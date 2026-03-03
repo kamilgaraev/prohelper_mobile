@@ -9,8 +9,7 @@ import '../providers/context_provider.dart';
 import '../models/user_context.dart';
 import '../../core/providers/module_provider.dart';
 import '../../core/services/permission_service.dart';
-import '../../features/site_requests/presentation/screens/site_requests_screen.dart';
-
+import 'quick_action_sheet.dart';
 
 class ActionHub extends ConsumerWidget {
   const ActionHub({super.key});
@@ -69,41 +68,32 @@ class ActionHub extends ConsumerWidget {
 
   Widget _buildPrimaryButton(BuildContext context, UserContext userContext, PermissionService permissions) {
     IconData icon = Icons.home_rounded;
-    String label = 'Главная';
-
-    // В поле: если есть модуль склада - сканировать, иначе (если есть заявки) - заявка.
+    
     if (userContext == UserContext.field) {
         if (permissions.canAccessModule(AppModule.basicWarehouse)) {
             icon = Icons.qr_code_scanner_rounded;
-            label = 'Сканировать';
         } else if (permissions.canAccessModule(AppModule.siteRequests)) {
             icon = Icons.add_task_rounded;
-            label = 'Заявка';
         } else {
-             icon = Icons.build_circle_rounded;
-             label = 'Действие'; // Fallback
+             icon = Icons.grid_view_rounded;
         }
-    } 
-    // В офисе (для управляющих): если есть модуль заявок - проверить (согласования), иначе - отчет.
-    else {
+    } else {
          if (permissions.canAccessModule(AppModule.siteRequests)) {
             icon = Icons.fact_check_rounded;
-            label = 'Проверить';
          } else {
-            icon = Icons.bar_chart_rounded;
-            label = 'Отчеты';
+            icon = Icons.grid_view_rounded;
          }
     }
-
 
     return GestureDetector(
       onTap: () {
         HapticFeedback.heavyImpact();
-        if (permissions.canAccessModule(AppModule.siteRequests)) {
-          Navigator.of(context).push(
-            MaterialPageRoute(builder: (context) => const SiteRequestsScreen()),
-          );
-        }
+        showModalBottomSheet(
+          context: context,
+          backgroundColor: Colors.transparent,
+          isScrollControlled: true,
+          builder: (context) => QuickActionSheet(permissions: permissions),
+        );
       },
       child: Container(
         width: 64,
