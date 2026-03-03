@@ -9,6 +9,8 @@ import '../providers/context_provider.dart';
 import '../models/user_context.dart';
 import '../../core/providers/module_provider.dart';
 import '../../core/services/permission_service.dart';
+import '../../features/site_requests/presentation/screens/site_requests_screen.dart';
+
 
 class ActionHub extends ConsumerWidget {
   const ActionHub({super.key});
@@ -93,8 +95,16 @@ class ActionHub extends ConsumerWidget {
          }
     }
 
+
     return GestureDetector(
-      onTap: () => HapticFeedback.heavyImpact(),
+      onTap: () {
+        HapticFeedback.heavyImpact();
+        if (permissions.canAccessModule(AppModule.siteRequests)) {
+          Navigator.of(context).push(
+            MaterialPageRoute(builder: (context) => const SiteRequestsScreen()),
+          );
+        }
+      },
       child: Container(
         width: 64,
         height: 64,

@@ -11,6 +11,8 @@ import '../../auth/presentation/widgets/profile_pill.dart';
 import '../../auth/presentation/widgets/user_profile_bottom_sheet.dart';
 import '../../auth/domain/auth_provider.dart';
 import '../../projects/domain/projects_provider.dart';
+import '../../site_requests/presentation/screens/site_requests_screen.dart';
+
 
 class DashboardScreen extends ConsumerWidget {
   const DashboardScreen({super.key});
@@ -303,6 +305,72 @@ class DashboardScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildUrgentRequests() => const SizedBox.shrink();
-  Widget _buildApprovalCounter() => const SizedBox.shrink();
+  Widget _buildUrgentRequests() {
+    return _buildModuleActionCard(
+      title: 'ЗАЯВКИ С ОБЪЕКТА',
+      subtitle: 'Заказать материалы или персонал',
+      icon: Icons.add_task_rounded,
+      color: AppColors.secondary,
+      onTap: (context) => Navigator.of(context).push(
+        MaterialPageRoute(builder: (context) => const SiteRequestsScreen()),
+      ),
+    );
+  }
+
+  Widget _buildApprovalCounter() {
+    return _buildModuleActionCard(
+      title: 'СОГЛАСОВАНИЯ',
+      subtitle: 'Ожидают вашего подтверждения',
+      icon: Icons.fact_check_rounded,
+      color: AppColors.primary,
+      onTap: (context) => Navigator.of(context).push(
+        MaterialPageRoute(builder: (context) => const SiteRequestsScreen()),
+      ),
+    );
+  }
+
+  Widget _buildModuleActionCard({
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required Color color,
+    required Function(BuildContext) onTap,
+  }) {
+    return Builder(
+      builder: (context) => IndustrialCard(
+        onTap: () => onTap(context),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(icon, color: color, size: 28),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: AppTypography.bodySmall.copyWith(
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 0.5,
+                    color: Theme.of(context).colorScheme.onSurface,
+                  )),
+                  const SizedBox(height: 2),
+                  Text(subtitle, style: AppTypography.caption.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  )),
+                ],
+              ),
+            ),
+            Icon(Icons.chevron_right_rounded, color: Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.3)),
+          ],
+        ),
+      ),
+    );
+  }
+
 }
