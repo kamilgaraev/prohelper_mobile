@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../../core/theme/app_colors.dart';
-import '../../core/theme/app_typography.dart';
-import '../../core/providers/module_provider.dart';
-import '../../core/services/permission_service.dart';
-import '../../features/site_requests/presentation/screens/site_requests_screen.dart';
+import 'package:prohelpers_mobile/core/theme/app_colors.dart';
+import 'package:prohelpers_mobile/core/theme/app_typography.dart';
+import 'package:prohelpers_mobile/core/providers/module_provider.dart';
+import 'package:prohelpers_mobile/core/services/permission_service.dart';
+import 'package:prohelpers_mobile/features/site_requests/presentation/screens/site_requests_screen.dart';
 
 class QuickActionSheet extends StatelessWidget {
   final PermissionService permissions;

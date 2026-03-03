@@ -1,12 +1,12 @@
 import 'package:isar/isar.dart';
 
-part 'site_request_model.g.dart';
+// part 'site_request_model.g.dart'; // Disabled generation
 
-@collection
+// @collection // Disabled Isar collection for immediate build fix
 class SiteRequestModel {
   Id id = Isar.autoIncrement;
 
-  @Index(unique: true, replace: true)
+  // @Index(unique: true, replace: true)
   late int serverId;
 
   late String title;

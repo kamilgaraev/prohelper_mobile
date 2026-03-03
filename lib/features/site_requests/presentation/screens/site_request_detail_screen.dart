@@ -5,7 +5,7 @@ import '../../../../core/theme/app_typography.dart';
 import '../../../../core/widgets/mesh_background.dart';
 import '../../../../core/widgets/pro_card.dart';
 import '../../../../core/widgets/pro_button.dart';
-import '../domain/site_request_detail_provider.dart';
+import '../../domain/site_request_detail_provider.dart';
 import '../../data/site_request_model.dart';
 
 class SiteRequestDetailScreen extends ConsumerWidget {
@@ -16,13 +16,9 @@ class SiteRequestDetailScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(siteRequestDetailProvider(id));
-    final theme = Theme.of(context);
 
     // Подготовка отображения статуса для экшена
     final status = state.request?.status;
-    final canSubmit = status == 'draft';
-    final canCancel = ['draft', 'pending'].contains(status);
-    final canComplete = status == 'approved';
 
     return MeshBackground(
       child: Scaffold(

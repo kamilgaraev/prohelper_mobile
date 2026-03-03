@@ -3,7 +3,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_typography.dart';
 import '../../../../core/widgets/mesh_background.dart';
-import '../domain/site_requests_provider.dart';
+import '../../domain/site_requests_provider.dart';
 import '../widgets/site_request_card.dart';
 import 'site_request_detail_screen.dart';
 import 'site_request_form_screen.dart';
@@ -44,8 +44,7 @@ class _SiteRequestsScreenState extends ConsumerState<SiteRequestsScreen> {
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(siteRequestsProvider);
-    final theme = Theme.of(context);
-
+    
     return MeshBackground(
       child: Scaffold(
         backgroundColor: Colors.transparent,
@@ -85,7 +84,7 @@ class _SiteRequestsScreenState extends ConsumerState<SiteRequestsScreen> {
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          'Создайте первую заявку, нажав на кнопĸу +',
+                          'Создайте первую заявку, нажав на кнопку +',
                           style: AppTypography.bodyMedium.copyWith(color: AppColors.textSecondary),
                         ),
                       ],

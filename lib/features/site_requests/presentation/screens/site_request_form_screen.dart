@@ -6,9 +6,9 @@ import '../../../../core/theme/app_typography.dart';
 import '../../../../core/widgets/mesh_background.dart';
 import '../../../../core/widgets/pro_card.dart';
 import '../../../../core/widgets/pro_button.dart';
-import '../../projects/domain/projects_provider.dart';
-import '../data/site_requests_repository.dart';
-import '../domain/site_requests_provider.dart';
+import 'package:prohelpers_mobile/features/projects/domain/projects_provider.dart';
+import '../../data/site_requests_repository.dart';
+import '../../domain/site_requests_provider.dart';
 
 class SiteRequestFormScreen extends HookConsumerWidget {
   const SiteRequestFormScreen({super.key});

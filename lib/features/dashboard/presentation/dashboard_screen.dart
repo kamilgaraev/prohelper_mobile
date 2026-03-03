@@ -11,7 +11,7 @@ import '../../auth/presentation/widgets/profile_pill.dart';
 import '../../auth/presentation/widgets/user_profile_bottom_sheet.dart';
 import '../../auth/domain/auth_provider.dart';
 import '../../projects/domain/projects_provider.dart';
-import '../../site_requests/presentation/screens/site_requests_screen.dart';
+import 'package:prohelpers_mobile/features/site_requests/presentation/screens/site_requests_screen.dart';
 
 
 class DashboardScreen extends ConsumerWidget {
