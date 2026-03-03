@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
-import '../../../../core/theme/app_colors.dart';
-import '../../../../core/theme/app_typography.dart';
-import '../../../../core/widgets/mesh_background.dart';
-import '../../domain/site_requests_provider.dart';
-import '../widgets/site_request_card.dart';
-import 'site_request_detail_screen.dart';
-import 'site_request_form_screen.dart';
+import 'package:prohelpers_mobile/core/theme/app_colors.dart';
+import 'package:prohelpers_mobile/core/theme/app_typography.dart';
+import 'package:prohelpers_mobile/core/widgets/mesh_background.dart';
+import 'package:prohelpers_mobile/features/site_requests/domain/site_requests_provider.dart';
+import 'package:prohelpers_mobile/features/site_requests/presentation/widgets/site_request_card.dart';
+import 'package:prohelpers_mobile/features/site_requests/presentation/screens/site_request_detail_screen.dart';
+import 'package:prohelpers_mobile/features/site_requests/presentation/screens/site_request_form_screen.dart';
 
 class SiteRequestsScreen extends ConsumerStatefulWidget {
   const SiteRequestsScreen({super.key});
@@ -44,6 +44,7 @@ class _SiteRequestsScreenState extends ConsumerState<SiteRequestsScreen> {
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(siteRequestsProvider);
+    final theme = Theme.of(context);
     
     return MeshBackground(
       child: Scaffold(
@@ -51,11 +52,11 @@ class _SiteRequestsScreenState extends ConsumerState<SiteRequestsScreen> {
         appBar: AppBar(
           backgroundColor: Colors.transparent,
           elevation: 0,
-          title: Text('Заявки с объекта', style: AppTypography.h1),
+          title: Text('Заявки с объекта', style: AppTypography.h1.copyWith(color: theme.colorScheme.onSurface)),
           centerTitle: false,
           actions: [
             IconButton(
-              icon: const Icon(Icons.filter_list_rounded),
+              icon: Icon(Icons.filter_list_rounded, color: theme.colorScheme.onSurface),
               onPressed: () {
                 // TODO: Показать фильтры
               },
@@ -76,16 +77,16 @@ class _SiteRequestsScreenState extends ConsumerState<SiteRequestsScreen> {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.inventory_2_outlined, size: 64, color: AppColors.textSecondary.withOpacity(0.5)),
+                        Icon(Icons.inventory_2_outlined, size: 64, color: theme.colorScheme.onSurfaceVariant.withOpacity(0.5)),
                         const SizedBox(height: 16),
                         Text(
                           'Заявок пока нет',
-                          style: AppTypography.h2.copyWith(color: AppColors.textSecondary),
+                          style: AppTypography.h2.copyWith(color: theme.colorScheme.onSurface),
                         ),
                         const SizedBox(height: 8),
                         Text(
                           'Создайте первую заявку, нажав на кнопку +',
-                          style: AppTypography.bodyMedium.copyWith(color: AppColors.textSecondary),
+                          style: AppTypography.bodyMedium.copyWith(color: theme.colorScheme.onSurfaceVariant),
                         ),
                       ],
                     ),
@@ -137,7 +138,7 @@ class _SiteRequestsScreenState extends ConsumerState<SiteRequestsScreen> {
               ),
             );
           },
-          backgroundColor: AppColors.primary,
+          backgroundColor: theme.colorScheme.primary,
           child: const Icon(Icons.add_rounded, color: Colors.white, size: 32),
         ),
       ),

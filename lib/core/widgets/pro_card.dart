@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import '../theme/app_colors.dart';
 
 class ProCard extends StatelessWidget {
   final Widget child;
@@ -19,17 +18,21 @@ class ProCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    
     return Container(
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: theme.cardTheme.color ?? theme.colorScheme.surface,
         borderRadius: BorderRadius.circular(borderRadius),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
-          ),
-        ],
+        boxShadow: theme.cardTheme.shadowColor != null 
+          ? [
+              BoxShadow(
+                color: theme.cardTheme.shadowColor!.withOpacity(theme.brightness == Brightness.dark ? 0.5 : 0.05),
+                blurRadius: 20,
+                offset: const Offset(0, 8),
+              ),
+            ]
+          : null,
       ),
       child: Material(
         color: Colors.transparent,

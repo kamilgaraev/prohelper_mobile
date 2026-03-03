@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import '../../../../core/theme/app_colors.dart';
-import '../../../../core/theme/app_typography.dart';
-import '../../../../core/widgets/pro_card.dart';
-import '../../data/site_request_model.dart';
+import 'package:prohelpers_mobile/core/theme/app_colors.dart';
+import 'package:prohelpers_mobile/core/theme/app_typography.dart';
+import 'package:prohelpers_mobile/core/widgets/pro_card.dart';
+import 'package:prohelpers_mobile/features/site_requests/data/site_request_model.dart';
 
 class SiteRequestCard extends StatelessWidget {
   final SiteRequestModel request;
@@ -29,7 +29,7 @@ class SiteRequestCard extends StatelessWidget {
               Expanded(
                 child: Text(
                   request.title,
-                  style: AppTypography.h2,
+                  style: AppTypography.h2.copyWith(color: theme.colorScheme.onSurface),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -65,7 +65,10 @@ class SiteRequestCard extends StatelessWidget {
                 Expanded(
                   child: Text(
                     '${request.materialName} - ${request.materialQuantity} ${request.materialUnit}',
-                    style: AppTypography.bodyMedium.copyWith(fontWeight: FontWeight.w600),
+                    style: AppTypography.bodyMedium.copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: theme.colorScheme.onSurface,
+                    ),
                   ),
                 ),
               ],
@@ -82,7 +85,7 @@ class SiteRequestCard extends StatelessWidget {
               if (request.createdAt != null)
                 Text(
                   _formatDate(request.createdAt!),
-                  style: AppTypography.caption,
+                  style: AppTypography.caption.copyWith(color: theme.colorScheme.onSurfaceVariant),
                 ),
             ],
           ),

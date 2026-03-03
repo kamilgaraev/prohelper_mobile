@@ -1,20 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
-import '../../../../core/theme/app_colors.dart';
-import '../../../../core/theme/app_typography.dart';
-import '../../../../core/widgets/mesh_background.dart';
-import '../../../../core/widgets/pro_card.dart';
-import '../../../../core/widgets/pro_button.dart';
+import 'package:prohelpers_mobile/core/theme/app_colors.dart';
+import 'package:prohelpers_mobile/core/theme/app_typography.dart';
+import 'package:prohelpers_mobile/core/widgets/mesh_background.dart';
+import 'package:prohelpers_mobile/core/widgets/pro_card.dart';
+import 'package:prohelpers_mobile/core/widgets/pro_button.dart';
 import 'package:prohelpers_mobile/features/projects/domain/projects_provider.dart';
-import '../../data/site_requests_repository.dart';
-import '../../domain/site_requests_provider.dart';
+import 'package:prohelpers_mobile/features/site_requests/data/site_requests_repository.dart';
+import 'package:prohelpers_mobile/features/site_requests/domain/site_requests_provider.dart';
 
 class SiteRequestFormScreen extends HookConsumerWidget {
   const SiteRequestFormScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     final titleController = useTextEditingController();
     final nameController = useTextEditingController();
     final quantityController = useTextEditingController();
@@ -98,7 +99,10 @@ class SiteRequestFormScreen extends HookConsumerWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               if (templates.value.isNotEmpty) ...[
-                Text('БЫСТРОЕ СОЗДАНИЕ ИЗ ШАБЛОНА', style: AppTypography.caption),
+                Text(
+                  'БЫСТРОЕ СОЗДАНИЕ ИЗ ШАБЛОНА', 
+                  style: AppTypography.caption.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                ),
                 const SizedBox(height: 12),
                 SizedBox(
                   height: 100,
@@ -114,9 +118,12 @@ class SiteRequestFormScreen extends HookConsumerWidget {
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            const Icon(Icons.copy_rounded, color: AppColors.primary),
+                            Icon(Icons.copy_rounded, color: theme.colorScheme.primary),
                             const SizedBox(height: 4),
-                            Text(t['title'] ?? 'Шаблон', style: AppTypography.bodySmall),
+                            Text(
+                              t['title'] ?? 'Шаблон', 
+                              style: AppTypography.bodySmall.copyWith(color: theme.colorScheme.onSurface),
+                            ),
                           ],
                         ),
                       );
@@ -126,30 +133,36 @@ class SiteRequestFormScreen extends HookConsumerWidget {
                 const SizedBox(height: 32),
               ],
               
-              Text('ОСНОВНАЯ ИНФОРМАЦИЯ', style: AppTypography.caption),
+              Text(
+                'ОСНОВНАЯ ИНФОРМАЦИЯ', 
+                style: AppTypography.caption.copyWith(color: theme.colorScheme.onSurfaceVariant),
+              ),
               const SizedBox(height: 12),
               ProCard(
                 child: Column(
                   children: [
-                    _buildField('Заголовок (например, Бетон М400)', titleController),
+                    _buildField(context, 'Заголовок (например, Бетон М400)', titleController),
                     const SizedBox(height: 16),
-                    _buildField('Наименование материала', nameController),
+                    _buildField(context, 'Наименование материала', nameController),
                     const SizedBox(height: 16),
                     Row(
                       children: [
-                        Expanded(child: _buildField('Количество', quantityController, keyboardType: TextInputType.number)),
+                        Expanded(child: _buildField(context, 'Количество', quantityController, keyboardType: TextInputType.number)),
                         const SizedBox(width: 16),
-                        Expanded(child: _buildField('Ед. изм.', unitController)),
+                        Expanded(child: _buildField(context, 'Ед. изм.', unitController)),
                       ],
                     ),
                   ],
                 ),
               ),
               const SizedBox(height: 24),
-              Text('ДОПОЛНИТЕЛЬНО', style: AppTypography.caption),
+              Text(
+                'ДОПОЛНИТЕЛЬНО', 
+                style: AppTypography.caption.copyWith(color: theme.colorScheme.onSurfaceVariant),
+              ),
               const SizedBox(height: 12),
               ProCard(
-                child: _buildField('Описание / Примечания', descriptionController, maxLines: 3),
+                child: _buildField(context, 'Описание / Примечания', descriptionController, maxLines: 3),
               ),
               const SizedBox(height: 100),
             ],
@@ -167,17 +180,23 @@ class SiteRequestFormScreen extends HookConsumerWidget {
     );
   }
 
-  Widget _buildField(String label, TextEditingController controller, {TextInputType? keyboardType, int maxLines = 1}) {
+  Widget _buildField(BuildContext context, String label, TextEditingController controller, {TextInputType? keyboardType, int maxLines = 1}) {
+    final theme = Theme.of(context);
+    
     return TextField(
       controller: controller,
       keyboardType: keyboardType,
       maxLines: maxLines,
-      style: AppTypography.bodyLarge,
+      style: AppTypography.bodyLarge.copyWith(color: theme.colorScheme.onSurface),
       decoration: InputDecoration(
         labelText: label,
-        labelStyle: AppTypography.caption,
-        enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: AppColors.textSecondary.withOpacity(0.2))),
-        focusedBorder: const UnderlineInputBorder(borderSide: BorderSide(color: AppColors.primary)),
+        labelStyle: AppTypography.caption.copyWith(color: theme.colorScheme.onSurfaceVariant),
+        enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: theme.colorScheme.outline.withOpacity(0.2))),
+        focusedBorder: BorderSide.none.copyWith(
+          borderSide: BorderSide(color: theme.colorScheme.primary),
+        ),
+        // Force the text visible even if hints are buggy
+        floatingLabelBehavior: FloatingLabelBehavior.auto,
       ),
     );
   }

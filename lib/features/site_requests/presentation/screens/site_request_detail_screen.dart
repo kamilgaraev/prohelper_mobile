@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
-import '../../../../core/theme/app_colors.dart';
-import '../../../../core/theme/app_typography.dart';
-import '../../../../core/widgets/mesh_background.dart';
-import '../../../../core/widgets/pro_card.dart';
-import '../../../../core/widgets/pro_button.dart';
-import '../../domain/site_request_detail_provider.dart';
-import '../../data/site_request_model.dart';
+import 'package:prohelpers_mobile/core/theme/app_colors.dart';
+import 'package:prohelpers_mobile/core/theme/app_typography.dart';
+import 'package:prohelpers_mobile/core/widgets/mesh_background.dart';
+import 'package:prohelpers_mobile/core/widgets/pro_card.dart';
+import 'package:prohelpers_mobile/core/widgets/pro_button.dart';
+import 'package:prohelpers_mobile/features/site_requests/domain/site_request_detail_provider.dart';
+import 'package:prohelpers_mobile/features/site_requests/data/site_request_model.dart';
 
 class SiteRequestDetailScreen extends ConsumerWidget {
   final int id;
@@ -14,11 +14,9 @@ class SiteRequestDetailScreen extends ConsumerWidget {
   const SiteRequestDetailScreen({super.key, required this.id});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final state = ref.watch(siteRequestDetailProvider(id));
-
-    // Подготовка отображения статуса для экшена
-    final status = state.request?.status;
+    final theme = Theme.of(context);
 
     return MeshBackground(
       child: Scaffold(
@@ -27,10 +25,10 @@ class SiteRequestDetailScreen extends ConsumerWidget {
           backgroundColor: Colors.transparent,
           elevation: 0,
           leading: IconButton(
-            icon: const Icon(Icons.arrow_back_ios_new_rounded),
+            icon: Icon(Icons.arrow_back_ios_new_rounded, color: theme.colorScheme.onSurface),
             onPressed: () => Navigator.of(context).pop(),
           ),
-          title: Text('Детали заявки', style: AppTypography.h2),
+          title: Text('Детали заявки', style: AppTypography.h2.copyWith(color: theme.colorScheme.onSurface)),
         ),
         body: state.isLoading && state.request == null
             ? const Center(child: CircularProgressIndicator())
@@ -48,24 +46,25 @@ class SiteRequestDetailScreen extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildInfoSection(request),
+          _buildInfoSection(context, request),
           const SizedBox(height: 16),
-          if (request.materialName != null) _buildMaterialSection(request),
+          if (request.materialName != null) _buildMaterialSection(context, request),
           const SizedBox(height: 16),
           if (request.description != null && request.description!.isNotEmpty)
-            _buildDescriptionSection(request.description!),
+            _buildDescriptionSection(context, request.description!),
           const SizedBox(height: 100), // Отступ для кнопок
         ],
       ),
     );
   }
 
-  Widget _buildInfoSection(SiteRequestModel request) {
+  Widget _buildInfoSection(BuildContext context, SiteRequestModel request) {
+    final theme = Theme.of(context);
     return ProCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(request.title, style: AppTypography.h1),
+          Text(request.title, style: AppTypography.h1.copyWith(color: theme.colorScheme.onSurface)),
           const SizedBox(height: 12),
           Row(
             children: [
@@ -74,56 +73,59 @@ class SiteRequestDetailScreen extends ConsumerWidget {
               _StatusBadge(label: request.statusLabel ?? request.status, color: _getStatusColor(request.status)),
             ],
           ),
-          const Divider(height: 32),
+          Divider(height: 32, color: theme.colorScheme.outline.withOpacity(0.2)),
           if (request.projectName != null)
-            _ParamRow(icon: Icons.location_on_outlined, label: 'Объект', value: request.projectName!),
+            _ParamRow(context: context, icon: Icons.location_on_outlined, label: 'Объект', value: request.projectName!),
           if (request.priorityLabel != null)
-            _ParamRow(icon: Icons.flag_outlined, label: 'Приоритет', value: request.priorityLabel!, valueColor: _getPriorityColor(request.priority)),
+            _ParamRow(context: context, icon: Icons.flag_outlined, label: 'Приоритет', value: request.priorityLabel!, valueColor: _getPriorityColor(request.priority)),
           if (request.createdAt != null)
-            _ParamRow(icon: Icons.calendar_today_outlined, label: 'Создана', value: _formatDate(request.createdAt!)),
+            _ParamRow(context: context, icon: Icons.calendar_today_outlined, label: 'Создана', value: _formatDate(request.createdAt!)),
         ],
       ),
     );
   }
 
-  Widget _buildMaterialSection(SiteRequestModel request) {
+  Widget _buildMaterialSection(BuildContext context, SiteRequestModel request) {
+    final theme = Theme.of(context);
     return ProCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Материалы', style: AppTypography.h2),
+          Text('Материалы', style: AppTypography.h2.copyWith(color: theme.colorScheme.onSurface)),
           const SizedBox(height: 16),
-          _ParamRow(icon: Icons.inventory_2_outlined, label: 'Наименование', value: request.materialName!),
-          _ParamRow(icon: Icons.format_list_numbered_outlined, label: 'Количество', value: '${request.materialQuantity} ${request.materialUnit}'),
+          _ParamRow(context: context, icon: Icons.inventory_2_outlined, label: 'Наименование', value: request.materialName!),
+          _ParamRow(context: context, icon: Icons.format_list_numbered_outlined, label: 'Количество', value: '${request.materialQuantity} ${request.materialUnit}'),
           if (request.requiredDate != null)
-            _ParamRow(icon: Icons.local_shipping_outlined, label: 'Дата поставки', value: request.requiredDate!),
+            _ParamRow(context: context, icon: Icons.local_shipping_outlined, label: 'Дата поставки', value: request.requiredDate!),
         ],
       ),
     );
   }
 
-  Widget _buildDescriptionSection(String description) {
+  Widget _buildDescriptionSection(BuildContext context, String description) {
+    final theme = Theme.of(context);
     return ProCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Описание', style: AppTypography.h2),
+          Text('Описание', style: AppTypography.h2.copyWith(color: theme.colorScheme.onSurface)),
           const SizedBox(height: 12),
-          Text(description, style: AppTypography.bodyMedium),
+          Text(description, style: AppTypography.bodyMedium.copyWith(color: theme.colorScheme.onSurface)),
         ],
       ),
     );
   }
 
   Widget _buildActions(BuildContext context, WidgetRef ref, SiteRequestDetailState state) {
+    final theme = Theme.of(context);
     final status = state.request!.status;
 
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: theme.colorScheme.surface,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 20)],
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(theme.brightness == Brightness.dark ? 0.3 : 0.05), blurRadius: 20)],
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -154,19 +156,20 @@ class SiteRequestDetailScreen extends ConsumerWidget {
   }
 
   void _showCancelDialog(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
     final controller = TextEditingController();
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: AppColors.surface,
-        title: Text('Отмена заявки', style: AppTypography.h2),
+        backgroundColor: theme.colorScheme.surface,
+        title: Text('Отмена заявки', style: AppTypography.h2.copyWith(color: theme.colorScheme.onSurface)),
         content: TextField(
           controller: controller,
           maxLines: 3,
-          style: AppTypography.bodyMedium,
-          decoration: const InputDecoration(
+          style: AppTypography.bodyMedium.copyWith(color: theme.colorScheme.onSurface),
+          decoration: InputDecoration(
             hintText: 'Причина отмены (необязательно)',
-            hintStyle: TextStyle(color: AppColors.textSecondary),
+            hintStyle: TextStyle(color: theme.colorScheme.onSurfaceVariant),
           ),
         ),
         actions: [
@@ -206,11 +209,14 @@ class _InfoLabel extends StatelessWidget {
   final String label;
   const _InfoLabel({required this.label});
   @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-    decoration: BoxDecoration(color: AppColors.surfaceLight, borderRadius: BorderRadius.circular(6)),
-    child: Text(label, style: AppTypography.bodySmall),
-  );
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(color: theme.colorScheme.surfaceVariant.withOpacity(0.5), borderRadius: BorderRadius.circular(6)),
+      child: Text(label, style: AppTypography.bodySmall.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+    );
+  }
 }
 
 class _StatusBadge extends StatelessWidget {
@@ -226,24 +232,28 @@ class _StatusBadge extends StatelessWidget {
 }
 
 class _ParamRow extends StatelessWidget {
+  final BuildContext context;
   final IconData icon;
   final String label;
   final String value;
   final Color? valueColor;
-  const _ParamRow({required this.icon, required this.label, required this.value, this.valueColor});
+  const _ParamRow({required this.context, required this.icon, required this.label, required this.value, this.valueColor});
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(bottom: 12),
-    child: Row(
-      children: [
-        Icon(icon, size: 18, color: AppColors.textSecondary),
-        const SizedBox(width: 8),
-        Text('$label:', style: AppTypography.bodyMedium.copyWith(color: AppColors.textSecondary)),
-        const SizedBox(width: 4),
-        Expanded(child: Text(value, style: AppTypography.bodyLarge.copyWith(color: valueColor))),
-      ],
-    ),
-  );
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        children: [
+          Icon(icon, size: 18, color: theme.colorScheme.onSurfaceVariant),
+          const SizedBox(width: 8),
+          Text('$label:', style: AppTypography.bodyMedium.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+          const SizedBox(width: 4),
+          Expanded(child: Text(value, style: AppTypography.bodyLarge.copyWith(color: valueColor ?? theme.colorScheme.onSurface))),
+        ],
+      ),
+    );
+  }
 }
 
 class _ErrorState extends StatelessWidget {
@@ -251,18 +261,24 @@ class _ErrorState extends StatelessWidget {
   final VoidCallback onRetry;
   const _ErrorState({required this.error, required this.onRetry});
   @override
-  Widget build(BuildContext context) => Center(
-    child: Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        const Icon(Icons.error_outline, size: 64, color: AppColors.error),
-        const SizedBox(height: 16),
-        Text('Ошибка загрузки', style: AppTypography.h2),
-        const SizedBox(height: 8),
-        Padding(padding: const EdgeInsets.symmetric(horizontal: 32), child: Text(error, textAlign: TextAlign.center, style: AppTypography.bodySmall)),
-        const SizedBox(height: 24),
-        OutlinedButton(onPressed: onRetry, child: const Text('Повторить')),
-      ],
-    ),
-  );
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.error_outline, size: 64, color: AppColors.error),
+          const SizedBox(height: 16),
+          Text('Ошибка загрузки', style: AppTypography.h2.copyWith(color: theme.colorScheme.onSurface)),
+          const SizedBox(height: 8),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 32), 
+            child: Text(error, textAlign: TextAlign.center, style: AppTypography.bodySmall.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+          ),
+          const SizedBox(height: 24),
+          OutlinedButton(onPressed: onRetry, child: const Text('Повторить')),
+        ],
+      ),
+    );
+  }
 }
