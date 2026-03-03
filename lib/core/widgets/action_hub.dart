@@ -24,7 +24,7 @@ class ActionHub extends ConsumerWidget {
       decoration: BoxDecoration(
         color: theme.cardTheme.color,
         border: Border(
-          top: BorderSide(color: theme.colorScheme.outline, width: ProHelperTheme.borderWidth),
+          top: BorderSide(color: theme.colorScheme.outline.withOpacity(0.2), width: ProHelperTheme.borderWidth),
         ),
         boxShadow: [
           BoxShadow(
@@ -50,11 +50,12 @@ class ActionHub extends ConsumerWidget {
       onTap: () => HapticFeedback.selectionClick(),
       behavior: HitTestBehavior.opaque,
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(icon, color: isActive ? AppColors.primary : theme.colorScheme.onSurface.withOpacity(0.4), size: 24),
+          Icon(icon, color: isActive ? theme.colorScheme.primary : theme.colorScheme.onSurface.withOpacity(0.4), size: 24),
           const SizedBox(height: 6),
-          Text(label, style: AppTypography.caption.copyWith(
+          Text(label, style: AppTypography.caption(context).copyWith(
             color: isActive ? theme.colorScheme.onSurface : theme.colorScheme.onSurface.withOpacity(0.4),
             fontWeight: isActive ? FontWeight.w900 : FontWeight.w500,
             fontSize: 9,
@@ -66,6 +67,7 @@ class ActionHub extends ConsumerWidget {
   }
 
   Widget _buildPrimaryButton(BuildContext context, UserContext userContext, PermissionService permissions) {
+    final theme = Theme.of(context);
     IconData icon = Icons.home_rounded;
     
     if (userContext == UserContext.field) {
@@ -97,12 +99,13 @@ class ActionHub extends ConsumerWidget {
       child: Container(
         width: 64,
         height: 64,
+        margin: const EdgeInsets.only(bottom: 24),
         decoration: BoxDecoration(
-          color: AppColors.primary,
+          color: theme.colorScheme.primary,
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
-              color: AppColors.primary.withOpacity(0.4),
+              color: theme.colorScheme.primary.withOpacity(0.4),
               blurRadius: 15,
               offset: const Offset(0, 4),
             ),

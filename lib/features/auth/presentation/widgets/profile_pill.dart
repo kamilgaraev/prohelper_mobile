@@ -37,12 +37,12 @@ class ProfilePill extends StatelessWidget {
           children: [
             CircleAvatar(
               radius: 14,
-              backgroundColor: AppColors.primary,
+              backgroundColor: theme.colorScheme.primary,
               backgroundImage: user.avatarUrl != null ? NetworkImage(user.avatarUrl!) : null,
               child: user.avatarUrl == null
                   ? Text(
                       user.name.substring(0, 1).toUpperCase(),
-                      style: AppTypography.bodySmall.copyWith(
+                      style: AppTypography.bodySmall(context).copyWith(
                         color: Colors.white,
                         fontWeight: FontWeight.bold,
                       ),

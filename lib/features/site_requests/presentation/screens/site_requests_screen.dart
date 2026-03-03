@@ -52,7 +52,7 @@ class _SiteRequestsScreenState extends ConsumerState<SiteRequestsScreen> {
         appBar: AppBar(
           backgroundColor: Colors.transparent,
           elevation: 0,
-          title: Text('Заявки с объекта', style: AppTypography.h1.copyWith(color: theme.colorScheme.onSurface)),
+          title: Text('Заявки с объекта', style: AppTypography.h1(context)),
           centerTitle: false,
           actions: [
             IconButton(
@@ -81,12 +81,12 @@ class _SiteRequestsScreenState extends ConsumerState<SiteRequestsScreen> {
                         const SizedBox(height: 16),
                         Text(
                           'Заявок пока нет',
-                          style: AppTypography.h2.copyWith(color: theme.colorScheme.onSurface),
+                          style: AppTypography.h2(context),
                         ),
                         const SizedBox(height: 8),
                         Text(
                           'Создайте первую заявку, нажав на кнопку +',
-                          style: AppTypography.bodyMedium.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                          style: AppTypography.bodyMedium(context).copyWith(color: theme.colorScheme.onSurfaceVariant),
                         ),
                       ],
                     ),

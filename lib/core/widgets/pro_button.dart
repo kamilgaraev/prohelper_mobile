@@ -45,6 +45,9 @@ class _ProButtonState extends State<ProButton> with SingleTickerProviderStateMix
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final effectiveColor = widget.backgroundColor ?? theme.colorScheme.primary;
+
     return GestureDetector(
       onTapDown: (_) => _controller.forward(),
       onTapUp: (_) => _controller.reverse(),
@@ -56,11 +59,11 @@ class _ProButtonState extends State<ProButton> with SingleTickerProviderStateMix
           height: 56,
           width: double.infinity,
           decoration: BoxDecoration(
-            color: widget.backgroundColor ?? Theme.of(context).primaryColor,
+            color: effectiveColor,
             borderRadius: BorderRadius.circular(20),
             boxShadow: [
               BoxShadow(
-                color: (widget.backgroundColor ?? Theme.of(context).primaryColor).withOpacity(0.3),
+                color: effectiveColor.withOpacity(0.3),
                 blurRadius: 12,
                 offset: const Offset(0, 6),
               ),

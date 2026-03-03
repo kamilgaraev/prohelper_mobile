@@ -87,9 +87,9 @@ class SiteRequestFormScreen extends HookConsumerWidget {
         appBar: AppBar(
           backgroundColor: Colors.transparent,
           elevation: 0,
-          title: Text('Новая заявка', style: AppTypography.h2),
+          title: Text('Новая заявка', style: AppTypography.h2(context)),
           leading: IconButton(
-            icon: const Icon(Icons.close_rounded),
+            icon: Icon(Icons.close_rounded, color: theme.colorScheme.onSurface),
             onPressed: () => Navigator.pop(context),
           ),
         ),
@@ -101,7 +101,7 @@ class SiteRequestFormScreen extends HookConsumerWidget {
               if (templates.value.isNotEmpty) ...[
                 Text(
                   'БЫСТРОЕ СОЗДАНИЕ ИЗ ШАБЛОНА', 
-                  style: AppTypography.caption.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                  style: AppTypography.caption(context),
                 ),
                 const SizedBox(height: 12),
                 SizedBox(
@@ -122,7 +122,7 @@ class SiteRequestFormScreen extends HookConsumerWidget {
                             const SizedBox(height: 4),
                             Text(
                               t['title'] ?? 'Шаблон', 
-                              style: AppTypography.bodySmall.copyWith(color: theme.colorScheme.onSurface),
+                              style: AppTypography.bodySmall(context),
                             ),
                           ],
                         ),
@@ -135,7 +135,7 @@ class SiteRequestFormScreen extends HookConsumerWidget {
               
               Text(
                 'ОСНОВНАЯ ИНФОРМАЦИЯ', 
-                style: AppTypography.caption.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                style: AppTypography.caption(context),
               ),
               const SizedBox(height: 12),
               ProCard(
@@ -158,7 +158,7 @@ class SiteRequestFormScreen extends HookConsumerWidget {
               const SizedBox(height: 24),
               Text(
                 'ДОПОЛНИТЕЛЬНО', 
-                style: AppTypography.caption.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                style: AppTypography.caption(context),
               ),
               const SizedBox(height: 12),
               ProCard(
@@ -187,15 +187,14 @@ class SiteRequestFormScreen extends HookConsumerWidget {
       controller: controller,
       keyboardType: keyboardType,
       maxLines: maxLines,
-      style: AppTypography.bodyLarge.copyWith(color: theme.colorScheme.onSurface),
+      style: AppTypography.bodyLarge(context),
       decoration: InputDecoration(
         labelText: label,
-        labelStyle: AppTypography.caption.copyWith(color: theme.colorScheme.onSurfaceVariant),
+        labelStyle: AppTypography.caption(context),
         enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: theme.colorScheme.outline.withOpacity(0.2))),
         focusedBorder: UnderlineInputBorder(
           borderSide: BorderSide(color: theme.colorScheme.primary),
         ),
-        // Force the text visible even if hints are buggy
         floatingLabelBehavior: FloatingLabelBehavior.auto,
       ),
     );

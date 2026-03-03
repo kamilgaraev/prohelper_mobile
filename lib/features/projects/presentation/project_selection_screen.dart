@@ -17,7 +17,6 @@ class _ProjectSelectionScreenState extends ConsumerState<ProjectSelectionScreen>
   @override
   void initState() {
     super.initState();
-    // Fetch projects on init
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(projectsProvider.notifier).loadProjects();
     });
@@ -27,7 +26,7 @@ class _ProjectSelectionScreenState extends ConsumerState<ProjectSelectionScreen>
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final state = ref.watch(projectsProvider);
-    final user = ref.watch(authProvider).user; // Should be authenticated to be here
+    final user = ref.watch(authProvider).user;
 
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
@@ -37,7 +36,6 @@ class _ProjectSelectionScreenState extends ConsumerState<ProjectSelectionScreen>
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Header
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -46,12 +44,12 @@ class _ProjectSelectionScreenState extends ConsumerState<ProjectSelectionScreen>
                     children: [
                       Text(
                         'Привет, ${user?.name ?? "User"}', 
-                        style: AppTypography.h2.copyWith(color: theme.colorScheme.onSurface),
+                        style: AppTypography.h2(context),
                       ),
                       const SizedBox(height: 4),
                       Text(
                         'Выберите объект для работы', 
-                        style: AppTypography.bodyMedium.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                        style: AppTypography.bodyMedium(context),
                       ),
                     ],
                   ),
@@ -78,13 +76,12 @@ class _ProjectSelectionScreenState extends ConsumerState<ProjectSelectionScreen>
                         const SizedBox(height: 16),
                         Text(
                           'Ошибка загрузки проектов', 
-                          style: AppTypography.h2.copyWith(color: theme.colorScheme.onSurface),
+                          style: AppTypography.h2(context),
                         ),
                         const SizedBox(height: 8),
-                         // Limit error text length or make it scrollable/expandable if too long
                         Text(
                           state.error!.length > 100 ? '${state.error!.substring(0, 100)}...' : state.error!, 
-                          style: AppTypography.bodySmall.copyWith(color: theme.colorScheme.error),
+                          style: AppTypography.bodySmall(context).copyWith(color: theme.colorScheme.error),
                           textAlign: TextAlign.center,
                         ),
                         const SizedBox(height: 24),
@@ -106,12 +103,12 @@ class _ProjectSelectionScreenState extends ConsumerState<ProjectSelectionScreen>
                         const SizedBox(height: 16),
                         Text(
                           'Нет доступных проектов', 
-                          style: AppTypography.h2.copyWith(color: theme.colorScheme.onSurface),
+                          style: AppTypography.h2(context),
                         ),
                          const SizedBox(height: 8),
                         Text(
                           'Обратитесь к администратору', 
-                          style: AppTypography.bodyMedium.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                          style: AppTypography.bodyMedium(context),
                         ),
                       ],
                     ),
@@ -128,7 +125,6 @@ class _ProjectSelectionScreenState extends ConsumerState<ProjectSelectionScreen>
                         project: project,
                         onTap: () {
                           ref.read(projectsProvider.notifier).selectProject(project);
-                          // Navigation is handled by router logic watching selectedProject
                         },
                         isSelected: state.selectedProject?.id == project.id,
                       );

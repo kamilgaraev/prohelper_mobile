@@ -14,6 +14,7 @@ class LoginScreen extends HookConsumerWidget {
     final emailController = useTextEditingController();
     final passwordController = useTextEditingController();
     final authState = ref.watch(authProvider);
+    final theme = Theme.of(context);
 
     // Listen for errors
     ref.listen(authProvider, (previous, next) {
@@ -28,22 +29,21 @@ class LoginScreen extends HookConsumerWidget {
     });
 
     return Scaffold(
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      backgroundColor: theme.scaffoldBackgroundColor,
       body: Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              // Logo / Brand
               Container(
                 padding: const EdgeInsets.all(24),
                 decoration: BoxDecoration(
-                  color: AppColors.primary,
+                  color: theme.colorScheme.primary,
                   shape: BoxShape.circle,
                   boxShadow: [
                     BoxShadow(
-                      color: AppColors.primary.withOpacity(0.4),
+                      color: theme.colorScheme.primary.withOpacity(0.4),
                       blurRadius: 30,
                       offset: const Offset(0, 10),
                     ),
@@ -54,22 +54,19 @@ class LoginScreen extends HookConsumerWidget {
               const SizedBox(height: 40),
               
               Text('PROHELPER', 
-                style: AppTypography.h1.copyWith(
+                style: AppTypography.h1(context).copyWith(
                   letterSpacing: 4, 
                   fontSize: 32,
-                  color: Theme.of(context).colorScheme.onSurface,
                 )
               ),
               const SizedBox(height: 8),
               Text('INDUSTRIAL MANAGEMENT', 
-                style: AppTypography.caption.copyWith(
+                style: AppTypography.caption(context).copyWith(
                   letterSpacing: 2,
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
                 )
               ),
               const SizedBox(height: 60),
 
-              // Login Form
               IndustrialCard(
                 padding: const EdgeInsets.all(24),
                 child: Column(
@@ -90,7 +87,7 @@ class LoginScreen extends HookConsumerWidget {
                             );
                           },
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.primary,
+                        backgroundColor: theme.colorScheme.primary,
                         foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(vertical: 16),
                         shape: RoundedRectangleBorder(
@@ -138,7 +135,7 @@ class LoginScreen extends HookConsumerWidget {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: AppColors.primary, width: 2),
+          borderSide: BorderSide(color: theme.colorScheme.primary, width: 2),
         ),
       ),
     );

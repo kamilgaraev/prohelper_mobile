@@ -29,7 +29,7 @@ class SiteRequestCard extends StatelessWidget {
               Expanded(
                 child: Text(
                   request.title,
-                  style: AppTypography.h2.copyWith(color: theme.colorScheme.onSurface),
+                  style: AppTypography.h2(context),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -50,7 +50,7 @@ class SiteRequestCard extends StatelessWidget {
                 Expanded(
                   child: Text(
                     request.projectName!,
-                    style: AppTypography.bodyMedium.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                    style: AppTypography.bodyMedium(context).copyWith(color: theme.colorScheme.onSurfaceVariant),
                   ),
                 ),
               ],
@@ -65,9 +65,8 @@ class SiteRequestCard extends StatelessWidget {
                 Expanded(
                   child: Text(
                     '${request.materialName} - ${request.materialQuantity} ${request.materialUnit}',
-                    style: AppTypography.bodyMedium.copyWith(
+                    style: AppTypography.bodyMedium(context).copyWith(
                       fontWeight: FontWeight.w600,
-                      color: theme.colorScheme.onSurface,
                     ),
                   ),
                 ),
@@ -80,12 +79,12 @@ class SiteRequestCard extends StatelessWidget {
             children: [
               Text(
                 'Приоритет: ${request.priorityLabel ?? request.priority}',
-                style: AppTypography.caption.copyWith(color: _getPriorityColor(request.priority)),
+                style: AppTypography.caption(context).copyWith(color: _getPriorityColor(request.priority)),
               ),
               if (request.createdAt != null)
                 Text(
                   _formatDate(request.createdAt!),
-                  style: AppTypography.caption.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                  style: AppTypography.caption(context),
                 ),
             ],
           ),
@@ -136,7 +135,7 @@ class _StatusBadge extends StatelessWidget {
       ),
       child: Text(
         label,
-        style: AppTypography.caption.copyWith(
+        style: AppTypography.caption(context).copyWith(
           color: color,
           fontWeight: FontWeight.bold,
         ),

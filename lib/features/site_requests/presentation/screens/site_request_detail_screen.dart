@@ -28,7 +28,7 @@ class SiteRequestDetailScreen extends ConsumerWidget {
             icon: Icon(Icons.arrow_back_ios_new_rounded, color: theme.colorScheme.onSurface),
             onPressed: () => Navigator.of(context).pop(),
           ),
-          title: Text('Детали заявки', style: AppTypography.h2.copyWith(color: theme.colorScheme.onSurface)),
+          title: Text('Детали заявки', style: AppTypography.h2(context)),
         ),
         body: state.isLoading && state.request == null
             ? const Center(child: CircularProgressIndicator())
@@ -64,7 +64,7 @@ class SiteRequestDetailScreen extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(request.title, style: AppTypography.h1.copyWith(color: theme.colorScheme.onSurface)),
+          Text(request.title, style: AppTypography.h1(context)),
           const SizedBox(height: 12),
           Row(
             children: [
@@ -86,12 +86,11 @@ class SiteRequestDetailScreen extends ConsumerWidget {
   }
 
   Widget _buildMaterialSection(BuildContext context, SiteRequestModel request) {
-    final theme = Theme.of(context);
     return ProCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Материалы', style: AppTypography.h2.copyWith(color: theme.colorScheme.onSurface)),
+          Text('Материалы', style: AppTypography.h2(context)),
           const SizedBox(height: 16),
           _ParamRow(context: context, icon: Icons.inventory_2_outlined, label: 'Наименование', value: request.materialName!),
           _ParamRow(context: context, icon: Icons.format_list_numbered_outlined, label: 'Количество', value: '${request.materialQuantity} ${request.materialUnit}'),
@@ -103,14 +102,13 @@ class SiteRequestDetailScreen extends ConsumerWidget {
   }
 
   Widget _buildDescriptionSection(BuildContext context, String description) {
-    final theme = Theme.of(context);
     return ProCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Описание', style: AppTypography.h2.copyWith(color: theme.colorScheme.onSurface)),
+          Text('Описание', style: AppTypography.h2(context)),
           const SizedBox(height: 12),
-          Text(description, style: AppTypography.bodyMedium.copyWith(color: theme.colorScheme.onSurface)),
+          Text(description, style: AppTypography.bodyMedium(context)),
         ],
       ),
     );
@@ -147,7 +145,7 @@ class SiteRequestDetailScreen extends ConsumerWidget {
             const SizedBox(height: 12),
             TextButton(
               onPressed: state.isActionLoading ? null : () => _showCancelDialog(context, ref),
-              child: Text('ОТМЕНИТЬ ЗАЯВКУ', style: AppTypography.bodyMedium.copyWith(color: AppColors.error)),
+              child: Text('ОТМЕНИТЬ ЗАЯВКУ', style: AppTypography.bodyMedium(context).copyWith(color: AppColors.error)),
             ),
           ],
         ],
@@ -162,11 +160,11 @@ class SiteRequestDetailScreen extends ConsumerWidget {
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: theme.colorScheme.surface,
-        title: Text('Отмена заявки', style: AppTypography.h2.copyWith(color: theme.colorScheme.onSurface)),
+        title: Text('Отмена заявки', style: AppTypography.h2(context)),
         content: TextField(
           controller: controller,
           maxLines: 3,
-          style: AppTypography.bodyMedium.copyWith(color: theme.colorScheme.onSurface),
+          style: AppTypography.bodyMedium(context),
           decoration: InputDecoration(
             hintText: 'Причина отмены (необязательно)',
             hintStyle: TextStyle(color: theme.colorScheme.onSurfaceVariant),
@@ -214,7 +212,7 @@ class _InfoLabel extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(color: theme.colorScheme.surfaceVariant.withOpacity(0.5), borderRadius: BorderRadius.circular(6)),
-      child: Text(label, style: AppTypography.bodySmall.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+      child: Text(label, style: AppTypography.bodySmall(context)),
     );
   }
 }
@@ -227,7 +225,7 @@ class _StatusBadge extends StatelessWidget {
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
     decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(12), border: Border.all(color: color.withOpacity(0.3))),
-    child: Text(label, style: AppTypography.bodySmall.copyWith(color: color, fontWeight: FontWeight.bold)),
+    child: Text(label, style: AppTypography.bodySmall(context).copyWith(color: color, fontWeight: FontWeight.bold)),
   );
 }
 
@@ -247,9 +245,9 @@ class _ParamRow extends StatelessWidget {
         children: [
           Icon(icon, size: 18, color: theme.colorScheme.onSurfaceVariant),
           const SizedBox(width: 8),
-          Text('$label:', style: AppTypography.bodyMedium.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+          Text('$label:', style: AppTypography.bodyMedium(context).copyWith(color: theme.colorScheme.onSurfaceVariant)),
           const SizedBox(width: 4),
-          Expanded(child: Text(value, style: AppTypography.bodyLarge.copyWith(color: valueColor ?? theme.colorScheme.onSurface))),
+          Expanded(child: Text(value, style: AppTypography.bodyLarge(context).copyWith(color: valueColor))),
         ],
       ),
     );
@@ -262,18 +260,17 @@ class _ErrorState extends StatelessWidget {
   const _ErrorState({required this.error, required this.onRetry});
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           const Icon(Icons.error_outline, size: 64, color: AppColors.error),
           const SizedBox(height: 16),
-          Text('Ошибка загрузки', style: AppTypography.h2.copyWith(color: theme.colorScheme.onSurface)),
+          Text('Ошибка загрузки', style: AppTypography.h2(context)),
           const SizedBox(height: 8),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 32), 
-            child: Text(error, textAlign: TextAlign.center, style: AppTypography.bodySmall.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+            child: Text(error, textAlign: TextAlign.center, style: AppTypography.bodySmall(context)),
           ),
           const SizedBox(height: 24),
           OutlinedButton(onPressed: onRetry, child: const Text('Повторить')),

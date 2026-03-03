@@ -15,8 +15,6 @@ class UserProfileBottomSheet extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    
-    // Use real organizations from user model
     final organizations = user.organizations;
 
     return Container(
@@ -41,12 +39,11 @@ class UserProfileBottomSheet extends ConsumerWidget {
           ),
           const SizedBox(height: 24),
           
-          // Header
           Row(
             children: [
               CircleAvatar(
                 radius: 32,
-                backgroundColor: AppColors.primary,
+                backgroundColor: theme.colorScheme.primary,
                 backgroundImage: user.avatarUrl != null ? NetworkImage(user.avatarUrl!) : null,
                 child: user.avatarUrl == null
                     ? Text(
@@ -66,9 +63,8 @@ class UserProfileBottomSheet extends ConsumerWidget {
                   children: [
                     Text(
                       user.name, 
-                      style: AppTypography.h2.copyWith(
+                      style: AppTypography.h2(context).copyWith(
                         fontSize: 20,
-                        color: theme.colorScheme.onSurface, // Fix: Use theme color
                       ),
                     ),
                     const SizedBox(height: 4),
@@ -81,8 +77,8 @@ class UserProfileBottomSheet extends ConsumerWidget {
                       ),
                       child: Text(
                         user.roles.isEmpty ? 'БЕЗ РОЛИ' : user.roles.join(', ').toUpperCase(),
-                        style: AppTypography.caption.copyWith(
-                          color: AppColors.primary,
+                        style: AppTypography.caption(context).copyWith(
+                          color: theme.colorScheme.primary,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
@@ -96,11 +92,10 @@ class UserProfileBottomSheet extends ConsumerWidget {
           const SizedBox(height: 32),
           Text(
             'ОРГАНИЗАЦИЯ', 
-            style: AppTypography.caption.copyWith(color: theme.colorScheme.onSurfaceVariant),
+            style: AppTypography.caption(context),
           ),
           const SizedBox(height: 12),
           
-          // Org Switcher
           ...organizations.map((org) {
             final orgId = org['id'] as int;
             final isSelected = user.currentOrganizationId == orgId;
@@ -117,26 +112,26 @@ class UserProfileBottomSheet extends ConsumerWidget {
                     ? theme.colorScheme.primary.withOpacity(0.05)
                     : theme.cardTheme.color,
                 border: isSelected 
-                    ? Border.all(color: AppColors.primary, width: 1.5)
+                    ? Border.all(color: theme.colorScheme.primary, width: 1.5)
                     : null,
                 child: Row(
                   children: [
                     Icon(
                       Icons.business_rounded,
-                      color: isSelected ? AppColors.primary : theme.iconTheme.color?.withOpacity(0.6),
+                      color: isSelected ? theme.colorScheme.primary : theme.colorScheme.onSurfaceVariant,
                     ),
                     const SizedBox(width: 16),
                     Expanded(
                       child: Text(
                         org['name'] as String,
-                        style: AppTypography.bodyMedium.copyWith(
+                        style: AppTypography.bodyMedium(context).copyWith(
                           fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                          color: isSelected ? AppColors.primary : theme.textTheme.bodyMedium?.color,
+                          color: isSelected ? theme.colorScheme.primary : theme.colorScheme.onSurface,
                         ),
                       ),
                     ),
                     if (isSelected)
-                      const Icon(Icons.check_circle_rounded, color: AppColors.primary),
+                      Icon(Icons.check_circle_rounded, color: theme.colorScheme.primary),
                   ],
                 ),
               ),
@@ -147,7 +142,6 @@ class UserProfileBottomSheet extends ConsumerWidget {
           const Divider(),
           const SizedBox(height: 16),
           
-          // Actions
           SizedBox(
             width: double.infinity,
             child: OutlinedButton.icon(

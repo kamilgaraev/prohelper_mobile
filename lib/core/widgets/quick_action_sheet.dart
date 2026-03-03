@@ -18,14 +18,13 @@ class QuickActionSheet extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.fromLTRB(24, 12, 24, 40),
       decoration: BoxDecoration(
-        color: theme.colorScheme.surface, // Use theme surface
+        color: theme.colorScheme.surface,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
         border: Border.all(color: theme.colorScheme.outline.withOpacity(0.1), width: 1),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Handle
           Container(
             width: 40,
             height: 4,
@@ -37,7 +36,7 @@ class QuickActionSheet extends StatelessWidget {
           const SizedBox(height: 24),
           Text(
             'БЫСТРЫЕ ДЕЙСТВИЯ',
-            style: AppTypography.caption.copyWith(
+            style: AppTypography.caption(context).copyWith(
               fontWeight: FontWeight.w900,
               letterSpacing: 2,
               color: theme.colorScheme.onSurfaceVariant,
@@ -70,7 +69,6 @@ class QuickActionSheet extends StatelessWidget {
                   color: AppColors.primary,
                   onTap: () {
                     Navigator.pop(context);
-                    // TODO: Перейти на сканер/склад
                   },
                 ),
                _ActionItem(
@@ -88,10 +86,10 @@ class QuickActionSheet extends StatelessWidget {
                 _ActionItem(
                   icon: Icons.settings_outlined,
                   label: 'Настройки',
-                  color: AppColors.textSecondary,
+                  color: theme.colorScheme.onSurfaceVariant,
                   onTap: () => Navigator.pop(context),
                 ),
-                 _ActionItem(
+                _ActionItem(
                   icon: Icons.help_outline_rounded,
                   label: 'Помощь',
                   color: Colors.cyan,
@@ -139,7 +137,7 @@ class _ActionItem extends StatelessWidget {
           const SizedBox(height: 8),
           Text(
             label,
-            style: AppTypography.caption.copyWith(
+            style: AppTypography.caption(context).copyWith(
               fontWeight: FontWeight.w600,
               color: Theme.of(context).colorScheme.onSurface,
             ),
