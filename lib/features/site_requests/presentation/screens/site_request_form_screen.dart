@@ -14,7 +14,7 @@ class SiteRequestFormScreen extends HookConsumerWidget {
   const SiteRequestFormScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final titleController = useTextEditingController();
     final nameController = useTextEditingController();
@@ -192,7 +192,7 @@ class SiteRequestFormScreen extends HookConsumerWidget {
         labelText: label,
         labelStyle: AppTypography.caption.copyWith(color: theme.colorScheme.onSurfaceVariant),
         enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: theme.colorScheme.outline.withOpacity(0.2))),
-        focusedBorder: BorderSide.none.copyWith(
+        focusedBorder: UnderlineInputBorder(
           borderSide: BorderSide(color: theme.colorScheme.primary),
         ),
         // Force the text visible even if hints are buggy

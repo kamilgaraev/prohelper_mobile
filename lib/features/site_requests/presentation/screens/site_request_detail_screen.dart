@@ -14,7 +14,7 @@ class SiteRequestDetailScreen extends ConsumerWidget {
   const SiteRequestDetailScreen({super.key, required this.id});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(siteRequestDetailProvider(id));
     final theme = Theme.of(context);
 
