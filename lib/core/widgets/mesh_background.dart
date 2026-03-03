@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'dart:math' as math;
-import '../theme/app_colors.dart';
 
 class MeshBackground extends StatefulWidget {
   final Widget child;
@@ -30,8 +29,10 @@ class _MeshBackgroundState extends State<MeshBackground> with SingleTickerProvid
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    
     return Scaffold(
-      backgroundColor: const Color(0xFF0F0F12),
+      backgroundColor: theme.scaffoldBackgroundColor, // Use theme background
       body: AnimatedBuilder(
         animation: _controller,
         builder: (context, _) {
@@ -41,13 +42,13 @@ class _MeshBackgroundState extends State<MeshBackground> with SingleTickerProvid
               Positioned(
                 top: -100 + 50 * math.sin(_controller.value * 2 * math.pi),
                 left: -100 + 50 * math.cos(_controller.value * 2 * math.pi),
-                child: _Blob(color: AppColors.primary.withOpacity(0.3), size: 400),
+                child: _Blob(color: theme.colorScheme.primary.withOpacity(0.15), size: 400),
               ),
               // Градиент 2
               Positioned(
                 bottom: -100 + 50 * math.cos(_controller.value * 2 * math.pi),
                 right: -100 + 50 * math.sin(_controller.value * 2 * math.pi),
-                child: _Blob(color: AppColors.secondary.withOpacity(0.2), size: 500),
+                child: _Blob(color: theme.colorScheme.secondary.withOpacity(0.1), size: 500),
               ),
               // Основной контент
               widget.child,

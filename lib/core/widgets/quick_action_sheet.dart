@@ -18,7 +18,7 @@ class QuickActionSheet extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.fromLTRB(24, 12, 24, 40),
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: theme.colorScheme.surface, // Use theme surface
         borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
         border: Border.all(color: theme.colorScheme.outline.withOpacity(0.1), width: 1),
       ),
