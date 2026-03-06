@@ -26,6 +26,17 @@ class SiteRequestModel {
   String? materialName;
   double? materialQuantity;
   String? materialUnit;
+  
+  // Дополнительные поля (Персонал, Техника)
+  String? personnelType;
+  String? personnelTypeLabel;
+  int? personnelCount;
+  String? equipmentType;
+  String? equipmentTypeLabel;
+  String? workStartDate;
+  String? workEndDate;
+  String? rentalStartDate;
+  String? rentalEndDate;
 
   // Проект
   int? projectId;
@@ -54,6 +65,15 @@ class SiteRequestModel {
           ? double.tryParse(json['material_quantity'].toString()) 
           : null
       ..materialUnit = json['material_unit']
+      ..personnelType = json['personnel_type']
+      ..personnelTypeLabel = json['personnel_type_label']
+      ..personnelCount = json['personnel_count']
+      ..equipmentType = json['equipment_type']
+      ..equipmentTypeLabel = json['equipment_type_label']
+      ..workStartDate = json['work_start_date']
+      ..workEndDate = json['work_end_date']
+      ..rentalStartDate = json['rental_start_date']
+      ..rentalEndDate = json['rental_end_date']
       ..projectId = json['project_id']
       ..projectName = json['project'] != null ? json['project']['name'] : null
       ..createdAt = json['created_at'] != null ? DateTime.tryParse(json['created_at']) : null;

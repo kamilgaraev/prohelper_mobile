@@ -130,4 +130,14 @@ class SiteRequestsRepository {
       rethrow;
     }
   }
+
+  /// Получить мета-данные (справочники)
+  Future<Map<String, dynamic>> fetchMeta() async {
+    try {
+      final response = await _dio.get('/site-requests/meta');
+      return response.data['data'];
+    } catch (e) {
+      rethrow;
+    }
+  }
 }
