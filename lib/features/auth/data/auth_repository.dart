@@ -85,11 +85,12 @@ class AuthRepository {
 
     final currentOrgId = json['current_organization_id'] as int?;
 
+    final authData = json['auth'] as Map<String, dynamic>?;
     final List<String> roles = [];
-    if (json['auth']?['roles'] != null) {
-       roles.addAll(List<String>.from(json['auth']['roles']));
-    } else if (json['auth']?['role_labels'] != null) {
-      roles.addAll(List<String>.from(json['auth']['role_labels']));
+    if (authData != null && authData['roles'] != null) {
+      roles.addAll(List<String>.from(authData['roles']));
+    } else if (authData != null && authData['role_labels'] != null) {
+      roles.addAll(List<String>.from(authData['role_labels']));
     }
 
     // Find organization name
@@ -121,7 +122,7 @@ class AuthRepository {
       ..currentOrganizationId = currentOrgId
       ..organizationName = orgName
       ..organizationsJson = jsonEncode(organizations)
-      ..permissionsJson = jsonEncode(json['auth']?['modules'] ?? {});
+      ..permissionsJson = jsonEncode(authData != null ? authData['modules'] ?? {} : {});
   }
 
   Future<void> logout() async {

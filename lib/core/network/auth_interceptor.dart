@@ -88,9 +88,11 @@ class AuthInterceptor extends Interceptor {
       ));
 
       final response = await refreshClient.post('/auth/refresh');
-      final refreshedToken = response.data is Map<String, dynamic>
-          ? response.data['data']?['token']
+      final responseData = response.data;
+      final payload = responseData is Map<String, dynamic>
+          ? responseData['data'] as Map<String, dynamic>?
           : null;
+      final refreshedToken = payload != null ? payload['token'] : null;
 
       if (refreshedToken is String && refreshedToken.isNotEmpty) {
         await storage.saveToken(refreshedToken);
