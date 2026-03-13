@@ -6,8 +6,9 @@ import '../../../core/theme/app_typography.dart';
 import '../../../core/widgets/app_state_view.dart';
 import '../../../core/widgets/industrial_card.dart';
 import '../../projects/domain/projects_provider.dart';
-import '../data/schedule_summary_model.dart';
+import '../data/schedule_model.dart';
 import '../domain/schedule_provider.dart';
+import 'schedule_details_screen.dart';
 
 class ScheduleScreen extends ConsumerStatefulWidget {
   const ScheduleScreen({super.key});
@@ -30,7 +31,7 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
   Widget build(BuildContext context) {
     final state = ref.watch(scheduleProvider);
     final selectedProject = ref.watch(projectsProvider).selectedProject;
-    final theme = Theme.of(context);
+    final overview = state.overview;
 
     return Scaffold(
       appBar: AppBar(
@@ -44,74 +45,73 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
         child: CustomScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           slivers: [
-            if (state.isLoading && state.data == null)
+            if (selectedProject == null)
+              const SliverFillRemaining(
+                child: AppStateView(
+                  icon: Icons.timeline_outlined,
+                  title: 'Объект не выбран',
+                  description: 'Сначала выберите объект, чтобы открыть графики работ.',
+                ),
+              )
+            else if (state.isLoading && overview == null)
               const SliverFillRemaining(
                 child: Center(child: CircularProgressIndicator()),
               )
-            else if (state.error != null && state.data == null)
+            else if (state.error != null && overview == null)
               SliverFillRemaining(
                 child: AppStateView(
                   icon: Icons.error_outline_rounded,
-                  title: 'Не удалось загрузить график работ',
+                  title: 'Не удалось загрузить графики работ',
                   description: state.error,
                   action: OutlinedButton(
                     onPressed: () => ref.read(scheduleProvider.notifier).load(
-                          projectId: selectedProject?.serverId,
+                          projectId: selectedProject.serverId,
                         ),
                     child: const Text('Повторить'),
                   ),
                 ),
               )
-            else if (state.data == null)
+            else if (overview == null)
               const SliverFillRemaining(
                 child: AppStateView(
-                  icon: Icons.timeline_rounded,
-                  title: 'Нет данных по графику',
-                  description: 'Как только на сервере появятся события, они отобразятся здесь.',
+                  icon: Icons.timeline_outlined,
+                  title: 'Графики работ пока недоступны',
+                  description: 'Попробуйте обновить экран позже.',
                 ),
               )
             else ...[
               SliverPadding(
                 padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
                 sliver: SliverToBoxAdapter(
-                  child: _ScheduleSummarySection(
-                    summary: state.data!.summary,
-                    selectedProjectName: selectedProject?.name,
+                  child: _ScheduleHeader(
+                    projectName: overview.project?.name ?? selectedProject.name,
+                    isRefreshing: state.isLoading,
                   ),
                 ),
               ),
               SliverPadding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
                 sliver: SliverToBoxAdapter(
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          'Ближайшие события',
-                          style: AppTypography.h2(context),
-                        ),
-                      ),
-                      if (state.isLoading)
-                        SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: theme.colorScheme.primary,
-                          ),
-                        ),
-                    ],
+                  child: _ScheduleSummaryGrid(summary: overview.summary),
+                ),
+              ),
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                sliver: SliverToBoxAdapter(
+                  child: Text(
+                    'Графики объекта',
+                    style: AppTypography.h2(context),
                   ),
                 ),
               ),
-              if (state.data!.events.isEmpty)
+              if (overview.schedules.isEmpty)
                 const SliverToBoxAdapter(
                   child: Padding(
                     padding: EdgeInsets.symmetric(horizontal: 16),
                     child: AppStateView(
-                      icon: Icons.event_busy_outlined,
-                      title: 'Событий пока нет',
-                      description: 'На ближайшие дни ничего не запланировано.',
+                      icon: Icons.event_note_outlined,
+                      title: 'Графиков пока нет',
+                      description: 'Для выбранного объекта еще не создано ни одного графика работ.',
                     ),
                   ),
                 )
@@ -121,13 +121,23 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
                   sliver: SliverList(
                     delegate: SliverChildBuilderDelegate(
                       (context, index) {
-                        final event = state.data!.events[index];
+                        final schedule = overview.schedules[index];
+
                         return Padding(
                           padding: const EdgeInsets.only(bottom: 12),
-                          child: _ScheduleEventCard(event: event),
+                          child: _ScheduleCard(
+                            schedule: schedule,
+                            onTap: () => Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => ScheduleDetailsScreen(
+                                  scheduleId: schedule.id,
+                                ),
+                              ),
+                            ),
+                          ),
                         );
                       },
-                      childCount: state.data!.events.length,
+                      childCount: overview.schedules.length,
                     ),
                   ),
                 ),
@@ -139,46 +149,78 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
   }
 }
 
-class _ScheduleSummarySection extends StatelessWidget {
-  const _ScheduleSummarySection({
-    required this.summary,
-    this.selectedProjectName,
+class _ScheduleHeader extends StatelessWidget {
+  const _ScheduleHeader({
+    required this.projectName,
+    required this.isRefreshing,
   });
 
-  final ScheduleSummaryData summary;
-  final String? selectedProjectName;
+  final String projectName;
+  final bool isRefreshing;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Row(
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                projectName,
+                style: AppTypography.bodyMedium(context).copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Список графиков работ по выбранному объекту',
+                style: AppTypography.bodyLarge(context),
+              ),
+            ],
+          ),
+        ),
+        if (isRefreshing)
+          SizedBox(
+            width: 18,
+            height: 18,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              color: theme.colorScheme.primary,
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _ScheduleSummaryGrid extends StatelessWidget {
+  const _ScheduleSummaryGrid({required this.summary});
+
+  final ScheduleOverviewSummaryModel summary;
 
   @override
   Widget build(BuildContext context) {
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if ((summary.projectName ?? selectedProjectName)?.isNotEmpty == true)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 12),
-            child: Text(
-              summary.projectName ?? selectedProjectName!,
-              style: AppTypography.bodyMedium(context).copyWith(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
-            ),
-          ),
         Row(
           children: [
             Expanded(
               child: _ScheduleSummaryCard(
-                title: 'Сегодня',
-                value: summary.todayCount.toString(),
-                icon: Icons.today_outlined,
+                title: 'Всего графиков',
+                value: summary.totalSchedules.toString(),
+                icon: Icons.timeline_outlined,
                 color: Theme.of(context).colorScheme.primary,
               ),
             ),
             const SizedBox(width: 12),
             Expanded(
               child: _ScheduleSummaryCard(
-                title: '7 дней',
-                value: summary.upcomingCount.toString(),
-                icon: Icons.date_range_rounded,
+                title: 'Активных',
+                value: summary.activeSchedules.toString(),
+                icon: Icons.play_circle_outline_rounded,
                 color: AppColors.success,
               ),
             ),
@@ -189,19 +231,19 @@ class _ScheduleSummarySection extends StatelessWidget {
           children: [
             Expanded(
               child: _ScheduleSummaryCard(
-                title: 'Блокирующие',
-                value: summary.blockingCount.toString(),
-                icon: Icons.block_rounded,
-                color: AppColors.warning,
+                title: 'Завершено',
+                value: summary.completedSchedules.toString(),
+                icon: Icons.check_circle_outline_rounded,
+                color: AppColors.secondary,
               ),
             ),
             const SizedBox(width: 12),
             Expanded(
               child: _ScheduleSummaryCard(
-                title: 'В работе',
-                value: summary.inProgressCount.toString(),
-                icon: Icons.play_circle_outline_rounded,
-                color: AppColors.secondary,
+                title: 'Средний прогресс',
+                value: '${summary.averageProgressPercent.toStringAsFixed(1)}%',
+                icon: Icons.bar_chart_rounded,
+                color: AppColors.warning,
               ),
             ),
           ],
@@ -241,103 +283,214 @@ class _ScheduleSummaryCard extends StatelessWidget {
   }
 }
 
-class _ScheduleEventCard extends StatelessWidget {
-  const _ScheduleEventCard({required this.event});
+class _ScheduleCard extends StatelessWidget {
+  const _ScheduleCard({
+    required this.schedule,
+    required this.onTap,
+  });
 
-  final ScheduleEventModel event;
+  final ScheduleItemModel schedule;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final statusColor = _parseColor(
+      schedule.statusColor,
+      theme.colorScheme.primary,
+    );
+    final progressColor = _parseColor(
+      schedule.progressColor,
+      theme.colorScheme.secondary,
+    );
 
     return IndustrialCard(
+      onTap: onTap,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
-                child: Text(
-                  event.title,
-                  style: AppTypography.h2(context),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      schedule.name,
+                      style: AppTypography.h2(context),
+                    ),
+                    if ((schedule.description ?? '').trim().isNotEmpty) ...[
+                      const SizedBox(height: 6),
+                      Text(
+                        schedule.description!,
+                        style: AppTypography.bodyMedium(context).copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ],
                 ),
               ),
-              if (event.isBlocking)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: AppColors.warning.withOpacity(0.12),
-                    borderRadius: BorderRadius.circular(999),
-                  ),
-                  child: Text(
-                    'Блокирует',
-                    style: AppTypography.caption(context).copyWith(
-                      color: AppColors.warning,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
+              const SizedBox(width: 12),
+              _ScheduleBadge(
+                label: schedule.statusLabel,
+                color: statusColor,
+              ),
             ],
           ),
-          const SizedBox(height: 8),
-          Text(
-            '${event.eventTypeLabel} • ${event.statusLabel}',
-            style: AppTypography.bodyMedium(context).copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-          ),
-          if (event.location?.isNotEmpty == true) ...[
-            const SizedBox(height: 4),
-            Text(
-              event.location!,
-              style: AppTypography.bodyMedium(context).copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-          ],
-          const SizedBox(height: 12),
+          const SizedBox(height: 16),
           Row(
             children: [
               Expanded(
                 child: Text(
-                  _formatDate(event.eventDate),
-                  style: AppTypography.bodyMedium(context),
+                  'Прогресс ${schedule.overallProgressPercent.toStringAsFixed(1)}%',
+                  style: AppTypography.bodyMedium(context).copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ),
               Text(
-                event.isAllDay ? 'Весь день' : (event.eventTime ?? 'Без времени'),
-                style: AppTypography.bodyMedium(context).copyWith(
-                  fontWeight: FontWeight.w700,
+                '${schedule.completedTasksCount}/${schedule.tasksCount} задач',
+                style: AppTypography.caption(context).copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
                 ),
               ),
             ],
           ),
-          if (event.projectName?.isNotEmpty == true) ...[
-            const SizedBox(height: 4),
-            Text(
-              'Объект: ${event.projectName}',
-              style: AppTypography.caption(context),
+          const SizedBox(height: 8),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(999),
+            child: LinearProgressIndicator(
+              value: (schedule.overallProgressPercent.clamp(0, 100)) / 100,
+              minHeight: 8,
+              color: progressColor,
+              backgroundColor: theme.colorScheme.outline.withOpacity(0.12),
             ),
-          ],
-          const SizedBox(height: 4),
+          ),
+          const SizedBox(height: 14),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _MetaPill(
+                icon: Icons.event_outlined,
+                label:
+                    '${_formatDate(schedule.plannedStartDate)} - ${_formatDate(schedule.plannedEndDate)}',
+              ),
+              _MetaPill(
+                icon: Icons.rule_folder_outlined,
+                label: schedule.criticalPathCalculated
+                    ? 'Критический путь рассчитан'
+                    : 'Критический путь не рассчитан',
+              ),
+              if (schedule.overdueTasksCount > 0)
+                _MetaPill(
+                  icon: Icons.warning_amber_rounded,
+                  label: 'Просрочено: ${schedule.overdueTasksCount}',
+                  color: AppColors.warning,
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ScheduleBadge extends StatelessWidget {
+  const _ScheduleBadge({
+    required this.label,
+    required this.color,
+  });
+
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        label,
+        style: AppTypography.caption(context).copyWith(
+          color: color,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+}
+
+class _MetaPill extends StatelessWidget {
+  const _MetaPill({
+    required this.icon,
+    required this.label,
+    this.color,
+  });
+
+  final IconData icon;
+  final String label;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final resolvedColor = color ?? theme.colorScheme.onSurfaceVariant;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: resolvedColor.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 16, color: resolvedColor),
+          const SizedBox(width: 6),
           Text(
-            'Приоритет: ${event.priorityLabel}',
+            label,
             style: AppTypography.caption(context).copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
+              color: resolvedColor,
+              fontWeight: FontWeight.w600,
             ),
           ),
         ],
       ),
     );
   }
+}
 
-  String _formatDate(DateTime? date) {
-    if (date == null) {
-      return 'Дата не указана';
-    }
-
-    final day = date.day.toString().padLeft(2, '0');
-    final month = date.month.toString().padLeft(2, '0');
-    return '$day.$month.${date.year}';
+String _formatDate(String? value) {
+  if (value == null || value.isEmpty) {
+    return 'Дата не указана';
   }
+
+  final date = DateTime.tryParse(value);
+  if (date == null) {
+    return value;
+  }
+
+  final day = date.day.toString().padLeft(2, '0');
+  final month = date.month.toString().padLeft(2, '0');
+  return '$day.$month.${date.year}';
+}
+
+Color _parseColor(String? value, Color fallback) {
+  if (value == null || value.isEmpty) {
+    return fallback;
+  }
+
+  final normalized = value.replaceFirst('#', '');
+  final hex = normalized.length == 6 ? 'FF$normalized' : normalized;
+  final parsed = int.tryParse(hex, radix: 16);
+
+  return parsed == null ? fallback : Color(parsed);
 }
