@@ -1,6 +1,10 @@
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import '../../auth/domain/auth_provider.dart';
+import '../../projects/domain/projects_provider.dart';
 import '../data/site_request_model.dart';
 import '../data/site_requests_repository.dart';
+
+const _siteRequestsSentinel = Object();
 
 class SiteRequestsState {
   final bool isLoading;
@@ -26,7 +30,7 @@ class SiteRequestsState {
     List<SiteRequestModel>? requests,
     int? currentPage,
     bool? hasMore,
-    String? error,
+    Object? error = _siteRequestsSentinel,
     String? statusFilter,
     int? projectFilter,
     bool clearStatusFilter = false,
@@ -37,7 +41,7 @@ class SiteRequestsState {
       requests: requests ?? this.requests,
       currentPage: currentPage ?? this.currentPage,
       hasMore: hasMore ?? this.hasMore,
-      error: error ?? this.error,
+      error: identical(error, _siteRequestsSentinel) ? this.error : error as String?,
       statusFilter: clearStatusFilter ? null : (statusFilter ?? this.statusFilter),
       projectFilter: clearProjectFilter ? null : (projectFilter ?? this.projectFilter),
     );
@@ -45,13 +49,21 @@ class SiteRequestsState {
 }
 
 final siteRequestsProvider = StateNotifierProvider<SiteRequestsNotifier, SiteRequestsState>((ref) {
-  return SiteRequestsNotifier(ref.read(siteRequestsRepositoryProvider));
+  ref.watch(authProvider);
+  final selectedProject = ref.watch(projectsProvider).selectedProject;
+  return SiteRequestsNotifier(
+    ref.read(siteRequestsRepositoryProvider),
+    initialProjectId: selectedProject?.serverId,
+  );
 });
 
 class SiteRequestsNotifier extends StateNotifier<SiteRequestsState> {
   final SiteRequestsRepository _repository;
 
-  SiteRequestsNotifier(this._repository) : super(SiteRequestsState());
+  SiteRequestsNotifier(
+    this._repository, {
+    int? initialProjectId,
+  }) : super(SiteRequestsState(projectFilter: initialProjectId));
 
   Future<void> loadRequests({bool refresh = false}) async {
     if (state.isLoading) return;
@@ -79,6 +91,22 @@ class SiteRequestsNotifier extends StateNotifier<SiteRequestsState> {
     } catch (e) {
       state = state.copyWith(isLoading: false, error: e.toString());
     }
+  }
+
+  void syncProject(int? projectId) {
+    final currentProjectId = state.projectFilter;
+    if (currentProjectId == projectId) {
+      return;
+    }
+
+    state = state.copyWith(
+      projectFilter: projectId,
+      clearProjectFilter: projectId == null,
+      requests: [],
+      currentPage: 1,
+      hasMore: true,
+      error: null,
+    );
   }
 
   void setStatusFilter(String? status) {

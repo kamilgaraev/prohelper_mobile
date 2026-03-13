@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
-import 'package:prohelpers_mobile/core/theme/app_colors.dart';
 import 'package:prohelpers_mobile/core/theme/app_typography.dart';
+import 'package:prohelpers_mobile/core/widgets/app_state_view.dart';
 import 'package:prohelpers_mobile/core/widgets/mesh_background.dart';
+import 'package:prohelpers_mobile/features/projects/domain/projects_provider.dart';
 import 'package:prohelpers_mobile/features/site_requests/domain/site_requests_provider.dart';
-import 'package:prohelpers_mobile/features/site_requests/presentation/widgets/site_request_card.dart';
 import 'package:prohelpers_mobile/features/site_requests/presentation/screens/site_request_detail_screen.dart';
 import 'package:prohelpers_mobile/features/site_requests/presentation/screens/site_request_form_screen.dart';
+import 'package:prohelpers_mobile/features/site_requests/presentation/widgets/site_request_card.dart';
 
 class SiteRequestsScreen extends ConsumerStatefulWidget {
   const SiteRequestsScreen({super.key});
@@ -22,11 +23,6 @@ class _SiteRequestsScreenState extends ConsumerState<SiteRequestsScreen> {
   void initState() {
     super.initState();
     _scrollController.addListener(_onScroll);
-    
-    // Первичная загрузка
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(siteRequestsProvider.notifier).loadRequests(refresh: true);
-    });
   }
 
   @override
@@ -44,52 +40,86 @@ class _SiteRequestsScreenState extends ConsumerState<SiteRequestsScreen> {
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(siteRequestsProvider);
+    final selectedProject = ref.watch(projectsProvider).selectedProject;
     final theme = Theme.of(context);
-    
+
+    ref.listen<SiteRequestsState>(siteRequestsProvider, (previous, next) {
+      final shouldShowError = next.error != null &&
+          next.error != previous?.error &&
+          next.requests.isNotEmpty;
+      if (!shouldShowError || !mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(next.error!)),
+      );
+    });
+
+    if (selectedProject != null &&
+        !state.isLoading &&
+        state.requests.isEmpty &&
+        state.error == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        ref.read(siteRequestsProvider.notifier).syncProject(selectedProject?.serverId);
+        ref.read(siteRequestsProvider.notifier).loadRequests(refresh: true);
+      });
+    }
+
     return MeshBackground(
       child: Scaffold(
         backgroundColor: Colors.transparent,
         appBar: AppBar(
           backgroundColor: Colors.transparent,
           elevation: 0,
-          title: Text('Заявки с объекта', style: AppTypography.h1(context)),
+          title: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Заявки с объекта', style: AppTypography.h1(context)),
+              if (selectedProject != null)
+                Text(
+                  selectedProject.name,
+                  style: AppTypography.caption(context).copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+            ],
+          ),
           centerTitle: false,
-          actions: [
-            IconButton(
-              icon: Icon(Icons.filter_list_rounded, color: theme.colorScheme.onSurface),
-              onPressed: () {
-                // TODO: Показать фильтры
-              },
-            ),
-          ],
         ),
         body: RefreshIndicator(
           onRefresh: () async {
+            if (selectedProject == null) {
+              return;
+            }
+
+            ref.read(siteRequestsProvider.notifier).syncProject(selectedProject?.serverId);
             await ref.read(siteRequestsProvider.notifier).loadRequests(refresh: true);
           },
           child: CustomScrollView(
             controller: _scrollController,
             physics: const AlwaysScrollableScrollPhysics(),
             slivers: [
-              if (state.requests.isEmpty && !state.isLoading)
+              if (state.error != null && state.requests.isEmpty)
                 SliverFillRemaining(
-                  child: Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.inventory_2_outlined, size: 64, color: theme.colorScheme.onSurfaceVariant.withOpacity(0.5)),
-                        const SizedBox(height: 16),
-                        Text(
-                          'Заявок пока нет',
-                          style: AppTypography.h2(context),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'Создайте первую заявку, нажав на кнопку +',
-                          style: AppTypography.bodyMedium(context).copyWith(color: theme.colorScheme.onSurfaceVariant),
-                        ),
-                      ],
+                  child: AppStateView(
+                    icon: Icons.error_outline_rounded,
+                    title: 'Не удалось загрузить заявки',
+                    description: state.error,
+                    action: OutlinedButton(
+                      onPressed: () => ref.read(siteRequestsProvider.notifier).loadRequests(refresh: true),
+                      child: const Text('Повторить'),
                     ),
+                  ),
+                )
+              else if (state.requests.isEmpty && !state.isLoading)
+                SliverFillRemaining(
+                  child: AppStateView(
+                    icon: Icons.inventory_2_outlined,
+                    title: 'Заявок пока нет',
+                    description: selectedProject == null
+                        ? 'Сначала выберите объект.'
+                        : 'Создайте первую заявку для текущего объекта.',
                   ),
                 )
               else ...[
@@ -106,7 +136,7 @@ class _SiteRequestsScreenState extends ConsumerState<SiteRequestsScreen> {
                             onTap: () {
                               Navigator.of(context).push(
                                 MaterialPageRoute(
-                                  builder: (context) => SiteRequestDetailScreen(id: request.serverId),
+                                  builder: (_) => SiteRequestDetailScreen(id: request.serverId),
                                 ),
                               );
                             },
@@ -120,21 +150,27 @@ class _SiteRequestsScreenState extends ConsumerState<SiteRequestsScreen> {
                 if (state.isLoading)
                   const SliverToBoxAdapter(
                     child: Padding(
-                      padding: EdgeInsets.all(24.0),
+                      padding: EdgeInsets.all(24),
                       child: Center(child: CircularProgressIndicator()),
                     ),
                   ),
               ],
-              // Отступ снизу для FAB
               const SliverToBoxAdapter(child: SizedBox(height: 80)),
             ],
           ),
         ),
         floatingActionButton: FloatingActionButton(
           onPressed: () {
+            if (selectedProject == null) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Сначала выберите объект.')),
+              );
+              return;
+            }
+
             Navigator.of(context).push(
               MaterialPageRoute(
-                builder: (context) => const SiteRequestFormScreen(),
+                builder: (_) => const SiteRequestFormScreen(),
               ),
             );
           },

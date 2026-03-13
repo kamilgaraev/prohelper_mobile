@@ -1,136 +1,95 @@
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
-import '../../../../core/theme/app_colors.dart';
-import '../../../../core/theme/app_typography.dart';
-import '../../auth/domain/auth_provider.dart';
-import '../domain/projects_provider.dart';
-import 'widgets/project_card.dart';
+import 'package:prohelpers_mobile/core/theme/app_colors.dart';
+import 'package:prohelpers_mobile/core/theme/app_typography.dart';
+import 'package:prohelpers_mobile/core/widgets/app_state_view.dart';
+import 'package:prohelpers_mobile/features/auth/domain/auth_provider.dart';
+import 'package:prohelpers_mobile/features/projects/domain/projects_provider.dart';
+import 'package:prohelpers_mobile/features/projects/presentation/widgets/project_card.dart';
 
-class ProjectSelectionScreen extends ConsumerStatefulWidget {
+class ProjectSelectionScreen extends ConsumerWidget {
   const ProjectSelectionScreen({super.key});
 
   @override
-  ConsumerState<ProjectSelectionScreen> createState() => _ProjectSelectionScreenState();
-}
-
-class _ProjectSelectionScreenState extends ConsumerState<ProjectSelectionScreen> {
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(projectsProvider.notifier).loadProjects();
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final state = ref.watch(projectsProvider);
     final user = ref.watch(authProvider).user;
+
+    if (!state.isLoading && state.projects.isEmpty && state.error == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        ref.read(projectsProvider.notifier).loadProjects();
+      });
+    }
 
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
       body: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.all(24.0),
+          padding: const EdgeInsets.all(24),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Привет, ${user?.name ?? "User"}', 
-                        style: AppTypography.h2(context),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Выберите объект для работы', 
-                        style: AppTypography.bodyMedium(context),
-                      ),
-                    ],
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Привет, ${user?.name ?? 'пользователь'}',
+                          style: AppTypography.h2(context),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Выберите объект для работы',
+                          style: AppTypography.bodyMedium(context).copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                   IconButton(
-                    onPressed: () {
-                      ref.read(authProvider.notifier).logout();
-                    },
+                    onPressed: () => ref.read(authProvider.notifier).logout(),
                     icon: const Icon(Icons.logout_rounded, color: AppColors.error),
                   ),
                 ],
               ),
-              
               const SizedBox(height: 32),
-              
-              if (state.isLoading)
-                const Expanded(child: Center(child: CircularProgressIndicator()))
-              else if (state.error != null)
-                Expanded(
-                  child: Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(Icons.error_outline, size: 48, color: AppColors.error),
-                        const SizedBox(height: 16),
-                        Text(
-                          'Ошибка загрузки проектов', 
-                          style: AppTypography.h2(context),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          state.error!.length > 100 ? '${state.error!.substring(0, 100)}...' : state.error!, 
-                          style: AppTypography.bodySmall(context).copyWith(color: theme.colorScheme.error),
-                          textAlign: TextAlign.center,
-                        ),
-                        const SizedBox(height: 24),
-                        OutlinedButton(
-                          onPressed: () => ref.read(projectsProvider.notifier).loadProjects(),
-                          child: const Text('Повторить'),
-                        ),
-                      ],
+              Expanded(
+                child: switch ((state.isLoading, state.error, state.projects.isEmpty)) {
+                  (true, _, _) => const Center(child: CircularProgressIndicator()),
+                  (_, final String error, true) => AppStateView(
+                      icon: Icons.error_outline_rounded,
+                      iconColor: AppColors.error,
+                      title: 'Не удалось загрузить объекты',
+                      description: error,
+                      action: OutlinedButton(
+                        onPressed: () => ref.read(projectsProvider.notifier).loadProjects(),
+                        child: const Text('Повторить'),
+                      ),
                     ),
-                  ),
-                )
-              else if (state.projects.isEmpty)
-                 Expanded(
-                  child: Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.folder_off_outlined, size: 64, color: theme.colorScheme.onSurfaceVariant),
-                        const SizedBox(height: 16),
-                        Text(
-                          'Нет доступных проектов', 
-                          style: AppTypography.h2(context),
-                        ),
-                         const SizedBox(height: 8),
-                        Text(
-                          'Обратитесь к администратору', 
-                          style: AppTypography.bodyMedium(context),
-                        ),
-                      ],
+                  (_, _, true) => AppStateView(
+                      icon: Icons.folder_off_outlined,
+                      title: 'Нет доступных объектов',
+                      description: 'Попросите администратора выдать вам доступ к проекту.',
                     ),
-                  ),
-                )
-              else
-                Expanded(
-                  child: ListView.separated(
-                    itemCount: state.projects.length,
-                    separatorBuilder: (context, index) => const SizedBox(height: 16),
-                    itemBuilder: (context, index) {
-                      final project = state.projects[index];
-                      return ProjectCard(
-                        project: project,
-                        onTap: () {
-                          ref.read(projectsProvider.notifier).selectProject(project);
-                        },
-                        isSelected: state.selectedProject?.id == project.id,
-                      );
-                    },
-                  ),
-                ),
+                  _ => ListView.separated(
+                      itemCount: state.projects.length,
+                      separatorBuilder: (_, _) => const SizedBox(height: 16),
+                      itemBuilder: (context, index) {
+                        final project = state.projects[index];
+                        return ProjectCard(
+                          project: project,
+                          isSelected: state.selectedProject?.serverId == project.serverId,
+                          onTap: () => ref.read(projectsProvider.notifier).selectProject(project),
+                        );
+                      },
+                    ),
+                },
+              ),
             ],
           ),
         ),

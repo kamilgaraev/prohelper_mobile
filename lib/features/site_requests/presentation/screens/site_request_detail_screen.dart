@@ -2,11 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:prohelpers_mobile/core/theme/app_colors.dart';
 import 'package:prohelpers_mobile/core/theme/app_typography.dart';
+import 'package:prohelpers_mobile/core/widgets/app_state_view.dart';
 import 'package:prohelpers_mobile/core/widgets/mesh_background.dart';
-import 'package:prohelpers_mobile/core/widgets/pro_card.dart';
 import 'package:prohelpers_mobile/core/widgets/pro_button.dart';
-import 'package:prohelpers_mobile/features/site_requests/domain/site_request_detail_provider.dart';
+import 'package:prohelpers_mobile/core/widgets/pro_card.dart';
 import 'package:prohelpers_mobile/features/site_requests/data/site_request_model.dart';
+import 'package:prohelpers_mobile/features/site_requests/domain/site_request_detail_provider.dart';
 
 class SiteRequestDetailScreen extends ConsumerWidget {
   final int id;
@@ -33,9 +34,15 @@ class SiteRequestDetailScreen extends ConsumerWidget {
         body: state.isLoading && state.request == null
             ? const Center(child: CircularProgressIndicator())
             : state.error != null && state.request == null
-                ? _ErrorState(
-                    error: state.error!,
-                    onRetry: () => ref.read(siteRequestDetailProvider(id).notifier).loadDetails(),
+                ? AppStateView(
+                    icon: Icons.error_outline_rounded,
+                    iconColor: AppColors.error,
+                    title: 'Не удалось загрузить заявку',
+                    description: state.error,
+                    action: OutlinedButton(
+                      onPressed: () => ref.read(siteRequestDetailProvider(id).notifier).loadDetails(),
+                      child: const Text('Повторить'),
+                    ),
                   )
                 : _buildContent(context, state.request!),
         bottomNavigationBar: state.request != null ? _buildActions(context, ref, state) : null,
@@ -50,11 +57,22 @@ class SiteRequestDetailScreen extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _buildInfoSection(context, request),
-          const SizedBox(height: 16),
-          if (request.materialName != null) _buildMaterialSection(context, request),
-          const SizedBox(height: 16),
-          if (request.description != null && request.description!.isNotEmpty)
+          if (request.materialName != null) ...[
+            const SizedBox(height: 16),
+            _buildMaterialSection(context, request),
+          ],
+          if (request.personnelTypeLabel != null || request.personnelCount != null) ...[
+            const SizedBox(height: 16),
+            _buildPersonnelSection(context, request),
+          ],
+          if (request.equipmentTypeLabel != null || request.equipmentType != null) ...[
+            const SizedBox(height: 16),
+            _buildEquipmentSection(context, request),
+          ],
+          if (request.description != null && request.description!.isNotEmpty) ...[
+            const SizedBox(height: 16),
             _buildDescriptionSection(context, request.description!),
+          ],
           const SizedBox(height: 100),
         ],
       ),
@@ -63,6 +81,7 @@ class SiteRequestDetailScreen extends ConsumerWidget {
 
   Widget _buildInfoSection(BuildContext context, SiteRequestModel request) {
     final theme = Theme.of(context);
+
     return ProCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -85,6 +104,12 @@ class SiteRequestDetailScreen extends ConsumerWidget {
               icon: Icons.location_on_outlined,
               label: 'Объект',
               value: request.projectName!,
+            ),
+          if (request.requestTypeLabel != null)
+            _ParamRow(
+              icon: Icons.category_outlined,
+              label: 'Тип',
+              value: request.requestTypeLabel!,
             ),
           if (request.priorityLabel != null)
             _ParamRow(
@@ -119,13 +144,78 @@ class SiteRequestDetailScreen extends ConsumerWidget {
           _ParamRow(
             icon: Icons.format_list_numbered_outlined,
             label: 'Количество',
-            value: '${request.materialQuantity} ${request.materialUnit}',
+            value: '${request.materialQuantity} ${request.materialUnit ?? ''}'.trim(),
           ),
           if (request.requiredDate != null)
             _ParamRow(
               icon: Icons.local_shipping_outlined,
               label: 'Дата поставки',
               value: request.requiredDate!,
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPersonnelSection(BuildContext context, SiteRequestModel request) {
+    return ProCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Персонал', style: AppTypography.h2(context)),
+          const SizedBox(height: 16),
+          if (request.personnelTypeLabel != null)
+            _ParamRow(
+              icon: Icons.groups_outlined,
+              label: 'Специальность',
+              value: request.personnelTypeLabel!,
+            ),
+          if (request.personnelCount != null)
+            _ParamRow(
+              icon: Icons.person_outline_rounded,
+              label: 'Количество',
+              value: request.personnelCount.toString(),
+            ),
+          if (request.workStartDate != null)
+            _ParamRow(
+              icon: Icons.event_available_outlined,
+              label: 'Дата начала',
+              value: request.workStartDate!,
+            ),
+          if (request.workEndDate != null)
+            _ParamRow(
+              icon: Icons.event_busy_outlined,
+              label: 'Дата окончания',
+              value: request.workEndDate!,
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEquipmentSection(BuildContext context, SiteRequestModel request) {
+    return ProCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Техника', style: AppTypography.h2(context)),
+          const SizedBox(height: 16),
+          _ParamRow(
+            icon: Icons.precision_manufacturing_outlined,
+            label: 'Тип',
+            value: request.equipmentTypeLabel ?? request.equipmentType ?? 'Не указан',
+          ),
+          if (request.rentalStartDate != null)
+            _ParamRow(
+              icon: Icons.event_available_outlined,
+              label: 'Начало аренды',
+              value: request.rentalStartDate!,
+            ),
+          if (request.rentalEndDate != null)
+            _ParamRow(
+              icon: Icons.event_busy_outlined,
+              label: 'Окончание аренды',
+              value: request.rentalEndDate!,
             ),
         ],
       ),
@@ -202,7 +292,10 @@ class SiteRequestDetailScreen extends ConsumerWidget {
     try {
       await action();
     } catch (error) {
-      if (!context.mounted) return;
+      if (!context.mounted) {
+        return;
+      }
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(error.toString())),
       );
@@ -212,6 +305,7 @@ class SiteRequestDetailScreen extends ConsumerWidget {
   void _showCancelDialog(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final controller = TextEditingController();
+
     showDialog(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -354,38 +448,6 @@ class _ParamRow extends StatelessWidget {
               style: AppTypography.bodyLarge(context).copyWith(color: valueColor),
             ),
           ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ErrorState extends StatelessWidget {
-  final String error;
-  final VoidCallback onRetry;
-
-  const _ErrorState({required this.error, required this.onRetry});
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(Icons.error_outline, size: 64, color: AppColors.error),
-          const SizedBox(height: 16),
-          Text('Ошибка загрузки', style: AppTypography.h2(context)),
-          const SizedBox(height: 8),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 32),
-            child: Text(
-              error,
-              textAlign: TextAlign.center,
-              style: AppTypography.bodySmall(context),
-            ),
-          ),
-          const SizedBox(height: 24),
-          OutlinedButton(onPressed: onRetry, child: const Text('Повторить')),
         ],
       ),
     );

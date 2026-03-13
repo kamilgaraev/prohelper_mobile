@@ -102,9 +102,26 @@ class UserProfileBottomSheet extends ConsumerWidget {
             return Padding(
               padding: const EdgeInsets.only(bottom: 8),
               child: IndustrialCard(
-                onTap: () {
-                  Navigator.pop(context);
-                  ref.read(authProvider.notifier).switchOrganization(orgId);
+                onTap: () async {
+                  if (isSelected) {
+                    Navigator.pop(context);
+                    return;
+                  }
+
+                  try {
+                    await ref.read(authProvider.notifier).switchOrganization(orgId);
+                    if (context.mounted) {
+                      Navigator.pop(context);
+                    }
+                  } catch (error) {
+                    if (!context.mounted) {
+                      return;
+                    }
+
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text(error.toString())),
+                    );
+                  }
                 },
                 padding: const EdgeInsets.all(16),
                 backgroundColor: isSelected

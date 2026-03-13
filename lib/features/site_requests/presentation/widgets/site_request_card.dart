@@ -97,8 +97,12 @@ class SiteRequestCard extends StatelessWidget {
     return switch (status) {
       'draft' => AppColors.textSecondary,
       'pending' => AppColors.warning,
+      'in_review' => AppColors.primary,
       'approved' => AppColors.primary,
+      'in_progress' => AppColors.secondary,
+      'fulfilled' => AppColors.success,
       'completed' => AppColors.success,
+      'on_hold' => AppColors.warning,
       'cancelled' || 'rejected' => AppColors.error,
       _ => AppColors.textSecondary,
     };
@@ -107,6 +111,7 @@ class SiteRequestCard extends StatelessWidget {
   Color _getPriorityColor(String priority) {
     return switch (priority) {
       'high' || 'urgent' => AppColors.error,
+      'medium' => AppColors.warning,
       'normal' => AppColors.textSecondary,
       'low' => AppColors.success,
       _ => AppColors.textSecondary,

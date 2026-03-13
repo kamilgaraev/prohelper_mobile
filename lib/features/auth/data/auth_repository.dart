@@ -2,6 +2,7 @@ import 'dart:developer';
 import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import '../../../core/network/api_exception.dart';
 import '../../../core/network/dio_client.dart';
 import '../../../core/storage/secure_storage_service.dart';
 import 'user_model.dart';
@@ -30,12 +31,17 @@ class AuthRepository {
       final token = data['token'];
 
       await _storage.saveToken(token);
-      
+
       // Login response has limited user data (no orgs, no permissions).
       // We must fetch full profile immediately.
       return await getMe();
-    } catch (e) {
-      throw e;
+    } on DioException catch (error) {
+      throw ApiException.fromDio(
+        error,
+        fallbackMessage: 'Не удалось выполнить вход.',
+      );
+    } catch (_) {
+      throw const ApiException('Не удалось выполнить вход.');
     }
   }
 
@@ -54,8 +60,13 @@ class AuthRepository {
 
       // Reload profile with new context
       return await getMe();
-    } catch (e) {
-      throw e;
+    } on DioException catch (error) {
+      throw ApiException.fromDio(
+        error,
+        fallbackMessage: 'Не удалось переключить организацию.',
+      );
+    } catch (_) {
+      throw const ApiException('Не удалось переключить организацию.');
     }
   }
 
@@ -64,8 +75,13 @@ class AuthRepository {
       final response = await _dio.get('/auth/me');
       log('GET /auth/me payload: ${jsonEncode(response.data)}');
       return _mapJsonToUser(response.data['data']);
-    } catch (e) {
-      throw e;
+    } on DioException catch (error) {
+      throw ApiException.fromDio(
+        error,
+        fallbackMessage: 'Не удалось загрузить профиль пользователя.',
+      );
+    } catch (_) {
+      throw const ApiException('Не удалось загрузить профиль пользователя.');
     }
   }
 

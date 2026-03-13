@@ -3,6 +3,8 @@ import '../data/site_request_model.dart';
 import '../data/site_requests_repository.dart';
 import 'site_requests_provider.dart';
 
+const _siteRequestDetailSentinel = Object();
+
 class SiteRequestDetailState {
   final bool isLoading;
   final bool isActionLoading;
@@ -20,13 +22,13 @@ class SiteRequestDetailState {
     bool? isLoading,
     bool? isActionLoading,
     SiteRequestModel? request,
-    String? error,
+    Object? error = _siteRequestDetailSentinel,
   }) {
     return SiteRequestDetailState(
       isLoading: isLoading ?? this.isLoading,
       isActionLoading: isActionLoading ?? this.isActionLoading,
       request: request ?? this.request,
-      error: error ?? this.error,
+      error: identical(error, _siteRequestDetailSentinel) ? this.error : error as String?,
     );
   }
 }

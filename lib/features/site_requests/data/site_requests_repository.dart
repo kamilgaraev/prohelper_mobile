@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import '../../../core/network/api_exception.dart';
 import '../../../core/network/dio_client.dart';
 import 'site_request_model.dart';
 
@@ -15,12 +16,14 @@ class SiteRequestsRepository {
   /// Получить список заявок с пагинацией и фильтрами
   Future<List<SiteRequestModel>> fetchSiteRequests({
     int page = 1,
+    int perPage = 20,
     String? status,
     int? projectId,
   }) async {
     try {
       final queryParams = {
         'page': page,
+        'per_page': perPage,
         if (status != null) 'status': status,
         if (projectId != null) 'project_id': projectId,
       };
@@ -38,8 +41,13 @@ class SiteRequestsRepository {
       }
 
       return list.map((e) => SiteRequestModel.fromJson(e)).toList();
-    } catch (e) {
-      rethrow;
+    } on DioException catch (error) {
+      throw ApiException.fromDio(
+        error,
+        fallbackMessage: 'Не удалось загрузить заявки.',
+      );
+    } catch (_) {
+      throw const ApiException('Не удалось загрузить заявки.');
     }
   }
 
@@ -50,8 +58,13 @@ class SiteRequestsRepository {
       
       final Map<String, dynamic> data = response.data['data'];
       return SiteRequestModel.fromJson(data);
-    } catch (e) {
-      rethrow;
+    } on DioException catch (error) {
+      throw ApiException.fromDio(
+        error,
+        fallbackMessage: 'Не удалось загрузить детали заявки.',
+      );
+    } catch (_) {
+      throw const ApiException('Не удалось загрузить детали заявки.');
     }
   }
 
@@ -60,8 +73,13 @@ class SiteRequestsRepository {
     try {
       final response = await _dio.post('/site-requests', data: data);
       return SiteRequestModel.fromJson(response.data['data']);
-    } catch (e) {
-      rethrow;
+    } on DioException catch (error) {
+      throw ApiException.fromDio(
+        error,
+        fallbackMessage: 'Не удалось создать заявку.',
+      );
+    } catch (_) {
+      throw const ApiException('Не удалось создать заявку.');
     }
   }
 
@@ -70,8 +88,13 @@ class SiteRequestsRepository {
     try {
       final response = await _dio.put('/site-requests/$id', data: data);
       return SiteRequestModel.fromJson(response.data['data']);
-    } catch (e) {
-      rethrow;
+    } on DioException catch (error) {
+      throw ApiException.fromDio(
+        error,
+        fallbackMessage: 'Не удалось обновить заявку.',
+      );
+    } catch (_) {
+      throw const ApiException('Не удалось обновить заявку.');
     }
   }
 
@@ -80,8 +103,13 @@ class SiteRequestsRepository {
     try {
       final response = await _dio.post('/site-requests/$id/submit');
       return SiteRequestModel.fromJson(response.data['data']);
-    } catch (e) {
-      rethrow;
+    } on DioException catch (error) {
+      throw ApiException.fromDio(
+        error,
+        fallbackMessage: 'Не удалось отправить заявку.',
+      );
+    } catch (_) {
+      throw const ApiException('Не удалось отправить заявку.');
     }
   }
 
@@ -92,8 +120,13 @@ class SiteRequestsRepository {
         if (notes != null) 'notes': notes,
       });
       return SiteRequestModel.fromJson(response.data['data']);
-    } catch (e) {
-      rethrow;
+    } on DioException catch (error) {
+      throw ApiException.fromDio(
+        error,
+        fallbackMessage: 'Не удалось отменить заявку.',
+      );
+    } catch (_) {
+      throw const ApiException('Не удалось отменить заявку.');
     }
   }
 
@@ -104,8 +137,13 @@ class SiteRequestsRepository {
         if (notes != null) 'notes': notes,
       });
       return SiteRequestModel.fromJson(response.data['data']);
-    } catch (e) {
-      rethrow;
+    } on DioException catch (error) {
+      throw ApiException.fromDio(
+        error,
+        fallbackMessage: 'Не удалось завершить заявку.',
+      );
+    } catch (_) {
+      throw const ApiException('Не удалось завершить заявку.');
     }
   }
 
@@ -114,8 +152,13 @@ class SiteRequestsRepository {
     try {
       final response = await _dio.get('/site-requests/templates');
       return List<Map<String, dynamic>>.from(response.data['data']);
-    } catch (e) {
-      rethrow;
+    } on DioException catch (error) {
+      throw ApiException.fromDio(
+        error,
+        fallbackMessage: 'Не удалось загрузить шаблоны.',
+      );
+    } catch (_) {
+      throw const ApiException('Не удалось загрузить шаблоны.');
     }
   }
 
@@ -126,8 +169,13 @@ class SiteRequestsRepository {
         'project_id': projectId,
       });
       return SiteRequestModel.fromJson(response.data['data']);
-    } catch (e) {
-      rethrow;
+    } on DioException catch (error) {
+      throw ApiException.fromDio(
+        error,
+        fallbackMessage: 'Не удалось создать заявку из шаблона.',
+      );
+    } catch (_) {
+      throw const ApiException('Не удалось создать заявку из шаблона.');
     }
   }
 
@@ -136,8 +184,13 @@ class SiteRequestsRepository {
     try {
       final response = await _dio.get('/site-requests/meta');
       return response.data['data'];
-    } catch (e) {
-      rethrow;
+    } on DioException catch (error) {
+      throw ApiException.fromDio(
+        error,
+        fallbackMessage: 'Не удалось загрузить справочники.',
+      );
+    } catch (_) {
+      throw const ApiException('Не удалось загрузить справочники.');
     }
   }
 }

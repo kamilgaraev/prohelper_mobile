@@ -1,59 +1,71 @@
-// dashboard_controller.dart
 import 'package:hooks_riverpod/hooks_riverpod.dart';
-import '../../../../core/services/permission_service.dart';
-import '../../../../core/providers/module_provider.dart';
-import '../../../../core/models/user_context.dart';
+import 'package:prohelpers_mobile/features/auth/domain/auth_provider.dart';
+import 'package:prohelpers_mobile/features/dashboard/data/dashboard_repository.dart';
+import 'package:prohelpers_mobile/features/dashboard/data/dashboard_widget_model.dart';
 
-enum DashboardWidgetType {
-  primaryAction,
-  stats,
-  urgentRequests,
-  approvalCounter,
-  timeline,
-}
+const _dashboardSentinel = Object();
 
 class DashboardState {
-  final List<DashboardWidgetType> slots;
-  DashboardState({required this.slots});
+  const DashboardState({
+    this.isLoading = false,
+    this.widgets = const [],
+    this.error,
+  });
+
+  final bool isLoading;
+  final List<DashboardWidgetModel> widgets;
+  final String? error;
+
+  DashboardState copyWith({
+    bool? isLoading,
+    List<DashboardWidgetModel>? widgets,
+    Object? error = _dashboardSentinel,
+  }) {
+    return DashboardState(
+      isLoading: isLoading ?? this.isLoading,
+      widgets: widgets ?? this.widgets,
+      error: identical(error, _dashboardSentinel) ? this.error : error as String?,
+    );
+  }
 }
 
 class DashboardController extends StateNotifier<DashboardState> {
-  final PermissionService _permissions;
-
-  DashboardController(this._permissions) : super(DashboardState(slots: [])) {
-    _initSlots();
+  DashboardController(
+    this._repository, {
+    required bool canLoad,
+  }) : super(const DashboardState()) {
+    if (canLoad) {
+      loadDashboard();
+    }
   }
 
-  void _initSlots() {
-    final slots = <DashboardWidgetType>[];
+  final DashboardRepository _repository;
 
-    if (_permissions.context == UserContext.field) {
-      if (_permissions.canAccessModule(AppModule.basicWarehouse)) {
-        slots.add(DashboardWidgetType.primaryAction); // QR Scanner
-      }
-      if (_permissions.canAccessModule(AppModule.siteRequests)) {
-        slots.add(DashboardWidgetType.urgentRequests); // Создание заявок
-      }
-      if (_permissions.canAccessModule(AppModule.scheduleManagement)) {
-        slots.add(DashboardWidgetType.timeline); // Лента
-      }
-    } else { // office (например: Admin, Owner, Manager, Observer)
-      slots.add(DashboardWidgetType.stats); // Статистика для руководящих
-      
-      if (_permissions.canAccessModule(AppModule.siteRequests)) {
-        slots.add(DashboardWidgetType.approvalCounter); // Согласования
-      }
-      if (_permissions.canAccessModule(AppModule.scheduleManagement)) {
-        slots.add(DashboardWidgetType.timeline); // Лента
-      }
+  Future<void> loadDashboard() async {
+    state = state.copyWith(isLoading: true, error: null);
+
+    try {
+      final widgets = await _repository.fetchWidgets();
+      state = state.copyWith(
+        isLoading: false,
+        widgets: widgets,
+      );
+    } catch (error) {
+      state = state.copyWith(
+        isLoading: false,
+        widgets: const [],
+        error: error.toString(),
+      );
     }
-
-    state = DashboardState(slots: slots);
   }
 }
 
 final dashboardControllerProvider =
     StateNotifierProvider<DashboardController, DashboardState>((ref) {
-  final permissions = ref.watch(permissionServiceProvider);
-  return DashboardController(permissions);
+  final authState = ref.watch(authProvider);
+
+  return DashboardController(
+    ref.read(dashboardRepositoryProvider),
+    canLoad: authState is AuthAuthenticated,
+  );
 });

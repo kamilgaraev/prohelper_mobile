@@ -3,6 +3,8 @@ import '../../auth/domain/auth_provider.dart';
 import '../data/project_model.dart';
 import '../data/projects_repository.dart';
 
+const _projectsSentinel = Object();
+
 // State
 class ProjectsState {
   final bool isLoading;
@@ -20,14 +22,16 @@ class ProjectsState {
   ProjectsState copyWith({
     bool? isLoading,
     List<Project>? projects,
-    Project? selectedProject,
-    String? error,
+    Object? selectedProject = _projectsSentinel,
+    Object? error = _projectsSentinel,
   }) {
     return ProjectsState(
       isLoading: isLoading ?? this.isLoading,
       projects: projects ?? this.projects,
-      selectedProject: selectedProject ?? this.selectedProject,
-      error: error ?? this.error,
+      selectedProject: identical(selectedProject, _projectsSentinel)
+          ? this.selectedProject
+          : selectedProject as Project?,
+      error: identical(error, _projectsSentinel) ? this.error : error as String?,
     );
   }
 }
@@ -48,10 +52,17 @@ class ProjectsNotifier extends StateNotifier<ProjectsState> {
     try {
       final projects = await _repository.fetchProjects();
       
-      // Auto-select if only one project
       Project? selected;
       if (projects.length == 1) {
         selected = projects.first;
+      } else if (state.selectedProject != null) {
+        final selectedServerId = state.selectedProject!.serverId;
+        for (final project in projects) {
+          if (project.serverId == selectedServerId) {
+            selected = project;
+            break;
+          }
+        }
       }
 
       state = state.copyWith(

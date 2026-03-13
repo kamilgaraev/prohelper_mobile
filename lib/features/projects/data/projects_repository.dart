@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import '../../../core/network/api_exception.dart';
 import '../../../core/network/dio_client.dart';
 import 'project_model.dart';
 
@@ -15,10 +16,6 @@ class ProjectsRepository {
   Future<List<Project>> fetchProjects() async {
     try {
       final response = await _dio.get('/projects');
-      
-      // Log response for debugging
-      // import 'dart:developer'; // make sure to import this
-      // log('GET /projects payload: ${response.data}'); 
 
       final List<dynamic> list;
       if (response.data is List) {
@@ -35,8 +32,13 @@ class ProjectsRepository {
       }
 
       return list.map((e) => Project.fromJson(e)).toList();
-    } catch (e) {
-      throw e;
+    } on DioException catch (error) {
+      throw ApiException.fromDio(
+        error,
+        fallbackMessage: 'Не удалось загрузить список объектов.',
+      );
+    } catch (_) {
+      throw const ApiException('Не удалось загрузить список объектов.');
     }
   }
 }

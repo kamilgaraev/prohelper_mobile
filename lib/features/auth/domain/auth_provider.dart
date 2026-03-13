@@ -67,9 +67,6 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   Future<void> switchOrganization(int organizationId) async {
-    // Keep current state or show loading overlay? 
-    // For now, let's keep showing current UI but maybe show a loading indicator
-    // ideally strictly we should transition to loading or have a separate loading state property
     if (state is! AuthAuthenticated) return;
     
     final currentUser = (state as AuthAuthenticated).user;
@@ -79,9 +76,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
       final updatedUser = await _repository.switchOrganization(organizationId);
       state = AuthAuthenticated(updatedUser);
     } catch (e) {
-      // Revert to previous user if failed, or show error
-      state = AuthAuthenticated(currentUser); // Or AuthError
-      // NOTE: In a real app we might want to show a toast error instead of changing state to Error which replaces screen
+      state = AuthAuthenticated(currentUser);
+      rethrow;
     }
   }
 
