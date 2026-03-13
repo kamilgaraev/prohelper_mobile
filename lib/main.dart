@@ -24,6 +24,21 @@ class ProHelperApp extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final authState = ref.watch(authProvider);
     final projectsState = ref.watch(projectsProvider);
+    final Widget home;
+
+    if (authState is AuthAuthenticated) {
+      home = projectsState.selectedProject != null
+          ? const DashboardScreen()
+          : const ProjectSelectionScreen();
+    } else if (authState is AuthInitial) {
+      home = const Scaffold(
+        body: Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+    } else {
+      home = const LoginScreen();
+    }
 
     return MaterialApp(
       title: 'ProHelper',
@@ -31,17 +46,7 @@ class ProHelperApp extends ConsumerWidget {
       theme: ProHelperTheme.lightTheme,
       darkTheme: ProHelperTheme.darkTheme,
       themeMode: ThemeMode.system,
-      home: switch (authState) {
-        AuthAuthenticated() => projectsState.selectedProject != null
-            ? const DashboardScreen()
-            : const ProjectSelectionScreen(),
-        AuthUnauthenticated() || AuthError() || AuthLoading() => const LoginScreen(),
-        AuthInitial() => const Scaffold(
-            body: Center(
-              child: CircularProgressIndicator(),
-            ),
-          ),
-      },
+      home: home,
     );
   }
 }

@@ -32,7 +32,8 @@ class _SiteRequestsScreenState extends ConsumerState<SiteRequestsScreen> {
   }
 
   void _onScroll() {
-    if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 200) {
+    if (_scrollController.position.pixels >=
+        _scrollController.position.maxScrollExtent - 200) {
       ref.read(siteRequestsProvider.notifier).loadRequests();
     }
   }
@@ -44,9 +45,8 @@ class _SiteRequestsScreenState extends ConsumerState<SiteRequestsScreen> {
     final theme = Theme.of(context);
 
     ref.listen<SiteRequestsState>(siteRequestsProvider, (previous, next) {
-      final shouldShowError = next.error != null &&
-          next.error != previous?.error &&
-          next.requests.isNotEmpty;
+      final shouldShowError =
+          next.error != null && next.error != previous?.error && next.requests.isNotEmpty;
       if (!shouldShowError || !mounted) {
         return;
       }
@@ -61,7 +61,9 @@ class _SiteRequestsScreenState extends ConsumerState<SiteRequestsScreen> {
         state.requests.isEmpty &&
         state.error == null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        ref.read(siteRequestsProvider.notifier).syncProject(selectedProject?.serverId);
+        ref
+            .read(siteRequestsProvider.notifier)
+            .syncProject(selectedProject.serverId);
         ref.read(siteRequestsProvider.notifier).loadRequests(refresh: true);
       });
     }
@@ -93,7 +95,9 @@ class _SiteRequestsScreenState extends ConsumerState<SiteRequestsScreen> {
               return;
             }
 
-            ref.read(siteRequestsProvider.notifier).syncProject(selectedProject?.serverId);
+            ref
+                .read(siteRequestsProvider.notifier)
+                .syncProject(selectedProject.serverId);
             await ref.read(siteRequestsProvider.notifier).loadRequests(refresh: true);
           },
           child: CustomScrollView(
@@ -107,7 +111,9 @@ class _SiteRequestsScreenState extends ConsumerState<SiteRequestsScreen> {
                     title: 'Не удалось загрузить заявки',
                     description: state.error,
                     action: OutlinedButton(
-                      onPressed: () => ref.read(siteRequestsProvider.notifier).loadRequests(refresh: true),
+                      onPressed: () => ref
+                          .read(siteRequestsProvider.notifier)
+                          .loadRequests(refresh: true),
                       child: const Text('Повторить'),
                     ),
                   ),
@@ -136,7 +142,8 @@ class _SiteRequestsScreenState extends ConsumerState<SiteRequestsScreen> {
                             onTap: () {
                               Navigator.of(context).push(
                                 MaterialPageRoute(
-                                  builder: (_) => SiteRequestDetailScreen(id: request.serverId),
+                                  builder: (_) =>
+                                      SiteRequestDetailScreen(id: request.serverId),
                                 ),
                               );
                             },

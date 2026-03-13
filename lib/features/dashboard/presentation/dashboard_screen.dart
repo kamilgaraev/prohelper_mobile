@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+
 import 'package:prohelpers_mobile/core/theme/app_colors.dart';
 import 'package:prohelpers_mobile/core/theme/app_typography.dart';
 import 'package:prohelpers_mobile/core/widgets/action_hub.dart';
@@ -12,7 +13,9 @@ import 'package:prohelpers_mobile/features/auth/presentation/widgets/user_profil
 import 'package:prohelpers_mobile/features/dashboard/data/dashboard_widget_model.dart';
 import 'package:prohelpers_mobile/features/dashboard/presentation/controllers/dashboard_controller.dart';
 import 'package:prohelpers_mobile/features/projects/domain/projects_provider.dart';
+import 'package:prohelpers_mobile/features/schedule/presentation/schedule_screen.dart';
 import 'package:prohelpers_mobile/features/site_requests/presentation/screens/site_requests_screen.dart';
+import 'package:prohelpers_mobile/features/warehouse/presentation/warehouse_screen.dart';
 
 class DashboardScreen extends ConsumerWidget {
   const DashboardScreen({super.key});
@@ -31,14 +34,17 @@ class DashboardScreen extends ConsumerWidget {
                 const SliverFillRemaining(
                   child: Center(child: CircularProgressIndicator()),
                 )
-              else if (dashboardState.error != null && dashboardState.widgets.isEmpty)
+              else if (dashboardState.error != null &&
+                  dashboardState.widgets.isEmpty)
                 SliverFillRemaining(
                   child: AppStateView(
                     icon: Icons.error_outline_rounded,
                     title: 'Не удалось загрузить дашборд',
                     description: dashboardState.error,
                     action: OutlinedButton(
-                      onPressed: () => ref.read(dashboardControllerProvider.notifier).loadDashboard(),
+                      onPressed: () => ref
+                          .read(dashboardControllerProvider.notifier)
+                          .loadDashboard(),
                       child: const Text('Повторить'),
                     ),
                   ),
@@ -48,12 +54,14 @@ class DashboardScreen extends ConsumerWidget {
                   child: AppStateView(
                     icon: Icons.dashboard_customize_outlined,
                     title: 'Дашборд пока пуст',
-                    description: 'Для вашей роли пока не подключены мобильные виджеты.',
+                    description:
+                        'Для вашей роли пока не подключены мобильные виджеты.',
                   ),
                 )
               else ...[
                 SliverPadding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   sliver: SliverList(
                     delegate: SliverChildBuilderDelegate(
                       (context, index) {
@@ -100,7 +108,7 @@ class DashboardScreen extends ConsumerWidget {
             children: [
               if (selectedProject != null)
                 Text(
-                  'ТЕКУЩИЙ ОБЪЕКТ',
+                  'Текущий объект',
                   style: AppTypography.caption(context).copyWith(
                     fontSize: 10,
                     letterSpacing: 1.2,
@@ -142,7 +150,8 @@ class DashboardScreen extends ConsumerWidget {
                       context: context,
                       isScrollControlled: true,
                       backgroundColor: Colors.transparent,
-                      builder: (_) => UserProfileBottomSheet(user: authState.user),
+                      builder: (_) =>
+                          UserProfileBottomSheet(user: authState.user),
                     );
                   },
                 ),
@@ -160,9 +169,12 @@ class DashboardScreen extends ConsumerWidget {
     DashboardWidgetModel widget,
   ) {
     return switch (widget.type) {
-      DashboardWidgetType.projectOverview => _buildProjectOverview(context, ref, widget),
-      DashboardWidgetType.siteRequests => _buildSiteRequestsCard(context, widget),
-      DashboardWidgetType.siteRequestApprovals => _buildApprovalsCard(context, widget),
+      DashboardWidgetType.projectOverview =>
+        _buildProjectOverview(context, ref, widget),
+      DashboardWidgetType.siteRequests =>
+        _buildSiteRequestsCard(context, widget),
+      DashboardWidgetType.siteRequestApprovals =>
+        _buildApprovalsCard(context, widget),
       DashboardWidgetType.warehouse => _buildWarehouseCard(context, widget),
       DashboardWidgetType.schedule => _buildScheduleCard(context, widget),
       DashboardWidgetType.unknown => const SizedBox.shrink(),
@@ -214,12 +226,16 @@ class DashboardScreen extends ConsumerWidget {
             _buildProjectParam(
               context,
               'Адрес',
-              project.address?.trim().isNotEmpty == true ? project.address! : 'Не указан',
+              project.address?.trim().isNotEmpty == true
+                  ? project.address!
+                  : 'Не указан',
             ),
             _buildProjectParam(
               context,
               'Роль на объекте',
-              project.myRole?.trim().isNotEmpty == true ? project.myRole! : 'Не указана',
+              project.myRole?.trim().isNotEmpty == true
+                  ? project.myRole!
+                  : 'Не указана',
               valueColor: theme.colorScheme.primary,
             ),
           ],
@@ -264,52 +280,23 @@ class DashboardScreen extends ConsumerWidget {
   }
 
   Widget _buildWarehouseCard(BuildContext context, DashboardWidgetModel widget) {
-    final theme = Theme.of(context);
-
-    return IndustrialCard(
-      onTap: () => _showWidgetMessage(context, widget),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: theme.colorScheme.primary.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Icon(
-              Icons.warehouse_outlined,
-              color: theme.colorScheme.primary,
-              size: 28,
-            ),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  widget.title.toUpperCase(),
-                  style: AppTypography.bodySmall(context).copyWith(
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: 0.5,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  widget.description,
-                  style: AppTypography.bodyMedium(context).copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
+    return _buildModuleActionCard(
+      context: context,
+      title: widget.title,
+      subtitle: widget.description,
+      icon: Icons.warehouse_outlined,
+      color: Theme.of(context).colorScheme.primary,
+      badge: widget.badge,
+      onTap: (_) => Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => const WarehouseScreen()),
       ),
     );
   }
 
-  Widget _buildSiteRequestsCard(BuildContext context, DashboardWidgetModel widget) {
+  Widget _buildSiteRequestsCard(
+    BuildContext context,
+    DashboardWidgetModel widget,
+  ) {
     return _buildModuleActionCard(
       context: context,
       title: widget.title,
@@ -323,7 +310,10 @@ class DashboardScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildApprovalsCard(BuildContext context, DashboardWidgetModel widget) {
+  Widget _buildApprovalsCard(
+    BuildContext context,
+    DashboardWidgetModel widget,
+  ) {
     return _buildModuleActionCard(
       context: context,
       title: widget.title,
@@ -345,7 +335,9 @@ class DashboardScreen extends ConsumerWidget {
       icon: Icons.timeline_rounded,
       color: AppColors.success,
       badge: widget.badge,
-      onTap: (_) => _showWidgetMessage(context, widget),
+      onTap: (_) => Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => const ScheduleScreen()),
+      ),
     );
   }
 
@@ -391,7 +383,10 @@ class DashboardScreen extends ConsumerWidget {
                     ),
                     if (badge != null && badge.isNotEmpty)
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
                         decoration: BoxDecoration(
                           color: color.withOpacity(0.12),
                           borderRadius: BorderRadius.circular(999),
@@ -422,18 +417,6 @@ class DashboardScreen extends ConsumerWidget {
           ),
         ],
       ),
-    );
-  }
-
-  void _showWidgetMessage(BuildContext context, DashboardWidgetModel widget) {
-    final message = widget.payload['toast'] as String? ?? widget.description;
-
-    if (message.isEmpty) {
-      return;
-    }
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
     );
   }
 }

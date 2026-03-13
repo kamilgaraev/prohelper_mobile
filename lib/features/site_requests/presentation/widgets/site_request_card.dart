@@ -5,19 +5,19 @@ import 'package:prohelpers_mobile/core/widgets/pro_card.dart';
 import 'package:prohelpers_mobile/features/site_requests/data/site_request_model.dart';
 
 class SiteRequestCard extends StatelessWidget {
-  final SiteRequestModel request;
-  final VoidCallback onTap;
-
   const SiteRequestCard({
     super.key,
     required this.request,
     required this.onTap,
   });
 
+  final SiteRequestModel request;
+  final VoidCallback onTap;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    
+
     return ProCard(
       onTap: onTap,
       child: Column(
@@ -45,12 +45,18 @@ class SiteRequestCard extends StatelessWidget {
           if (request.projectName != null) ...[
             Row(
               children: [
-                Icon(Icons.location_on_outlined, size: 16, color: theme.colorScheme.onSurfaceVariant),
+                Icon(
+                  Icons.location_on_outlined,
+                  size: 16,
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
                 const SizedBox(width: 4),
                 Expanded(
                   child: Text(
                     request.projectName!,
-                    style: AppTypography.bodyMedium(context).copyWith(color: theme.colorScheme.onSurfaceVariant),
+                    style: AppTypography.bodyMedium(context).copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
                   ),
                 ),
               ],
@@ -60,7 +66,11 @@ class SiteRequestCard extends StatelessWidget {
           if (request.materialName != null) ...[
             Row(
               children: [
-                Icon(Icons.inventory_2_outlined, size: 16, color: theme.colorScheme.onSurfaceVariant),
+                Icon(
+                  Icons.inventory_2_outlined,
+                  size: 16,
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
                 const SizedBox(width: 4),
                 Expanded(
                   child: Text(
@@ -79,7 +89,9 @@ class SiteRequestCard extends StatelessWidget {
             children: [
               Text(
                 'Приоритет: ${request.priorityLabel ?? request.priority}',
-                style: AppTypography.caption(context).copyWith(color: _getPriorityColor(request.priority)),
+                style: AppTypography.caption(context).copyWith(
+                  color: _getPriorityColor(request.priority),
+                ),
               ),
               if (request.createdAt != null)
                 Text(
@@ -119,15 +131,20 @@ class SiteRequestCard extends StatelessWidget {
   }
 
   String _formatDate(DateTime date) {
-    return '${date.day.toString().padLeft(2, '0')}.${date.month.toString().padLeft(2, '0')}.${date.year}';
+    final day = date.day.toString().padLeft(2, '0');
+    final month = date.month.toString().padLeft(2, '0');
+    return '$day.$month.${date.year}';
   }
 }
 
 class _StatusBadge extends StatelessWidget {
+  const _StatusBadge({
+    required this.label,
+    required this.color,
+  });
+
   final String label;
   final Color color;
-
-  const _StatusBadge({required this.label, required this.color});
 
   @override
   Widget build(BuildContext context) {

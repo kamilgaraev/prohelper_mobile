@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+
 import 'package:prohelpers_mobile/core/theme/app_colors.dart';
 import 'package:prohelpers_mobile/core/theme/app_typography.dart';
 import 'package:prohelpers_mobile/core/widgets/app_state_view.dart';
@@ -53,7 +54,10 @@ class ProjectSelectionScreen extends ConsumerWidget {
                   ),
                   IconButton(
                     onPressed: () => ref.read(authProvider.notifier).logout(),
-                    icon: const Icon(Icons.logout_rounded, color: AppColors.error),
+                    icon: const Icon(
+                      Icons.logout_rounded,
+                      color: AppColors.error,
+                    ),
                   ),
                 ],
               ),
@@ -67,14 +71,16 @@ class ProjectSelectionScreen extends ConsumerWidget {
                       title: 'Не удалось загрузить объекты',
                       description: error,
                       action: OutlinedButton(
-                        onPressed: () => ref.read(projectsProvider.notifier).loadProjects(),
+                        onPressed: () =>
+                            ref.read(projectsProvider.notifier).loadProjects(),
                         child: const Text('Повторить'),
                       ),
                     ),
-                  (_, _, true) => AppStateView(
+                  (_, _, true) => const AppStateView(
                       icon: Icons.folder_off_outlined,
                       title: 'Нет доступных объектов',
-                      description: 'Попросите администратора выдать вам доступ к проекту.',
+                      description:
+                          'Попросите администратора выдать вам доступ к проекту.',
                     ),
                   _ => ListView.separated(
                       itemCount: state.projects.length,
@@ -83,8 +89,11 @@ class ProjectSelectionScreen extends ConsumerWidget {
                         final project = state.projects[index];
                         return ProjectCard(
                           project: project,
-                          isSelected: state.selectedProject?.serverId == project.serverId,
-                          onTap: () => ref.read(projectsProvider.notifier).selectProject(project),
+                          isSelected:
+                              state.selectedProject?.serverId == project.serverId,
+                          onTap: () => ref
+                              .read(projectsProvider.notifier)
+                              .selectProject(project),
                         );
                       },
                     ),

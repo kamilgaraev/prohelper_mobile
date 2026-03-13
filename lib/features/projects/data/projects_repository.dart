@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+
 import '../../../core/network/api_exception.dart';
 import '../../../core/network/dio_client.dart';
 import 'project_model.dart';
@@ -9,9 +10,9 @@ final projectsRepositoryProvider = Provider<ProjectsRepository>((ref) {
 });
 
 class ProjectsRepository {
-  final Dio _dio;
-
   ProjectsRepository(this._dio);
+
+  final Dio _dio;
 
   Future<List<Project>> fetchProjects() async {
     try {
@@ -20,14 +21,13 @@ class ProjectsRepository {
       final List<dynamic> list;
       if (response.data is List) {
         list = response.data;
-      } else if (response.data is Map && response.data['data'] is Map && response.data['data']['data'] is List) {
-         // Handle nested: { data: { data: [...] } }
+      } else if (response.data is Map &&
+          response.data['data'] is Map &&
+          response.data['data']['data'] is List) {
         list = response.data['data']['data'];
       } else if (response.data is Map && response.data['data'] is List) {
-        // Handle standard: { data: [...] }
         list = response.data['data'];
       } else {
-        // Fallback or empty
         list = [];
       }
 

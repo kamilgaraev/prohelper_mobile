@@ -1,4 +1,5 @@
 import 'dart:convert';
+
 import 'package:isar/isar.dart';
 
 part 'user_model.g.dart';
@@ -16,13 +17,16 @@ class User {
 
   int? currentOrganizationId;
   String? organizationName;
-  late String organizationsJson; // Stored as JSON string list of objects
-  
+  late String organizationsJson;
+
   @ignore
   List<Map<String, dynamic>> get organizations {
     try {
-      if (organizationsJson.isEmpty) return [];
-      final List<dynamic> list = jsonDecode(organizationsJson);
+      if (organizationsJson.isEmpty) {
+        return [];
+      }
+
+      final list = jsonDecode(organizationsJson) as List<dynamic>;
       return list.cast<Map<String, dynamic>>();
     } catch (_) {
       return [];
@@ -30,8 +34,7 @@ class User {
   }
 
   late List<String> roles;
-  
-  late String permissionsJson; 
+  late String permissionsJson;
 
   @ignore
   List<String> get displayRoles {
@@ -44,6 +47,7 @@ class User {
       'organization_admin' => 'Администратор',
       'foreman' => 'Прораб',
       'worker' => 'Рабочий',
+      'observer' => 'Наблюдатель',
       _ => role
           .split('_')
           .where((part) => part.isNotEmpty)

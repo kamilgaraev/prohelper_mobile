@@ -1,7 +1,9 @@
-import 'dart:developer';
 import 'dart:convert';
+import 'dart:developer';
+
 import 'package:dio/dio.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+
 import '../../../core/network/api_exception.dart';
 import '../../../core/network/dio_client.dart';
 import '../../../core/storage/secure_storage_service.dart';
@@ -15,10 +17,10 @@ final authRepositoryProvider = Provider<AuthRepository>((ref) {
 });
 
 class AuthRepository {
+  AuthRepository(this._dio, this._storage);
+
   final Dio _dio;
   final SecureStorageService _storage;
-
-  AuthRepository(this._dio, this._storage);
 
   Future<User> login(String email, String password) async {
     try {
@@ -32,8 +34,6 @@ class AuthRepository {
 
       await _storage.saveToken(token);
 
-      // Login response has limited user data (no orgs, no permissions).
-      // We must fetch full profile immediately.
       return await getMe();
     } on DioException catch (error) {
       throw ApiException.fromDio(
@@ -53,12 +53,11 @@ class AuthRepository {
 
       final data = response.data['data'];
       final token = data['token'];
-      
+
       if (token != null) {
         await _storage.saveToken(token);
       }
 
-      // Reload profile with new context
       return await getMe();
     } on DioException catch (error) {
       throw ApiException.fromDio(
@@ -86,30 +85,21 @@ class AuthRepository {
   }
 
   User _mapJsonToUser(Map<String, dynamic> json) {
-    // API Response Structure (Final):
-    // {
-    //   "id": 45,
-    //   "auth": { "roles": [...], "role_labels": ["Владелец..."] },
-    //   "organizations": [...],
-    //   "current_organization_id": 39
-    // }
-
-    // Parse organizations
     final organizations = (json['organizations'] as List<dynamic>?)
             ?.map((e) => e as Map<String, dynamic>)
-            .toList() ?? [];
+            .toList() ??
+        [];
 
     final currentOrgId = json['current_organization_id'] as int?;
-
     final authData = json['auth'] as Map<String, dynamic>?;
-    final List<String> roles = [];
+    final roles = <String>[];
+
     if (authData != null && authData['roles'] != null) {
       roles.addAll(List<String>.from(authData['roles']));
     } else if (authData != null && authData['role_labels'] != null) {
       roles.addAll(List<String>.from(authData['role_labels']));
     }
 
-    // Find organization name
     String? orgName;
     if (currentOrgId != null) {
       final currentOrg = organizations.firstWhere(
@@ -118,10 +108,9 @@ class AuthRepository {
       );
       orgName = currentOrg['name'] as String?;
     }
-    
-    // Fallback to first active if name not found
+
     if (orgName == null && organizations.isNotEmpty) {
-       final activeOrg = organizations.firstWhere(
+      final activeOrg = organizations.firstWhere(
         (org) => org['is_active'] == true,
         orElse: () => {},
       );
@@ -132,13 +121,14 @@ class AuthRepository {
       ..serverId = json['id'] ?? 0
       ..email = json['email'] ?? ''
       ..name = json['name'] ?? 'User'
-      // Prefer full URL, fallback to path if needed (though URL is signed and better)
       ..avatarUrl = json['avatar_url'] ?? json['avatar_path']
       ..roles = roles
       ..currentOrganizationId = currentOrgId
       ..organizationName = orgName
       ..organizationsJson = jsonEncode(organizations)
-      ..permissionsJson = jsonEncode(authData != null ? authData['modules'] ?? {} : {});
+      ..permissionsJson = jsonEncode(
+        authData != null ? authData['modules'] ?? {} : {},
+      );
   }
 
   Future<void> logout() async {

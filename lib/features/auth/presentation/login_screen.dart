@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../core/widgets/industrial_card.dart';
@@ -37,7 +38,11 @@ class LoginScreen extends HookConsumerWidget {
                     ),
                   ],
                 ),
-                child: const Icon(Icons.construction_rounded, size: 60, color: Colors.white),
+                child: const Icon(
+                  Icons.construction_rounded,
+                  size: 60,
+                  color: Colors.white,
+                ),
               ),
               const SizedBox(height: 40),
               Text(
@@ -60,19 +65,27 @@ class LoginScreen extends HookConsumerWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    _buildTextField(context, emailController, 'Email', Icons.email_outlined),
+                    _buildTextField(
+                      context,
+                      emailController,
+                      'Email',
+                      Icons.email_outlined,
+                    ),
                     const SizedBox(height: 16),
                     _buildTextField(
                       context,
                       passwordController,
-                      'Password',
+                      'Пароль',
                       Icons.lock_outline,
                       isPassword: true,
                     ),
                     if (authState is AuthError) ...[
                       const SizedBox(height: 16),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 12,
+                        ),
                         decoration: BoxDecoration(
                           color: AppColors.error.withOpacity(0.08),
                           borderRadius: BorderRadius.circular(12),
@@ -132,7 +145,7 @@ class LoginScreen extends HookConsumerWidget {
                                 strokeWidth: 2,
                               ),
                             )
-                          : Text('ВХОД', style: AppTypography.button),
+                          : Text('Вход', style: AppTypography.button),
                     ),
                   ],
                 ),
@@ -176,7 +189,10 @@ class LoginScreen extends HookConsumerWidget {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: theme.colorScheme.primary, width: 2),
+          borderSide: BorderSide(
+            color: theme.colorScheme.primary,
+            width: 2,
+          ),
         ),
       ),
     );

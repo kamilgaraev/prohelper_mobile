@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+
 import '../../../core/network/api_exception.dart';
 import '../../../core/network/dio_client.dart';
 import 'site_request_model.dart';
@@ -9,11 +10,10 @@ final siteRequestsRepositoryProvider = Provider<SiteRequestsRepository>((ref) {
 });
 
 class SiteRequestsRepository {
-  final Dio _dio;
-
   SiteRequestsRepository(this._dio);
 
-  /// Получить список заявок с пагинацией и фильтрами
+  final Dio _dio;
+
   Future<List<SiteRequestModel>> fetchSiteRequests({
     int page = 1,
     int perPage = 20,
@@ -28,10 +28,12 @@ class SiteRequestsRepository {
         if (projectId != null) 'project_id': projectId,
       };
 
-      final response = await _dio.get('/site-requests', queryParameters: queryParams);
+      final response = await _dio.get(
+        '/site-requests',
+        queryParameters: queryParams,
+      );
 
       final List<dynamic> list;
-      // Обработка структуры MobileResponse: { success: true, data: { data: [...], current_page: ... } }
       if (response.data['data'] != null && response.data['data']['data'] is List) {
         list = response.data['data']['data'];
       } else if (response.data['data'] is List) {
@@ -51,12 +53,10 @@ class SiteRequestsRepository {
     }
   }
 
-  /// Получить детали конкретной заявки
   Future<SiteRequestModel> fetchSiteRequestDetails(int id) async {
     try {
       final response = await _dio.get('/site-requests/$id');
-      
-      final Map<String, dynamic> data = response.data['data'];
+      final data = response.data['data'] as Map<String, dynamic>;
       return SiteRequestModel.fromJson(data);
     } on DioException catch (error) {
       throw ApiException.fromDio(
@@ -68,7 +68,6 @@ class SiteRequestsRepository {
     }
   }
 
-  /// Создать новую заявку
   Future<SiteRequestModel> createSiteRequest(Map<String, dynamic> data) async {
     try {
       final response = await _dio.post('/site-requests', data: data);
@@ -83,8 +82,10 @@ class SiteRequestsRepository {
     }
   }
 
-  /// Обновить заявку (черновик)
-  Future<SiteRequestModel> updateSiteRequest(int id, Map<String, dynamic> data) async {
+  Future<SiteRequestModel> updateSiteRequest(
+    int id,
+    Map<String, dynamic> data,
+  ) async {
     try {
       final response = await _dio.put('/site-requests/$id', data: data);
       return SiteRequestModel.fromJson(response.data['data']);
@@ -98,7 +99,6 @@ class SiteRequestsRepository {
     }
   }
 
-  /// Отправить заявку на согласование
   Future<SiteRequestModel> submitSiteRequest(int id) async {
     try {
       final response = await _dio.post('/site-requests/$id/submit');
@@ -113,7 +113,6 @@ class SiteRequestsRepository {
     }
   }
 
-  /// Отменить заявку
   Future<SiteRequestModel> cancelSiteRequest(int id, {String? notes}) async {
     try {
       final response = await _dio.post('/site-requests/$id/cancel', data: {
@@ -130,7 +129,6 @@ class SiteRequestsRepository {
     }
   }
 
-  /// Подтвердить выполнение (получение материалов)
   Future<SiteRequestModel> completeSiteRequest(int id, {String? notes}) async {
     try {
       final response = await _dio.post('/site-requests/$id/complete', data: {
@@ -147,7 +145,6 @@ class SiteRequestsRepository {
     }
   }
 
-  /// Получить популярные шаблоны
   Future<List<Map<String, dynamic>>> fetchTemplates() async {
     try {
       final response = await _dio.get('/site-requests/templates');
@@ -162,10 +159,10 @@ class SiteRequestsRepository {
     }
   }
 
-  /// Создать заявку из шаблона
   Future<SiteRequestModel> createFromTemplate(int templateId, int projectId) async {
     try {
-      final response = await _dio.post('/site-requests/from-template/$templateId', data: {
+      final response =
+          await _dio.post('/site-requests/from-template/$templateId', data: {
         'project_id': projectId,
       });
       return SiteRequestModel.fromJson(response.data['data']);
@@ -179,7 +176,6 @@ class SiteRequestsRepository {
     }
   }
 
-  /// Получить мета-данные (справочники)
   Future<Map<String, dynamic>> fetchMeta() async {
     try {
       final response = await _dio.get('/site-requests/meta');

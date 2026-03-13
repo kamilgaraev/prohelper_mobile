@@ -1,16 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_typography.dart';
 import '../../../../core/widgets/industrial_card.dart';
-import '../../domain/auth_provider.dart';
-import '../../data/user_model.dart';
 import '../../../projects/domain/projects_provider.dart';
+import '../../data/user_model.dart';
+import '../../domain/auth_provider.dart';
 
 class UserProfileBottomSheet extends ConsumerWidget {
-  final User user;
+  const UserProfileBottomSheet({
+    super.key,
+    required this.user,
+  });
 
-  const UserProfileBottomSheet({super.key, required this.user});
+  final User user;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -43,7 +47,8 @@ class UserProfileBottomSheet extends ConsumerWidget {
               CircleAvatar(
                 radius: 32,
                 backgroundColor: theme.colorScheme.primary,
-                backgroundImage: user.avatarUrl != null ? NetworkImage(user.avatarUrl!) : null,
+                backgroundImage:
+                    user.avatarUrl != null ? NetworkImage(user.avatarUrl!) : null,
                 child: user.avatarUrl == null
                     ? Text(
                         user.name.substring(0, 1).toUpperCase(),
@@ -62,9 +67,7 @@ class UserProfileBottomSheet extends ConsumerWidget {
                   children: [
                     Text(
                       user.name,
-                      style: AppTypography.h2(context).copyWith(
-                        fontSize: 20,
-                      ),
+                      style: AppTypography.h2(context).copyWith(fontSize: 20),
                     ),
                     const SizedBox(height: 4),
                     Container(
@@ -72,11 +75,13 @@ class UserProfileBottomSheet extends ConsumerWidget {
                       decoration: BoxDecoration(
                         color: theme.colorScheme.primary.withOpacity(0.1),
                         borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: theme.colorScheme.primary.withOpacity(0.3)),
+                        border: Border.all(
+                          color: theme.colorScheme.primary.withOpacity(0.3),
+                        ),
                       ),
                       child: Text(
                         user.displayRoles.isEmpty
-                            ? 'БЕЗ РОЛИ'
+                            ? 'Без роли'
                             : user.displayRoles.join(', ').toUpperCase(),
                         style: AppTypography.caption(context).copyWith(
                           color: theme.colorScheme.primary,
@@ -91,7 +96,7 @@ class UserProfileBottomSheet extends ConsumerWidget {
           ),
           const SizedBox(height: 32),
           Text(
-            'ОРГАНИЗАЦИЯ',
+            'Организация',
             style: AppTypography.caption(context),
           ),
           const SizedBox(height: 12),
@@ -143,7 +148,8 @@ class UserProfileBottomSheet extends ConsumerWidget {
                       child: Text(
                         org['name'] as String,
                         style: AppTypography.bodyMedium(context).copyWith(
-                          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                          fontWeight:
+                              isSelected ? FontWeight.bold : FontWeight.normal,
                           color: isSelected
                               ? theme.colorScheme.primary
                               : theme.colorScheme.onSurface,
@@ -151,7 +157,10 @@ class UserProfileBottomSheet extends ConsumerWidget {
                       ),
                     ),
                     if (isSelected)
-                      Icon(Icons.check_circle_rounded, color: theme.colorScheme.primary),
+                      Icon(
+                        Icons.check_circle_rounded,
+                        color: theme.colorScheme.primary,
+                      ),
                   ],
                 ),
               ),
@@ -170,11 +179,16 @@ class UserProfileBottomSheet extends ConsumerWidget {
               style: OutlinedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 side: BorderSide(color: theme.dividerColor),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
               ),
-              icon: Icon(Icons.swap_horiz_rounded, color: theme.colorScheme.onSurface),
+              icon: Icon(
+                Icons.swap_horiz_rounded,
+                color: theme.colorScheme.onSurface,
+              ),
               label: Text(
-                'СМЕНИТЬ ОБЪЕКТ',
+                'Сменить объект',
                 style: AppTypography.button.copyWith(
                   color: theme.colorScheme.onSurface,
                   fontSize: 14,
@@ -190,11 +204,16 @@ class UserProfileBottomSheet extends ConsumerWidget {
               style: OutlinedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 side: BorderSide(color: theme.dividerColor),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
               ),
-              icon: Icon(Icons.settings_outlined, color: theme.colorScheme.onSurface),
+              icon: Icon(
+                Icons.settings_outlined,
+                color: theme.colorScheme.onSurface,
+              ),
               label: Text(
-                'НАСТРОЙКИ',
+                'Настройки',
                 style: AppTypography.button.copyWith(
                   color: theme.colorScheme.onSurface,
                   fontSize: 14,
@@ -213,12 +232,14 @@ class UserProfileBottomSheet extends ConsumerWidget {
               style: OutlinedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 side: const BorderSide(color: AppColors.error),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
                 backgroundColor: AppColors.error.withOpacity(0.05),
               ),
               icon: const Icon(Icons.logout_rounded, color: AppColors.error),
               label: Text(
-                'ВЫЙТИ',
+                'Выйти',
                 style: AppTypography.button.copyWith(
                   color: AppColors.error,
                   fontSize: 14,

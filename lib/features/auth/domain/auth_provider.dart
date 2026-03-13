@@ -1,4 +1,5 @@
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+
 import '../../../core/storage/secure_storage_service.dart';
 import '../data/auth_repository.dart';
 import '../data/user_model.dart';
@@ -85,12 +86,12 @@ class AuthNotifier extends StateNotifier<AuthState> {
       }
 
       state = AuthAuthenticated(user);
-    } catch (e) {
+    } catch (error) {
       if (!mounted) {
         return;
       }
 
-      state = AuthError('Не удалось выполнить вход: ${e.toString()}');
+      state = AuthError('Не удалось выполнить вход: ${error.toString()}');
     }
   }
 
@@ -108,7 +109,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       }
 
       state = AuthAuthenticated(updatedUser);
-    } catch (e) {
+    } catch (error) {
       if (!mounted) {
         return;
       }
