@@ -31,7 +31,24 @@ class User {
 
   late List<String> roles;
   
-  // Permissions are stored as JSON strings for simplicity in this iteration
-  // Key: Module Slug, Value: List of permissions
   late String permissionsJson; 
+
+  @ignore
+  List<String> get displayRoles {
+    return roles.map(_humanizeRole).toList();
+  }
+
+  String _humanizeRole(String role) {
+    return switch (role) {
+      'organization_owner' => 'Владелец',
+      'organization_admin' => 'Администратор',
+      'foreman' => 'Прораб',
+      'worker' => 'Рабочий',
+      _ => role
+          .split('_')
+          .where((part) => part.isNotEmpty)
+          .map((part) => '${part[0].toUpperCase()}${part.substring(1)}')
+          .join(' '),
+    };
+  }
 }

@@ -38,7 +38,6 @@ class UserProfileBottomSheet extends ConsumerWidget {
             ),
           ),
           const SizedBox(height: 24),
-          
           Row(
             children: [
               CircleAvatar(
@@ -62,7 +61,7 @@ class UserProfileBottomSheet extends ConsumerWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      user.name, 
+                      user.name,
                       style: AppTypography.h2(context).copyWith(
                         fontSize: 20,
                       ),
@@ -76,7 +75,9 @@ class UserProfileBottomSheet extends ConsumerWidget {
                         border: Border.all(color: theme.colorScheme.primary.withOpacity(0.3)),
                       ),
                       child: Text(
-                        user.roles.isEmpty ? 'БЕЗ РОЛИ' : user.roles.join(', ').toUpperCase(),
+                        user.displayRoles.isEmpty
+                            ? 'БЕЗ РОЛИ'
+                            : user.displayRoles.join(', ').toUpperCase(),
                         style: AppTypography.caption(context).copyWith(
                           color: theme.colorScheme.primary,
                           fontWeight: FontWeight.bold,
@@ -88,37 +89,37 @@ class UserProfileBottomSheet extends ConsumerWidget {
               ),
             ],
           ),
-          
           const SizedBox(height: 32),
           Text(
-            'ОРГАНИЗАЦИЯ', 
+            'ОРГАНИЗАЦИЯ',
             style: AppTypography.caption(context),
           ),
           const SizedBox(height: 12),
-          
           ...organizations.map((org) {
             final orgId = org['id'] as int;
             final isSelected = user.currentOrganizationId == orgId;
-                             
+
             return Padding(
               padding: const EdgeInsets.only(bottom: 8),
               child: IndustrialCard(
                 onTap: () {
                   Navigator.pop(context);
-                  ref.read(authProvider.notifier).switchOrganization(org['id'] as int);
+                  ref.read(authProvider.notifier).switchOrganization(orgId);
                 },
                 padding: const EdgeInsets.all(16),
-                backgroundColor: isSelected 
+                backgroundColor: isSelected
                     ? theme.colorScheme.primary.withOpacity(0.05)
                     : theme.cardTheme.color,
-                border: isSelected 
+                border: isSelected
                     ? Border.all(color: theme.colorScheme.primary, width: 1.5)
                     : null,
                 child: Row(
                   children: [
                     Icon(
                       Icons.business_rounded,
-                      color: isSelected ? theme.colorScheme.primary : theme.colorScheme.onSurfaceVariant,
+                      color: isSelected
+                          ? theme.colorScheme.primary
+                          : theme.colorScheme.onSurfaceVariant,
                     ),
                     const SizedBox(width: 16),
                     Expanded(
@@ -126,7 +127,9 @@ class UserProfileBottomSheet extends ConsumerWidget {
                         org['name'] as String,
                         style: AppTypography.bodyMedium(context).copyWith(
                           fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                          color: isSelected ? theme.colorScheme.primary : theme.colorScheme.onSurface,
+                          color: isSelected
+                              ? theme.colorScheme.primary
+                              : theme.colorScheme.onSurface,
                         ),
                       ),
                     ),
@@ -137,11 +140,9 @@ class UserProfileBottomSheet extends ConsumerWidget {
               ),
             );
           }),
-          
           const SizedBox(height: 24),
           const Divider(),
           const SizedBox(height: 16),
-          
           SizedBox(
             width: double.infinity,
             child: OutlinedButton.icon(
@@ -156,7 +157,7 @@ class UserProfileBottomSheet extends ConsumerWidget {
               ),
               icon: Icon(Icons.swap_horiz_rounded, color: theme.colorScheme.onSurface),
               label: Text(
-                'СМЕНИТЬ ОБЪЕКТ', 
+                'СМЕНИТЬ ОБЪЕКТ',
                 style: AppTypography.button.copyWith(
                   color: theme.colorScheme.onSurface,
                   fontSize: 14,
@@ -176,7 +177,7 @@ class UserProfileBottomSheet extends ConsumerWidget {
               ),
               icon: Icon(Icons.settings_outlined, color: theme.colorScheme.onSurface),
               label: Text(
-                'НАСТРОЙКИ', 
+                'НАСТРОЙКИ',
                 style: AppTypography.button.copyWith(
                   color: theme.colorScheme.onSurface,
                   fontSize: 14,
@@ -200,7 +201,7 @@ class UserProfileBottomSheet extends ConsumerWidget {
               ),
               icon: const Icon(Icons.logout_rounded, color: AppColors.error),
               label: Text(
-                'ВЫЙТИ', 
+                'ВЫЙТИ',
                 style: AppTypography.button.copyWith(
                   color: AppColors.error,
                   fontSize: 14,

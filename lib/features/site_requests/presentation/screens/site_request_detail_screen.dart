@@ -33,7 +33,10 @@ class SiteRequestDetailScreen extends ConsumerWidget {
         body: state.isLoading && state.request == null
             ? const Center(child: CircularProgressIndicator())
             : state.error != null && state.request == null
-                ? _ErrorState(error: state.error!, onRetry: () => ref.read(siteRequestDetailProvider(id).notifier).loadDetails())
+                ? _ErrorState(
+                    error: state.error!,
+                    onRetry: () => ref.read(siteRequestDetailProvider(id).notifier).loadDetails(),
+                  )
                 : _buildContent(context, state.request!),
         bottomNavigationBar: state.request != null ? _buildActions(context, ref, state) : null,
       ),
@@ -52,7 +55,7 @@ class SiteRequestDetailScreen extends ConsumerWidget {
           const SizedBox(height: 16),
           if (request.description != null && request.description!.isNotEmpty)
             _buildDescriptionSection(context, request.description!),
-          const SizedBox(height: 100), // Отступ для кнопок
+          const SizedBox(height: 100),
         ],
       ),
     );
@@ -70,16 +73,32 @@ class SiteRequestDetailScreen extends ConsumerWidget {
             children: [
               _InfoLabel(label: 'ID #${request.serverId}'),
               const Spacer(),
-              _StatusBadge(label: request.statusLabel ?? request.status, color: _getStatusColor(request.status)),
+              _StatusBadge(
+                label: request.statusLabel ?? request.status,
+                color: _getStatusColor(request.status),
+              ),
             ],
           ),
           Divider(height: 32, color: theme.colorScheme.outline.withOpacity(0.2)),
           if (request.projectName != null)
-            _ParamRow(context: context, icon: Icons.location_on_outlined, label: 'Объект', value: request.projectName!),
+            _ParamRow(
+              icon: Icons.location_on_outlined,
+              label: 'Объект',
+              value: request.projectName!,
+            ),
           if (request.priorityLabel != null)
-            _ParamRow(context: context, icon: Icons.flag_outlined, label: 'Приоритет', value: request.priorityLabel!, valueColor: _getPriorityColor(request.priority)),
+            _ParamRow(
+              icon: Icons.flag_outlined,
+              label: 'Приоритет',
+              value: request.priorityLabel!,
+              valueColor: _getPriorityColor(request.priority),
+            ),
           if (request.createdAt != null)
-            _ParamRow(context: context, icon: Icons.calendar_today_outlined, label: 'Создана', value: _formatDate(request.createdAt!)),
+            _ParamRow(
+              icon: Icons.calendar_today_outlined,
+              label: 'Создана',
+              value: _formatDate(request.createdAt!),
+            ),
         ],
       ),
     );
@@ -92,10 +111,22 @@ class SiteRequestDetailScreen extends ConsumerWidget {
         children: [
           Text('Материалы', style: AppTypography.h2(context)),
           const SizedBox(height: 16),
-          _ParamRow(context: context, icon: Icons.inventory_2_outlined, label: 'Наименование', value: request.materialName!),
-          _ParamRow(context: context, icon: Icons.format_list_numbered_outlined, label: 'Количество', value: '${request.materialQuantity} ${request.materialUnit}'),
+          _ParamRow(
+            icon: Icons.inventory_2_outlined,
+            label: 'Наименование',
+            value: request.materialName!,
+          ),
+          _ParamRow(
+            icon: Icons.format_list_numbered_outlined,
+            label: 'Количество',
+            value: '${request.materialQuantity} ${request.materialUnit}',
+          ),
           if (request.requiredDate != null)
-            _ParamRow(context: context, icon: Icons.local_shipping_outlined, label: 'Дата поставки', value: request.requiredDate!),
+            _ParamRow(
+              icon: Icons.local_shipping_outlined,
+              label: 'Дата поставки',
+              value: request.requiredDate!,
+            ),
         ],
       ),
     );
@@ -123,7 +154,12 @@ class SiteRequestDetailScreen extends ConsumerWidget {
       decoration: BoxDecoration(
         color: theme.colorScheme.surface,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(theme.brightness == Brightness.dark ? 0.3 : 0.05), blurRadius: 20)],
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(theme.brightness == Brightness.dark ? 0.3 : 0.05),
+            blurRadius: 20,
+          ),
+        ],
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -132,20 +168,29 @@ class SiteRequestDetailScreen extends ConsumerWidget {
             ProButton(
               text: 'ОТПРАВИТЬ ЗАЯВКУ',
               isLoading: state.isActionLoading,
-              onPressed: () => ref.read(siteRequestDetailProvider(id).notifier).submit(),
+              onPressed: () => _runAction(
+                context,
+                () => ref.read(siteRequestDetailProvider(id).notifier).submit(),
+              ),
             ),
-          if (status == 'approved')
+          if (status == 'fulfilled')
             ProButton(
               text: 'ПОДТВЕРДИТЬ ПОЛУЧЕНИЕ',
               backgroundColor: AppColors.success,
               isLoading: state.isActionLoading,
-              onPressed: () => ref.read(siteRequestDetailProvider(id).notifier).complete(),
+              onPressed: () => _runAction(
+                context,
+                () => ref.read(siteRequestDetailProvider(id).notifier).complete(),
+              ),
             ),
           if (['draft', 'pending'].contains(status)) ...[
             const SizedBox(height: 12),
             TextButton(
               onPressed: state.isActionLoading ? null : () => _showCancelDialog(context, ref),
-              child: Text('ОТМЕНИТЬ ЗАЯВКУ', style: AppTypography.bodyMedium(context).copyWith(color: AppColors.error)),
+              child: Text(
+                'ОТМЕНИТЬ ЗАЯВКУ',
+                style: AppTypography.bodyMedium(context).copyWith(color: AppColors.error),
+              ),
             ),
           ],
         ],
@@ -153,12 +198,23 @@ class SiteRequestDetailScreen extends ConsumerWidget {
     );
   }
 
+  Future<void> _runAction(BuildContext context, Future<void> Function() action) async {
+    try {
+      await action();
+    } catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.toString())),
+      );
+    }
+  }
+
   void _showCancelDialog(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final controller = TextEditingController();
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         backgroundColor: theme.colorScheme.surface,
         title: Text('Отмена заявки', style: AppTypography.h2(context)),
         content: TextField(
@@ -171,11 +227,17 @@ class SiteRequestDetailScreen extends ConsumerWidget {
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Назад')),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Назад'),
+          ),
           TextButton(
             onPressed: () {
-              ref.read(siteRequestDetailProvider(id).notifier).cancel(notes: controller.text);
-              Navigator.pop(context);
+              Navigator.pop(dialogContext);
+              _runAction(
+                context,
+                () => ref.read(siteRequestDetailProvider(id).notifier).cancel(notes: controller.text),
+              );
             },
             child: const Text('Отменить', style: TextStyle(color: AppColors.error)),
           ),
@@ -185,33 +247,47 @@ class SiteRequestDetailScreen extends ConsumerWidget {
   }
 
   Color _getStatusColor(String status) => switch (status) {
-    'draft' => AppColors.textSecondary,
-    'pending' => AppColors.warning,
-    'approved' => AppColors.primary,
-    'completed' => AppColors.success,
-    'cancelled' || 'rejected' => AppColors.error,
-    _ => AppColors.textSecondary,
-  };
+        'draft' => AppColors.textSecondary,
+        'pending' => AppColors.warning,
+        'in_review' => AppColors.primary,
+        'approved' => AppColors.primary,
+        'in_progress' => AppColors.secondary,
+        'fulfilled' => AppColors.success,
+        'completed' => AppColors.success,
+        'on_hold' => AppColors.warning,
+        'cancelled' || 'rejected' => AppColors.error,
+        _ => AppColors.textSecondary,
+      };
 
   Color _getPriorityColor(String priority) => switch (priority) {
-    'high' || 'urgent' => AppColors.error,
-    'normal' => AppColors.textSecondary,
-    'low' => AppColors.success,
-    _ => AppColors.textSecondary,
-  };
+        'high' || 'urgent' => AppColors.error,
+        'medium' => AppColors.warning,
+        'normal' => AppColors.textSecondary,
+        'low' => AppColors.success,
+        _ => AppColors.textSecondary,
+      };
 
-  String _formatDate(DateTime date) => '${date.day.toString().padLeft(2, '0')}.${date.month.toString().padLeft(2, '0')}.${date.year}';
+  String _formatDate(DateTime date) {
+    final day = date.day.toString().padLeft(2, '0');
+    final month = date.month.toString().padLeft(2, '0');
+    return '$day.$month.${date.year}';
+  }
 }
 
 class _InfoLabel extends StatelessWidget {
   final String label;
+
   const _InfoLabel({required this.label});
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(color: theme.colorScheme.surfaceVariant.withOpacity(0.5), borderRadius: BorderRadius.circular(6)),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceVariant.withOpacity(0.5),
+        borderRadius: BorderRadius.circular(6),
+      ),
       child: Text(label, style: AppTypography.bodySmall(context)),
     );
   }
@@ -220,22 +296,42 @@ class _InfoLabel extends StatelessWidget {
 class _StatusBadge extends StatelessWidget {
   final String label;
   final Color color;
+
   const _StatusBadge({required this.label, required this.color});
+
   @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-    decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(12), border: Border.all(color: color.withOpacity(0.3))),
-    child: Text(label, style: AppTypography.bodySmall(context).copyWith(color: color, fontWeight: FontWeight.bold)),
-  );
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withOpacity(0.3)),
+      ),
+      child: Text(
+        label,
+        style: AppTypography.bodySmall(context).copyWith(
+          color: color,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+    );
+  }
 }
 
 class _ParamRow extends StatelessWidget {
-  final BuildContext context;
   final IconData icon;
   final String label;
   final String value;
   final Color? valueColor;
-  const _ParamRow({required this.context, required this.icon, required this.label, required this.value, this.valueColor});
+
+  const _ParamRow({
+    required this.icon,
+    required this.label,
+    required this.value,
+    this.valueColor,
+  });
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -245,9 +341,19 @@ class _ParamRow extends StatelessWidget {
         children: [
           Icon(icon, size: 18, color: theme.colorScheme.onSurfaceVariant),
           const SizedBox(width: 8),
-          Text('$label:', style: AppTypography.bodyMedium(context).copyWith(color: theme.colorScheme.onSurfaceVariant)),
+          Text(
+            '$label:',
+            style: AppTypography.bodyMedium(context).copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
           const SizedBox(width: 4),
-          Expanded(child: Text(value, style: AppTypography.bodyLarge(context).copyWith(color: valueColor))),
+          Expanded(
+            child: Text(
+              value,
+              style: AppTypography.bodyLarge(context).copyWith(color: valueColor),
+            ),
+          ),
         ],
       ),
     );
@@ -257,7 +363,9 @@ class _ParamRow extends StatelessWidget {
 class _ErrorState extends StatelessWidget {
   final String error;
   final VoidCallback onRetry;
+
   const _ErrorState({required this.error, required this.onRetry});
+
   @override
   Widget build(BuildContext context) {
     return Center(
@@ -269,8 +377,12 @@ class _ErrorState extends StatelessWidget {
           Text('Ошибка загрузки', style: AppTypography.h2(context)),
           const SizedBox(height: 8),
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 32), 
-            child: Text(error, textAlign: TextAlign.center, style: AppTypography.bodySmall(context)),
+            padding: const EdgeInsets.symmetric(horizontal: 32),
+            child: Text(
+              error,
+              textAlign: TextAlign.center,
+              style: AppTypography.bodySmall(context),
+            ),
           ),
           const SizedBox(height: 24),
           OutlinedButton(onPressed: onRetry, child: const Text('Повторить')),

@@ -1,6 +1,8 @@
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import '../../../core/storage/secure_storage_service.dart';
 import '../data/auth_repository.dart';
 import '../data/user_model.dart';
+import 'auth_session_provider.dart';
 
 // State Definition
 abstract class AuthState {
@@ -21,20 +23,37 @@ class AuthError extends AuthState {
 
 // Provider
 final authProvider = StateNotifierProvider<AuthNotifier, AuthState>((ref) {
-  return AuthNotifier(ref.read(authRepositoryProvider));
+  ref.watch(authSessionVersionProvider);
+  return AuthNotifier(
+    ref.read(authRepositoryProvider),
+    ref.read(secureStorageProvider),
+  );
 });
 
 class AuthNotifier extends StateNotifier<AuthState> {
   final AuthRepository _repository;
+  final SecureStorageService _storage;
 
-  AuthNotifier(this._repository) : super(AuthInitial()) {
+  AuthNotifier(this._repository, this._storage) : super(AuthInitial()) {
     checkAuth();
   }
 
   Future<void> checkAuth() async {
-    // TODO: Check token and Isar for offline support
-    // For now, start unauthenticated
-    state = AuthUnauthenticated();
+    state = AuthLoading();
+
+    final token = await _storage.getToken();
+    if (token == null || token.isEmpty) {
+      state = AuthUnauthenticated();
+      return;
+    }
+
+    try {
+      final user = await _repository.getMe();
+      state = AuthAuthenticated(user);
+    } catch (_) {
+      await _storage.clearToken();
+      state = AuthUnauthenticated();
+    }
   }
 
   Future<void> login(String email, String password) async {
@@ -43,7 +62,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       final user = await _repository.login(email, password);
       state = AuthAuthenticated(user);
     } catch (e) {
-      state = AuthError('Login failed: ${e.toString()}');
+      state = AuthError('Не удалось выполнить вход: ${e.toString()}');
     }
   }
 

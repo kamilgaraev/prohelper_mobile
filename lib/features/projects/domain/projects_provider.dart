@@ -34,6 +34,7 @@ class ProjectsState {
 
 // Provider
 final projectsProvider = StateNotifierProvider<ProjectsNotifier, ProjectsState>((ref) {
+  ref.watch(authProvider);
   return ProjectsNotifier(ref.read(projectsRepositoryProvider));
 });
 

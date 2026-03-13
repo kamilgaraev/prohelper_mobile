@@ -4,7 +4,6 @@ import 'package:dio/dio.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import '../../../core/network/dio_client.dart';
 import '../../../core/storage/secure_storage_service.dart';
-// import '../../core/storage/isar_service.dart'; // TODO: Implement Isar saving
 import 'user_model.dart';
 
 final authRepositoryProvider = Provider<AuthRepository>((ref) {
@@ -29,7 +28,6 @@ class AuthRepository {
 
       final data = response.data['data'];
       final token = data['token'];
-      final userData = data['user'];
 
       await _storage.saveToken(token);
       
@@ -87,12 +85,11 @@ class AuthRepository {
 
     final currentOrgId = json['current_organization_id'] as int?;
 
-    // Parse Roles: Prefer labels for UI display, fallback to slugs
     final List<String> roles = [];
-    if (json['auth']?['role_labels'] != null) {
-       roles.addAll(List<String>.from(json['auth']['role_labels']));
-    } else if (json['auth']?['roles'] != null) {
+    if (json['auth']?['roles'] != null) {
        roles.addAll(List<String>.from(json['auth']['roles']));
+    } else if (json['auth']?['role_labels'] != null) {
+      roles.addAll(List<String>.from(json['auth']['role_labels']));
     }
 
     // Find organization name
@@ -129,6 +126,5 @@ class AuthRepository {
 
   Future<void> logout() async {
     await _storage.clearToken();
-    // TODO: Clear Isar
   }
 }
