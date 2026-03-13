@@ -27,11 +27,16 @@ class AuthInterceptor extends Interceptor {
     }
 
     final requestOptions = err.requestOptions;
-    final isAuthRequest = requestOptions.path.endsWith('/auth/login') ||
-        requestOptions.path.endsWith('/auth/refresh');
+    final isLoginRequest = requestOptions.path.endsWith('/auth/login');
+    final isRefreshRequest = requestOptions.path.endsWith('/auth/refresh');
     final isRetried = requestOptions.extra['auth_retry'] == true;
 
-    if (isAuthRequest || isRetried) {
+    if (isLoginRequest) {
+      handler.next(err);
+      return;
+    }
+
+    if (isRefreshRequest || isRetried) {
       await _invalidateSession();
       handler.next(err);
       return;

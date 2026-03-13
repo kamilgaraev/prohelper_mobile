@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../core/widgets/industrial_card.dart';
@@ -15,18 +15,6 @@ class LoginScreen extends HookConsumerWidget {
     final passwordController = useTextEditingController();
     final authState = ref.watch(authProvider);
     final theme = Theme.of(context);
-
-    // Listen for errors
-    ref.listen(authProvider, (previous, next) {
-      if (next is AuthError) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(next.message),
-            backgroundColor: AppColors.error,
-          ),
-        );
-      }
-    });
 
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
@@ -52,21 +40,21 @@ class LoginScreen extends HookConsumerWidget {
                 child: const Icon(Icons.construction_rounded, size: 60, color: Colors.white),
               ),
               const SizedBox(height: 40),
-              
-              Text('PROHELPER', 
+              Text(
+                'PROHELPER',
                 style: AppTypography.h1(context).copyWith(
-                  letterSpacing: 4, 
+                  letterSpacing: 4,
                   fontSize: 32,
-                )
+                ),
               ),
               const SizedBox(height: 8),
-              Text('INDUSTRIAL MANAGEMENT', 
+              Text(
+                'INDUSTRIAL MANAGEMENT',
                 style: AppTypography.caption(context).copyWith(
                   letterSpacing: 2,
-                )
+                ),
               ),
               const SizedBox(height: 60),
-
               IndustrialCard(
                 padding: const EdgeInsets.all(24),
                 child: Column(
@@ -74,18 +62,58 @@ class LoginScreen extends HookConsumerWidget {
                   children: [
                     _buildTextField(context, emailController, 'Email', Icons.email_outlined),
                     const SizedBox(height: 16),
-                    _buildTextField(context, passwordController, 'Password', Icons.lock_outline, isPassword: true),
+                    _buildTextField(
+                      context,
+                      passwordController,
+                      'Password',
+                      Icons.lock_outline,
+                      isPassword: true,
+                    ),
+                    if (authState is AuthError) ...[
+                      const SizedBox(height: 16),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                        decoration: BoxDecoration(
+                          color: AppColors.error.withOpacity(0.08),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: AppColors.error.withOpacity(0.25),
+                          ),
+                        ),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Padding(
+                              padding: EdgeInsets.only(top: 1),
+                              child: Icon(
+                                Icons.error_outline_rounded,
+                                color: AppColors.error,
+                                size: 18,
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                authState.message,
+                                style: AppTypography.bodyMedium(context).copyWith(
+                                  color: AppColors.error,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 32),
-                    
                     ElevatedButton(
-                      onPressed: authState is AuthLoading 
-                        ? null 
-                        : () {
-                            ref.read(authProvider.notifier).login(
-                              emailController.text,
-                              passwordController.text,
-                            );
-                          },
+                      onPressed: authState is AuthLoading
+                          ? null
+                          : () {
+                              ref.read(authProvider.notifier).login(
+                                    emailController.text,
+                                    passwordController.text,
+                                  );
+                            },
                       style: ElevatedButton.styleFrom(
                         backgroundColor: theme.colorScheme.primary,
                         foregroundColor: Colors.white,
@@ -96,12 +124,15 @@ class LoginScreen extends HookConsumerWidget {
                         elevation: 0,
                       ),
                       child: authState is AuthLoading
-                        ? const SizedBox(
-                            height: 20, 
-                            width: 20, 
-                            child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)
-                          )
-                        : Text('ВХОД', style: AppTypography.button),
+                          ? const SizedBox(
+                              height: 20,
+                              width: 20,
+                              child: CircularProgressIndicator(
+                                color: Colors.white,
+                                strokeWidth: 2,
+                              ),
+                            )
+                          : Text('ВХОД', style: AppTypography.button),
                     ),
                   ],
                 ),
@@ -113,8 +144,15 @@ class LoginScreen extends HookConsumerWidget {
     );
   }
 
-  Widget _buildTextField(BuildContext context, TextEditingController controller, String label, IconData icon, {bool isPassword = false}) {
+  Widget _buildTextField(
+    BuildContext context,
+    TextEditingController controller,
+    String label,
+    IconData icon, {
+    bool isPassword = false,
+  }) {
     final theme = Theme.of(context);
+
     return TextField(
       controller: controller,
       obscureText: isPassword,
@@ -131,7 +169,10 @@ class LoginScreen extends HookConsumerWidget {
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: theme.colorScheme.outline.withOpacity(0.3), width: 1),
+          borderSide: BorderSide(
+            color: theme.colorScheme.outline.withOpacity(0.3),
+            width: 1,
+          ),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
