@@ -3,6 +3,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/network/api_exception.dart';
 import '../../../core/network/dio_client.dart';
+import '../domain/site_requests_scope.dart';
 import 'site_request_model.dart';
 
 final siteRequestsRepositoryProvider = Provider<SiteRequestsRepository>((ref) {
@@ -19,13 +20,17 @@ class SiteRequestsRepository {
     int perPage = 20,
     String? status,
     int? projectId,
+    String? search,
+    SiteRequestsScope scope = SiteRequestsScope.own,
   }) async {
     try {
       final queryParams = {
         'page': page,
         'per_page': perPage,
+        'scope': scope.value,
         if (status != null) 'status': status,
         if (projectId != null) 'project_id': projectId,
+        if (search != null && search.trim().isNotEmpty) 'search': search.trim(),
       };
 
       final response = await _dio.get(
@@ -42,7 +47,14 @@ class SiteRequestsRepository {
         list = [];
       }
 
-      return list.map((e) => SiteRequestModel.fromJson(e)).toList();
+      return list
+          .whereType<Map>()
+          .map(
+            (item) => SiteRequestModel.fromJson(
+              item.map((key, value) => MapEntry(key.toString(), value)),
+            ),
+          )
+          .toList();
     } on DioException catch (error) {
       throw ApiException.fromDio(
         error,
@@ -71,13 +83,17 @@ class SiteRequestsRepository {
   Future<SiteRequestModel> createSiteRequest(Map<String, dynamic> data) async {
     try {
       final response = await _dio.post('/site-requests', data: data);
-      return SiteRequestModel.fromJson(response.data['data']);
+      return _parseSiteRequestResponse(response.data['data']);
     } on DioException catch (error) {
       throw ApiException.fromDio(
         error,
         fallbackMessage: 'Не удалось создать заявку.',
       );
-    } catch (_) {
+    } catch (error) {
+      if (error is ApiException) {
+        rethrow;
+      }
+
       throw const ApiException('Не удалось создать заявку.');
     }
   }
@@ -96,6 +112,23 @@ class SiteRequestsRepository {
       );
     } catch (_) {
       throw const ApiException('Не удалось обновить заявку.');
+    }
+  }
+
+  Future<SiteRequestModel> updateSiteRequestGroup(
+    int groupId,
+    Map<String, dynamic> data,
+  ) async {
+    try {
+      final response = await _dio.put('/site-requests/groups/$groupId', data: data);
+      return _parseSiteRequestResponse(response.data['data']);
+    } on DioException catch (error) {
+      throw ApiException.fromDio(
+        error,
+        fallbackMessage: 'Не удалось обновить группу заявок.',
+      );
+    } catch (_) {
+      throw const ApiException('Не удалось обновить группу заявок.');
     }
   }
 
@@ -145,6 +178,27 @@ class SiteRequestsRepository {
     }
   }
 
+  Future<SiteRequestModel> changeSiteRequestStatus(
+    int id,
+    String status, {
+    String? notes,
+  }) async {
+    try {
+      final response = await _dio.post('/site-requests/$id/status', data: {
+        'status': status,
+        if (notes != null && notes.trim().isNotEmpty) 'notes': notes.trim(),
+      });
+      return SiteRequestModel.fromJson(response.data['data']);
+    } on DioException catch (error) {
+      throw ApiException.fromDio(
+        error,
+        fallbackMessage: 'Не удалось изменить статус заявки.',
+      );
+    } catch (_) {
+      throw const ApiException('Не удалось изменить статус заявки.');
+    }
+  }
+
   Future<List<Map<String, dynamic>>> fetchTemplates() async {
     try {
       final response = await _dio.get('/site-requests/templates');
@@ -188,5 +242,24 @@ class SiteRequestsRepository {
     } catch (_) {
       throw const ApiException('Не удалось загрузить справочники.');
     }
+  }
+
+  SiteRequestModel _parseSiteRequestResponse(dynamic responseData) {
+    if (responseData is Map<String, dynamic>) {
+      if (responseData['primary_request'] is Map<String, dynamic>) {
+        return SiteRequestModel.fromJson(responseData['primary_request']);
+      }
+
+      if (responseData['requests'] is List && (responseData['requests'] as List).isNotEmpty) {
+        final first = (responseData['requests'] as List).first;
+        if (first is Map<String, dynamic>) {
+          return SiteRequestModel.fromJson(first);
+        }
+      }
+
+      return SiteRequestModel.fromJson(responseData);
+    }
+
+    throw const ApiException('Не удалось обработать данные заявки.');
   }
 }

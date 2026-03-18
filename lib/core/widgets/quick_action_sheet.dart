@@ -139,7 +139,11 @@ class QuickActionSheet extends ConsumerWidget {
         return;
       default:
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Этот модуль пока недоступен в мобильном приложении.')),
+          const SnackBar(
+            content: Text(
+              'Этот модуль пока недоступен в мобильном приложении.',
+            ),
+          ),
         );
         return;
     }

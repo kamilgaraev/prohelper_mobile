@@ -43,6 +43,12 @@
 	</array>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>Камера нужна для сканирования QR-кодов и штрихкодов склада, а также для фотографий складских операций.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Доступ к галерее нужен для прикрепления фотографий к складским позициям и операциям.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Доступ нужен для выбора и сохранения складских фотографий.</string>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 </dict>

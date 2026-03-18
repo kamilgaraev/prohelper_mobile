@@ -1,4 +1,5 @@
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+
 import '../data/site_request_model.dart';
 import '../data/site_requests_repository.dart';
 import 'site_requests_provider.dart';
@@ -33,18 +34,20 @@ class SiteRequestDetailState {
   }
 }
 
-final siteRequestDetailProvider = StateNotifierProvider.family<SiteRequestDetailNotifier, SiteRequestDetailState, int>((ref, id) {
+final siteRequestDetailProvider = StateNotifierProvider.family<
+    SiteRequestDetailNotifier, SiteRequestDetailState, int>((ref, id) {
   return SiteRequestDetailNotifier(ref.read(siteRequestsRepositoryProvider), ref, id);
 });
 
 class SiteRequestDetailNotifier extends StateNotifier<SiteRequestDetailState> {
+  SiteRequestDetailNotifier(this._repository, this._ref, this._id)
+      : super(SiteRequestDetailState()) {
+    loadDetails();
+  }
+
   final SiteRequestsRepository _repository;
   final Ref _ref;
   final int _id;
-
-  SiteRequestDetailNotifier(this._repository, this._ref, this._id) : super(SiteRequestDetailState()) {
-    loadDetails();
-  }
 
   Future<void> loadDetails() async {
     state = state.copyWith(isLoading: true, error: null);
@@ -68,14 +71,18 @@ class SiteRequestDetailNotifier extends StateNotifier<SiteRequestDetailState> {
     await _performAction(() => _repository.completeSiteRequest(_id, notes: notes));
   }
 
+  Future<void> changeStatus(String status, {String? notes}) async {
+    await _performAction(
+      () => _repository.changeSiteRequestStatus(_id, status, notes: notes),
+    );
+  }
+
   Future<void> _performAction(Future<SiteRequestModel> Function() action) async {
     state = state.copyWith(isActionLoading: true, error: null);
     try {
       final updatedRequest = await action();
       state = state.copyWith(isActionLoading: false, request: updatedRequest);
-      
-      // Обновляем список заявок, если он загружен
-      _ref.read(siteRequestsProvider.notifier).loadRequests(refresh: true);
+      await _ref.read(siteRequestsProvider.notifier).loadRequests(refresh: true);
     } catch (e) {
       state = state.copyWith(isActionLoading: false, error: e.toString());
       rethrow;

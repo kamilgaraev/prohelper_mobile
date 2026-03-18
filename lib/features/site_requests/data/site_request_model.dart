@@ -1,16 +1,123 @@
 import 'package:isar/isar.dart';
 
-// part 'site_request_model.g.dart'; // Disabled generation
+class SiteRequestTransition {
+  const SiteRequestTransition({
+    required this.status,
+    this.name,
+    this.color,
+    this.icon,
+  });
 
-// @collection // Disabled Isar collection for immediate build fix
+  final String status;
+  final String? name;
+  final String? color;
+  final String? icon;
+
+  factory SiteRequestTransition.fromJson(Map<String, dynamic> json) {
+    return SiteRequestTransition(
+      status: json['status']?.toString() ?? '',
+      name: json['name']?.toString(),
+      color: json['color']?.toString(),
+      icon: json['icon']?.toString(),
+    );
+  }
+}
+
+class SiteRequestHistoryEntry {
+  const SiteRequestHistoryEntry({
+    required this.id,
+    required this.action,
+    required this.actionLabel,
+    this.notes,
+    this.createdAt,
+    this.userName,
+    this.oldStatusLabel,
+    this.newStatusLabel,
+  });
+
+  final int id;
+  final String action;
+  final String actionLabel;
+  final String? notes;
+  final DateTime? createdAt;
+  final String? userName;
+  final String? oldStatusLabel;
+  final String? newStatusLabel;
+
+  factory SiteRequestHistoryEntry.fromJson(Map<String, dynamic> json) {
+    final user = json['user'];
+
+    return SiteRequestHistoryEntry(
+      id: _asInt(json['id']),
+      action: json['action']?.toString() ?? '',
+      actionLabel: _cleanLabel(json['action_label']) ?? json['action']?.toString() ?? '',
+      notes: json['notes']?.toString(),
+      createdAt: json['created_at'] != null
+          ? DateTime.tryParse(json['created_at'].toString())
+          : null,
+      userName: user is Map ? user['name']?.toString() : null,
+      oldStatusLabel: _cleanLabel(json['old_status_label']),
+      newStatusLabel: _cleanLabel(json['new_status_label']),
+    );
+  }
+}
+
+class SiteRequestGroupItem {
+  const SiteRequestGroupItem({
+    required this.id,
+    required this.title,
+    required this.status,
+    required this.statusLabel,
+    required this.requestType,
+    this.requestTypeLabel,
+    this.materialName,
+    this.materialQuantity,
+    this.materialUnit,
+    this.notes,
+    this.assignedUserName,
+    this.isCurrent = false,
+  });
+
+  final int id;
+  final String title;
+  final String status;
+  final String statusLabel;
+  final String requestType;
+  final String? requestTypeLabel;
+  final String? materialName;
+  final double? materialQuantity;
+  final String? materialUnit;
+  final String? notes;
+  final String? assignedUserName;
+  final bool isCurrent;
+
+  factory SiteRequestGroupItem.fromJson(Map<String, dynamic> json) {
+    final assignedUser = json['assigned_user'];
+
+    return SiteRequestGroupItem(
+      id: _asInt(json['id']),
+      title: json['title']?.toString() ?? '',
+      status: json['status']?.toString() ?? '',
+      statusLabel: _cleanLabel(json['status_label']) ?? json['status']?.toString() ?? '',
+      requestType: json['request_type']?.toString() ?? '',
+      requestTypeLabel: _cleanLabel(json['request_type_label']),
+      materialName: json['material_name']?.toString(),
+      materialQuantity: _asDouble(json['material_quantity']),
+      materialUnit: json['material_unit']?.toString(),
+      notes: json['notes']?.toString(),
+      assignedUserName: assignedUser is Map ? assignedUser['name']?.toString() : null,
+      isCurrent: json['is_current'] == true,
+    );
+  }
+}
+
 class SiteRequestModel {
   Id id = Isar.autoIncrement;
 
-  // @Index(unique: true, replace: true)
   late int serverId;
-
   late String title;
   String? description;
+  String? notes;
   late String status;
   String? statusLabel;
   String? statusColor;
@@ -19,15 +126,12 @@ class SiteRequestModel {
   String? priorityColor;
   late String requestType;
   String? requestTypeLabel;
-  
   String? requiredDate;
-  
-  // Материалы (основной кейс для прораба)
+
   String? materialName;
   double? materialQuantity;
   String? materialUnit;
-  
-  // Дополнительные поля (Персонал, Техника)
+
   String? personnelType;
   String? personnelTypeLabel;
   int? personnelCount;
@@ -38,44 +142,180 @@ class SiteRequestModel {
   String? rentalStartDate;
   String? rentalEndDate;
 
-  // Проект
   int? projectId;
   String? projectName;
-
+  String? userName;
+  String? assignedUserName;
+  int? siteRequestGroupId;
+  String? groupTitle;
+  String? groupStatus;
+  String? groupStatusLabel;
+  int groupRequestCount = 0;
+  bool canBeCancelled = false;
+  bool canBeEdited = false;
   DateTime? createdAt;
+  List<SiteRequestTransition> availableTransitions = const [];
+  List<SiteRequestHistoryEntry> history = const [];
+  List<SiteRequestGroupItem> groupItems = const [];
 
   SiteRequestModel();
 
   factory SiteRequestModel.fromJson(Map<String, dynamic> json) {
+    final rawTransitions = json['available_transitions'];
+    final transitions = rawTransitions is List
+        ? rawTransitions
+            .whereType<Map>()
+            .map(
+              (item) => SiteRequestTransition.fromJson(
+                item.map((key, value) => MapEntry(key.toString(), value)),
+              ),
+            )
+            .where((item) => item.status.isNotEmpty)
+            .toList(growable: false)
+        : const <SiteRequestTransition>[];
+    final rawHistory = json['history'];
+    final history = rawHistory is List
+        ? rawHistory
+            .whereType<Map>()
+            .map(
+              (item) => SiteRequestHistoryEntry.fromJson(
+                item.map((key, value) => MapEntry(key.toString(), value)),
+              ),
+            )
+            .toList(growable: false)
+        : const <SiteRequestHistoryEntry>[];
+    final groupContext = json['group_context'] ?? json['group'];
+    final groupItems = groupContext is Map && groupContext['items'] is List
+        ? (groupContext['items'] as List)
+            .whereType<Map>()
+            .map(
+              (item) => SiteRequestGroupItem.fromJson(
+                item.map((key, value) => MapEntry(key.toString(), value)),
+              ),
+            )
+            .toList(growable: false)
+        : const <SiteRequestGroupItem>[];
+    final user = json['user'];
+    final assignedUser = json['assigned_user'];
+
     return SiteRequestModel()
-      ..serverId = json['id']
-      ..title = json['title'] ?? ''
-      ..description = json['description']
-      ..status = json['status'] ?? 'draft'
-      ..statusLabel = json['status_label']
-      ..statusColor = json['status_color']
-      ..priority = json['priority'] ?? 'normal'
-      ..priorityLabel = json['priority_label']
-      ..priorityColor = json['priority_color']
-      ..requestType = json['request_type'] ?? 'material'
-      ..requestTypeLabel = json['request_type_label']
-      ..requiredDate = json['required_date']
-      ..materialName = json['material_name']
-      ..materialQuantity = json['material_quantity'] != null 
-          ? double.tryParse(json['material_quantity'].toString()) 
+      ..serverId = _asInt(json['id'])
+      ..title = json['title']?.toString() ?? ''
+      ..description = json['description']?.toString()
+      ..notes = json['notes']?.toString()
+      ..status = json['status']?.toString() ?? 'draft'
+      ..statusLabel = _cleanLabel(json['status_label'])
+      ..statusColor = json['status_color']?.toString()
+      ..priority = json['priority']?.toString() ?? 'normal'
+      ..priorityLabel = _cleanLabel(json['priority_label'])
+      ..priorityColor = json['priority_color']?.toString()
+      ..requestType = json['request_type']?.toString() ?? 'material_request'
+      ..requestTypeLabel = _cleanLabel(json['request_type_label'])
+      ..requiredDate = json['required_date']?.toString()
+      ..materialName = json['material_name']?.toString()
+      ..materialQuantity = _asDouble(json['material_quantity'])
+      ..materialUnit = json['material_unit']?.toString()
+      ..personnelType = json['personnel_type']?.toString()
+      ..personnelTypeLabel = _cleanLabel(json['personnel_type_label'])
+      ..personnelCount = _asNullableInt(json['personnel_count'])
+      ..equipmentType = json['equipment_type']?.toString()
+      ..equipmentTypeLabel = _resolveEquipmentTypeLabel(
+        json['equipment_type_label']?.toString(),
+        json['equipment_type']?.toString(),
+      )
+      ..workStartDate = json['work_start_date']?.toString()
+      ..workEndDate = json['work_end_date']?.toString()
+      ..rentalStartDate = json['rental_start_date']?.toString()
+      ..rentalEndDate = json['rental_end_date']?.toString()
+      ..projectId = _asNullableInt(json['project_id'])
+      ..projectName = json['project'] is Map
+          ? (json['project']['name']?.toString())
           : null
-      ..materialUnit = json['material_unit']
-      ..personnelType = json['personnel_type']
-      ..personnelTypeLabel = json['personnel_type_label']
-      ..personnelCount = json['personnel_count']
-      ..equipmentType = json['equipment_type']
-      ..equipmentTypeLabel = json['equipment_type_label']
-      ..workStartDate = json['work_start_date']
-      ..workEndDate = json['work_end_date']
-      ..rentalStartDate = json['rental_start_date']
-      ..rentalEndDate = json['rental_end_date']
-      ..projectId = json['project_id']
-      ..projectName = json['project'] != null ? json['project']['name'] : null
-      ..createdAt = json['created_at'] != null ? DateTime.tryParse(json['created_at']) : null;
+      ..userName = user is Map ? user['name']?.toString() : null
+      ..assignedUserName = assignedUser is Map ? assignedUser['name']?.toString() : null
+      ..siteRequestGroupId = _asNullableInt(json['site_request_group_id'])
+      ..groupTitle = groupContext is Map ? groupContext['title']?.toString() : null
+      ..groupStatus = groupContext is Map ? groupContext['status']?.toString() : null
+      ..groupStatusLabel = groupContext is Map
+          ? _cleanLabel(groupContext['status_label'])
+          : null
+      ..groupRequestCount = groupContext is Map
+          ? (_asNullableInt(groupContext['request_count']) ?? 0)
+          : 0
+      ..canBeCancelled = json['can_be_cancelled'] == true
+      ..canBeEdited = json['can_be_edited'] == true
+      ..createdAt = json['created_at'] != null
+          ? DateTime.tryParse(json['created_at'].toString())
+          : null
+      ..availableTransitions = transitions
+      ..history = history
+      ..groupItems = groupItems;
   }
+}
+
+int _asInt(dynamic value) => _asNullableInt(value) ?? 0;
+
+int? _asNullableInt(dynamic value) {
+  if (value is int) {
+    return value;
+  }
+
+  if (value is num) {
+    return value.toInt();
+  }
+
+  return int.tryParse(value?.toString() ?? '');
+}
+
+double? _asDouble(dynamic value) {
+  if (value is double) {
+    return value;
+  }
+
+  if (value is num) {
+    return value.toDouble();
+  }
+
+  return double.tryParse(value?.toString() ?? '');
+}
+
+String? _cleanLabel(dynamic value) {
+  final text = value?.toString().trim();
+  if (text == null || text.isEmpty) {
+    return null;
+  }
+
+  if (text.startsWith('site_requests.') || text.startsWith('mobile_')) {
+    return null;
+  }
+
+  return text;
+}
+
+String? _resolveEquipmentTypeLabel(String? rawLabel, String? rawType) {
+  final label = _cleanLabel(rawLabel);
+  if (label != null) {
+    return label;
+  }
+
+  return switch ((rawType ?? '').trim().toLowerCase()) {
+    'tower_crane' => 'Башенный кран',
+    'mobile_crane' => 'Автокран',
+    'excavator' => 'Экскаватор',
+    'bulldozer' => 'Бульдозер',
+    'loader' => 'Погрузчик',
+    'dump_truck' => 'Самосвал',
+    'concrete_mixer' => 'Бетономешалка',
+    'concrete_pump' => 'Бетононасос',
+    'forklift' => 'Вилочный погрузчик',
+    'scaffolding' => 'Строительные леса',
+    'compressor' => 'Компрессор',
+    'generator' => 'Генератор',
+    'welding_machine' => 'Сварочный аппарат',
+    'vibrator' => 'Вибратор для бетона',
+    'grader' => 'Грейдер',
+    'roller' => 'Каток',
+    'other' => 'Другое',
+    _ => rawType,
+  };
 }

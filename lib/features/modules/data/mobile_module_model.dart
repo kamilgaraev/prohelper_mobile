@@ -46,6 +46,7 @@ String _resolveModuleTitle(String slug, String? rawTitle) {
     'site-requests' => 'Заявки с объекта',
     'basic-warehouse' => 'Склад',
     'schedule-management' => 'График работ',
+    'ai-assistant' => 'AI-ассистент',
     'workflow-management' => 'Workflow',
     'time-tracking' => 'Учет времени',
     'budget-estimates' => 'Сметы',
@@ -64,7 +65,9 @@ String _resolveModuleDescription(String slug, String? rawDescription) {
     'basic-warehouse' =>
       'Остатки, движения и приемка материалов по организации.',
     'schedule-management' =>
-      'Ближайшие события, блокировки и рабочий календарь по объектам.',
+      'Графики работ, прогресс и задачи по объектам.',
+    'ai-assistant' =>
+      'История диалогов, управленческие вопросы и быстрый доступ к AI-помощнику.',
     'workflow-management' =>
       'Маршруты согласований и статусы бизнес-процессов.',
     'time-tracking' => 'Отметки, смены и контроль рабочего времени.',

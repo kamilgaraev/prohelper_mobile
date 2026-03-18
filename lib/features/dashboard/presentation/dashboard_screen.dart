@@ -4,10 +4,12 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import 'package:prohelpers_mobile/core/theme/app_colors.dart';
 import 'package:prohelpers_mobile/core/theme/app_typography.dart';
+import 'package:prohelpers_mobile/core/providers/module_provider.dart';
 import 'package:prohelpers_mobile/core/widgets/action_hub.dart';
 import 'package:prohelpers_mobile/core/widgets/app_state_view.dart';
 import 'package:prohelpers_mobile/core/widgets/industrial_card.dart';
 import 'package:prohelpers_mobile/features/auth/domain/auth_provider.dart';
+import 'package:prohelpers_mobile/features/ai_assistant/presentation/ai_assistant_home_screen.dart';
 import 'package:prohelpers_mobile/features/auth/presentation/widgets/profile_pill.dart';
 import 'package:prohelpers_mobile/features/auth/presentation/widgets/user_profile_bottom_sheet.dart';
 import 'package:prohelpers_mobile/features/dashboard/data/dashboard_widget_model.dart';
@@ -15,6 +17,7 @@ import 'package:prohelpers_mobile/features/dashboard/presentation/controllers/da
 import 'package:prohelpers_mobile/features/projects/domain/projects_provider.dart';
 import 'package:prohelpers_mobile/features/schedule/presentation/schedule_screen.dart';
 import 'package:prohelpers_mobile/features/site_requests/presentation/screens/site_requests_screen.dart';
+import 'package:prohelpers_mobile/features/site_requests/domain/site_requests_scope.dart';
 import 'package:prohelpers_mobile/features/warehouse/presentation/warehouse_screen.dart';
 
 class DashboardScreen extends ConsumerWidget {
@@ -23,6 +26,8 @@ class DashboardScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final dashboardState = ref.watch(dashboardControllerProvider);
+    final activeModules = ref.watch(activeModulesProvider);
+    final hasAiAssistant = activeModules.contains(AppModule.aiAssistant);
 
     return Scaffold(
       body: Stack(
@@ -75,6 +80,14 @@ class DashboardScreen extends ConsumerWidget {
                     ),
                   ),
                 ),
+                if (hasAiAssistant)
+                  SliverPadding(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    sliver: SliverToBoxAdapter(
+                      child: _buildAiAssistantCard(context),
+                    ),
+                  ),
                 const SliverToBoxAdapter(child: SizedBox(height: 110)),
               ],
             ],
@@ -322,7 +335,11 @@ class DashboardScreen extends ConsumerWidget {
       color: Theme.of(context).colorScheme.primary,
       badge: widget.badge,
       onTap: (_) => Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => const SiteRequestsScreen()),
+        MaterialPageRoute(
+          builder: (_) => const SiteRequestsScreen(
+            scope: SiteRequestsScope.approvals,
+          ),
+        ),
       ),
     );
   }
@@ -337,6 +354,21 @@ class DashboardScreen extends ConsumerWidget {
       badge: widget.badge,
       onTap: (_) => Navigator.of(context).push(
         MaterialPageRoute(builder: (_) => const ScheduleScreen()),
+      ),
+    );
+  }
+
+  Widget _buildAiAssistantCard(BuildContext context) {
+    return _buildModuleActionCard(
+      context: context,
+      title: 'AI-ассистент',
+      subtitle:
+          'История диалогов, быстрые управленческие вопросы и единый рабочий контекст по проекту.',
+      icon: Icons.smart_toy_outlined,
+      color: AppColors.secondary,
+      badge: 'AI',
+      onTap: (_) => Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => const AiAssistantHomeScreen()),
       ),
     );
   }
