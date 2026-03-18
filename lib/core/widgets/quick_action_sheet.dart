@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
+import '../../features/ai_assistant/presentation/ai_assistant_home_screen.dart';
 import '../../features/modules/data/mobile_module_model.dart';
 import '../../features/schedule/presentation/schedule_screen.dart';
 import '../../features/site_requests/presentation/screens/site_requests_screen.dart';
@@ -137,6 +138,11 @@ class QuickActionSheet extends ConsumerWidget {
           MaterialPageRoute(builder: (_) => const ScheduleScreen()),
         );
         return;
+      case 'ai_assistant':
+        navigator.push(
+          MaterialPageRoute(builder: (_) => const AiAssistantHomeScreen()),
+        );
+        return;
       default:
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -154,6 +160,7 @@ class QuickActionSheet extends ConsumerWidget {
       'clipboard' => Icons.add_task_rounded,
       'warehouse' => Icons.warehouse_outlined,
       'timeline' => Icons.timeline_rounded,
+      'spark' => Icons.smart_toy_outlined,
       'hub' => Icons.hub_outlined,
       'timer' => Icons.timer_outlined,
       'calculate' => Icons.calculate_outlined,
@@ -166,6 +173,7 @@ class QuickActionSheet extends ConsumerWidget {
       'site_requests' => theme.colorScheme.secondary,
       'warehouse' => theme.colorScheme.primary,
       'schedule' => Colors.green,
+      'ai_assistant' => Colors.teal,
       _ => theme.colorScheme.onSurfaceVariant,
     };
   }
