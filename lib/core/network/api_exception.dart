@@ -97,6 +97,14 @@ class ApiException implements Exception {
       return _fallbackByStatus(statusCode, fallbackMessage);
     }
 
+    final normalizedLowerCase = normalized.toLowerCase();
+    if (statusCode == 401 &&
+        (normalizedLowerCase == 'unauthorized' ||
+            normalizedLowerCase == 'unauthenticated' ||
+            normalizedLowerCase == 'not authorized')) {
+      return _fallbackByStatus(statusCode, fallbackMessage);
+    }
+
     if (!normalized.startsWith('ai_assistant.')) {
       return normalized;
     }

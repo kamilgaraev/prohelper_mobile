@@ -29,11 +29,16 @@ class AuthError extends AuthState {
 }
 
 final authProvider = StateNotifierProvider<AuthNotifier, AuthState>((ref) {
-  ref.watch(authSessionVersionProvider);
-  return AuthNotifier(
+  final notifier = AuthNotifier(
     ref.read(authRepositoryProvider),
     ref.read(secureStorageProvider),
   );
+
+  ref.listen<int>(authSessionVersionProvider, (_, __) {
+    notifier.handleSessionInvalidation();
+  });
+
+  return notifier;
 });
 
 class AuthNotifier extends StateNotifier<AuthState> {
@@ -121,6 +126,14 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
   Future<void> logout() async {
     await _repository.logout();
+    if (!mounted) {
+      return;
+    }
+
+    state = AuthUnauthenticated();
+  }
+
+  void handleSessionInvalidation() {
     if (!mounted) {
       return;
     }

@@ -111,6 +111,70 @@ class SiteRequestGroupItem {
   }
 }
 
+class SiteRequestPurchaseRequestSummary {
+  const SiteRequestPurchaseRequestSummary({
+    required this.id,
+    required this.number,
+    required this.status,
+    this.statusLabel,
+    this.createdAt,
+  });
+
+  final int id;
+  final String number;
+  final String status;
+  final String? statusLabel;
+  final DateTime? createdAt;
+
+  factory SiteRequestPurchaseRequestSummary.fromJson(Map<String, dynamic> json) {
+    return SiteRequestPurchaseRequestSummary(
+      id: _asInt(json['id']),
+      number: json['request_number']?.toString() ?? json['number']?.toString() ?? '',
+      status: json['status']?.toString() ?? '',
+      statusLabel: _cleanLabel(json['status_label']),
+      createdAt: json['created_at'] != null
+          ? DateTime.tryParse(json['created_at'].toString())
+          : null,
+    );
+  }
+}
+
+class SiteRequestPurchaseOrderSummary {
+  const SiteRequestPurchaseOrderSummary({
+    required this.id,
+    required this.number,
+    required this.status,
+    this.statusLabel,
+    this.supplierName,
+    this.deliveryDate,
+    this.createdAt,
+  });
+
+  final int id;
+  final String number;
+  final String status;
+  final String? statusLabel;
+  final String? supplierName;
+  final String? deliveryDate;
+  final DateTime? createdAt;
+
+  factory SiteRequestPurchaseOrderSummary.fromJson(Map<String, dynamic> json) {
+    final supplier = json['supplier'];
+
+    return SiteRequestPurchaseOrderSummary(
+      id: _asInt(json['id']),
+      number: json['order_number']?.toString() ?? json['number']?.toString() ?? '',
+      status: json['status']?.toString() ?? '',
+      statusLabel: _cleanLabel(json['status_label']),
+      supplierName: supplier is Map ? supplier['name']?.toString() : null,
+      deliveryDate: json['delivery_date']?.toString(),
+      createdAt: json['created_at'] != null
+          ? DateTime.tryParse(json['created_at'].toString())
+          : null,
+    );
+  }
+}
+
 class SiteRequestModel {
   Id id = Isar.autoIncrement;
 
@@ -153,10 +217,18 @@ class SiteRequestModel {
   int groupRequestCount = 0;
   bool canBeCancelled = false;
   bool canBeEdited = false;
+  bool materialReserved = false;
+  double? reservedQuantity;
+  DateTime? reservedAt;
+  bool materialsReceived = false;
+  DateTime? materialsReceivedAt;
+  int? warehouseId;
   DateTime? createdAt;
   List<SiteRequestTransition> availableTransitions = const [];
   List<SiteRequestHistoryEntry> history = const [];
   List<SiteRequestGroupItem> groupItems = const [];
+  List<SiteRequestPurchaseRequestSummary> purchaseRequests = const [];
+  List<SiteRequestPurchaseOrderSummary> purchaseOrders = const [];
 
   SiteRequestModel();
 
@@ -195,6 +267,31 @@ class SiteRequestModel {
             )
             .toList(growable: false)
         : const <SiteRequestGroupItem>[];
+    final metadata = json['metadata'];
+    final rawPurchaseRequests = json['purchase_requests'] ?? json['purchaseRequests'];
+    final purchaseRequests = rawPurchaseRequests is List
+        ? rawPurchaseRequests
+            .whereType<Map>()
+            .map(
+              (item) => SiteRequestPurchaseRequestSummary.fromJson(
+                item.map((key, value) => MapEntry(key.toString(), value)),
+              ),
+            )
+            .where((item) => item.id > 0)
+            .toList(growable: false)
+        : const <SiteRequestPurchaseRequestSummary>[];
+    final rawPurchaseOrders = json['purchase_orders'] ?? json['purchaseOrders'];
+    final purchaseOrders = rawPurchaseOrders is List
+        ? rawPurchaseOrders
+            .whereType<Map>()
+            .map(
+              (item) => SiteRequestPurchaseOrderSummary.fromJson(
+                item.map((key, value) => MapEntry(key.toString(), value)),
+              ),
+            )
+            .where((item) => item.id > 0)
+            .toList(growable: false)
+        : const <SiteRequestPurchaseOrderSummary>[];
     final user = json['user'];
     final assignedUser = json['assigned_user'];
 
@@ -244,12 +341,24 @@ class SiteRequestModel {
           : 0
       ..canBeCancelled = json['can_be_cancelled'] == true
       ..canBeEdited = json['can_be_edited'] == true
+      ..materialReserved = metadata is Map && metadata['material_reserved'] == true
+      ..reservedQuantity = metadata is Map ? _asDouble(metadata['reserved_quantity']) : null
+      ..reservedAt = metadata is Map && metadata['reserved_at'] != null
+          ? DateTime.tryParse(metadata['reserved_at'].toString())
+          : null
+      ..materialsReceived = metadata is Map && metadata['materials_received'] == true
+      ..materialsReceivedAt = metadata is Map && metadata['received_at'] != null
+          ? DateTime.tryParse(metadata['received_at'].toString())
+          : null
+      ..warehouseId = metadata is Map ? _asNullableInt(metadata['warehouse_id']) : null
       ..createdAt = json['created_at'] != null
           ? DateTime.tryParse(json['created_at'].toString())
           : null
       ..availableTransitions = transitions
       ..history = history
-      ..groupItems = groupItems;
+      ..groupItems = groupItems
+      ..purchaseRequests = purchaseRequests
+      ..purchaseOrders = purchaseOrders;
   }
 }
 

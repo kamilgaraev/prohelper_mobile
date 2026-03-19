@@ -212,6 +212,10 @@ class _SiteRequestDetailContent extends StatelessWidget {
             const SizedBox(height: 16),
             _RequestResourcesCard(request: request),
           ],
+          if (_hasProcurementSection(request)) ...[
+            const SizedBox(height: 16),
+            _RequestProcurementCard(request: request),
+          ],
           if ((request.notes ?? '').trim().isNotEmpty) ...[
             const SizedBox(height: 16),
             _RequestTextCard(
@@ -484,6 +488,191 @@ class _RequestResourcesCard extends StatelessWidget {
                 value: request.rentalEndDate!,
               ),
           ],
+        ],
+      ),
+    );
+  }
+}
+
+class _RequestProcurementCard extends StatelessWidget {
+  const _RequestProcurementCard({required this.request});
+
+  final SiteRequestModel request;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final reserveStatus = request.materialReserved
+        ? 'Материал зарезервирован'
+        : request.purchaseOrders.isNotEmpty
+            ? 'Ожидается резервирование или приемка'
+            : 'Закупка еще не запущена';
+    final receiptStatus = request.materialsReceived
+        ? 'Материалы приняты'
+        : request.purchaseOrders.isNotEmpty
+            ? 'Ожидается поставка'
+            : 'Поставка еще не оформлена';
+
+    return ProCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Закупка', style: AppTypography.h2(context)),
+          const SizedBox(height: 16),
+          _ParamRow(
+            icon: Icons.inventory_outlined,
+            label: 'Резерв',
+            value: reserveStatus,
+            valueColor: request.materialReserved ? AppColors.success : null,
+          ),
+          if (request.reservedQuantity != null)
+            _ParamRow(
+              icon: Icons.scale_outlined,
+              label: 'В резерве',
+              value: [
+                _formatQuantity(request.reservedQuantity!),
+                request.materialUnit,
+              ].whereType<String>().where((value) => value.trim().isNotEmpty).join(' '),
+            ),
+          if (request.reservedAt != null)
+            _ParamRow(
+              icon: Icons.schedule_outlined,
+              label: 'Резерв создан',
+              value: _formatDateTime(request.reservedAt!),
+            ),
+          if (request.warehouseId != null)
+            _ParamRow(
+              icon: Icons.warehouse_outlined,
+              label: 'Склад',
+              value: 'ID #${request.warehouseId}',
+            ),
+          _ParamRow(
+            icon: Icons.local_shipping_outlined,
+            label: 'Приемка',
+            value: receiptStatus,
+            valueColor: request.materialsReceived ? AppColors.success : null,
+          ),
+          if (request.materialsReceivedAt != null)
+            _ParamRow(
+              icon: Icons.fact_check_outlined,
+              label: 'Принято',
+              value: _formatDateTime(request.materialsReceivedAt!),
+            ),
+          if (request.purchaseRequests.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(
+              'Заявки на закупку',
+              style: AppTypography.bodyLarge(context).copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 12),
+            ...request.purchaseRequests.map(
+              (item) => _ProcurementItemTile(
+                icon: Icons.request_quote_outlined,
+                title: item.number.isNotEmpty ? item.number : 'Заявка #${item.id}',
+                subtitle: item.createdAt != null ? _formatDateTime(item.createdAt!) : null,
+                badgeLabel: _purchaseRequestStatusLabel(item),
+                badgeColor: _statusColor(item.status),
+              ),
+            ),
+          ],
+          if (request.purchaseOrders.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(
+              'Заказы поставщику',
+              style: AppTypography.bodyLarge(context).copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 12),
+            ...request.purchaseOrders.map(
+              (item) => _ProcurementItemTile(
+                icon: Icons.shopping_cart_checkout_outlined,
+                title: item.number.isNotEmpty ? item.number : 'Заказ #${item.id}',
+                subtitle: [
+                  item.supplierName,
+                  if ((item.deliveryDate ?? '').trim().isNotEmpty) item.deliveryDate,
+                  if (item.createdAt != null) _formatDateTime(item.createdAt!),
+                ].whereType<String>().where((value) => value.trim().isNotEmpty).join(' • '),
+                badgeLabel: _purchaseOrderStatusLabel(item),
+                badgeColor: _statusColor(item.status),
+              ),
+            ),
+          ],
+          if (request.purchaseRequests.isEmpty &&
+              request.purchaseOrders.isEmpty &&
+              !request.materialReserved &&
+              !request.materialsReceived) ...[
+            const SizedBox(height: 4),
+            Text(
+              'Связанных закупок по этой заявке пока нет.',
+              style: AppTypography.bodyMedium(context).copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _ProcurementItemTile extends StatelessWidget {
+  const _ProcurementItemTile({
+    required this.icon,
+    required this.title,
+    required this.badgeLabel,
+    required this.badgeColor,
+    this.subtitle,
+  });
+
+  final IconData icon;
+  final String title;
+  final String? subtitle;
+  final String badgeLabel;
+  final Color badgeColor;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceVariant.withOpacity(0.35),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 20, color: theme.colorScheme.onSurfaceVariant),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: AppTypography.bodyLarge(context).copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                if ((subtitle ?? '').trim().isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    subtitle!,
+                    style: AppTypography.bodyMedium(context).copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          _StatusBadge(label: badgeLabel, color: badgeColor),
         ],
       ),
     );
@@ -951,8 +1140,53 @@ bool _hasResourceSection(SiteRequestModel request) {
       (request.equipmentTypeLabel ?? request.equipmentType ?? '').trim().isNotEmpty;
 }
 
+bool _hasProcurementSection(SiteRequestModel request) {
+  return request.purchaseRequests.isNotEmpty ||
+      request.purchaseOrders.isNotEmpty ||
+      request.materialReserved ||
+      request.materialsReceived ||
+      request.reservedQuantity != null ||
+      request.reservedAt != null ||
+      request.materialsReceivedAt != null ||
+      request.warehouseId != null;
+}
+
 bool _hasGroupSection(SiteRequestModel request) {
   return request.groupRequestCount > 1 || request.groupItems.length > 1;
+}
+
+String _purchaseRequestStatusLabel(SiteRequestPurchaseRequestSummary item) {
+  final label = item.statusLabel?.trim();
+  if (label != null && label.isNotEmpty) {
+    return label;
+  }
+
+  return switch (item.status.trim().toLowerCase()) {
+    'draft' => 'Черновик',
+    'pending' => 'На рассмотрении',
+    'approved' => 'Согласована',
+    'rejected' => 'Отклонена',
+    'cancelled' => 'Отменена',
+    _ => item.status.isNotEmpty ? item.status : 'Без статуса',
+  };
+}
+
+String _purchaseOrderStatusLabel(SiteRequestPurchaseOrderSummary item) {
+  final label = item.statusLabel?.trim();
+  if (label != null && label.isNotEmpty) {
+    return label;
+  }
+
+  return switch (item.status.trim().toLowerCase()) {
+    'draft' => 'Черновик',
+    'sent' => 'Отправлен поставщику',
+    'confirmed' => 'Подтвержден поставщиком',
+    'in_delivery' => 'В доставке',
+    'delivered' => 'Доставлен',
+    'cancelled' => 'Отменен',
+    'approved' => 'Подтвержден',
+    _ => item.status.isNotEmpty ? item.status : 'Без статуса',
+  };
 }
 
 String _transitionActionLabel(SiteRequestTransition transition) {
@@ -1140,11 +1374,16 @@ Color _statusColor(String status) {
   return switch (status.trim().toLowerCase()) {
     'draft' => AppColors.textSecondary,
     'pending' => AppColors.warning,
+    'pending_approval' => AppColors.warning,
     'in_review' => AppColors.primary,
     'approved' => AppColors.primary,
     'in_progress' => AppColors.secondary,
+    'sent' => AppColors.primary,
+    'confirmed' => AppColors.success,
+    'in_delivery' => AppColors.warning,
     'fulfilled' => AppColors.success,
     'completed' => AppColors.success,
+    'delivered' => AppColors.success,
     'on_hold' => AppColors.warning,
     'cancelled' || 'rejected' => AppColors.error,
     _ => AppColors.textSecondary,
