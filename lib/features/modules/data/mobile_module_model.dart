@@ -49,7 +49,7 @@ String _resolveModuleTitle(String slug, String? rawTitle) {
     'ai-assistant' => 'AI-ассистент',
     'workflow-management' => 'Workflow',
     'time-tracking' => 'Учет времени',
-    'budget-estimates' => 'Сметы',
+    'budget-estimates' => 'Журнал работ',
     _ => 'Модуль',
   };
 }
@@ -72,7 +72,7 @@ String _resolveModuleDescription(String slug, String? rawDescription) {
       'Маршруты согласований и статусы бизнес-процессов.',
     'time-tracking' => 'Отметки, смены и контроль рабочего времени.',
     'budget-estimates' =>
-      'Сметные данные, объемы и связанные показатели проекта.',
+      'Ежедневные записи, статусы согласования и экспорт журнала работ.',
     _ => '',
   };
 }
@@ -80,6 +80,5 @@ String _resolveModuleDescription(String slug, String? rawDescription) {
 bool _needsModuleFallback(String? value) {
   final normalized = value?.trim() ?? '';
 
-  return normalized.isEmpty ||
-      normalized.startsWith('mobile_modules.modules.');
+  return normalized.isEmpty || normalized.startsWith('mobile_modules.modules.');
 }

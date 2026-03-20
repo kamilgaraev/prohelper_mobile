@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../features/ai_assistant/presentation/ai_assistant_home_screen.dart';
+import '../../features/construction_journal/presentation/construction_journal_screen.dart';
 import '../../features/modules/data/mobile_module_model.dart';
 import '../../features/schedule/presentation/schedule_screen.dart';
 import '../../features/site_requests/presentation/screens/site_requests_screen.dart';
@@ -42,7 +43,7 @@ class QuickActionSheet extends ConsumerWidget {
           ),
           const SizedBox(height: 24),
           Text(
-            'Быстрые действия',
+            'БЫСТРЫЕ ДЕЙСТВИЯ',
             style: AppTypography.caption(context).copyWith(
               fontWeight: FontWeight.w900,
               letterSpacing: 2,
@@ -84,7 +85,7 @@ class QuickActionSheet extends ConsumerWidget {
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 24),
               child: Text(
-                'Для вашей роли пока нет мобильных модулей.',
+                'Для вашей учетной записи пока нет мобильных модулей.',
                 style: AppTypography.bodyMedium(context).copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
@@ -124,31 +125,24 @@ class QuickActionSheet extends ConsumerWidget {
 
     switch (module.route) {
       case 'site_requests':
-        navigator.push(
-          MaterialPageRoute(builder: (_) => const SiteRequestsScreen()),
-        );
+        navigator.push(MaterialPageRoute(builder: (_) => const SiteRequestsScreen()));
         return;
       case 'warehouse':
-        navigator.push(
-          MaterialPageRoute(builder: (_) => const WarehouseScreen()),
-        );
+        navigator.push(MaterialPageRoute(builder: (_) => const WarehouseScreen()));
         return;
       case 'schedule':
-        navigator.push(
-          MaterialPageRoute(builder: (_) => const ScheduleScreen()),
-        );
+        navigator.push(MaterialPageRoute(builder: (_) => const ScheduleScreen()));
+        return;
+      case 'construction_journal':
+        navigator.push(MaterialPageRoute(builder: (_) => const ConstructionJournalScreen()));
         return;
       case 'ai_assistant':
-        navigator.push(
-          MaterialPageRoute(builder: (_) => const AiAssistantHomeScreen()),
-        );
+        navigator.push(MaterialPageRoute(builder: (_) => const AiAssistantHomeScreen()));
         return;
       default:
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text(
-              'Этот модуль пока недоступен в мобильном приложении.',
-            ),
+            content: Text('Этот модуль пока недоступен в мобильном приложении.'),
           ),
         );
         return;
@@ -161,6 +155,7 @@ class QuickActionSheet extends ConsumerWidget {
       'warehouse' => Icons.warehouse_outlined,
       'timeline' => Icons.timeline_rounded,
       'spark' => Icons.smart_toy_outlined,
+      'journal' => Icons.menu_book_outlined,
       'hub' => Icons.hub_outlined,
       'timer' => Icons.timer_outlined,
       'calculate' => Icons.calculate_outlined,
@@ -173,6 +168,7 @@ class QuickActionSheet extends ConsumerWidget {
       'site_requests' => theme.colorScheme.secondary,
       'warehouse' => theme.colorScheme.primary,
       'schedule' => Colors.green,
+      'construction_journal' => Colors.orange,
       'ai_assistant' => Colors.teal,
       _ => theme.colorScheme.onSurfaceVariant,
     };
