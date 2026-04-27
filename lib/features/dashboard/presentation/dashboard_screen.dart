@@ -14,6 +14,8 @@ import 'package:prohelpers_mobile/features/auth/presentation/widgets/profile_pil
 import 'package:prohelpers_mobile/features/auth/presentation/widgets/user_profile_bottom_sheet.dart';
 import 'package:prohelpers_mobile/features/dashboard/data/dashboard_widget_model.dart';
 import 'package:prohelpers_mobile/features/dashboard/presentation/controllers/dashboard_controller.dart';
+import 'package:prohelpers_mobile/features/notifications/domain/notifications_provider.dart';
+import 'package:prohelpers_mobile/features/notifications/presentation/notifications_screen.dart';
 import 'package:prohelpers_mobile/features/projects/domain/projects_provider.dart';
 import 'package:prohelpers_mobile/features/schedule/presentation/schedule_screen.dart';
 import 'package:prohelpers_mobile/features/site_requests/presentation/screens/site_requests_screen.dart';
@@ -47,9 +49,11 @@ class DashboardScreen extends ConsumerWidget {
                     title: 'Не удалось загрузить дашборд',
                     description: dashboardState.error,
                     action: OutlinedButton(
-                      onPressed: () => ref
-                          .read(dashboardControllerProvider.notifier)
-                          .loadDashboard(),
+                      onPressed:
+                          () =>
+                              ref
+                                  .read(dashboardControllerProvider.notifier)
+                                  .loadDashboard(),
                       child: const Text('Повторить'),
                     ),
                   ),
@@ -65,25 +69,26 @@ class DashboardScreen extends ConsumerWidget {
                 )
               else ...[
                 SliverPadding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
                   sliver: SliverList(
-                    delegate: SliverChildBuilderDelegate(
-                      (context, index) {
-                        final widget = dashboardState.widgets[index];
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: 16),
-                          child: _buildWidgetByType(context, ref, widget),
-                        );
-                      },
-                      childCount: dashboardState.widgets.length,
-                    ),
+                    delegate: SliverChildBuilderDelegate((context, index) {
+                      final widget = dashboardState.widgets[index];
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 16),
+                        child: _buildWidgetByType(context, ref, widget),
+                      );
+                    }, childCount: dashboardState.widgets.length),
                   ),
                 ),
                 if (hasAiAssistant)
                   SliverPadding(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
+                    ),
                     sliver: SliverToBoxAdapter(
                       child: _buildAiAssistantCard(context),
                     ),
@@ -92,12 +97,7 @@ class DashboardScreen extends ConsumerWidget {
               ],
             ],
           ),
-          const Positioned(
-            bottom: 0,
-            left: 0,
-            right: 0,
-            child: ActionHub(),
-          ),
+          const Positioned(bottom: 0, left: 0, right: 0, child: ActionHub()),
         ],
       ),
     );
@@ -147,6 +147,59 @@ class DashboardScreen extends ConsumerWidget {
       actions: [
         Consumer(
           builder: (context, ref, _) {
+            final unreadCount = ref.watch(
+              notificationsProvider.select((state) => state.unreadCount),
+            );
+
+            return Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: IconButton(
+                tooltip: 'Уведомления',
+                onPressed: () {
+                  HapticFeedback.selectionClick();
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const NotificationsScreen(),
+                    ),
+                  );
+                },
+                icon: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    const Icon(Icons.notifications_none_rounded),
+                    if (unreadCount > 0)
+                      Positioned(
+                        right: -6,
+                        top: -6,
+                        child: Container(
+                          constraints: const BoxConstraints(
+                            minWidth: 18,
+                            minHeight: 18,
+                          ),
+                          padding: const EdgeInsets.symmetric(horizontal: 5),
+                          decoration: BoxDecoration(
+                            color: AppColors.error,
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                          child: Text(
+                            unreadCount > 99 ? '99+' : unreadCount.toString(),
+                            textAlign: TextAlign.center,
+                            style: AppTypography.caption(context).copyWith(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w900,
+                              fontSize: 10,
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            );
+          },
+        ),
+        Consumer(
+          builder: (context, ref, _) {
             final authState = ref.watch(authProvider);
             if (authState is! AuthAuthenticated) {
               return const SizedBox.shrink();
@@ -163,8 +216,8 @@ class DashboardScreen extends ConsumerWidget {
                       context: context,
                       isScrollControlled: true,
                       backgroundColor: Colors.transparent,
-                      builder: (_) =>
-                          UserProfileBottomSheet(user: authState.user),
+                      builder:
+                          (_) => UserProfileBottomSheet(user: authState.user),
                     );
                   },
                 ),
@@ -182,12 +235,19 @@ class DashboardScreen extends ConsumerWidget {
     DashboardWidgetModel widget,
   ) {
     return switch (widget.type) {
-      DashboardWidgetType.projectOverview =>
-        _buildProjectOverview(context, ref, widget),
-      DashboardWidgetType.siteRequests =>
-        _buildSiteRequestsCard(context, widget),
-      DashboardWidgetType.siteRequestApprovals =>
-        _buildApprovalsCard(context, widget),
+      DashboardWidgetType.projectOverview => _buildProjectOverview(
+        context,
+        ref,
+        widget,
+      ),
+      DashboardWidgetType.siteRequests => _buildSiteRequestsCard(
+        context,
+        widget,
+      ),
+      DashboardWidgetType.siteRequestApprovals => _buildApprovalsCard(
+        context,
+        widget,
+      ),
       DashboardWidgetType.warehouse => _buildWarehouseCard(context, widget),
       DashboardWidgetType.schedule => _buildScheduleCard(context, widget),
       DashboardWidgetType.unknown => const SizedBox.shrink(),
@@ -209,10 +269,9 @@ class DashboardScreen extends ConsumerWidget {
         children: [
           Text(
             widget.title.toUpperCase(),
-            style: AppTypography.caption(context).copyWith(
-              fontWeight: FontWeight.w900,
-              letterSpacing: 0.8,
-            ),
+            style: AppTypography.caption(
+              context,
+            ).copyWith(fontWeight: FontWeight.w900, letterSpacing: 0.8),
           ),
           const SizedBox(height: 16),
           if (project == null)
@@ -227,9 +286,9 @@ class DashboardScreen extends ConsumerWidget {
                   const SizedBox(height: 8),
                   Text(
                     widget.description,
-                    style: AppTypography.bodyMedium(context).copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
+                    style: AppTypography.bodyMedium(
+                      context,
+                    ).copyWith(color: theme.colorScheme.onSurfaceVariant),
                   ),
                 ],
               ],
@@ -274,17 +333,17 @@ class DashboardScreen extends ConsumerWidget {
             width: 110,
             child: Text(
               label,
-              style: AppTypography.bodyMedium(context).copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
+              style: AppTypography.bodyMedium(
+                context,
+              ).copyWith(color: theme.colorScheme.onSurfaceVariant),
             ),
           ),
           Expanded(
             child: Text(
               value,
-              style: AppTypography.bodyLarge(context).copyWith(
-                color: valueColor,
-              ),
+              style: AppTypography.bodyLarge(
+                context,
+              ).copyWith(color: valueColor),
             ),
           ),
         ],
@@ -292,7 +351,10 @@ class DashboardScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildWarehouseCard(BuildContext context, DashboardWidgetModel widget) {
+  Widget _buildWarehouseCard(
+    BuildContext context,
+    DashboardWidgetModel widget,
+  ) {
     return _buildModuleActionCard(
       context: context,
       title: widget.title,
@@ -300,9 +362,10 @@ class DashboardScreen extends ConsumerWidget {
       icon: Icons.warehouse_outlined,
       color: Theme.of(context).colorScheme.primary,
       badge: widget.badge,
-      onTap: (_) => Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => const WarehouseScreen()),
-      ),
+      onTap:
+          (_) => Navigator.of(
+            context,
+          ).push(MaterialPageRoute(builder: (_) => const WarehouseScreen())),
     );
   }
 
@@ -317,9 +380,10 @@ class DashboardScreen extends ConsumerWidget {
       icon: Icons.add_task_rounded,
       color: AppColors.secondary,
       badge: widget.badge,
-      onTap: (_) => Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => const SiteRequestsScreen()),
-      ),
+      onTap:
+          (_) => Navigator.of(
+            context,
+          ).push(MaterialPageRoute(builder: (_) => const SiteRequestsScreen())),
     );
   }
 
@@ -334,13 +398,15 @@ class DashboardScreen extends ConsumerWidget {
       icon: Icons.fact_check_rounded,
       color: Theme.of(context).colorScheme.primary,
       badge: widget.badge,
-      onTap: (_) => Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => const SiteRequestsScreen(
-            scope: SiteRequestsScope.approvals,
+      onTap:
+          (_) => Navigator.of(context).push(
+            MaterialPageRoute(
+              builder:
+                  (_) => const SiteRequestsScreen(
+                    scope: SiteRequestsScope.approvals,
+                  ),
+            ),
           ),
-        ),
-      ),
     );
   }
 
@@ -352,9 +418,10 @@ class DashboardScreen extends ConsumerWidget {
       icon: Icons.timeline_rounded,
       color: AppColors.success,
       badge: widget.badge,
-      onTap: (_) => Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => const ScheduleScreen()),
-      ),
+      onTap:
+          (_) => Navigator.of(
+            context,
+          ).push(MaterialPageRoute(builder: (_) => const ScheduleScreen())),
     );
   }
 
@@ -367,9 +434,10 @@ class DashboardScreen extends ConsumerWidget {
       icon: Icons.smart_toy_outlined,
       color: AppColors.secondary,
       badge: 'AI',
-      onTap: (_) => Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => const AiAssistantHomeScreen()),
-      ),
+      onTap:
+          (_) => Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const AiAssistantHomeScreen()),
+          ),
     );
   }
 
@@ -391,7 +459,7 @@ class DashboardScreen extends ConsumerWidget {
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
+              color: color.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Icon(icon, color: color, size: 28),
@@ -420,15 +488,14 @@ class DashboardScreen extends ConsumerWidget {
                           vertical: 4,
                         ),
                         decoration: BoxDecoration(
-                          color: color.withOpacity(0.12),
+                          color: color.withValues(alpha: 0.12),
                           borderRadius: BorderRadius.circular(999),
                         ),
                         child: Text(
                           badge,
-                          style: AppTypography.caption(context).copyWith(
-                            color: color,
-                            fontWeight: FontWeight.w800,
-                          ),
+                          style: AppTypography.caption(
+                            context,
+                          ).copyWith(color: color, fontWeight: FontWeight.w800),
                         ),
                       ),
                   ],
@@ -436,16 +503,16 @@ class DashboardScreen extends ConsumerWidget {
                 const SizedBox(height: 2),
                 Text(
                   subtitle,
-                  style: AppTypography.caption(context).copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
+                  style: AppTypography.caption(
+                    context,
+                  ).copyWith(color: theme.colorScheme.onSurfaceVariant),
                 ),
               ],
             ),
           ),
           Icon(
             Icons.chevron_right_rounded,
-            color: theme.colorScheme.onSurfaceVariant.withOpacity(0.3),
+            color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.3),
           ),
         ],
       ),

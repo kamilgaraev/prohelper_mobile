@@ -5,6 +5,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import '../../features/ai_assistant/presentation/ai_assistant_home_screen.dart';
 import '../../features/construction_journal/presentation/construction_journal_screen.dart';
 import '../../features/modules/data/mobile_module_model.dart';
+import '../../features/notifications/presentation/notifications_screen.dart';
 import '../../features/schedule/presentation/schedule_screen.dart';
 import '../../features/site_requests/presentation/screens/site_requests_screen.dart';
 import '../../features/warehouse/presentation/warehouse_screen.dart';
@@ -26,7 +27,7 @@ class QuickActionSheet extends ConsumerWidget {
         color: theme.colorScheme.surface,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
         border: Border.all(
-          color: theme.colorScheme.outline.withOpacity(0.1),
+          color: theme.colorScheme.outline.withValues(alpha: 0.1),
           width: 1,
         ),
       ),
@@ -37,7 +38,7 @@ class QuickActionSheet extends ConsumerWidget {
             width: 40,
             height: 4,
             decoration: BoxDecoration(
-              color: theme.colorScheme.onSurfaceVariant.withOpacity(0.2),
+              color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.2),
               borderRadius: BorderRadius.circular(2),
             ),
           ),
@@ -69,13 +70,14 @@ class QuickActionSheet extends ConsumerWidget {
                   Text(
                     modulesState.error!,
                     textAlign: TextAlign.center,
-                    style: AppTypography.bodyMedium(context).copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
+                    style: AppTypography.bodyMedium(
+                      context,
+                    ).copyWith(color: theme.colorScheme.onSurfaceVariant),
                   ),
                   const SizedBox(height: 16),
                   OutlinedButton(
-                    onPressed: () => ref.read(modulesProvider.notifier).loadModules(),
+                    onPressed:
+                        () => ref.read(modulesProvider.notifier).loadModules(),
                     child: const Text('Повторить'),
                   ),
                 ],
@@ -86,9 +88,9 @@ class QuickActionSheet extends ConsumerWidget {
               padding: const EdgeInsets.symmetric(vertical: 24),
               child: Text(
                 'Для вашей учетной записи пока нет мобильных модулей.',
-                style: AppTypography.bodyMedium(context).copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
+                style: AppTypography.bodyMedium(
+                  context,
+                ).copyWith(color: theme.colorScheme.onSurfaceVariant),
               ),
             )
           else
@@ -113,8 +115,24 @@ class QuickActionSheet extends ConsumerWidget {
                 );
               },
             ),
+          const SizedBox(height: 20),
+          _ActionItem(
+            icon: Icons.notifications_none_rounded,
+            label: 'Уведомления',
+            color: theme.colorScheme.primary,
+            onTap: () => _openNotifications(context),
+          ),
         ],
       ),
+    );
+  }
+
+  void _openNotifications(BuildContext context) {
+    HapticFeedback.mediumImpact();
+    final navigator = Navigator.of(context);
+    navigator.pop();
+    navigator.push(
+      MaterialPageRoute(builder: (_) => const NotificationsScreen()),
     );
   }
 
@@ -125,24 +143,36 @@ class QuickActionSheet extends ConsumerWidget {
 
     switch (module.route) {
       case 'site_requests':
-        navigator.push(MaterialPageRoute(builder: (_) => const SiteRequestsScreen()));
+        navigator.push(
+          MaterialPageRoute(builder: (_) => const SiteRequestsScreen()),
+        );
         return;
       case 'warehouse':
-        navigator.push(MaterialPageRoute(builder: (_) => const WarehouseScreen()));
+        navigator.push(
+          MaterialPageRoute(builder: (_) => const WarehouseScreen()),
+        );
         return;
       case 'schedule':
-        navigator.push(MaterialPageRoute(builder: (_) => const ScheduleScreen()));
+        navigator.push(
+          MaterialPageRoute(builder: (_) => const ScheduleScreen()),
+        );
         return;
       case 'construction_journal':
-        navigator.push(MaterialPageRoute(builder: (_) => const ConstructionJournalScreen()));
+        navigator.push(
+          MaterialPageRoute(builder: (_) => const ConstructionJournalScreen()),
+        );
         return;
       case 'ai_assistant':
-        navigator.push(MaterialPageRoute(builder: (_) => const AiAssistantHomeScreen()));
+        navigator.push(
+          MaterialPageRoute(builder: (_) => const AiAssistantHomeScreen()),
+        );
         return;
       default:
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Этот модуль пока недоступен в мобильном приложении.'),
+            content: Text(
+              'Этот модуль пока недоступен в мобильном приложении.',
+            ),
           ),
         );
         return;
@@ -197,9 +227,9 @@ class _ActionItem extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
+              color: color.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: color.withOpacity(0.2)),
+              border: Border.all(color: color.withValues(alpha: 0.2)),
             ),
             child: Icon(icon, color: color, size: 28),
           ),
