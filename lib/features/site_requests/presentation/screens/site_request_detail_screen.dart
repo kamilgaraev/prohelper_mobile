@@ -577,6 +577,29 @@ class _RequestProcurementCard extends StatelessWidget {
               ),
             ),
           ],
+          if (request.supplierRequests.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(
+              'Заявки поставщикам',
+              style: AppTypography.bodyLarge(context).copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 12),
+            ...request.supplierRequests.map(
+              (item) => _ProcurementItemTile(
+                icon: Icons.assignment_turned_in_outlined,
+                title: item.number.isNotEmpty ? item.number : 'Заявка поставщику #${item.id}',
+                subtitle: [
+                  item.supplierName,
+                  if ((item.sentAt ?? '').trim().isNotEmpty) item.sentAt,
+                  if (item.createdAt != null) _formatDateTime(item.createdAt!),
+                ].whereType<String>().where((value) => value.trim().isNotEmpty).join(' • '),
+                badgeLabel: _supplierRequestStatusLabel(item),
+                badgeColor: _statusColor(item.status),
+              ),
+            ),
+          ],
           if (request.purchaseOrders.isNotEmpty) ...[
             const SizedBox(height: 8),
             Text(
@@ -601,6 +624,7 @@ class _RequestProcurementCard extends StatelessWidget {
             ),
           ],
           if (request.purchaseRequests.isEmpty &&
+              request.supplierRequests.isEmpty &&
               request.purchaseOrders.isEmpty &&
               !request.materialReserved &&
               !request.materialsReceived) ...[
@@ -1142,6 +1166,7 @@ bool _hasResourceSection(SiteRequestModel request) {
 
 bool _hasProcurementSection(SiteRequestModel request) {
   return request.purchaseRequests.isNotEmpty ||
+      request.supplierRequests.isNotEmpty ||
       request.purchaseOrders.isNotEmpty ||
       request.materialReserved ||
       request.materialsReceived ||
@@ -1149,6 +1174,22 @@ bool _hasProcurementSection(SiteRequestModel request) {
       request.reservedAt != null ||
       request.materialsReceivedAt != null ||
       request.warehouseId != null;
+}
+
+String _supplierRequestStatusLabel(SiteRequestSupplierRequestSummary item) {
+  final label = item.statusLabel?.trim();
+  if (label != null && label.isNotEmpty) {
+    return label;
+  }
+
+  return switch (item.status.trim().toLowerCase()) {
+    'draft' => 'Черновик',
+    'sent' => 'Отправлена',
+    'responded' => 'Получен ответ',
+    'cancelled' => 'Отменена',
+    'expired' => 'Истек срок',
+    _ => item.status.isNotEmpty ? item.status : 'Без статуса',
+  };
 }
 
 bool _hasGroupSection(SiteRequestModel request) {
@@ -1182,6 +1223,7 @@ String _purchaseOrderStatusLabel(SiteRequestPurchaseOrderSummary item) {
     'sent' => 'Отправлен поставщику',
     'confirmed' => 'Подтвержден поставщиком',
     'in_delivery' => 'В доставке',
+    'partially_delivered' => 'Частично доставлен',
     'delivered' => 'Доставлен',
     'cancelled' => 'Отменен',
     'approved' => 'Подтвержден',

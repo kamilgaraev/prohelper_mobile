@@ -175,6 +175,47 @@ class SiteRequestPurchaseOrderSummary {
   }
 }
 
+class SiteRequestSupplierRequestSummary {
+  const SiteRequestSupplierRequestSummary({
+    required this.id,
+    required this.number,
+    required this.status,
+    this.statusLabel,
+    this.supplierName,
+    this.sentAt,
+    this.createdAt,
+  });
+
+  final int id;
+  final String number;
+  final String status;
+  final String? statusLabel;
+  final String? supplierName;
+  final String? sentAt;
+  final DateTime? createdAt;
+
+  factory SiteRequestSupplierRequestSummary.fromJson(Map<String, dynamic> json) {
+    final supplier = json['supplier'];
+    final externalSupplier = json['external_supplier_contact'];
+
+    return SiteRequestSupplierRequestSummary(
+      id: _asInt(json['id']),
+      number: json['request_number']?.toString() ?? json['number']?.toString() ?? '',
+      status: json['status']?.toString() ?? '',
+      statusLabel: _cleanLabel(json['status_label']),
+      supplierName: supplier is Map
+          ? supplier['name']?.toString()
+          : externalSupplier is Map
+              ? externalSupplier['name']?.toString()
+              : null,
+      sentAt: json['sent_at']?.toString(),
+      createdAt: json['created_at'] != null
+          ? DateTime.tryParse(json['created_at'].toString())
+          : null,
+    );
+  }
+}
+
 class SiteRequestModel {
   Id id = Isar.autoIncrement;
 
@@ -228,6 +269,7 @@ class SiteRequestModel {
   List<SiteRequestHistoryEntry> history = const [];
   List<SiteRequestGroupItem> groupItems = const [];
   List<SiteRequestPurchaseRequestSummary> purchaseRequests = const [];
+  List<SiteRequestSupplierRequestSummary> supplierRequests = const [];
   List<SiteRequestPurchaseOrderSummary> purchaseOrders = const [];
 
   SiteRequestModel();
@@ -280,6 +322,18 @@ class SiteRequestModel {
             .where((item) => item.id > 0)
             .toList(growable: false)
         : const <SiteRequestPurchaseRequestSummary>[];
+    final rawSupplierRequests = json['supplier_requests'] ?? json['supplierRequests'];
+    final supplierRequests = rawSupplierRequests is List
+        ? rawSupplierRequests
+            .whereType<Map>()
+            .map(
+              (item) => SiteRequestSupplierRequestSummary.fromJson(
+                item.map((key, value) => MapEntry(key.toString(), value)),
+              ),
+            )
+            .where((item) => item.id > 0)
+            .toList(growable: false)
+        : const <SiteRequestSupplierRequestSummary>[];
     final rawPurchaseOrders = json['purchase_orders'] ?? json['purchaseOrders'];
     final purchaseOrders = rawPurchaseOrders is List
         ? rawPurchaseOrders
@@ -358,6 +412,7 @@ class SiteRequestModel {
       ..history = history
       ..groupItems = groupItems
       ..purchaseRequests = purchaseRequests
+      ..supplierRequests = supplierRequests
       ..purchaseOrders = purchaseOrders;
   }
 }
