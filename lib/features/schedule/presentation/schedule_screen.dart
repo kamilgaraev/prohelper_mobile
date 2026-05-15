@@ -8,6 +8,7 @@ import '../../../core/widgets/industrial_card.dart';
 import '../../projects/domain/projects_provider.dart';
 import '../data/schedule_model.dart';
 import '../domain/schedule_provider.dart';
+import 'schedule_daily_plans_screen.dart';
 import 'schedule_details_screen.dart';
 
 enum _ScheduleFilter {
@@ -91,6 +92,19 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
       appBar: AppBar(
         title: const Text('График работ'),
         centerTitle: false,
+        actions: [
+          IconButton(
+            tooltip: 'Дневные планы',
+            onPressed: selectedProject == null
+                ? null
+                : () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const ScheduleDailyPlansScreen(),
+                      ),
+                    ),
+            icon: const Icon(Icons.assignment_turned_in_outlined),
+          ),
+        ],
       ),
       body: RefreshIndicator(
         onRefresh: () => ref.read(scheduleProvider.notifier).load(

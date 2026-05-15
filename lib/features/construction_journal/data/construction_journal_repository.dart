@@ -5,9 +5,10 @@ import '../../../core/network/api_exception.dart';
 import '../../../core/network/dio_client.dart';
 import 'construction_journal_models.dart';
 
-final constructionJournalRepositoryProvider = Provider<ConstructionJournalRepository>((ref) {
-  return ConstructionJournalRepository(ref.read(dioProvider));
-});
+final constructionJournalRepositoryProvider =
+    Provider<ConstructionJournalRepository>((ref) {
+      return ConstructionJournalRepository(ref.read(dioProvider));
+    });
 
 class ConstructionJournalRepository {
   ConstructionJournalRepository(this._dio);
@@ -30,20 +31,28 @@ class ConstructionJournalRepository {
       );
 
       final data = _extractMap(response.data['data']);
-      final items = _extractList(data['items']).map(ConstructionJournalModel.fromJson).toList();
+      final items =
+          _extractList(
+            data['items'],
+          ).map(ConstructionJournalModel.fromJson).toList();
       final projectData = data['project'];
 
       return ConstructionJournalListPayload(
         items: items,
         meta: JournalPaginationMeta.fromJson(_extractMap(data['meta'])),
-        summary: ConstructionJournalSummary.fromJson(_extractMap(data['summary'])),
+        summary: ConstructionJournalSummary.fromJson(
+          _extractMap(data['summary']),
+        ),
         availableActions: _extractStringList(data['available_actions']),
-        project: projectData is Map<String, dynamic>
-            ? ConstructionJournalProjectRef.fromJson(projectData)
-            : projectData is Map
+        project:
+            projectData is Map<String, dynamic>
+                ? ConstructionJournalProjectRef.fromJson(projectData)
+                : projectData is Map
                 ? ConstructionJournalProjectRef.fromJson(
-                    projectData.map((key, value) => MapEntry(key.toString(), value)),
-                  )
+                  projectData.map(
+                    (key, value) => MapEntry(key.toString(), value),
+                  ),
+                )
                 : null,
       );
     } on DioException catch (error) {
@@ -60,25 +69,39 @@ class ConstructionJournalRepository {
     }
   }
 
-  Future<ConstructionJournalDetailPayload> fetchJournalDetail(int journalId) async {
+  Future<ConstructionJournalDetailPayload> fetchJournalDetail(
+    int journalId,
+  ) async {
     try {
-      final journalResponse = await _dio.get('/construction-journals/$journalId');
-      final entriesResponse = await _dio.get('/construction-journals/$journalId/entries');
+      final journalResponse = await _dio.get(
+        '/construction-journals/$journalId',
+      );
+      final entriesResponse = await _dio.get(
+        '/construction-journals/$journalId/entries',
+      );
       final journalData = _extractMap(journalResponse.data['data']);
       final entriesData = _extractMap(entriesResponse.data['data']);
 
-      final availableActions = _extractStringList(entriesData['available_actions']);
+      final availableActions = _extractStringList(
+        entriesData['available_actions'],
+      );
 
       return ConstructionJournalDetailPayload(
         journal: ConstructionJournalModel.fromJson(journalData),
-        entries: _extractList(entriesData['items'])
-            .map(ConstructionJournalEntryModel.fromJson)
-            .toList(),
-        entriesMeta: JournalPaginationMeta.fromJson(_extractMap(entriesData['meta'])),
-        entriesSummary: ConstructionJournalSummary.fromJson(_extractMap(entriesData['summary'])),
-        availableActions: availableActions.isNotEmpty
-            ? availableActions
-            : _extractStringList(journalData['available_actions']),
+        entries:
+            _extractList(
+              entriesData['items'],
+            ).map(ConstructionJournalEntryModel.fromJson).toList(),
+        entriesMeta: JournalPaginationMeta.fromJson(
+          _extractMap(entriesData['meta']),
+        ),
+        entriesSummary: ConstructionJournalSummary.fromJson(
+          _extractMap(entriesData['summary']),
+        ),
+        availableActions:
+            availableActions.isNotEmpty
+                ? availableActions
+                : _extractStringList(journalData['available_actions']),
       );
     } on DioException catch (error) {
       throw ApiException.fromDio(
@@ -97,7 +120,9 @@ class ConstructionJournalRepository {
   Future<ConstructionJournalEntryModel> fetchEntryDetail(int entryId) async {
     try {
       final response = await _dio.get('/journal-entries/$entryId');
-      return ConstructionJournalEntryModel.fromJson(_extractMap(response.data['data']));
+      return ConstructionJournalEntryModel.fromJson(
+        _extractMap(response.data['data']),
+      );
     } on DioException catch (error) {
       throw ApiException.fromDio(
         error,
@@ -109,6 +134,31 @@ class ConstructionJournalRepository {
       }
 
       throw const ApiException('Не удалось загрузить запись журнала.');
+    }
+  }
+
+  Future<ConstructionJournalEntryFormOptions> fetchEntryFormOptions(
+    int journalId,
+  ) async {
+    try {
+      final response = await _dio.get(
+        '/construction-journals/$journalId/entry-form-options',
+      );
+
+      return ConstructionJournalEntryFormOptions.fromJson(
+        _extractMap(response.data['data']),
+      );
+    } on DioException catch (error) {
+      throw ApiException.fromDio(
+        error,
+        fallbackMessage: 'Не удалось загрузить данные для формы записи.',
+      );
+    } catch (error) {
+      if (error is ApiException) {
+        rethrow;
+      }
+
+      throw const ApiException('Не удалось загрузить данные для формы записи.');
     }
   }
 
@@ -129,9 +179,14 @@ class ConstructionJournalRepository {
         },
       );
 
-      return ConstructionJournalModel.fromJson(_extractMap(response.data['data']));
+      return ConstructionJournalModel.fromJson(
+        _extractMap(response.data['data']),
+      );
     } on DioException catch (error) {
-      throw ApiException.fromDio(error, fallbackMessage: 'Не удалось создать журнал.');
+      throw ApiException.fromDio(
+        error,
+        fallbackMessage: 'Не удалось создать журнал.',
+      );
     }
   }
 
@@ -151,9 +206,14 @@ class ConstructionJournalRepository {
         },
       );
 
-      return ConstructionJournalModel.fromJson(_extractMap(response.data['data']));
+      return ConstructionJournalModel.fromJson(
+        _extractMap(response.data['data']),
+      );
     } on DioException catch (error) {
-      throw ApiException.fromDio(error, fallbackMessage: 'Не удалось обновить журнал.');
+      throw ApiException.fromDio(
+        error,
+        fallbackMessage: 'Не удалось обновить журнал.',
+      );
     }
   }
 
@@ -161,27 +221,38 @@ class ConstructionJournalRepository {
     required int journalId,
     required String entryDate,
     required String workDescription,
+    int? scheduleTaskId,
+    int? estimateId,
     String? problemsDescription,
     String? safetyNotes,
     String? visitorsNotes,
     String? qualityNotes,
+    List<ConstructionJournalWorkVolumeModel> workVolumes = const [],
   }) async {
     try {
       final response = await _dio.post(
         '/construction-journals/$journalId/entries',
         data: {
+          if (scheduleTaskId != null) 'schedule_task_id': scheduleTaskId,
+          if (estimateId != null) 'estimate_id': estimateId,
           'entry_date': entryDate,
           'work_description': workDescription,
           'problems_description': problemsDescription,
           'safety_notes': safetyNotes,
           'visitors_notes': visitorsNotes,
           'quality_notes': qualityNotes,
+          'work_volumes': workVolumes.map((volume) => volume.toJson()).toList(),
         },
       );
 
-      return ConstructionJournalEntryModel.fromJson(_extractMap(response.data['data']));
+      return ConstructionJournalEntryModel.fromJson(
+        _extractMap(response.data['data']),
+      );
     } on DioException catch (error) {
-      throw ApiException.fromDio(error, fallbackMessage: 'Не удалось создать запись.');
+      throw ApiException.fromDio(
+        error,
+        fallbackMessage: 'Не удалось создать запись.',
+      );
     }
   }
 
@@ -189,27 +260,38 @@ class ConstructionJournalRepository {
     required int entryId,
     required String entryDate,
     required String workDescription,
+    int? scheduleTaskId,
+    int? estimateId,
     String? problemsDescription,
     String? safetyNotes,
     String? visitorsNotes,
     String? qualityNotes,
+    List<ConstructionJournalWorkVolumeModel> workVolumes = const [],
   }) async {
     try {
       final response = await _dio.put(
         '/journal-entries/$entryId',
         data: {
+          'schedule_task_id': scheduleTaskId,
+          'estimate_id': estimateId,
           'entry_date': entryDate,
           'work_description': workDescription,
           'problems_description': problemsDescription,
           'safety_notes': safetyNotes,
           'visitors_notes': visitorsNotes,
           'quality_notes': qualityNotes,
+          'work_volumes': workVolumes.map((volume) => volume.toJson()).toList(),
         },
       );
 
-      return ConstructionJournalEntryModel.fromJson(_extractMap(response.data['data']));
+      return ConstructionJournalEntryModel.fromJson(
+        _extractMap(response.data['data']),
+      );
     } on DioException catch (error) {
-      throw ApiException.fromDio(error, fallbackMessage: 'Не удалось обновить запись.');
+      throw ApiException.fromDio(
+        error,
+        fallbackMessage: 'Не удалось обновить запись.',
+      );
     }
   }
 
@@ -217,7 +299,10 @@ class ConstructionJournalRepository {
     try {
       await _dio.delete('/journal-entries/$entryId');
     } on DioException catch (error) {
-      throw ApiException.fromDio(error, fallbackMessage: 'Не удалось удалить запись.');
+      throw ApiException.fromDio(
+        error,
+        fallbackMessage: 'Не удалось удалить запись.',
+      );
     }
   }
 
@@ -229,7 +314,10 @@ class ConstructionJournalRepository {
     return _entryAction('/journal-entries/$entryId/approve', const {});
   }
 
-  Future<ConstructionJournalEntryModel> rejectEntry(int entryId, String reason) async {
+  Future<ConstructionJournalEntryModel> rejectEntry(
+    int entryId,
+    String reason,
+  ) async {
     return _entryAction('/journal-entries/$entryId/reject', {'reason': reason});
   }
 
@@ -239,11 +327,12 @@ class ConstructionJournalRepository {
         '/construction-journals/$journalId/export/ks6',
         data: {
           'format': 'pdf',
-          'date_from': DateTime.now()
-              .subtract(const Duration(days: 30))
-              .toIso8601String()
-              .split('T')
-              .first,
+          'date_from':
+              DateTime.now()
+                  .subtract(const Duration(days: 30))
+                  .toIso8601String()
+                  .split('T')
+                  .first,
           'date_to': DateTime.now().toIso8601String().split('T').first,
         },
       );
@@ -251,26 +340,42 @@ class ConstructionJournalRepository {
       final data = _extractMap(response.data['data']);
       return data['url'] as String? ?? '';
     } on DioException catch (error) {
-      throw ApiException.fromDio(error, fallbackMessage: 'Не удалось сформировать экспорт журнала.');
+      throw ApiException.fromDio(
+        error,
+        fallbackMessage: 'Не удалось сформировать экспорт журнала.',
+      );
     }
   }
 
   Future<String> exportDailyReport(int entryId) async {
     try {
-      final response = await _dio.post('/journal-entries/$entryId/export/daily-report');
+      final response = await _dio.post(
+        '/journal-entries/$entryId/export/daily-report',
+      );
       final data = _extractMap(response.data['data']);
       return data['url'] as String? ?? '';
     } on DioException catch (error) {
-      throw ApiException.fromDio(error, fallbackMessage: 'Не удалось сформировать дневной отчет.');
+      throw ApiException.fromDio(
+        error,
+        fallbackMessage: 'Не удалось сформировать дневной отчет.',
+      );
     }
   }
 
-  Future<ConstructionJournalEntryModel> _entryAction(String path, Map<String, dynamic> body) async {
+  Future<ConstructionJournalEntryModel> _entryAction(
+    String path,
+    Map<String, dynamic> body,
+  ) async {
     try {
       final response = await _dio.post(path, data: body);
-      return ConstructionJournalEntryModel.fromJson(_extractMap(response.data['data']));
+      return ConstructionJournalEntryModel.fromJson(
+        _extractMap(response.data['data']),
+      );
     } on DioException catch (error) {
-      throw ApiException.fromDio(error, fallbackMessage: 'Не удалось выполнить действие по записи.');
+      throw ApiException.fromDio(
+        error,
+        fallbackMessage: 'Не удалось выполнить действие по записи.',
+      );
     }
   }
 
@@ -293,7 +398,9 @@ class ConstructionJournalRepository {
 
     return payload
         .whereType<Map>()
-        .map((item) => item.map((key, value) => MapEntry(key.toString(), value)))
+        .map(
+          (item) => item.map((key, value) => MapEntry(key.toString(), value)),
+        )
         .toList();
   }
 

@@ -18,6 +18,15 @@ subprojects {
 
 subprojects {
     val project = this
+
+    project.plugins.withId("com.android.library") {
+        project.extensions.configure<com.android.build.api.variant.LibraryAndroidComponentsExtension>("androidComponents") {
+            finalizeDsl { extension ->
+                extension.compileSdk = 35
+            }
+        }
+    }
+
     val fixNamespace = {
         if (project.hasProperty("android")) {
             val android = project.extensions.getByName("android")

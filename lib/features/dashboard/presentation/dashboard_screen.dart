@@ -14,9 +14,12 @@ import 'package:prohelpers_mobile/features/auth/presentation/widgets/profile_pil
 import 'package:prohelpers_mobile/features/auth/presentation/widgets/user_profile_bottom_sheet.dart';
 import 'package:prohelpers_mobile/features/dashboard/data/dashboard_widget_model.dart';
 import 'package:prohelpers_mobile/features/dashboard/presentation/controllers/dashboard_controller.dart';
+import 'package:prohelpers_mobile/features/handover_acceptance/presentation/handover_acceptance_screen.dart';
 import 'package:prohelpers_mobile/features/notifications/domain/notifications_provider.dart';
 import 'package:prohelpers_mobile/features/notifications/presentation/notifications_screen.dart';
 import 'package:prohelpers_mobile/features/projects/domain/projects_provider.dart';
+import 'package:prohelpers_mobile/features/quality_control/presentation/quality_control_screen.dart';
+import 'package:prohelpers_mobile/features/safety/presentation/safety_screen.dart';
 import 'package:prohelpers_mobile/features/schedule/presentation/schedule_screen.dart';
 import 'package:prohelpers_mobile/features/site_requests/presentation/screens/site_requests_screen.dart';
 import 'package:prohelpers_mobile/features/site_requests/domain/site_requests_scope.dart';
@@ -30,6 +33,9 @@ class DashboardScreen extends ConsumerWidget {
     final dashboardState = ref.watch(dashboardControllerProvider);
     final activeModules = ref.watch(activeModulesProvider);
     final hasAiAssistant = activeModules.contains(AppModule.aiAssistant);
+    final hasQualityControl = activeModules.contains(AppModule.qualityControl);
+    final hasSafetyManagement = activeModules.contains(AppModule.safetyManagement);
+    final hasHandoverAcceptance = activeModules.contains(AppModule.handoverAcceptance);
 
     return Scaffold(
       body: Stack(
@@ -91,6 +97,36 @@ class DashboardScreen extends ConsumerWidget {
                     ),
                     sliver: SliverToBoxAdapter(
                       child: _buildAiAssistantCard(context),
+                    ),
+                  ),
+                if (hasQualityControl)
+                  SliverPadding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
+                    ),
+                    sliver: SliverToBoxAdapter(
+                      child: _buildQualityControlCard(context),
+                    ),
+                  ),
+                if (hasSafetyManagement)
+                  SliverPadding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
+                    ),
+                    sliver: SliverToBoxAdapter(
+                      child: _buildSafetyManagementCard(context),
+                    ),
+                  ),
+                if (hasHandoverAcceptance)
+                  SliverPadding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
+                    ),
+                    sliver: SliverToBoxAdapter(
+                      child: _buildHandoverAcceptanceCard(context),
                     ),
                   ),
                 const SliverToBoxAdapter(child: SizedBox(height: 110)),
@@ -437,6 +473,51 @@ class DashboardScreen extends ConsumerWidget {
       onTap:
           (_) => Navigator.of(context).push(
             MaterialPageRoute(builder: (_) => const AiAssistantHomeScreen()),
+          ),
+    );
+  }
+
+  Widget _buildQualityControlCard(BuildContext context) {
+    return _buildModuleActionCard(
+      context: context,
+      title: 'Контроль качества',
+      subtitle: 'Фиксация замечаний, работа ответственных и передача результата на приемку.',
+      icon: Icons.fact_check_rounded,
+      color: AppColors.warning,
+      badge: 'QC',
+      onTap:
+          (_) => Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const QualityControlScreen()),
+          ),
+    );
+  }
+
+  Widget _buildSafetyManagementCard(BuildContext context) {
+    return _buildModuleActionCard(
+      context: context,
+      title: 'Охрана труда',
+      subtitle: 'Активные наряды-допуски, происшествия и нарушения по выбранному объекту.',
+      icon: Icons.health_and_safety_rounded,
+      color: AppColors.error,
+      badge: 'HSE',
+      onTap:
+          (_) => Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const SafetyScreen()),
+          ),
+    );
+  }
+
+  Widget _buildHandoverAcceptanceCard(BuildContext context) {
+    return _buildModuleActionCard(
+      context: context,
+      title: 'Приемка зон',
+      subtitle: 'Punch-list, документы и повторная проверка готовых зон перед передачей заказчику.',
+      icon: Icons.assignment_turned_in_rounded,
+      color: AppColors.success,
+      badge: 'HA',
+      onTap:
+          (_) => Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const HandoverAcceptanceScreen()),
           ),
     );
   }

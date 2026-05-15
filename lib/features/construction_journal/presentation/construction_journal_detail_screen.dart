@@ -13,23 +13,25 @@ import 'journal_entry_form_screen.dart';
 import 'journal_form_screen.dart';
 
 class ConstructionJournalDetailScreen extends ConsumerWidget {
-  const ConstructionJournalDetailScreen({
-    super.key,
-    required this.journalId,
-  });
+  const ConstructionJournalDetailScreen({super.key, required this.journalId});
 
   final int journalId;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(constructionJournalDetailProvider(journalId));
-    final notifier = ref.read(constructionJournalDetailProvider(journalId).notifier);
+    final notifier = ref.read(
+      constructionJournalDetailProvider(journalId).notifier,
+    );
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Карточка журнала'),
         actions: [
-          IconButton(onPressed: notifier.load, icon: const Icon(Icons.refresh_rounded)),
+          IconButton(
+            onPressed: notifier.load,
+            icon: const Icon(Icons.refresh_rounded),
+          ),
         ],
       ),
       body: RefreshIndicator(
@@ -68,12 +70,16 @@ class ConstructionJournalDetailScreen extends ConsumerWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(state.journal!.name, style: AppTypography.h2(context)),
+                        Text(
+                          state.journal!.name,
+                          style: AppTypography.h2(context),
+                        ),
                         const SizedBox(height: 6),
                         Text(
                           'Журнал №${state.journal!.journalNumber.isEmpty ? '-' : state.journal!.journalNumber}',
                           style: AppTypography.bodyMedium(context).copyWith(
-                            color: Theme.of(context).colorScheme.onSurfaceVariant,
+                            color:
+                                Theme.of(context).colorScheme.onSurfaceVariant,
                           ),
                         ),
                         const SizedBox(height: 12),
@@ -81,10 +87,25 @@ class ConstructionJournalDetailScreen extends ConsumerWidget {
                           spacing: 8,
                           runSpacing: 8,
                           children: [
-                            _Badge(label: 'Всего ${state.journal!.totalEntries}', color: Theme.of(context).colorScheme.primary),
-                            _Badge(label: 'Утверждено ${state.journal!.approvedEntries}', color: AppColors.success),
-                            _Badge(label: 'На проверке ${state.journal!.submittedEntries}', color: AppColors.warning),
-                            _Badge(label: 'Отклонено ${state.journal!.rejectedEntries}', color: AppColors.error),
+                            _Badge(
+                              label: 'Всего ${state.journal!.totalEntries}',
+                              color: Theme.of(context).colorScheme.primary,
+                            ),
+                            _Badge(
+                              label:
+                                  'Утверждено ${state.journal!.approvedEntries}',
+                              color: AppColors.success,
+                            ),
+                            _Badge(
+                              label:
+                                  'На проверке ${state.journal!.submittedEntries}',
+                              color: AppColors.warning,
+                            ),
+                            _Badge(
+                              label:
+                                  'Отклонено ${state.journal!.rejectedEntries}',
+                              color: AppColors.error,
+                            ),
                           ],
                         ),
                         const SizedBox(height: 16),
@@ -95,9 +116,14 @@ class ConstructionJournalDetailScreen extends ConsumerWidget {
                             if (state.availableActions.contains('create_entry'))
                               ElevatedButton.icon(
                                 onPressed: () async {
-                                  final created = await Navigator.of(context).push<bool>(
+                                  final created = await Navigator.of(
+                                    context,
+                                  ).push<bool>(
                                     MaterialPageRoute(
-                                      builder: (_) => JournalEntryFormScreen(journalId: journalId),
+                                      builder:
+                                          (_) => JournalEntryFormScreen(
+                                            journalId: journalId,
+                                          ),
                                     ),
                                   );
 
@@ -111,9 +137,14 @@ class ConstructionJournalDetailScreen extends ConsumerWidget {
                             if (state.availableActions.contains('update'))
                               OutlinedButton.icon(
                                 onPressed: () async {
-                                  final updated = await Navigator.of(context).push<bool>(
+                                  final updated = await Navigator.of(
+                                    context,
+                                  ).push<bool>(
                                     MaterialPageRoute(
-                                      builder: (_) => JournalFormScreen(initialJournal: state.journal),
+                                      builder:
+                                          (_) => JournalFormScreen(
+                                            initialJournal: state.journal,
+                                          ),
                                     ),
                                   );
 
@@ -127,7 +158,15 @@ class ConstructionJournalDetailScreen extends ConsumerWidget {
                             if (state.availableActions.contains('export'))
                               OutlinedButton.icon(
                                 onPressed: () async {
-                                  final url = await ref.read(constructionJournalRepositoryProvider).exportJournal(journalId);
+                                  final url = await ref
+                                      .read(
+                                        constructionJournalRepositoryProvider,
+                                      )
+                                      .exportJournal(journalId);
+                                  if (!context.mounted) {
+                                    return;
+                                  }
+
                                   await _showExportDialog(context, url);
                                 },
                                 icon: const Icon(Icons.download_rounded),
@@ -156,7 +195,8 @@ class ConstructionJournalDetailScreen extends ConsumerWidget {
                       Expanded(
                         child: _MetricCard(
                           title: 'Утверждено',
-                          value: state.entriesSummary.approvedEntries.toString(),
+                          value:
+                              state.entriesSummary.approvedEntries.toString(),
                           color: AppColors.success,
                         ),
                       ),
@@ -167,7 +207,10 @@ class ConstructionJournalDetailScreen extends ConsumerWidget {
               SliverPadding(
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
                 sliver: SliverToBoxAdapter(
-                  child: Text('Записи журнала', style: AppTypography.h2(context)),
+                  child: Text(
+                    'Записи журнала',
+                    style: AppTypography.h2(context),
+                  ),
                 ),
               ),
               if (state.entries.isEmpty)
@@ -176,68 +219,84 @@ class ConstructionJournalDetailScreen extends ConsumerWidget {
                   child: AppStateView(
                     icon: Icons.event_note_outlined,
                     title: 'Записей пока нет',
-                    description: 'Добавьте первую запись по выполненным работам.',
+                    description:
+                        'Добавьте первую запись по выполненным работам.',
                   ),
                 )
               else
                 SliverPadding(
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
                   sliver: SliverList(
-                    delegate: SliverChildBuilderDelegate(
-                      (context, index) {
-                        final entry = state.entries[index];
+                    delegate: SliverChildBuilderDelegate((context, index) {
+                      final entry = state.entries[index];
 
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: 12),
-                          child: IndustrialCard(
-                            onTap: () => Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (_) => JournalEntryDetailScreen(
-                                  journalId: journalId,
-                                  entryId: entry.id,
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: IndustrialCard(
+                          onTap:
+                              () => Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder:
+                                      (_) => JournalEntryDetailScreen(
+                                        journalId: journalId,
+                                        entryId: entry.id,
+                                      ),
                                 ),
                               ),
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Text('Запись №${entry.entryNumber}', style: AppTypography.bodyLarge(context)),
-                                          const SizedBox(height: 4),
-                                          Text(_formatDate(entry.entryDate), style: AppTypography.caption(context)),
-                                        ],
-                                      ),
-                                    ),
-                                    _Badge(
-                                      label: _entryStatusLabel(entry.status),
-                                      color: _entryStatusColor(entry.status),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 12),
-                                Text(entry.workDescription, style: AppTypography.bodyMedium(context)),
-                                if ((entry.rejectionReason ?? '').trim().isNotEmpty) ...[
-                                  const SizedBox(height: 12),
-                                  Text(
-                                    'Причина отклонения: ${entry.rejectionReason}',
-                                    style: AppTypography.caption(context).copyWith(
-                                      color: AppColors.error,
-                                      fontWeight: FontWeight.w700,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          'Запись №${entry.entryNumber}',
+                                          style: AppTypography.bodyLarge(
+                                            context,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          _formatDate(entry.entryDate),
+                                          style: AppTypography.caption(context),
+                                        ),
+                                      ],
                                     ),
                                   ),
+                                  _Badge(
+                                    label: _entryStatusLabel(entry.status),
+                                    color: _entryStatusColor(entry.status),
+                                  ),
                                 ],
+                              ),
+                              const SizedBox(height: 12),
+                              Text(
+                                entry.workDescription,
+                                style: AppTypography.bodyMedium(context),
+                              ),
+                              if ((entry.rejectionReason ?? '')
+                                  .trim()
+                                  .isNotEmpty) ...[
+                                const SizedBox(height: 12),
+                                Text(
+                                  'Причина отклонения: ${entry.rejectionReason}',
+                                  style: AppTypography.caption(
+                                    context,
+                                  ).copyWith(
+                                    color: AppColors.error,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
                               ],
-                            ),
+                            ],
                           ),
-                        );
-                      },
-                      childCount: state.entries.length,
-                    ),
+                        ),
+                      );
+                    }, childCount: state.entries.length),
                   ),
                 ),
             ],
@@ -275,10 +334,7 @@ class _MetricCard extends StatelessWidget {
 }
 
 class _Badge extends StatelessWidget {
-  const _Badge({
-    required this.label,
-    required this.color,
-  });
+  const _Badge({required this.label, required this.color});
 
   final String label;
   final Color color;
@@ -288,15 +344,14 @@ class _Badge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.12),
+        color: color.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(
         label,
-        style: AppTypography.caption(context).copyWith(
-          color: color,
-          fontWeight: FontWeight.w700,
-        ),
+        style: AppTypography.caption(
+          context,
+        ).copyWith(color: color, fontWeight: FontWeight.w700),
       ),
     );
   }
@@ -346,7 +401,9 @@ Future<void> _showExportDialog(BuildContext context, String url) async {
       return AlertDialog(
         title: const Text('Ссылка на экспорт готова'),
         content: SelectableText(
-          url.isEmpty ? 'Ссылка не получена от сервера.' : '$url\n\nСсылка уже скопирована в буфер обмена.',
+          url.isEmpty
+              ? 'Ссылка не получена от сервера.'
+              : '$url\n\nСсылка уже скопирована в буфер обмена.',
         ),
         actions: [
           TextButton(

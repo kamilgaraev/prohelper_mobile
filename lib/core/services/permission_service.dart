@@ -30,6 +30,10 @@ class PermissionService {
       'view_schedule' => canAccessModule(AppModule.scheduleManagement),
       'view_budget' => canAccessModule(AppModule.budgetEstimates),
       'track_time' => canAccessModule(AppModule.timeTracking),
+      'record_machinery_shift' =>
+        context == UserContext.field && canAccessModule(AppModule.machineryOperations),
+      'record_labor_output' =>
+        context == UserContext.field && canAccessModule(AppModule.productionLabor),
       _ => false,
     };
   }

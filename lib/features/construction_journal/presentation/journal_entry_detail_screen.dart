@@ -6,6 +6,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../core/widgets/app_state_view.dart';
 import '../../../core/widgets/industrial_card.dart';
+import '../data/construction_journal_models.dart';
 import '../data/construction_journal_repository.dart';
 import '../domain/construction_journal_provider.dart';
 import 'journal_entry_form_screen.dart';
@@ -117,6 +118,12 @@ class JournalEntryDetailScreen extends ConsumerWidget {
                 ],
               ),
             ),
+            if (entry.blockers.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              _BlockersCard(blockers: entry.blockers),
+            ],
+            const SizedBox(height: 16),
+            _WorkVolumesReadOnlyCard(volumes: entry.workVolumes),
             const SizedBox(height: 16),
             Wrap(
               spacing: 8,
@@ -201,6 +208,98 @@ class JournalEntryDetailScreen extends ConsumerWidget {
   }
 }
 
+class _BlockersCard extends StatelessWidget {
+  const _BlockersCard({required this.blockers});
+
+  final List<ConstructionJournalBlockerModel> blockers;
+
+  @override
+  Widget build(BuildContext context) {
+    return IndustrialCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Запись пока нельзя утвердить',
+            style: AppTypography.bodyLarge(context).copyWith(
+              color: AppColors.warning,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 8),
+          ...blockers.map(
+            (blocker) => Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                blocker.message,
+                style: AppTypography.bodyMedium(context),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _WorkVolumesReadOnlyCard extends StatelessWidget {
+  const _WorkVolumesReadOnlyCard({required this.volumes});
+
+  final List<ConstructionJournalWorkVolumeModel> volumes;
+
+  @override
+  Widget build(BuildContext context) {
+    return IndustrialCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Объемы выполненных работ',
+            style: AppTypography.bodyLarge(context).copyWith(
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 8),
+          if (volumes.isEmpty)
+            Text(
+              'Список работ пуст',
+              style: AppTypography.bodyMedium(context),
+            )
+          else
+            ...volumes.map(
+              (volume) => Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      volume.title ?? volume.notes ?? 'Работа',
+                      style: AppTypography.bodyMedium(context).copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '${volume.quantity} ${volume.measurementUnitName ?? ''}'.trim(),
+                      style: AppTypography.caption(context),
+                    ),
+                    if ((volume.notes ?? '').trim().isNotEmpty) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        volume.notes!,
+                        style: AppTypography.caption(context),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
 class _Section extends StatelessWidget {
   const _Section({
     required this.title,
@@ -256,7 +355,7 @@ class _StatusBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.12),
+        color: color.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(

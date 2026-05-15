@@ -50,6 +50,11 @@ String _resolveModuleTitle(String slug, String? rawTitle) {
     'workflow-management' => 'Workflow',
     'time-tracking' => 'Учет времени',
     'budget-estimates' => 'Журнал работ',
+    'quality-control' => 'Контроль качества',
+    'safety-management' => 'Охрана труда',
+    'machinery-operations' => 'Техника',
+    'production-labor' => 'Наряды',
+    'handover-acceptance' => 'Приемка зон',
     _ => 'Модуль',
   };
 }
@@ -60,19 +65,18 @@ String _resolveModuleDescription(String slug, String? rawDescription) {
   }
 
   return switch (slug) {
-    'site-requests' =>
-      'Создание, просмотр и согласование заявок по объекту.',
-    'basic-warehouse' =>
-      'Остатки, движения и приемка материалов по организации.',
-    'schedule-management' =>
-      'Графики работ, прогресс и задачи по объектам.',
-    'ai-assistant' =>
-      'История диалогов, управленческие вопросы и быстрый доступ к AI-помощнику.',
-    'workflow-management' =>
-      'Маршруты согласований и статусы бизнес-процессов.',
+    'site-requests' => 'Создание, просмотр и согласование заявок по объекту.',
+    'basic-warehouse' => 'Остатки, движения и приемка материалов по организации.',
+    'schedule-management' => 'Графики работ, прогресс и задачи по объектам.',
+    'ai-assistant' => 'История диалогов, управленческие вопросы и быстрый доступ к AI-помощнику.',
+    'workflow-management' => 'Маршруты согласований и статусы бизнес-процессов.',
     'time-tracking' => 'Отметки, смены и контроль рабочего времени.',
-    'budget-estimates' =>
-      'Ежедневные записи, статусы согласования и экспорт журнала работ.',
+    'budget-estimates' => 'Ежедневные записи, статусы согласования и экспорт журнала работ.',
+    'quality-control' => 'Замечания, дефекты и повторная проверка выполненных работ.',
+    'safety-management' => 'Наряды-допуски, происшествия и нарушения на объекте.',
+    'machinery-operations' => 'Сменные рапорты, простои и ГСМ по технике на объекте.',
+    'production-labor' => 'Наряды, табели и выработка бригад на объекте.',
+    'handover-acceptance' => 'Зоны, punch-list и передача готовых помещений заказчику.',
     _ => '',
   };
 }

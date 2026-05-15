@@ -314,6 +314,223 @@ class ScheduleTaskModel {
   }
 }
 
+class DailyWorkPlanModel {
+  const DailyWorkPlanModel({
+    required this.id,
+    required this.projectId,
+    required this.scheduleId,
+    required this.lookaheadPlanId,
+    required this.workDate,
+    required this.status,
+    required this.statusLabel,
+    required this.availableActions,
+    required this.assignments,
+    this.scheduleName,
+  });
+
+  final int id;
+  final int projectId;
+  final int scheduleId;
+  final int lookaheadPlanId;
+  final String? scheduleName;
+  final String? workDate;
+  final String status;
+  final String statusLabel;
+  final List<String> availableActions;
+  final List<DailyWorkPlanAssignmentModel> assignments;
+
+  factory DailyWorkPlanModel.fromJson(Map<String, dynamic> json) {
+    return DailyWorkPlanModel(
+      id: _parseInt(json['id']),
+      projectId: _parseInt(json['project_id']),
+      scheduleId: _parseInt(json['schedule_id']),
+      lookaheadPlanId: _parseInt(json['lookahead_plan_id']),
+      scheduleName: json['schedule_name'] as String?,
+      workDate: json['work_date'] as String?,
+      status: json['status'] as String? ?? '',
+      statusLabel: (json['status_label'] as String?) ?? (json['status'] as String?) ?? '',
+      availableActions: (json['available_actions'] as List<dynamic>? ?? const [])
+          .map((action) => action.toString())
+          .toList(),
+      assignments: (json['assignments'] as List<dynamic>? ?? const [])
+          .whereType<Map>()
+          .map(
+            (assignment) => DailyWorkPlanAssignmentModel.fromJson(
+              assignment.map((key, value) => MapEntry(key.toString(), value)),
+            ),
+          )
+          .toList(),
+    );
+  }
+}
+
+class DailyWorkPlanAssignmentModel {
+  const DailyWorkPlanAssignmentModel({
+    required this.id,
+    required this.dailyWorkPlanId,
+    required this.lookaheadPlanTaskId,
+    required this.scheduleTaskId,
+    required this.status,
+    required this.plannedQuantity,
+    required this.completedQuantity,
+    required this.plannedWorkHours,
+    required this.actualWorkHours,
+    required this.constraints,
+    required this.linkedBlockingEntities,
+    this.journalEntryId,
+    this.failureReason,
+    this.factComment,
+    this.scheduleTaskName,
+  });
+
+  final int id;
+  final int dailyWorkPlanId;
+  final int lookaheadPlanTaskId;
+  final int scheduleTaskId;
+  final int? journalEntryId;
+  final String status;
+  final double? plannedQuantity;
+  final double? completedQuantity;
+  final double? plannedWorkHours;
+  final double? actualWorkHours;
+  final String? failureReason;
+  final String? factComment;
+  final String? scheduleTaskName;
+  final List<DailyWorkConstraintModel> constraints;
+  final List<DailyWorkLinkedEntityModel> linkedBlockingEntities;
+
+  factory DailyWorkPlanAssignmentModel.fromJson(Map<String, dynamic> json) {
+    final scheduleTask = json['schedule_task'];
+
+    return DailyWorkPlanAssignmentModel(
+      id: _parseInt(json['id']),
+      dailyWorkPlanId: _parseInt(json['daily_work_plan_id']),
+      lookaheadPlanTaskId: _parseInt(json['lookahead_plan_task_id']),
+      scheduleTaskId: _parseInt(json['schedule_task_id']),
+      journalEntryId: json['journal_entry_id'] == null
+          ? null
+          : _parseInt(json['journal_entry_id']),
+      status: json['status'] as String? ?? '',
+      plannedQuantity: json['planned_quantity'] == null
+          ? null
+          : _parseDouble(json['planned_quantity']),
+      completedQuantity: json['completed_quantity'] == null
+          ? null
+          : _parseDouble(json['completed_quantity']),
+      plannedWorkHours: json['planned_work_hours'] == null
+          ? null
+          : _parseDouble(json['planned_work_hours']),
+      actualWorkHours: json['actual_work_hours'] == null
+          ? null
+          : _parseDouble(json['actual_work_hours']),
+      failureReason: json['failure_reason'] as String?,
+      factComment: json['fact_comment'] as String?,
+      scheduleTaskName: scheduleTask is Map
+          ? scheduleTask['name'] as String?
+          : null,
+      constraints: (json['constraints'] as List<dynamic>? ?? const [])
+          .whereType<Map>()
+          .map(
+            (constraint) => DailyWorkConstraintModel.fromJson(
+              constraint.map((key, value) => MapEntry(key.toString(), value)),
+            ),
+          )
+          .toList(),
+      linkedBlockingEntities:
+          (json['linked_blocking_entities'] as List<dynamic>? ?? const [])
+              .whereType<Map>()
+              .map(
+                (entity) => DailyWorkLinkedEntityModel.fromJson(
+                  entity.map((key, value) => MapEntry(key.toString(), value)),
+                ),
+              )
+              .toList(),
+    );
+  }
+}
+
+class DailyWorkConstraintModel {
+  const DailyWorkConstraintModel({
+    required this.id,
+    required this.title,
+    required this.constraintType,
+    required this.severity,
+    required this.status,
+    required this.availableActions,
+    this.linkedAction,
+    this.linkedEntity,
+    this.dueDate,
+  });
+
+  final int id;
+  final String title;
+  final String constraintType;
+  final String severity;
+  final String status;
+  final List<String> availableActions;
+  final DailyWorkLinkedEntityModel? linkedAction;
+  final DailyWorkLinkedEntityModel? linkedEntity;
+  final String? dueDate;
+
+  factory DailyWorkConstraintModel.fromJson(Map<String, dynamic> json) {
+    final linkedActionJson = json['linked_action'];
+    final linkedEntityJson = json['linked_entity'];
+    final linkedAction = linkedActionJson is Map<String, dynamic>
+        ? DailyWorkLinkedEntityModel.fromJson(linkedActionJson)
+        : linkedActionJson is Map
+            ? DailyWorkLinkedEntityModel.fromJson(
+                linkedActionJson.map(
+                  (key, value) => MapEntry(key.toString(), value),
+                ),
+              )
+            : null;
+
+    return DailyWorkConstraintModel(
+      id: _parseInt(json['id']),
+      title: json['title'] as String? ?? '',
+      constraintType: json['constraint_type'] as String? ?? '',
+      severity: json['severity'] as String? ?? '',
+      status: json['status'] as String? ?? '',
+      availableActions: (json['available_actions'] as List<dynamic>? ?? const [])
+          .map((action) => action.toString())
+          .toList(),
+      linkedAction: linkedAction,
+      linkedEntity: linkedEntityJson is Map<String, dynamic>
+          ? DailyWorkLinkedEntityModel.fromJson(linkedEntityJson)
+          : linkedEntityJson is Map
+              ? DailyWorkLinkedEntityModel.fromJson(
+                  linkedEntityJson.map(
+                    (key, value) => MapEntry(key.toString(), value),
+                  ),
+                )
+              : linkedAction,
+      dueDate: json['due_date'] as String?,
+    );
+  }
+}
+
+class DailyWorkLinkedEntityModel {
+  const DailyWorkLinkedEntityModel({
+    required this.type,
+    required this.id,
+    this.constraintId,
+  });
+
+  final String type;
+  final int id;
+  final int? constraintId;
+
+  factory DailyWorkLinkedEntityModel.fromJson(Map<String, dynamic> json) {
+    return DailyWorkLinkedEntityModel(
+      type: json['type'] as String? ?? '',
+      id: _parseInt(json['id']),
+      constraintId: json['constraint_id'] == null
+          ? null
+          : _parseInt(json['constraint_id']),
+    );
+  }
+}
+
 int _parseInt(dynamic value) {
   if (value is int) {
     return value;

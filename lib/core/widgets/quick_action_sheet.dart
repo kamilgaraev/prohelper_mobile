@@ -4,8 +4,11 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../features/ai_assistant/presentation/ai_assistant_home_screen.dart';
 import '../../features/construction_journal/presentation/construction_journal_screen.dart';
+import '../../features/machinery_operations/presentation/machinery_operations_screen.dart';
 import '../../features/modules/data/mobile_module_model.dart';
 import '../../features/notifications/presentation/notifications_screen.dart';
+import '../../features/production_labor/presentation/production_labor_screen.dart';
+import '../../features/safety/presentation/safety_screen.dart';
 import '../../features/schedule/presentation/schedule_screen.dart';
 import '../../features/site_requests/presentation/screens/site_requests_screen.dart';
 import '../../features/warehouse/presentation/warehouse_screen.dart';
@@ -141,7 +144,7 @@ class QuickActionSheet extends ConsumerWidget {
     final navigator = Navigator.of(context);
     navigator.pop();
 
-    switch (module.route) {
+    switch (module.route ?? module.slug) {
       case 'site_requests':
         navigator.push(
           MaterialPageRoute(builder: (_) => const SiteRequestsScreen()),
@@ -155,6 +158,24 @@ class QuickActionSheet extends ConsumerWidget {
       case 'schedule':
         navigator.push(
           MaterialPageRoute(builder: (_) => const ScheduleScreen()),
+        );
+        return;
+      case 'safety':
+      case 'safety-management':
+        navigator.push(
+          MaterialPageRoute(builder: (_) => const SafetyScreen()),
+        );
+        return;
+      case 'machinery_operations':
+      case 'machinery-operations':
+        navigator.push(
+          MaterialPageRoute(builder: (_) => const MachineryOperationsScreen()),
+        );
+        return;
+      case 'production_labor':
+      case 'production-labor':
+        navigator.push(
+          MaterialPageRoute(builder: (_) => const ProductionLaborScreen()),
         );
         return;
       case 'construction_journal':
@@ -189,6 +210,8 @@ class QuickActionSheet extends ConsumerWidget {
       'hub' => Icons.hub_outlined,
       'timer' => Icons.timer_outlined,
       'calculate' => Icons.calculate_outlined,
+      'machinery' => Icons.precision_manufacturing_outlined,
+      'engineer' => Icons.engineering_outlined,
       _ => Icons.grid_view_rounded,
     };
   }
@@ -198,6 +221,12 @@ class QuickActionSheet extends ConsumerWidget {
       'site_requests' => theme.colorScheme.secondary,
       'warehouse' => theme.colorScheme.primary,
       'schedule' => Colors.green,
+      'safety' => Colors.red,
+      'safety-management' => Colors.red,
+      'machinery_operations' => Colors.indigo,
+      'machinery-operations' => Colors.indigo,
+      'production_labor' => Colors.brown,
+      'production-labor' => Colors.brown,
       'construction_journal' => Colors.orange,
       'ai_assistant' => Colors.teal,
       _ => theme.colorScheme.onSurfaceVariant,

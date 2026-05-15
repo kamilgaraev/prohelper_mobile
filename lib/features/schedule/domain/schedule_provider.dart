@@ -141,3 +141,131 @@ class ScheduleDetailNotifier extends StateNotifier<ScheduleDetailState> {
     }
   }
 }
+
+const _dailyPlansSentinel = Object();
+
+class DailyWorkPlansState {
+  const DailyWorkPlansState({
+    this.isLoading = false,
+    this.plans = const [],
+    this.error,
+    this.projectId,
+  });
+
+  final bool isLoading;
+  final List<DailyWorkPlanModel> plans;
+  final String? error;
+  final int? projectId;
+
+  DailyWorkPlansState copyWith({
+    bool? isLoading,
+    List<DailyWorkPlanModel>? plans,
+    Object? error = _dailyPlansSentinel,
+    Object? projectId = _dailyPlansSentinel,
+  }) {
+    return DailyWorkPlansState(
+      isLoading: isLoading ?? this.isLoading,
+      plans: plans ?? this.plans,
+      error: identical(error, _dailyPlansSentinel) ? this.error : error as String?,
+      projectId: identical(projectId, _dailyPlansSentinel)
+          ? this.projectId
+          : projectId as int?,
+    );
+  }
+}
+
+final dailyWorkPlansProvider =
+    StateNotifierProvider<DailyWorkPlansNotifier, DailyWorkPlansState>((ref) {
+  return DailyWorkPlansNotifier(ref.read(scheduleRepositoryProvider));
+});
+
+class DailyWorkPlansNotifier extends StateNotifier<DailyWorkPlansState> {
+  DailyWorkPlansNotifier(this._repository) : super(const DailyWorkPlansState());
+
+  final ScheduleRepository _repository;
+
+  Future<void> load({required int? projectId}) async {
+    if (projectId == null) {
+      state = const DailyWorkPlansState(
+        error: 'Сначала выберите объект.',
+      );
+      return;
+    }
+
+    state = state.copyWith(
+      isLoading: true,
+      error: null,
+      projectId: projectId,
+    );
+
+    try {
+      final plans = await _repository.fetchDailyWorkPlans(projectId: projectId);
+      state = state.copyWith(
+        isLoading: false,
+        plans: plans,
+      );
+    } catch (error) {
+      state = state.copyWith(
+        isLoading: false,
+        error: error.toString(),
+      );
+    }
+  }
+
+  Future<void> recordFact(DailyWorkPlanAssignmentModel assignment) async {
+    final updatedAssignment = await _repository.recordDailyWorkFact(
+      assignmentId: assignment.id,
+      status: 'done',
+      completedQuantity: assignment.plannedQuantity ?? 0,
+      actualWorkHours: assignment.plannedWorkHours ?? 0,
+      factComment: 'Факт выполнен по дневному заданию',
+    );
+
+    state = state.copyWith(
+      plans: state.plans
+          .map(
+            (plan) => DailyWorkPlanModel(
+              id: plan.id,
+              projectId: plan.projectId,
+              scheduleId: plan.scheduleId,
+              lookaheadPlanId: plan.lookaheadPlanId,
+              scheduleName: plan.scheduleName,
+              workDate: plan.workDate,
+              status: plan.status,
+              statusLabel: plan.statusLabel,
+              availableActions: plan.availableActions,
+              assignments: plan.assignments
+                  .map((item) => item.id == updatedAssignment.id ? updatedAssignment : item)
+                  .toList(),
+            ),
+          )
+          .toList(),
+    );
+  }
+
+  Future<void> createLinkedConstraintAction(
+    DailyWorkConstraintModel constraint,
+  ) async {
+    await _repository.createLinkedConstraintAction(
+      constraintId: constraint.id,
+      comment: constraint.title,
+    );
+
+    if (state.projectId != null) {
+      await load(projectId: state.projectId);
+    }
+  }
+
+  Future<void> submit(DailyWorkPlanModel plan) async {
+    final updatedPlan = await _repository.submitDailyWorkPlan(
+      dailyPlanId: plan.id,
+      summaryComment: 'Дневной план выполнен и передан на приемку',
+    );
+
+    state = state.copyWith(
+      plans: state.plans
+          .map((item) => item.id == updatedPlan.id ? updatedPlan : item)
+          .toList(),
+    );
+  }
+}

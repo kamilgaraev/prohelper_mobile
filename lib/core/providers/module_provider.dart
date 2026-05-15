@@ -12,6 +12,11 @@ enum AppModule {
   budgetEstimates,
   timeTracking,
   workflowManagement,
+  qualityControl,
+  safetyManagement,
+  machineryOperations,
+  productionLabor,
+  handoverAcceptance,
 }
 
 extension AppModuleX on AppModule {
@@ -24,6 +29,11 @@ extension AppModuleX on AppModule {
       AppModule.budgetEstimates => 'budget-estimates',
       AppModule.timeTracking => 'time-tracking',
       AppModule.workflowManagement => 'workflow-management',
+      AppModule.qualityControl => 'quality-control',
+      AppModule.safetyManagement => 'safety-management',
+      AppModule.machineryOperations => 'machinery-operations',
+      AppModule.productionLabor => 'production-labor',
+      AppModule.handoverAcceptance => 'handover-acceptance',
     };
   }
 
