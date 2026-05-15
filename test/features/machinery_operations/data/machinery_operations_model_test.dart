@@ -14,7 +14,11 @@ void main() {
         'project_id': 9,
         'project': {'id': 9, 'name': 'Башня'},
         'problem_flags': [
-          {'code': 'maintenance_due', 'severity': 'warning', 'message': 'Нужно ТО'},
+          {
+            'code': 'maintenance_due',
+            'severity': 'warning',
+            'message': 'Нужно ТО',
+          },
         ],
       });
 

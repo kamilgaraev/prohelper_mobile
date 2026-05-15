@@ -71,19 +71,21 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
     final selectedProject = ref.watch(projectsProvider).selectedProject;
     final overview = state.overview;
 
-    final schedules = overview == null
-        ? const <ScheduleItemModel>[]
-        : _sortSchedules(
-            overview.schedules
-                .where(
-                  (schedule) =>
-                      _matchesFilter(schedule, _selectedFilter) &&
-                      _matchesSearch(schedule, _searchQuery),
-                )
-                .toList(),
-          );
+    final schedules =
+        overview == null
+            ? const <ScheduleItemModel>[]
+            : _sortSchedules(
+              overview.schedules
+                  .where(
+                    (schedule) =>
+                        _matchesFilter(schedule, _selectedFilter) &&
+                        _matchesSearch(schedule, _searchQuery),
+                  )
+                  .toList(),
+            );
     final attentionCount = overview?.schedules.where(_hasAttention).length ?? 0;
-    final overdueSchedulesCount = overview?.schedules
+    final overdueSchedulesCount =
+        overview?.schedules
             .where((schedule) => schedule.overdueTasksCount > 0)
             .length ??
         0;
@@ -95,9 +97,10 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
         actions: [
           IconButton(
             tooltip: 'Дневные планы',
-            onPressed: selectedProject == null
-                ? null
-                : () => Navigator.of(context).push(
+            onPressed:
+                selectedProject == null
+                    ? null
+                    : () => Navigator.of(context).push(
                       MaterialPageRoute(
                         builder: (_) => const ScheduleDailyPlansScreen(),
                       ),
@@ -107,9 +110,10 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
         ],
       ),
       body: RefreshIndicator(
-        onRefresh: () => ref.read(scheduleProvider.notifier).load(
-              projectId: selectedProject?.serverId,
-            ),
+        onRefresh:
+            () => ref
+                .read(scheduleProvider.notifier)
+                .load(projectId: selectedProject?.serverId),
         child: CustomScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           slivers: [
@@ -133,9 +137,10 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
                   title: 'Не удалось загрузить графики работ',
                   description: state.error,
                   action: OutlinedButton(
-                    onPressed: () => ref.read(scheduleProvider.notifier).load(
-                          projectId: selectedProject.serverId,
-                        ),
+                    onPressed:
+                        () => ref
+                            .read(scheduleProvider.notifier)
+                            .load(projectId: selectedProject.serverId),
                     child: const Text('Повторить'),
                   ),
                 ),
@@ -187,11 +192,12 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
                         _selectedFilter = filter;
                       });
                     },
-                    onClearSearch: _searchQuery.isEmpty
-                        ? null
-                        : () {
-                            _searchController.clear();
-                          },
+                    onClearSearch:
+                        _searchQuery.isEmpty
+                            ? null
+                            : () {
+                              _searchController.clear();
+                            },
                   ),
                 ),
               ),
@@ -232,26 +238,25 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
                 SliverPadding(
                   padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
                   sliver: SliverList(
-                    delegate: SliverChildBuilderDelegate(
-                      (context, index) {
-                        final schedule = schedules[index];
+                    delegate: SliverChildBuilderDelegate((context, index) {
+                      final schedule = schedules[index];
 
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: 12),
-                          child: _ScheduleCard(
-                            schedule: schedule,
-                            onTap: () => Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (_) => ScheduleDetailsScreen(
-                                  scheduleId: schedule.id,
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: _ScheduleCard(
+                          schedule: schedule,
+                          onTap:
+                              () => Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder:
+                                      (_) => ScheduleDetailsScreen(
+                                        scheduleId: schedule.id,
+                                      ),
                                 ),
                               ),
-                            ),
-                          ),
-                        );
-                      },
-                      childCount: schedules.length,
-                    ),
+                        ),
+                      );
+                    }, childCount: schedules.length),
                   ),
                 ),
             ],
@@ -267,12 +272,13 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
     }
 
     final normalizedQuery = query.toLowerCase();
-    final haystack = [
-      schedule.name,
-      schedule.description ?? '',
-      schedule.statusLabel,
-      _healthStatusLabel(schedule.healthStatus),
-    ].join(' ').toLowerCase();
+    final haystack =
+        [
+          schedule.name,
+          schedule.description ?? '',
+          schedule.statusLabel,
+          _healthStatusLabel(schedule.healthStatus),
+        ].join(' ').toLowerCase();
 
     return haystack.contains(normalizedQuery);
   }
@@ -309,9 +315,9 @@ class _ScheduleHeader extends StatelessWidget {
             children: [
               Text(
                 projectName,
-                style: AppTypography.bodyMedium(context).copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
+                style: AppTypography.bodyMedium(
+                  context,
+                ).copyWith(color: theme.colorScheme.onSurfaceVariant),
               ),
               const SizedBox(height: 4),
               Text(
@@ -408,24 +414,28 @@ class _ScheduleOperationalBanner extends StatelessWidget {
     final theme = Theme.of(context);
     final hasAttention = attentionCount > 0;
     final title = hasAttention ? 'Нужны действия' : 'Ситуация под контролем';
-    final description = hasAttention
-        ? 'Графиков с риском: $attentionCount. Из них с просрочкой: $overdueSchedulesCount.'
-        : 'Все $totalSchedules графиков сейчас без критичных сигналов.';
+    final description =
+        hasAttention
+            ? 'Графиков с риском: $attentionCount. Из них с просрочкой: $overdueSchedulesCount.'
+            : 'Все $totalSchedules графиков сейчас без критичных сигналов.';
 
     return IndustrialCard(
-      backgroundColor: hasAttention
-          ? theme.colorScheme.secondaryContainer.withOpacity(0.45)
-          : theme.colorScheme.primaryContainer.withOpacity(0.35),
-      borderColor: hasAttention
-          ? theme.colorScheme.secondary.withOpacity(0.3)
-          : theme.colorScheme.primary.withOpacity(0.2),
+      backgroundColor:
+          hasAttention
+              ? theme.colorScheme.secondaryContainer.withValues(alpha: 0.45)
+              : theme.colorScheme.primaryContainer.withValues(alpha: 0.35),
+      borderColor:
+          hasAttention
+              ? theme.colorScheme.secondary.withValues(alpha: 0.3)
+              : theme.colorScheme.primary.withValues(alpha: 0.2),
       child: Row(
         children: [
           Icon(
             hasAttention ? Icons.priority_high_rounded : Icons.track_changes,
-            color: hasAttention
-                ? theme.colorScheme.secondary
-                : theme.colorScheme.primary,
+            color:
+                hasAttention
+                    ? theme.colorScheme.secondary
+                    : theme.colorScheme.primary,
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -434,16 +444,16 @@ class _ScheduleOperationalBanner extends StatelessWidget {
               children: [
                 Text(
                   title,
-                  style: AppTypography.bodyLarge(context).copyWith(
-                    fontWeight: FontWeight.w800,
-                  ),
+                  style: AppTypography.bodyLarge(
+                    context,
+                  ).copyWith(fontWeight: FontWeight.w800),
                 ),
                 const SizedBox(height: 4),
                 Text(
                   description,
-                  style: AppTypography.bodyMedium(context).copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
+                  style: AppTypography.bodyMedium(
+                    context,
+                  ).copyWith(color: theme.colorScheme.onSurfaceVariant),
                 ),
               ],
             ),
@@ -485,15 +495,17 @@ class _ScheduleFiltersCard extends StatelessWidget {
             decoration: InputDecoration(
               hintText: 'Поиск по названию, описанию или статусу',
               prefixIcon: const Icon(Icons.search_rounded),
-              suffixIcon: onClearSearch == null
-                  ? null
-                  : IconButton(
-                      onPressed: onClearSearch,
-                      icon: const Icon(Icons.close_rounded),
-                    ),
+              suffixIcon:
+                  onClearSearch == null
+                      ? null
+                      : IconButton(
+                        onPressed: onClearSearch,
+                        icon: const Icon(Icons.close_rounded),
+                      ),
               filled: true,
-              fillColor: theme.colorScheme.surfaceContainerHighest
-                  .withOpacity(0.45),
+              fillColor: theme.colorScheme.surfaceContainerHighest.withValues(
+                alpha: 0.45,
+              ),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(16),
                 borderSide: BorderSide.none,
@@ -508,24 +520,25 @@ class _ScheduleFiltersCard extends StatelessWidget {
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: Row(
-              children: _ScheduleFilter.values.map((filter) {
-                return Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: FilterChip(
-                    selected: selectedFilter == filter,
-                    label: Text(filter.label),
-                    onSelected: (_) => onFilterChanged(filter),
-                  ),
-                );
-              }).toList(),
+              children:
+                  _ScheduleFilter.values.map((filter) {
+                    return Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: FilterChip(
+                        selected: selectedFilter == filter,
+                        label: Text(filter.label),
+                        onSelected: (_) => onFilterChanged(filter),
+                      ),
+                    );
+                  }).toList(),
             ),
           ),
           const SizedBox(height: 12),
           Text(
             'Найдено: $resultCount из $totalCount',
-            style: AppTypography.caption(context).copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
+            style: AppTypography.caption(
+              context,
+            ).copyWith(color: theme.colorScheme.onSurfaceVariant),
           ),
         ],
       ),
@@ -564,10 +577,7 @@ class _ScheduleSummaryCard extends StatelessWidget {
 }
 
 class _ScheduleCard extends StatelessWidget {
-  const _ScheduleCard({
-    required this.schedule,
-    required this.onTap,
-  });
+  const _ScheduleCard({required this.schedule, required this.onTap});
 
   final ScheduleItemModel schedule;
   final VoidCallback onTap;
@@ -590,9 +600,10 @@ class _ScheduleCard extends StatelessWidget {
     return IndustrialCard(
       onTap: onTap,
       borderColor: hasAttention ? AppColors.warning : null,
-      backgroundColor: hasAttention
-          ? theme.colorScheme.secondaryContainer.withOpacity(0.18)
-          : null,
+      backgroundColor:
+          hasAttention
+              ? theme.colorScheme.secondaryContainer.withValues(alpha: 0.18)
+              : null,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -603,17 +614,14 @@ class _ScheduleCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      schedule.name,
-                      style: AppTypography.h2(context),
-                    ),
+                    Text(schedule.name, style: AppTypography.h2(context)),
                     if ((schedule.description ?? '').trim().isNotEmpty) ...[
                       const SizedBox(height: 6),
                       Text(
                         schedule.description!,
-                        style: AppTypography.bodyMedium(context).copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
-                        ),
+                        style: AppTypography.bodyMedium(
+                          context,
+                        ).copyWith(color: theme.colorScheme.onSurfaceVariant),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -622,10 +630,7 @@ class _ScheduleCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 12),
-              _ScheduleBadge(
-                label: schedule.statusLabel,
-                color: statusColor,
-              ),
+              _ScheduleBadge(label: schedule.statusLabel, color: statusColor),
             ],
           ),
           const SizedBox(height: 12),
@@ -647,12 +652,14 @@ class _ScheduleCard extends StatelessWidget {
                 ),
               _MetaPill(
                 icon: Icons.rule_folder_outlined,
-                label: schedule.criticalPathCalculated
-                    ? 'Критический путь рассчитан'
-                    : 'Критический путь не рассчитан',
-                color: schedule.criticalPathCalculated
-                    ? theme.colorScheme.primary
-                    : theme.colorScheme.onSurfaceVariant,
+                label:
+                    schedule.criticalPathCalculated
+                        ? 'Критический путь рассчитан'
+                        : 'Критический путь не рассчитан',
+                color:
+                    schedule.criticalPathCalculated
+                        ? theme.colorScheme.primary
+                        : theme.colorScheme.onSurfaceVariant,
               ),
             ],
           ),
@@ -662,16 +669,16 @@ class _ScheduleCard extends StatelessWidget {
               Expanded(
                 child: Text(
                   'Прогресс ${schedule.overallProgressPercent.toStringAsFixed(1)}%',
-                  style: AppTypography.bodyMedium(context).copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
+                  style: AppTypography.bodyMedium(
+                    context,
+                  ).copyWith(fontWeight: FontWeight.w700),
                 ),
               ),
               Text(
                 '${schedule.completedTasksCount}/${schedule.tasksCount} задач',
-                style: AppTypography.caption(context).copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
+                style: AppTypography.caption(
+                  context,
+                ).copyWith(color: theme.colorScheme.onSurfaceVariant),
               ),
             ],
           ),
@@ -682,7 +689,9 @@ class _ScheduleCard extends StatelessWidget {
               value: (schedule.overallProgressPercent.clamp(0, 100)) / 100,
               minHeight: 8,
               color: progressColor,
-              backgroundColor: theme.colorScheme.outline.withOpacity(0.12),
+              backgroundColor: theme.colorScheme.outline.withValues(
+                alpha: 0.12,
+              ),
             ),
           ),
           const SizedBox(height: 14),
@@ -714,10 +723,7 @@ class _ScheduleCard extends StatelessWidget {
 }
 
 class _ScheduleBadge extends StatelessWidget {
-  const _ScheduleBadge({
-    required this.label,
-    required this.color,
-  });
+  const _ScheduleBadge({required this.label, required this.color});
 
   final String label;
   final Color color;
@@ -727,26 +733,21 @@ class _ScheduleBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.12),
+        color: color.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(
         label,
-        style: AppTypography.caption(context).copyWith(
-          color: color,
-          fontWeight: FontWeight.w700,
-        ),
+        style: AppTypography.caption(
+          context,
+        ).copyWith(color: color, fontWeight: FontWeight.w700),
       ),
     );
   }
 }
 
 class _MetaPill extends StatelessWidget {
-  const _MetaPill({
-    required this.icon,
-    required this.label,
-    this.color,
-  });
+  const _MetaPill({required this.icon, required this.label, this.color});
 
   final IconData icon;
   final String label;
@@ -760,7 +761,7 @@ class _MetaPill extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
-        color: resolvedColor.withOpacity(0.08),
+        color: resolvedColor.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
@@ -770,10 +771,9 @@ class _MetaPill extends StatelessWidget {
           const SizedBox(width: 6),
           Text(
             label,
-            style: AppTypography.caption(context).copyWith(
-              color: resolvedColor,
-              fontWeight: FontWeight.w600,
-            ),
+            style: AppTypography.caption(
+              context,
+            ).copyWith(color: resolvedColor, fontWeight: FontWeight.w600),
           ),
         ],
       ),
@@ -783,14 +783,16 @@ class _MetaPill extends StatelessWidget {
 
 List<ScheduleItemModel> _sortSchedules(List<ScheduleItemModel> schedules) {
   schedules.sort((left, right) {
-    final attentionCompare =
-        _boolPriority(_hasAttention(right)).compareTo(_boolPriority(_hasAttention(left)));
+    final attentionCompare = _boolPriority(
+      _hasAttention(right),
+    ).compareTo(_boolPriority(_hasAttention(left)));
     if (attentionCompare != 0) {
       return attentionCompare;
     }
 
-    final overdueCompare =
-        right.overdueTasksCount.compareTo(left.overdueTasksCount);
+    final overdueCompare = right.overdueTasksCount.compareTo(
+      left.overdueTasksCount,
+    );
     if (overdueCompare != 0) {
       return overdueCompare;
     }

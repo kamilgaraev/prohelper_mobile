@@ -19,20 +19,23 @@ class ProCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    
+
     return Container(
       decoration: BoxDecoration(
         color: theme.cardTheme.color ?? theme.colorScheme.surface,
         borderRadius: BorderRadius.circular(borderRadius),
-        boxShadow: theme.cardTheme.shadowColor != null 
-          ? [
-              BoxShadow(
-                color: theme.cardTheme.shadowColor!.withOpacity(theme.brightness == Brightness.dark ? 0.5 : 0.05),
-                blurRadius: 20,
-                offset: const Offset(0, 8),
-              ),
-            ]
-          : null,
+        boxShadow:
+            theme.cardTheme.shadowColor != null
+                ? [
+                  BoxShadow(
+                    color: theme.cardTheme.shadowColor!.withValues(
+                      alpha: theme.brightness == Brightness.dark ? 0.5 : 0.05,
+                    ),
+                    blurRadius: 20,
+                    offset: const Offset(0, 8),
+                  ),
+                ]
+                : null,
       ),
       child: Material(
         color: Colors.transparent,

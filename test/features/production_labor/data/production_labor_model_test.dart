@@ -26,7 +26,11 @@ void main() {
           },
         ],
         'problem_flags': [
-          {'code': 'underproduction', 'severity': 'warning', 'message': 'Ниже плана'},
+          {
+            'code': 'underproduction',
+            'severity': 'warning',
+            'message': 'Ниже плана',
+          },
         ],
       });
 

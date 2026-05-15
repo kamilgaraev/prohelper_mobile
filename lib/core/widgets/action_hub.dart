@@ -25,13 +25,15 @@ class ActionHub extends ConsumerWidget {
         color: theme.cardTheme.color,
         border: Border(
           top: BorderSide(
-            color: theme.colorScheme.outline.withOpacity(0.2),
+            color: theme.colorScheme.outline.withValues(alpha: 0.2),
             width: ProHelperTheme.borderWidth,
           ),
         ),
         boxShadow: [
           BoxShadow(
-            color: theme.cardTheme.shadowColor ?? Colors.black.withOpacity(0.1),
+            color:
+                theme.cardTheme.shadowColor ??
+                Colors.black.withValues(alpha: 0.1),
             blurRadius: 20,
             offset: const Offset(0, -5),
           ),
@@ -78,18 +80,20 @@ class ActionHub extends ConsumerWidget {
         children: [
           Icon(
             icon,
-            color: isActive
-                ? theme.colorScheme.primary
-                : theme.colorScheme.onSurface.withOpacity(0.4),
+            color:
+                isActive
+                    ? theme.colorScheme.primary
+                    : theme.colorScheme.onSurface.withValues(alpha: 0.4),
             size: 24,
           ),
           const SizedBox(height: 6),
           Text(
             label,
             style: AppTypography.caption(context).copyWith(
-              color: isActive
-                  ? theme.colorScheme.onSurface
-                  : theme.colorScheme.onSurface.withOpacity(0.4),
+              color:
+                  isActive
+                      ? theme.colorScheme.onSurface
+                      : theme.colorScheme.onSurface.withValues(alpha: 0.4),
               fontWeight: isActive ? FontWeight.w900 : FontWeight.w500,
               fontSize: 9,
               letterSpacing: 0.5,
@@ -137,7 +141,7 @@ class ActionHub extends ConsumerWidget {
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
-              color: theme.colorScheme.primary.withOpacity(0.4),
+              color: theme.colorScheme.primary.withValues(alpha: 0.4),
               blurRadius: 15,
               offset: const Offset(0, 4),
             ),

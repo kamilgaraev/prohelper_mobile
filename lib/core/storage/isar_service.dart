@@ -5,16 +5,15 @@ import '../../features/auth/data/user_model.dart';
 
 final isarProvider = FutureProvider<Isar>((ref) async {
   final dir = await getApplicationDocumentsDirectory();
-  return await Isar.open(
-    [UserSchema],
-    directory: dir.path,
-  );
+  return await Isar.open([UserSchema], directory: dir.path);
 });
 
 class IsarService {
   final Future<Isar> _isarFuture;
 
   IsarService(this._isarFuture);
-  
+
+  Future<Isar> get instance => _isarFuture;
+
   // Future methods to access data
 }

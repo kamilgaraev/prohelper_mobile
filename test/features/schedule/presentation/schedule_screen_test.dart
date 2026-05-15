@@ -52,10 +52,7 @@ class _FakeScheduleNotifier extends ScheduleNotifier {
 }
 
 const _overview = ScheduleOverviewModel(
-  project: ScheduleProjectModel(
-    id: 15,
-    name: 'Дом 300м Царево',
-  ),
+  project: ScheduleProjectModel(id: 15, name: 'Дом 300м Царево'),
   summary: ScheduleOverviewSummaryModel(
     totalSchedules: 3,
     activeSchedules: 1,
@@ -155,13 +152,13 @@ void main() {
         projectsProvider.overrideWith((ref) => _FakeProjectsNotifier(project)),
         scheduleProvider.overrideWith((ref) => _FakeScheduleNotifier()),
       ],
-      child: const MaterialApp(
-        home: ScheduleScreen(),
-      ),
+      child: const MaterialApp(home: ScheduleScreen()),
     );
   }
 
-  testWidgets('показывает графики и фильтрует их по риску и поиску', (tester) async {
+  testWidgets('показывает графики и фильтрует их по риску и поиску', (
+    tester,
+  ) async {
     await tester.pumpWidget(createWidget());
     await tester.pumpAndSettle();
 
@@ -182,7 +179,7 @@ void main() {
     expect(find.text('Фундамент'), findsOneWidget);
     expect(find.text('Монтаж кровли'), findsNothing);
     expect(find.text('Отделка секции А'), findsNothing);
-    
+
     await _scrollToTop(tester);
     await tester.ensureVisible(find.text('Все'));
     await tester.pumpAndSettle();
@@ -195,10 +192,7 @@ void main() {
     await tester.ensureVisible(find.byType(TextField));
     await tester.pumpAndSettle();
 
-    await tester.enterText(
-      find.byType(TextField),
-      'Отделка',
-    );
+    await tester.enterText(find.byType(TextField), 'Отделка');
     await tester.pumpAndSettle();
 
     await _scrollToText(tester, 'Отделка секции А');

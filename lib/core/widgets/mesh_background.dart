@@ -9,7 +9,8 @@ class MeshBackground extends StatefulWidget {
   State<MeshBackground> createState() => _MeshBackgroundState();
 }
 
-class _MeshBackgroundState extends State<MeshBackground> with SingleTickerProviderStateMixin {
+class _MeshBackgroundState extends State<MeshBackground>
+    with SingleTickerProviderStateMixin {
   late AnimationController _controller;
 
   @override
@@ -30,7 +31,7 @@ class _MeshBackgroundState extends State<MeshBackground> with SingleTickerProvid
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    
+
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor, // Use theme background
       body: AnimatedBuilder(
@@ -42,13 +43,19 @@ class _MeshBackgroundState extends State<MeshBackground> with SingleTickerProvid
               Positioned(
                 top: -100 + 50 * math.sin(_controller.value * 2 * math.pi),
                 left: -100 + 50 * math.cos(_controller.value * 2 * math.pi),
-                child: _Blob(color: theme.colorScheme.primary.withOpacity(0.15), size: 400),
+                child: _Blob(
+                  color: theme.colorScheme.primary.withValues(alpha: 0.15),
+                  size: 400,
+                ),
               ),
               // Градиент 2
               Positioned(
                 bottom: -100 + 50 * math.cos(_controller.value * 2 * math.pi),
                 right: -100 + 50 * math.sin(_controller.value * 2 * math.pi),
-                child: _Blob(color: theme.colorScheme.secondary.withOpacity(0.1), size: 500),
+                child: _Blob(
+                  color: theme.colorScheme.secondary.withValues(alpha: 0.1),
+                  size: 500,
+                ),
               ),
               // Основной контент
               widget.child,
@@ -72,9 +79,7 @@ class _Blob extends StatelessWidget {
       height: size,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        gradient: RadialGradient(
-          colors: [color, color.withOpacity(0)],
-        ),
+        gradient: RadialGradient(colors: [color, color.withValues(alpha: 0)]),
       ),
     );
   }

@@ -6,11 +6,7 @@ import '../data/warehouse_summary_model.dart';
 const _warehouseSentinel = Object();
 
 class WarehouseState {
-  const WarehouseState({
-    this.isLoading = false,
-    this.data,
-    this.error,
-  });
+  const WarehouseState({this.isLoading = false, this.data, this.error});
 
   final bool isLoading;
   final WarehouseSummaryModel? data;
@@ -23,8 +19,12 @@ class WarehouseState {
   }) {
     return WarehouseState(
       isLoading: isLoading ?? this.isLoading,
-      data: identical(data, _warehouseSentinel) ? this.data : data as WarehouseSummaryModel?,
-      error: identical(error, _warehouseSentinel) ? this.error : error as String?,
+      data:
+          identical(data, _warehouseSentinel)
+              ? this.data
+              : data as WarehouseSummaryModel?,
+      error:
+          identical(error, _warehouseSentinel) ? this.error : error as String?,
     );
   }
 }
@@ -39,20 +39,14 @@ class WarehouseNotifier extends StateNotifier<WarehouseState> {
 
     try {
       final data = await _repository.fetchWarehouseSummary();
-      state = state.copyWith(
-        isLoading: false,
-        data: data,
-      );
+      state = state.copyWith(isLoading: false, data: data);
     } catch (error) {
-      state = state.copyWith(
-        isLoading: false,
-        error: error.toString(),
-      );
+      state = state.copyWith(isLoading: false, error: error.toString());
     }
   }
 }
 
 final warehouseProvider =
     StateNotifierProvider<WarehouseNotifier, WarehouseState>((ref) {
-  return WarehouseNotifier(ref.read(warehouseRepositoryProvider));
-});
+      return WarehouseNotifier(ref.read(warehouseRepositoryProvider));
+    });

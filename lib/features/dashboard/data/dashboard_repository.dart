@@ -19,7 +19,8 @@ class DashboardRepository {
       final response = await _dio.get('/dashboard');
       final data = response.data;
       final payload = data is Map<String, dynamic> ? data['data'] : null;
-      final widgets = payload is Map<String, dynamic> ? payload['widgets'] : null;
+      final widgets =
+          payload is Map<String, dynamic> ? payload['widgets'] : null;
 
       if (widgets is! List) {
         return const [];

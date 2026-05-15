@@ -32,7 +32,7 @@ class LoginScreen extends HookConsumerWidget {
                   shape: BoxShape.circle,
                   boxShadow: [
                     BoxShadow(
-                      color: theme.colorScheme.primary.withOpacity(0.4),
+                      color: theme.colorScheme.primary.withValues(alpha: 0.4),
                       blurRadius: 30,
                       offset: const Offset(0, 10),
                     ),
@@ -47,17 +47,16 @@ class LoginScreen extends HookConsumerWidget {
               const SizedBox(height: 40),
               Text(
                 'PROHELPER',
-                style: AppTypography.h1(context).copyWith(
-                  letterSpacing: 4,
-                  fontSize: 32,
-                ),
+                style: AppTypography.h1(
+                  context,
+                ).copyWith(letterSpacing: 4, fontSize: 32),
               ),
               const SizedBox(height: 8),
               Text(
                 'INDUSTRIAL MANAGEMENT',
-                style: AppTypography.caption(context).copyWith(
-                  letterSpacing: 2,
-                ),
+                style: AppTypography.caption(
+                  context,
+                ).copyWith(letterSpacing: 2),
               ),
               const SizedBox(height: 60),
               IndustrialCard(
@@ -87,10 +86,10 @@ class LoginScreen extends HookConsumerWidget {
                           vertical: 12,
                         ),
                         decoration: BoxDecoration(
-                          color: AppColors.error.withOpacity(0.08),
+                          color: AppColors.error.withValues(alpha: 0.08),
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(
-                            color: AppColors.error.withOpacity(0.25),
+                            color: AppColors.error.withValues(alpha: 0.25),
                           ),
                         ),
                         child: Row(
@@ -108,9 +107,9 @@ class LoginScreen extends HookConsumerWidget {
                             Expanded(
                               child: Text(
                                 authState.message,
-                                style: AppTypography.bodyMedium(context).copyWith(
-                                  color: AppColors.error,
-                                ),
+                                style: AppTypography.bodyMedium(
+                                  context,
+                                ).copyWith(color: AppColors.error),
                               ),
                             ),
                           ],
@@ -119,14 +118,17 @@ class LoginScreen extends HookConsumerWidget {
                     ],
                     const SizedBox(height: 32),
                     ElevatedButton(
-                      onPressed: authState is AuthLoading
-                          ? null
-                          : () {
-                              ref.read(authProvider.notifier).login(
-                                    emailController.text,
-                                    passwordController.text,
-                                  );
-                            },
+                      onPressed:
+                          authState is AuthLoading
+                              ? null
+                              : () {
+                                ref
+                                    .read(authProvider.notifier)
+                                    .login(
+                                      emailController.text,
+                                      passwordController.text,
+                                    );
+                              },
                       style: ElevatedButton.styleFrom(
                         backgroundColor: theme.colorScheme.primary,
                         foregroundColor: Colors.white,
@@ -136,16 +138,17 @@ class LoginScreen extends HookConsumerWidget {
                         ),
                         elevation: 0,
                       ),
-                      child: authState is AuthLoading
-                          ? const SizedBox(
-                              height: 20,
-                              width: 20,
-                              child: CircularProgressIndicator(
-                                color: Colors.white,
-                                strokeWidth: 2,
-                              ),
-                            )
-                          : Text('Вход', style: AppTypography.button),
+                      child:
+                          authState is AuthLoading
+                              ? const SizedBox(
+                                height: 20,
+                                width: 20,
+                                child: CircularProgressIndicator(
+                                  color: Colors.white,
+                                  strokeWidth: 2,
+                                ),
+                              )
+                              : Text('Вход', style: AppTypography.button),
                     ),
                   ],
                 ),
@@ -175,7 +178,9 @@ class LoginScreen extends HookConsumerWidget {
         labelStyle: TextStyle(color: theme.colorScheme.onSurfaceVariant),
         prefixIcon: Icon(icon, color: theme.colorScheme.onSurfaceVariant),
         filled: true,
-        fillColor: theme.colorScheme.surfaceContainerHighest.withOpacity(0.3),
+        fillColor: theme.colorScheme.surfaceContainerHighest.withValues(
+          alpha: 0.3,
+        ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide.none,
@@ -183,16 +188,13 @@ class LoginScreen extends HookConsumerWidget {
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide(
-            color: theme.colorScheme.outline.withOpacity(0.3),
+            color: theme.colorScheme.outline.withValues(alpha: 0.3),
             width: 1,
           ),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(
-            color: theme.colorScheme.primary,
-            width: 2,
-          ),
+          borderSide: BorderSide(color: theme.colorScheme.primary, width: 2),
         ),
       ),
     );

@@ -85,13 +85,22 @@ class LaborWorkOrderModel {
       id: _asInt(json['id']),
       projectId: _asInt(json['project_id']),
       title: _asString(json['title']),
-      orderNumber: _firstString(json['order_number'], json['work_order_number']),
+      orderNumber: _firstString(
+        json['order_number'],
+        json['work_order_number'],
+      ),
       status: _asString(json['status']),
       statusLabel: _asString(json['status_label']),
       availableActions: _stringList(json['available_actions']),
-      lines: _mapList(json['lines']).map(LaborWorkOrderLineModel.fromJson).toList(),
+      lines:
+          _mapList(
+            json['lines'],
+          ).map(LaborWorkOrderLineModel.fromJson).toList(),
       assigneeName: _asNullableString(json['assignee_name']),
-      problemFlags: _mapList(json['problem_flags']).map(LaborProblemFlagModel.fromJson).toList(),
+      problemFlags:
+          _mapList(
+            json['problem_flags'],
+          ).map(LaborProblemFlagModel.fromJson).toList(),
     );
   }
 }
@@ -166,7 +175,9 @@ List<Map<String, dynamic>> _mapList(dynamic value) {
 }
 
 List<String> _stringList(dynamic value) {
-  return (value as List<dynamic>? ?? const []).map((item) => item.toString()).toList();
+  return (value as List<dynamic>? ?? const [])
+      .map((item) => item.toString())
+      .toList();
 }
 
 int _asInt(dynamic value) {

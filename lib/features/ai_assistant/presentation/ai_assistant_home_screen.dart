@@ -17,15 +17,12 @@ class AiAssistantHomeScreen extends ConsumerWidget {
     final theme = Theme.of(context);
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('AI-ассистент'),
-      ),
+      appBar: AppBar(title: const Text('AI-ассистент')),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (_) => const AiAssistantChatScreen(),
-          ),
-        ),
+        onPressed:
+            () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const AiAssistantChatScreen()),
+            ),
         icon: const Icon(Icons.add_comment_outlined),
         label: const Text('Новый чат'),
       ),
@@ -52,16 +49,16 @@ class AiAssistantHomeScreen extends ConsumerWidget {
                       const SizedBox(height: 8),
                       Text(
                         'Рабочий помощник по проектам, срокам, контрактам и финансам.',
-                        style: AppTypography.bodyLarge(context).copyWith(
-                          fontWeight: FontWeight.w700,
-                        ),
+                        style: AppTypography.bodyLarge(
+                          context,
+                        ).copyWith(fontWeight: FontWeight.w700),
                       ),
                       const SizedBox(height: 10),
                       Text(
                         'Используйте историю диалогов как рабочий контекст и быстро возвращайтесь к прошлым разбором.',
-                        style: AppTypography.bodyMedium(context).copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
-                        ),
+                        style: AppTypography.bodyMedium(
+                          context,
+                        ).copyWith(color: theme.colorScheme.onSurfaceVariant),
                       ),
                     ],
                   ),
@@ -79,28 +76,35 @@ class AiAssistantHomeScreen extends ConsumerWidget {
                   title: 'Не удалось загрузить AI-ассистента',
                   description: state.error,
                   action: OutlinedButton(
-                    onPressed: () => ref.read(aiAssistantHomeProvider.notifier).load(),
+                    onPressed:
+                        () => ref.read(aiAssistantHomeProvider.notifier).load(),
                     child: const Text('Повторить'),
                   ),
                 ),
               )
             else ...[
               SliverPadding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
                 sliver: SliverToBoxAdapter(
                   child: _UsageCard(usage: state.home?.usage),
                 ),
               ),
               SliverPadding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
                 sliver: SliverToBoxAdapter(
                   child: _QuickPromptsCard(
                     onPromptTap: (prompt) {
                       Navigator.of(context).push(
                         MaterialPageRoute(
-                          builder: (_) => AiAssistantChatScreen(
-                            initialPrompt: prompt,
-                          ),
+                          builder:
+                              (_) =>
+                                  AiAssistantChatScreen(initialPrompt: prompt),
                         ),
                       );
                     },
@@ -110,35 +114,31 @@ class AiAssistantHomeScreen extends ConsumerWidget {
               SliverPadding(
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 120),
                 sliver: SliverList(
-                  delegate: SliverChildBuilderDelegate(
-                    (context, index) {
-                      final conversation = state.home!.conversations[index];
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        child: _ConversationCard(
-                          conversation: conversation,
-                          onOpen: () {
-                            Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (_) => AiAssistantChatScreen(
-                                  conversationId: conversation.id,
-                                ),
-                              ),
-                            );
-                          },
-                        ),
-                      );
-                    },
-                    childCount: state.home?.conversations.length ?? 0,
-                  ),
+                  delegate: SliverChildBuilderDelegate((context, index) {
+                    final conversation = state.home!.conversations[index];
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: _ConversationCard(
+                        conversation: conversation,
+                        onOpen: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder:
+                                  (_) => AiAssistantChatScreen(
+                                    conversationId: conversation.id,
+                                  ),
+                            ),
+                          );
+                        },
+                      ),
+                    );
+                  }, childCount: state.home?.conversations.length ?? 0),
                 ),
               ),
               if ((state.home?.conversations.isEmpty ?? true))
                 const SliverPadding(
                   padding: EdgeInsets.fromLTRB(16, 8, 16, 120),
-                  sliver: SliverToBoxAdapter(
-                    child: _EmptyHistoryCard(),
-                  ),
+                  sliver: SliverToBoxAdapter(child: _EmptyHistoryCard()),
                 ),
             ],
           ],
@@ -163,26 +163,30 @@ class _UsageCard extends StatelessWidget {
         children: [
           Text(
             'Запросы за месяц',
-            style: AppTypography.caption(context).copyWith(
-              fontWeight: FontWeight.w800,
-            ),
+            style: AppTypography.caption(
+              context,
+            ).copyWith(fontWeight: FontWeight.w800),
           ),
           const SizedBox(height: 12),
           Row(
             children: [
               Expanded(
                 child: Text(
-                  usage == null ? '—' : '${usage!.used} / ${usage!.monthlyLimit}',
-                  style: AppTypography.h2(context).copyWith(
-                    fontSize: 26,
-                    fontWeight: FontWeight.w900,
-                  ),
+                  usage == null
+                      ? '—'
+                      : '${usage!.used} / ${usage!.monthlyLimit}',
+                  style: AppTypography.h2(
+                    context,
+                  ).copyWith(fontSize: 26, fontWeight: FontWeight.w900),
                 ),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
                 decoration: BoxDecoration(
-                  color: theme.colorScheme.primary.withOpacity(0.1),
+                  color: theme.colorScheme.primary.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(16),
                 ),
                 child: Text(
@@ -199,9 +203,10 @@ class _UsageCard extends StatelessWidget {
           ClipRRect(
             borderRadius: BorderRadius.circular(999),
             child: LinearProgressIndicator(
-              value: usage == null
-                  ? 0
-                  : ((usage!.percentageUsed / 100).clamp(0, 1) as num).toDouble(),
+              value:
+                  usage == null
+                      ? 0
+                      : (usage!.percentageUsed / 100).clamp(0, 1).toDouble(),
               minHeight: 10,
             ),
           ),
@@ -210,9 +215,9 @@ class _UsageCard extends StatelessWidget {
             usage == null
                 ? 'Лимит не загружен'
                 : 'Осталось ${usage!.remaining} запросов',
-            style: AppTypography.bodyMedium(context).copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
+            style: AppTypography.bodyMedium(
+              context,
+            ).copyWith(color: theme.colorScheme.onSurfaceVariant),
           ),
         ],
       ),
@@ -240,20 +245,21 @@ class _QuickPromptsCard extends StatelessWidget {
         children: [
           Text(
             'Быстрый старт',
-            style: AppTypography.bodyLarge(context).copyWith(
-              fontWeight: FontWeight.w800,
-            ),
+            style: AppTypography.bodyLarge(
+              context,
+            ).copyWith(fontWeight: FontWeight.w800),
           ),
           const SizedBox(height: 10),
           Wrap(
             spacing: 8,
             runSpacing: 8,
-            children: _prompts.map((prompt) {
-              return ActionChip(
-                label: Text(prompt),
-                onPressed: () => onPromptTap(prompt),
-              );
-            }).toList(),
+            children:
+                _prompts.map((prompt) {
+                  return ActionChip(
+                    label: Text(prompt),
+                    onPressed: () => onPromptTap(prompt),
+                  );
+                }).toList(),
           ),
         ],
       ),
@@ -262,10 +268,7 @@ class _QuickPromptsCard extends StatelessWidget {
 }
 
 class _ConversationCard extends StatelessWidget {
-  const _ConversationCard({
-    required this.conversation,
-    required this.onOpen,
-  });
+  const _ConversationCard({required this.conversation, required this.onOpen});
 
   final AiConversationModel conversation;
   final VoidCallback onOpen;
@@ -282,7 +285,7 @@ class _ConversationCard extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: theme.colorScheme.primary.withOpacity(0.1),
+              color: theme.colorScheme.primary.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Icon(
@@ -299,25 +302,25 @@ class _ConversationCard extends StatelessWidget {
                   conversation.title.isEmpty
                       ? 'Диалог #${conversation.id}'
                       : conversation.title,
-                  style: AppTypography.bodyLarge(context).copyWith(
-                    fontWeight: FontWeight.w800,
-                  ),
+                  style: AppTypography.bodyLarge(
+                    context,
+                  ).copyWith(fontWeight: FontWeight.w800),
                 ),
                 const SizedBox(height: 4),
                 Text(
                   conversation.lastMessagePreview ?? 'Сообщений пока нет',
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: AppTypography.bodyMedium(context).copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
+                  style: AppTypography.bodyMedium(
+                    context,
+                  ).copyWith(color: theme.colorScheme.onSurfaceVariant),
                 ),
                 const SizedBox(height: 8),
                 Text(
                   '${conversation.messagesCount} сообщений • ${_formatDate(conversation.lastMessageAt ?? conversation.updatedAt)}',
-                  style: AppTypography.caption(context).copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
+                  style: AppTypography.caption(
+                    context,
+                  ).copyWith(color: theme.colorScheme.onSurfaceVariant),
                 ),
               ],
             ),

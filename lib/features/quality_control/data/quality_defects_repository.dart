@@ -5,7 +5,9 @@ import '../../../core/network/api_exception.dart';
 import '../../../core/network/dio_client.dart';
 import 'quality_defect_model.dart';
 
-final qualityDefectsRepositoryProvider = Provider<QualityDefectsRepository>((ref) {
+final qualityDefectsRepositoryProvider = Provider<QualityDefectsRepository>((
+  ref,
+) {
   return QualityDefectsRepository(ref.read(dioProvider));
 });
 
@@ -92,9 +94,13 @@ class QualityDefectsRepository {
 
   Future<QualityDefectModel> startDefect(int id, {String? comment}) async {
     try {
-      final response = await _dio.post('/quality-control/defects/$id/start', data: {
-        if (comment != null && comment.trim().isNotEmpty) 'comment': comment.trim(),
-      });
+      final response = await _dio.post(
+        '/quality-control/defects/$id/start',
+        data: {
+          if (comment != null && comment.trim().isNotEmpty)
+            'comment': comment.trim(),
+        },
+      );
       return QualityDefectModel.fromJson(response.data['data']);
     } on DioException catch (error) {
       throw ApiException.fromDio(
@@ -108,9 +114,13 @@ class QualityDefectsRepository {
 
   Future<QualityDefectModel> resolveDefect(int id, {String? comment}) async {
     try {
-      final response = await _dio.post('/quality-control/defects/$id/resolve', data: {
-        if (comment != null && comment.trim().isNotEmpty) 'comment': comment.trim(),
-      });
+      final response = await _dio.post(
+        '/quality-control/defects/$id/resolve',
+        data: {
+          if (comment != null && comment.trim().isNotEmpty)
+            'comment': comment.trim(),
+        },
+      );
       return QualityDefectModel.fromJson(response.data['data']);
     } on DioException catch (error) {
       throw ApiException.fromDio(

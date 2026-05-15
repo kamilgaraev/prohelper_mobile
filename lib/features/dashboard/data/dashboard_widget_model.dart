@@ -43,9 +43,10 @@ class DashboardWidgetModel {
   factory DashboardWidgetModel.fromJson(Map<String, dynamic> json) {
     final type = DashboardWidgetType.fromValue(json['type'] as String?);
     final rawPayload = json['payload'];
-    final payload = rawPayload is Map<String, dynamic>
-        ? rawPayload
-        : rawPayload is Map
+    final payload =
+        rawPayload is Map<String, dynamic>
+            ? rawPayload
+            : rawPayload is Map
             ? rawPayload.map((key, value) => MapEntry(key.toString(), value))
             : const <String, dynamic>{};
 

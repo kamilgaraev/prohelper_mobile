@@ -16,99 +16,97 @@ class _FakeSiteRequestsRepository extends SiteRequestsRepository {
   }
 }
 
-final _request = SiteRequestModel()
-  ..serverId = 1001
-  ..title = 'Срочно нужен бетон'
-  ..description = 'Нужно закрыть подачу бетона до конца смены.'
-  ..notes = 'Подтвердить время поставки до 14:00.'
-  ..status = 'draft'
-  ..statusLabel = 'Черновик'
-  ..priority = 'urgent'
-  ..priorityLabel = 'Срочно'
-  ..requestType = 'material_request'
-  ..requestTypeLabel = 'Материалы'
-  ..materialName = 'Бетон М300'
-  ..materialQuantity = 12
-  ..materialUnit = 'м3'
-  ..projectId = 15
-  ..projectName = 'Дом 300м Царево'
-  ..canBeEdited = true
-  ..userName = 'Иван Петров'
-  ..assignedUserName = 'Снабжение'
-  ..requiredDate = '2026-03-15'
-  ..groupTitle = 'Материалы на фундамент'
-  ..groupRequestCount = 2
-  ..groupItems = const [
-    SiteRequestGroupItem(
-      id: 1001,
-      title: 'Бетон М300',
-      status: 'draft',
-      statusLabel: 'Черновик',
-      requestType: 'material_request',
-      requestTypeLabel: 'Материалы',
-      materialName: 'Бетон М300',
-      materialQuantity: 12,
-      materialUnit: 'м3',
-      assignedUserName: 'Снабжение',
-      isCurrent: true,
-    ),
-    SiteRequestGroupItem(
-      id: 1002,
-      title: 'Арматура А500',
-      status: 'pending',
-      statusLabel: 'На согласовании',
-      requestType: 'material_request',
-      requestTypeLabel: 'Материалы',
-      materialName: 'Арматура А500',
-      materialQuantity: 2,
-      materialUnit: 'т',
-    ),
-  ]
-  ..history = const [
-    SiteRequestHistoryEntry(
-      id: 1,
-      action: 'created',
-      actionLabel: 'Создана',
-      userName: 'Иван Петров',
-    ),
-    SiteRequestHistoryEntry(
-      id: 2,
-      action: 'status_changed',
-      actionLabel: 'Статус изменен',
-      userName: 'Руководитель проекта',
-      oldStatusLabel: 'Черновик',
-      newStatusLabel: 'На согласовании',
-      notes: 'Нужно ускорить поставку.',
-    ),
-  ]
-  ..availableTransitions = const [
-    SiteRequestTransition(status: 'pending'),
-    SiteRequestTransition(status: 'cancelled'),
-  ]
-  ..createdAt = DateTime(2026, 3, 14);
+final _request =
+    SiteRequestModel()
+      ..serverId = 1001
+      ..title = 'Срочно нужен бетон'
+      ..description = 'Нужно закрыть подачу бетона до конца смены.'
+      ..notes = 'Подтвердить время поставки до 14:00.'
+      ..status = 'draft'
+      ..statusLabel = 'Черновик'
+      ..priority = 'urgent'
+      ..priorityLabel = 'Срочно'
+      ..requestType = 'material_request'
+      ..requestTypeLabel = 'Материалы'
+      ..materialName = 'Бетон М300'
+      ..materialQuantity = 12
+      ..materialUnit = 'м3'
+      ..projectId = 15
+      ..projectName = 'Дом 300м Царево'
+      ..canBeEdited = true
+      ..userName = 'Иван Петров'
+      ..assignedUserName = 'Снабжение'
+      ..requiredDate = '2026-03-15'
+      ..groupTitle = 'Материалы на фундамент'
+      ..groupRequestCount = 2
+      ..groupItems = const [
+        SiteRequestGroupItem(
+          id: 1001,
+          title: 'Бетон М300',
+          status: 'draft',
+          statusLabel: 'Черновик',
+          requestType: 'material_request',
+          requestTypeLabel: 'Материалы',
+          materialName: 'Бетон М300',
+          materialQuantity: 12,
+          materialUnit: 'м3',
+          assignedUserName: 'Снабжение',
+          isCurrent: true,
+        ),
+        SiteRequestGroupItem(
+          id: 1002,
+          title: 'Арматура А500',
+          status: 'pending',
+          statusLabel: 'На согласовании',
+          requestType: 'material_request',
+          requestTypeLabel: 'Материалы',
+          materialName: 'Арматура А500',
+          materialQuantity: 2,
+          materialUnit: 'т',
+        ),
+      ]
+      ..history = const [
+        SiteRequestHistoryEntry(
+          id: 1,
+          action: 'created',
+          actionLabel: 'Создана',
+          userName: 'Иван Петров',
+        ),
+        SiteRequestHistoryEntry(
+          id: 2,
+          action: 'status_changed',
+          actionLabel: 'Статус изменен',
+          userName: 'Руководитель проекта',
+          oldStatusLabel: 'Черновик',
+          newStatusLabel: 'На согласовании',
+          notes: 'Нужно ускорить поставку.',
+        ),
+      ]
+      ..availableTransitions = const [
+        SiteRequestTransition(status: 'pending'),
+        SiteRequestTransition(status: 'cancelled'),
+      ]
+      ..createdAt = DateTime(2026, 3, 14);
 
 void main() {
   Widget createWidget() {
     return ProviderScope(
       overrides: [
         siteRequestDetailProvider.overrideWith(
-          (ref, id) => SiteRequestDetailNotifier(
-            _FakeSiteRequestsRepository(),
-            ref,
-            id,
-          ),
+          (ref, id) =>
+              SiteRequestDetailNotifier(_FakeSiteRequestsRepository(), ref, id),
         ),
       ],
       child: const TickerMode(
         enabled: false,
-        child: MaterialApp(
-          home: SiteRequestDetailScreen(id: 1001),
-        ),
+        child: MaterialApp(home: SiteRequestDetailScreen(id: 1001)),
       ),
     );
   }
 
-  testWidgets('показывает ключевой контекст, группу и историю по заявке', (tester) async {
+  testWidgets('показывает ключевой контекст, группу и историю по заявке', (
+    tester,
+  ) async {
     await tester.pumpWidget(createWidget());
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));

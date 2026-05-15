@@ -7,10 +7,7 @@ import '../data/construction_journal_models.dart';
 import '../data/construction_journal_repository.dart';
 
 class JournalFormScreen extends ConsumerStatefulWidget {
-  const JournalFormScreen({
-    super.key,
-    this.initialJournal,
-  });
+  const JournalFormScreen({super.key, this.initialJournal});
 
   final ConstructionJournalModel? initialJournal;
 
@@ -29,9 +26,15 @@ class _JournalFormScreenState extends ConsumerState<JournalFormScreen> {
   @override
   void initState() {
     super.initState();
-    _nameController = TextEditingController(text: widget.initialJournal?.name ?? '');
-    _numberController = TextEditingController(text: widget.initialJournal?.journalNumber ?? '');
-    _startDate = DateTime.tryParse(widget.initialJournal?.startDate ?? '') ?? DateTime.now();
+    _nameController = TextEditingController(
+      text: widget.initialJournal?.name ?? '',
+    );
+    _numberController = TextEditingController(
+      text: widget.initialJournal?.journalNumber ?? '',
+    );
+    _startDate =
+        DateTime.tryParse(widget.initialJournal?.startDate ?? '') ??
+        DateTime.now();
   }
 
   @override
@@ -100,7 +103,8 @@ class _JournalFormScreenState extends ConsumerState<JournalFormScreen> {
           ),
           const SizedBox(height: 24),
           ElevatedButton(
-            onPressed: _isSaving ? null : () => _save(selectedProject?.serverId),
+            onPressed:
+                _isSaving ? null : () => _save(selectedProject?.serverId),
             child: Text(_isEdit ? 'Сохранить' : 'Создать'),
           ),
         ],
@@ -146,9 +150,9 @@ class _JournalFormScreenState extends ConsumerState<JournalFormScreen> {
         return;
       }
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(error.toString())),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.toString())));
     } finally {
       if (mounted) {
         setState(() {

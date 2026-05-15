@@ -35,8 +35,8 @@ class ApiException implements Exception {
     final message = switch (error.type) {
       DioExceptionType.connectionTimeout ||
       DioExceptionType.sendTimeout ||
-      DioExceptionType.receiveTimeout =>
-        'Сервер не ответил вовремя. Попробуйте еще раз.',
+      DioExceptionType
+          .receiveTimeout => 'Сервер не ответил вовремя. Попробуйте еще раз.',
       DioExceptionType.connectionError =>
         'Нет соединения с сервером. Проверьте интернет.',
       DioExceptionType.badCertificate =>
@@ -123,10 +123,8 @@ class ApiException implements Exception {
         'Диалог не найден или недоступен.',
       'ai_assistant.load_conversations_failed' =>
         'Не удалось загрузить список диалогов.',
-      'ai_assistant.load_conversation_failed' =>
-        'Не удалось загрузить диалог.',
-      'ai_assistant.delete_conversation_failed' =>
-        'Не удалось удалить диалог.',
+      'ai_assistant.load_conversation_failed' => 'Не удалось загрузить диалог.',
+      'ai_assistant.delete_conversation_failed' => 'Не удалось удалить диалог.',
       'ai_assistant.usage_failed' =>
         'Не удалось получить статистику использования AI-ассистента.',
       _ => _fallbackByStatus(statusCode, fallbackMessage),

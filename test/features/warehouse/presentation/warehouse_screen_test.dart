@@ -63,23 +63,24 @@ class _FakeWarehouseRepository extends WarehouseRepository {
       movementTypeLabel: 'Приход',
       quantity: payload.quantity,
       price: payload.price,
-      photoGallery: payload.photos
-          .asMap()
-          .entries
-          .map(
-            (entry) => WarehousePhotoModel(
-              id: entry.key + 1,
-              url: 'https://example.com/${entry.key + 1}.jpg',
-            ),
-          )
-          .toList(),
+      photoGallery:
+          payload.photos
+              .asMap()
+              .entries
+              .map(
+                (entry) => WarehousePhotoModel(
+                  id: entry.key + 1,
+                  url: 'https://example.com/${entry.key + 1}.jpg',
+                ),
+              )
+              .toList(),
       materialName: 'Цемент М500',
     );
   }
 }
 
 class _FakeWarehouseNotifier extends WarehouseNotifier {
-  _FakeWarehouseNotifier(WarehouseRepository repository) : super(repository) {
+  _FakeWarehouseNotifier(super.repository) {
     state = const WarehouseState(isLoading: false, data: _summary, error: null);
   }
 
@@ -88,10 +89,7 @@ class _FakeWarehouseNotifier extends WarehouseNotifier {
 }
 
 class _FakeMediaPicker extends WarehouseMediaPicker {
-  _FakeMediaPicker({
-    this.cameraPath,
-    this.galleryPaths = const <String>[],
-  });
+  _FakeMediaPicker({this.cameraPath, this.galleryPaths = const <String>[]});
 
   final String? cameraPath;
   final List<String> galleryPaths;
@@ -147,7 +145,7 @@ void main() {
     await _pumpWarehouseScreen(
       tester,
       repository: _FakeWarehouseRepository(),
-      mediaPicker: _FakeMediaPicker(),
+      mediaPicker: _FakeMediaPicker(galleryPaths: const ['/tmp/gallery.jpg']),
     );
 
     expect(find.text('Склад'), findsOneWidget);
@@ -182,10 +180,7 @@ void main() {
     await tester.tap(find.text('Цемент М500').last);
     await tester.pumpAndSettle();
 
-    await _ensureVisible(
-      tester,
-      find.byIcon(Icons.camera_alt_outlined).last,
-    );
+    await _ensureVisible(tester, find.byIcon(Icons.camera_alt_outlined).last);
     await tester.tap(find.byIcon(Icons.camera_alt_outlined).last);
     await tester.pumpAndSettle();
 

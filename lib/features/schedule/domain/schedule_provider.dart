@@ -26,13 +26,16 @@ class ScheduleState {
   }) {
     return ScheduleState(
       isLoading: isLoading ?? this.isLoading,
-      overview: identical(overview, _scheduleSentinel)
-          ? this.overview
-          : overview as ScheduleOverviewModel?,
-      error: identical(error, _scheduleSentinel) ? this.error : error as String?,
-      projectId: identical(projectId, _scheduleSentinel)
-          ? this.projectId
-          : projectId as int?,
+      overview:
+          identical(overview, _scheduleSentinel)
+              ? this.overview
+              : overview as ScheduleOverviewModel?,
+      error:
+          identical(error, _scheduleSentinel) ? this.error : error as String?,
+      projectId:
+          identical(projectId, _scheduleSentinel)
+              ? this.projectId
+              : projectId as int?,
     );
   }
 }
@@ -53,40 +56,27 @@ class ScheduleNotifier extends StateNotifier<ScheduleState> {
       return;
     }
 
-    state = state.copyWith(
-      isLoading: true,
-      error: null,
-      projectId: projectId,
-    );
+    state = state.copyWith(isLoading: true, error: null, projectId: projectId);
 
     try {
       final overview = await _repository.fetchSchedules(projectId: projectId);
-      state = state.copyWith(
-        isLoading: false,
-        overview: overview,
-      );
+      state = state.copyWith(isLoading: false, overview: overview);
     } catch (error) {
-      state = state.copyWith(
-        isLoading: false,
-        error: error.toString(),
-      );
+      state = state.copyWith(isLoading: false, error: error.toString());
     }
   }
 }
 
-final scheduleProvider =
-    StateNotifierProvider<ScheduleNotifier, ScheduleState>((ref) {
-  return ScheduleNotifier(ref.read(scheduleRepositoryProvider));
-});
+final scheduleProvider = StateNotifierProvider<ScheduleNotifier, ScheduleState>(
+  (ref) {
+    return ScheduleNotifier(ref.read(scheduleRepositoryProvider));
+  },
+);
 
 const _scheduleDetailSentinel = Object();
 
 class ScheduleDetailState {
-  const ScheduleDetailState({
-    this.isLoading = false,
-    this.detail,
-    this.error,
-  });
+  const ScheduleDetailState({this.isLoading = false, this.detail, this.error});
 
   final bool isLoading;
   final ScheduleDetailsModel? detail;
@@ -99,16 +89,23 @@ class ScheduleDetailState {
   }) {
     return ScheduleDetailState(
       isLoading: isLoading ?? this.isLoading,
-      detail: identical(detail, _scheduleDetailSentinel)
-          ? this.detail
-          : detail as ScheduleDetailsModel?,
-      error: identical(error, _scheduleDetailSentinel) ? this.error : error as String?,
+      detail:
+          identical(detail, _scheduleDetailSentinel)
+              ? this.detail
+              : detail as ScheduleDetailsModel?,
+      error:
+          identical(error, _scheduleDetailSentinel)
+              ? this.error
+              : error as String?,
     );
   }
 }
 
 final scheduleDetailProvider = StateNotifierProvider.family<
-    ScheduleDetailNotifier, ScheduleDetailState, int>((ref, scheduleId) {
+  ScheduleDetailNotifier,
+  ScheduleDetailState,
+  int
+>((ref, scheduleId) {
   return ScheduleDetailNotifier(
     ref.read(scheduleRepositoryProvider),
     scheduleId,
@@ -117,7 +114,7 @@ final scheduleDetailProvider = StateNotifierProvider.family<
 
 class ScheduleDetailNotifier extends StateNotifier<ScheduleDetailState> {
   ScheduleDetailNotifier(this._repository, this._scheduleId)
-      : super(const ScheduleDetailState()) {
+    : super(const ScheduleDetailState()) {
     load();
   }
 
@@ -129,15 +126,9 @@ class ScheduleDetailNotifier extends StateNotifier<ScheduleDetailState> {
 
     try {
       final detail = await _repository.fetchScheduleDetails(_scheduleId);
-      state = state.copyWith(
-        isLoading: false,
-        detail: detail,
-      );
+      state = state.copyWith(isLoading: false, detail: detail);
     } catch (error) {
-      state = state.copyWith(
-        isLoading: false,
-        error: error.toString(),
-      );
+      state = state.copyWith(isLoading: false, error: error.toString());
     }
   }
 }
@@ -166,18 +157,20 @@ class DailyWorkPlansState {
     return DailyWorkPlansState(
       isLoading: isLoading ?? this.isLoading,
       plans: plans ?? this.plans,
-      error: identical(error, _dailyPlansSentinel) ? this.error : error as String?,
-      projectId: identical(projectId, _dailyPlansSentinel)
-          ? this.projectId
-          : projectId as int?,
+      error:
+          identical(error, _dailyPlansSentinel) ? this.error : error as String?,
+      projectId:
+          identical(projectId, _dailyPlansSentinel)
+              ? this.projectId
+              : projectId as int?,
     );
   }
 }
 
 final dailyWorkPlansProvider =
     StateNotifierProvider<DailyWorkPlansNotifier, DailyWorkPlansState>((ref) {
-  return DailyWorkPlansNotifier(ref.read(scheduleRepositoryProvider));
-});
+      return DailyWorkPlansNotifier(ref.read(scheduleRepositoryProvider));
+    });
 
 class DailyWorkPlansNotifier extends StateNotifier<DailyWorkPlansState> {
   DailyWorkPlansNotifier(this._repository) : super(const DailyWorkPlansState());
@@ -186,29 +179,17 @@ class DailyWorkPlansNotifier extends StateNotifier<DailyWorkPlansState> {
 
   Future<void> load({required int? projectId}) async {
     if (projectId == null) {
-      state = const DailyWorkPlansState(
-        error: 'Сначала выберите объект.',
-      );
+      state = const DailyWorkPlansState(error: 'Сначала выберите объект.');
       return;
     }
 
-    state = state.copyWith(
-      isLoading: true,
-      error: null,
-      projectId: projectId,
-    );
+    state = state.copyWith(isLoading: true, error: null, projectId: projectId);
 
     try {
       final plans = await _repository.fetchDailyWorkPlans(projectId: projectId);
-      state = state.copyWith(
-        isLoading: false,
-        plans: plans,
-      );
+      state = state.copyWith(isLoading: false, plans: plans);
     } catch (error) {
-      state = state.copyWith(
-        isLoading: false,
-        error: error.toString(),
-      );
+      state = state.copyWith(isLoading: false, error: error.toString());
     }
   }
 
@@ -222,24 +203,31 @@ class DailyWorkPlansNotifier extends StateNotifier<DailyWorkPlansState> {
     );
 
     state = state.copyWith(
-      plans: state.plans
-          .map(
-            (plan) => DailyWorkPlanModel(
-              id: plan.id,
-              projectId: plan.projectId,
-              scheduleId: plan.scheduleId,
-              lookaheadPlanId: plan.lookaheadPlanId,
-              scheduleName: plan.scheduleName,
-              workDate: plan.workDate,
-              status: plan.status,
-              statusLabel: plan.statusLabel,
-              availableActions: plan.availableActions,
-              assignments: plan.assignments
-                  .map((item) => item.id == updatedAssignment.id ? updatedAssignment : item)
-                  .toList(),
-            ),
-          )
-          .toList(),
+      plans:
+          state.plans
+              .map(
+                (plan) => DailyWorkPlanModel(
+                  id: plan.id,
+                  projectId: plan.projectId,
+                  scheduleId: plan.scheduleId,
+                  lookaheadPlanId: plan.lookaheadPlanId,
+                  scheduleName: plan.scheduleName,
+                  workDate: plan.workDate,
+                  status: plan.status,
+                  statusLabel: plan.statusLabel,
+                  availableActions: plan.availableActions,
+                  assignments:
+                      plan.assignments
+                          .map(
+                            (item) =>
+                                item.id == updatedAssignment.id
+                                    ? updatedAssignment
+                                    : item,
+                          )
+                          .toList(),
+                ),
+              )
+              .toList(),
     );
   }
 
@@ -263,9 +251,10 @@ class DailyWorkPlansNotifier extends StateNotifier<DailyWorkPlansState> {
     );
 
     state = state.copyWith(
-      plans: state.plans
-          .map((item) => item.id == updatedPlan.id ? updatedPlan : item)
-          .toList(),
+      plans:
+          state.plans
+              .map((item) => item.id == updatedPlan.id ? updatedPlan : item)
+              .toList(),
     );
   }
 }

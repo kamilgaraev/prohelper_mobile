@@ -50,19 +50,16 @@ class HandoverWorkflowSummary {
     return HandoverWorkflowSummary(
       status: json['status']?.toString() ?? '',
       availableActions: _asStringList(json['available_actions']),
-      problemFlags: _asMapList(json['problem_flags'])
-          .map(HandoverProblemFlag.fromJson)
-          .toList(),
+      problemFlags:
+          _asMapList(
+            json['problem_flags'],
+          ).map(HandoverProblemFlag.fromJson).toList(),
     );
   }
 }
 
 class HandoverLocation {
-  const HandoverLocation({
-    required this.id,
-    required this.name,
-    this.path,
-  });
+  const HandoverLocation({required this.id, required this.name, this.path});
 
   final int id;
   final String name;
@@ -149,9 +146,10 @@ class HandoverPackageModel {
   final String status;
   final List<HandoverPackageDocumentModel> documents;
 
-  int get approvedRequiredDocuments => documents
-      .where((document) => document.required && document.approved)
-      .length;
+  int get approvedRequiredDocuments =>
+      documents
+          .where((document) => document.required && document.approved)
+          .length;
 
   int get requiredDocuments =>
       documents.where((document) => document.required).length;
@@ -161,9 +159,10 @@ class HandoverPackageModel {
       id: _asInt(json['id']),
       title: json['title']?.toString() ?? '',
       status: json['status']?.toString() ?? '',
-      documents: _asMapList(json['documents'])
-          .map(HandoverPackageDocumentModel.fromJson)
-          .toList(),
+      documents:
+          _asMapList(
+            json['documents'],
+          ).map(HandoverPackageDocumentModel.fromJson).toList(),
     );
   }
 }
@@ -183,9 +182,10 @@ class AcceptanceSessionModel {
     return AcceptanceSessionModel(
       id: _asInt(json['id']),
       status: json['status']?.toString() ?? '',
-      findings: _asMapList(json['findings'])
-          .map(AcceptanceFindingModel.fromJson)
-          .toList(),
+      findings:
+          _asMapList(
+            json['findings'],
+          ).map(AcceptanceFindingModel.fromJson).toList(),
     );
   }
 }
@@ -233,21 +233,24 @@ class AcceptanceScopeModel {
       title: json['title']?.toString() ?? '',
       description: json['description']?.toString(),
       status: json['status']?.toString() ?? '',
-      workflowSummary: workflow.isEmpty
-          ? HandoverWorkflowSummary(
-              status: json['status']?.toString() ?? '',
-              availableActions: const [],
-              problemFlags: const [],
-            )
-          : HandoverWorkflowSummary.fromJson(workflow),
+      workflowSummary:
+          workflow.isEmpty
+              ? HandoverWorkflowSummary(
+                status: json['status']?.toString() ?? '',
+                availableActions: const [],
+                problemFlags: const [],
+              )
+              : HandoverWorkflowSummary.fromJson(workflow),
       project: project.isEmpty ? null : HandoverReference.fromJson(project),
       location: location.isEmpty ? null : HandoverLocation.fromJson(location),
-      sessions: _asMapList(json['sessions'])
-          .map(AcceptanceSessionModel.fromJson)
-          .toList(),
-      findings: _asMapList(json['findings'])
-          .map(AcceptanceFindingModel.fromJson)
-          .toList(),
+      sessions:
+          _asMapList(
+            json['sessions'],
+          ).map(AcceptanceSessionModel.fromJson).toList(),
+      findings:
+          _asMapList(
+            json['findings'],
+          ).map(AcceptanceFindingModel.fromJson).toList(),
       handoverPackage:
           package.isEmpty ? null : HandoverPackageModel.fromJson(package),
     );

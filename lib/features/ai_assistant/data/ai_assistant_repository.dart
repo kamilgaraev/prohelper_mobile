@@ -25,14 +25,12 @@ class AiAssistantRepository {
       final conversationsData = _unwrapData(responses[1].data);
 
       final usage = AiUsageModel.fromJson(_asMap(usageData));
-      final conversations = _asList(conversationsData)
-          .map((item) => AiConversationModel.fromJson(_asMap(item)))
-          .toList();
+      final conversations =
+          _asList(
+            conversationsData,
+          ).map((item) => AiConversationModel.fromJson(_asMap(item))).toList();
 
-      return AiAssistantHomeModel(
-        usage: usage,
-        conversations: conversations,
-      );
+      return AiAssistantHomeModel(usage: usage, conversations: conversations);
     } on DioException catch (error) {
       throw ApiException.fromDio(
         error,
@@ -52,11 +50,13 @@ class AiAssistantRepository {
       final response = await _dio.get('/ai-assistant/conversations/$id');
       final payload = _asMap(_unwrapData(response.data));
 
-      final conversation =
-          AiConversationModel.fromJson(_asMap(payload['conversation']));
-      final messages = _asList(payload['messages'])
-          .map((item) => AiMessageModel.fromJson(_asMap(item)))
-          .toList();
+      final conversation = AiConversationModel.fromJson(
+        _asMap(payload['conversation']),
+      );
+      final messages =
+          _asList(
+            payload['messages'],
+          ).map((item) => AiMessageModel.fromJson(_asMap(item))).toList();
 
       return AiConversationDetailsModel(
         conversation: conversation,

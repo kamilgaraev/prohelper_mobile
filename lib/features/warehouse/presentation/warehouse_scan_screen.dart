@@ -101,9 +101,8 @@ class _WarehouseScanScreenState extends ConsumerState<WarehouseScanScreen> {
                           width: double.infinity,
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
-                            color: theme.colorScheme.surfaceContainerHighest.withValues(
-                              alpha: 0.7,
-                            ),
+                            color: theme.colorScheme.surfaceContainerHighest
+                                .withValues(alpha: 0.7),
                             borderRadius: BorderRadius.circular(18),
                           ),
                           child: Column(
@@ -121,7 +120,8 @@ class _WarehouseScanScreenState extends ConsumerState<WarehouseScanScreen> {
                                 runSpacing: 8,
                                 children: [
                                   _ScanExampleChip(
-                                    icon: Icons.precision_manufacturing_outlined,
+                                    icon:
+                                        Icons.precision_manufacturing_outlined,
                                     label: 'Актив: AST-15-000123',
                                   ),
                                   _ScanExampleChip(
@@ -141,9 +141,8 @@ class _WarehouseScanScreenState extends ConsumerState<WarehouseScanScreen> {
                         Container(
                           padding: const EdgeInsets.all(14),
                           decoration: BoxDecoration(
-                            color: theme.colorScheme.primaryContainer.withValues(
-                              alpha: 0.45,
-                            ),
+                            color: theme.colorScheme.primaryContainer
+                                .withValues(alpha: 0.45),
                             borderRadius: BorderRadius.circular(18),
                           ),
                           child: Row(
@@ -179,8 +178,7 @@ class _WarehouseScanScreenState extends ConsumerState<WarehouseScanScreen> {
                         SizedBox(
                           width: double.infinity,
                           child: FilledButton.icon(
-                            onPressed:
-                                _isResolving ? null : _openCameraScanner,
+                            onPressed: _isResolving ? null : _openCameraScanner,
                             icon: const Icon(Icons.camera_alt_outlined),
                             label: const Text('Сканировать камерой'),
                           ),
@@ -207,9 +205,7 @@ class _WarehouseScanScreenState extends ConsumerState<WarehouseScanScreen> {
                           'Поддерживаются QR-коды и распространенные складские штрихкоды. После распознавания откроется результат сканирования и доступные действия.',
                           style: AppTypography.bodyMedium(
                             context,
-                          ).copyWith(
-                            color: theme.colorScheme.onSurfaceVariant,
-                          ),
+                          ).copyWith(color: theme.colorScheme.onSurfaceVariant),
                         ),
                         const SizedBox(height: 16),
                         SizedBox(
@@ -263,9 +259,7 @@ class _WarehouseScanScreenState extends ConsumerState<WarehouseScanScreen> {
 
   Future<void> _openCameraScanner() async {
     final scannedCode = await Navigator.of(context).push<String>(
-      MaterialPageRoute(
-        builder: (_) => const WarehouseCameraScannerScreen(),
-      ),
+      MaterialPageRoute(builder: (_) => const WarehouseCameraScannerScreen()),
     );
 
     if (!mounted || scannedCode == null || scannedCode.trim().isEmpty) {
@@ -280,9 +274,7 @@ class _WarehouseScanScreenState extends ConsumerState<WarehouseScanScreen> {
     final code = _codeController.text.trim();
 
     if (code.isEmpty) {
-      _showMessage(
-        'Сначала введите код в поле или отсканируйте его камерой.',
-      );
+      _showMessage('Сначала введите код в поле или отсканируйте его камерой.');
       return;
     }
 
@@ -295,13 +287,15 @@ class _WarehouseScanScreenState extends ConsumerState<WarehouseScanScreen> {
     });
 
     try {
-      final result = await ref.read(warehouseRepositoryProvider).resolveScan(
-        WarehouseScanPayload(
-          code: code,
-          warehouseId: _selectedWarehouseId,
-          scanContext: 'warehouse_scan_flow',
-        ),
-      );
+      final result = await ref
+          .read(warehouseRepositoryProvider)
+          .resolveScan(
+            WarehouseScanPayload(
+              code: code,
+              warehouseId: _selectedWarehouseId,
+              scanContext: 'warehouse_scan_flow',
+            ),
+          );
 
       if (!mounted) {
         return;
@@ -329,19 +323,14 @@ class _WarehouseScanScreenState extends ConsumerState<WarehouseScanScreen> {
   }
 
   void _showMessage(String message) {
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(
+    ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message.replaceFirst('ApiException: ', ''))),
     );
   }
 }
 
 class _ScanExampleChip extends StatelessWidget {
-  const _ScanExampleChip({
-    required this.icon,
-    required this.label,
-  });
+  const _ScanExampleChip({required this.icon, required this.label});
 
   final IconData icon;
   final String label;
@@ -351,7 +340,9 @@ class _ScanExampleChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.45),
+        color: Theme.of(
+          context,
+        ).colorScheme.primaryContainer.withValues(alpha: 0.45),
         borderRadius: BorderRadius.circular(999),
       ),
       child: Row(

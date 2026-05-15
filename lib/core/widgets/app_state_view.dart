@@ -30,7 +30,9 @@ class AppStateView extends StatelessWidget {
             Icon(
               icon,
               size: 64,
-              color: iconColor ?? theme.colorScheme.onSurfaceVariant.withOpacity(0.7),
+              color:
+                  iconColor ??
+                  theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
             ),
             const SizedBox(height: 16),
             Text(
@@ -42,16 +44,13 @@ class AppStateView extends StatelessWidget {
               const SizedBox(height: 8),
               Text(
                 description!,
-                style: AppTypography.bodyMedium(context).copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
+                style: AppTypography.bodyMedium(
+                  context,
+                ).copyWith(color: theme.colorScheme.onSurfaceVariant),
                 textAlign: TextAlign.center,
               ),
             ],
-            if (action != null) ...[
-              const SizedBox(height: 24),
-              action!,
-            ],
+            if (action != null) ...[const SizedBox(height: 24), action!],
           ],
         ),
       ),

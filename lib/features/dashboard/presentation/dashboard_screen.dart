@@ -34,8 +34,12 @@ class DashboardScreen extends ConsumerWidget {
     final activeModules = ref.watch(activeModulesProvider);
     final hasAiAssistant = activeModules.contains(AppModule.aiAssistant);
     final hasQualityControl = activeModules.contains(AppModule.qualityControl);
-    final hasSafetyManagement = activeModules.contains(AppModule.safetyManagement);
-    final hasHandoverAcceptance = activeModules.contains(AppModule.handoverAcceptance);
+    final hasSafetyManagement = activeModules.contains(
+      AppModule.safetyManagement,
+    );
+    final hasHandoverAcceptance = activeModules.contains(
+      AppModule.handoverAcceptance,
+    );
 
     return Scaffold(
       body: Stack(
@@ -481,7 +485,8 @@ class DashboardScreen extends ConsumerWidget {
     return _buildModuleActionCard(
       context: context,
       title: 'Контроль качества',
-      subtitle: 'Фиксация замечаний, работа ответственных и передача результата на приемку.',
+      subtitle:
+          'Фиксация замечаний, работа ответственных и передача результата на приемку.',
       icon: Icons.fact_check_rounded,
       color: AppColors.warning,
       badge: 'QC',
@@ -496,14 +501,15 @@ class DashboardScreen extends ConsumerWidget {
     return _buildModuleActionCard(
       context: context,
       title: 'Охрана труда',
-      subtitle: 'Активные наряды-допуски, происшествия и нарушения по выбранному объекту.',
+      subtitle:
+          'Активные наряды-допуски, происшествия и нарушения по выбранному объекту.',
       icon: Icons.health_and_safety_rounded,
       color: AppColors.error,
       badge: 'HSE',
       onTap:
-          (_) => Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => const SafetyScreen()),
-          ),
+          (_) => Navigator.of(
+            context,
+          ).push(MaterialPageRoute(builder: (_) => const SafetyScreen())),
     );
   }
 
@@ -511,7 +517,8 @@ class DashboardScreen extends ConsumerWidget {
     return _buildModuleActionCard(
       context: context,
       title: 'Приемка зон',
-      subtitle: 'Punch-list, документы и повторная проверка готовых зон перед передачей заказчику.',
+      subtitle:
+          'Punch-list, документы и повторная проверка готовых зон перед передачей заказчику.',
       icon: Icons.assignment_turned_in_rounded,
       color: AppColors.success,
       badge: 'HA',

@@ -10,11 +10,7 @@ void main() {
       'description': 'Чистовая приемка',
       'status': 'findings_open',
       'project': {'id': 9, 'name': 'ЖК Север'},
-      'location': {
-        'id': 7,
-        'name': 'Этаж 2',
-        'path': 'Секция А / этаж 2',
-      },
+      'location': {'id': 7, 'name': 'Этаж 2', 'path': 'Секция А / этаж 2'},
       'workflow_summary': {
         'status': 'findings_open',
         'available_actions': ['resolve_findings', 'ready_for_reinspection'],
@@ -76,7 +72,10 @@ void main() {
 
     expect(scope.project?.name, 'ЖК Север');
     expect(scope.locationLabel, 'Секция А / этаж 2');
-    expect(scope.workflowSummary.availableActions, contains('ready_for_reinspection'));
+    expect(
+      scope.workflowSummary.availableActions,
+      contains('ready_for_reinspection'),
+    );
     expect(scope.workflowSummary.problemFlags.single.count, 1);
     expect(scope.sessions.single.findings.single.qualityDefectId, 55);
     expect(scope.openFindings, 1);

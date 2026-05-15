@@ -15,39 +15,38 @@ class ScheduleOverviewModel {
     final schedulesJson = json['schedules'];
 
     return ScheduleOverviewModel(
-      project: projectJson is Map<String, dynamic>
-          ? ScheduleProjectModel.fromJson(projectJson)
-          : projectJson is Map
+      project:
+          projectJson is Map<String, dynamic>
+              ? ScheduleProjectModel.fromJson(projectJson)
+              : projectJson is Map
               ? ScheduleProjectModel.fromJson(
-                  projectJson.map(
-                    (key, value) => MapEntry(key.toString(), value),
-                  ),
-                )
+                projectJson.map(
+                  (key, value) => MapEntry(key.toString(), value),
+                ),
+              )
               : null,
       summary: ScheduleOverviewSummaryModel.fromJson(
         summaryJson is Map<String, dynamic>
             ? summaryJson
             : summaryJson is Map
-                ? summaryJson.map((key, value) => MapEntry(key.toString(), value))
-                : const {},
+            ? summaryJson.map((key, value) => MapEntry(key.toString(), value))
+            : const {},
       ),
-      schedules: (schedulesJson as List<dynamic>? ?? const [])
-          .whereType<Map>()
-          .map(
-            (schedule) => ScheduleItemModel.fromJson(
-              schedule.map((key, value) => MapEntry(key.toString(), value)),
-            ),
-          )
-          .toList(),
+      schedules:
+          (schedulesJson as List<dynamic>? ?? const [])
+              .whereType<Map>()
+              .map(
+                (schedule) => ScheduleItemModel.fromJson(
+                  schedule.map((key, value) => MapEntry(key.toString(), value)),
+                ),
+              )
+              .toList(),
     );
   }
 }
 
 class ScheduleProjectModel {
-  const ScheduleProjectModel({
-    required this.id,
-    required this.name,
-  });
+  const ScheduleProjectModel({required this.id, required this.name});
 
   final int id;
   final String name;
@@ -149,7 +148,8 @@ class ScheduleItemModel {
       plannedDurationDays: json['planned_duration_days'] as int?,
       actualStartDate: json['actual_start_date'] as String?,
       actualEndDate: json['actual_end_date'] as String?,
-      criticalPathCalculated: json['critical_path_calculated'] as bool? ?? false,
+      criticalPathCalculated:
+          json['critical_path_calculated'] as bool? ?? false,
       criticalPathDurationDays: json['critical_path_duration_days'] as int?,
       tasksCount: _parseInt(json['tasks_count']),
       completedTasksCount: _parseInt(json['completed_tasks_count']),
@@ -180,37 +180,39 @@ class ScheduleDetailsModel {
     final tasksJson = json['tasks'];
 
     return ScheduleDetailsModel(
-      project: projectJson is Map<String, dynamic>
-          ? ScheduleProjectModel.fromJson(projectJson)
-          : projectJson is Map
+      project:
+          projectJson is Map<String, dynamic>
+              ? ScheduleProjectModel.fromJson(projectJson)
+              : projectJson is Map
               ? ScheduleProjectModel.fromJson(
-                  projectJson.map(
-                    (key, value) => MapEntry(key.toString(), value),
-                  ),
-                )
+                projectJson.map(
+                  (key, value) => MapEntry(key.toString(), value),
+                ),
+              )
               : null,
       schedule: ScheduleItemModel.fromJson(
         scheduleJson is Map<String, dynamic>
             ? scheduleJson
             : scheduleJson is Map
-                ? scheduleJson.map((key, value) => MapEntry(key.toString(), value))
-                : const {},
+            ? scheduleJson.map((key, value) => MapEntry(key.toString(), value))
+            : const {},
       ),
       summary: ScheduleDetailsSummaryModel.fromJson(
         summaryJson is Map<String, dynamic>
             ? summaryJson
             : summaryJson is Map
-                ? summaryJson.map((key, value) => MapEntry(key.toString(), value))
-                : const {},
+            ? summaryJson.map((key, value) => MapEntry(key.toString(), value))
+            : const {},
       ),
-      tasks: (tasksJson as List<dynamic>? ?? const [])
-          .whereType<Map>()
-          .map(
-            (task) => ScheduleTaskModel.fromJson(
-              task.map((key, value) => MapEntry(key.toString(), value)),
-            ),
-          )
-          .toList(),
+      tasks:
+          (tasksJson as List<dynamic>? ?? const [])
+              .whereType<Map>()
+              .map(
+                (task) => ScheduleTaskModel.fromJson(
+                  task.map((key, value) => MapEntry(key.toString(), value)),
+                ),
+              )
+              .toList(),
     );
   }
 }
@@ -305,10 +307,12 @@ class ScheduleTaskModel {
       plannedDurationDays: json['planned_duration_days'] as int?,
       actualStartDate: json['actual_start_date'] as String?,
       actualEndDate: json['actual_end_date'] as String?,
-      quantity: json['quantity'] != null ? _parseDouble(json['quantity']) : null,
-      completedQuantity: json['completed_quantity'] != null
-          ? _parseDouble(json['completed_quantity'])
-          : null,
+      quantity:
+          json['quantity'] != null ? _parseDouble(json['quantity']) : null,
+      completedQuantity:
+          json['completed_quantity'] != null
+              ? _parseDouble(json['completed_quantity'])
+              : null,
       measurementUnit: json['measurement_unit'] as String?,
     );
   }
@@ -348,18 +352,22 @@ class DailyWorkPlanModel {
       scheduleName: json['schedule_name'] as String?,
       workDate: json['work_date'] as String?,
       status: json['status'] as String? ?? '',
-      statusLabel: (json['status_label'] as String?) ?? (json['status'] as String?) ?? '',
-      availableActions: (json['available_actions'] as List<dynamic>? ?? const [])
-          .map((action) => action.toString())
-          .toList(),
-      assignments: (json['assignments'] as List<dynamic>? ?? const [])
-          .whereType<Map>()
-          .map(
-            (assignment) => DailyWorkPlanAssignmentModel.fromJson(
-              assignment.map((key, value) => MapEntry(key.toString(), value)),
-            ),
-          )
-          .toList(),
+      statusLabel:
+          (json['status_label'] as String?) ??
+          (json['status'] as String?) ??
+          '',
+      availableActions: _parseActions(json['available_actions']),
+      assignments:
+          (json['assignments'] as List<dynamic>? ?? const [])
+              .whereType<Map>()
+              .map(
+                (assignment) => DailyWorkPlanAssignmentModel.fromJson(
+                  assignment.map(
+                    (key, value) => MapEntry(key.toString(), value),
+                  ),
+                ),
+              )
+              .toList(),
     );
   }
 }
@@ -407,35 +415,42 @@ class DailyWorkPlanAssignmentModel {
       dailyWorkPlanId: _parseInt(json['daily_work_plan_id']),
       lookaheadPlanTaskId: _parseInt(json['lookahead_plan_task_id']),
       scheduleTaskId: _parseInt(json['schedule_task_id']),
-      journalEntryId: json['journal_entry_id'] == null
-          ? null
-          : _parseInt(json['journal_entry_id']),
+      journalEntryId:
+          json['journal_entry_id'] == null
+              ? null
+              : _parseInt(json['journal_entry_id']),
       status: json['status'] as String? ?? '',
-      plannedQuantity: json['planned_quantity'] == null
-          ? null
-          : _parseDouble(json['planned_quantity']),
-      completedQuantity: json['completed_quantity'] == null
-          ? null
-          : _parseDouble(json['completed_quantity']),
-      plannedWorkHours: json['planned_work_hours'] == null
-          ? null
-          : _parseDouble(json['planned_work_hours']),
-      actualWorkHours: json['actual_work_hours'] == null
-          ? null
-          : _parseDouble(json['actual_work_hours']),
+      plannedQuantity:
+          json['planned_quantity'] == null
+              ? null
+              : _parseDouble(json['planned_quantity']),
+      completedQuantity:
+          json['completed_quantity'] == null
+              ? null
+              : _parseDouble(json['completed_quantity']),
+      plannedWorkHours:
+          json['planned_work_hours'] == null
+              ? null
+              : _parseDouble(json['planned_work_hours']),
+      actualWorkHours:
+          json['actual_work_hours'] == null
+              ? null
+              : _parseDouble(json['actual_work_hours']),
       failureReason: json['failure_reason'] as String?,
       factComment: json['fact_comment'] as String?,
-      scheduleTaskName: scheduleTask is Map
-          ? scheduleTask['name'] as String?
-          : null,
-      constraints: (json['constraints'] as List<dynamic>? ?? const [])
-          .whereType<Map>()
-          .map(
-            (constraint) => DailyWorkConstraintModel.fromJson(
-              constraint.map((key, value) => MapEntry(key.toString(), value)),
-            ),
-          )
-          .toList(),
+      scheduleTaskName:
+          scheduleTask is Map ? scheduleTask['name'] as String? : null,
+      constraints:
+          (json['constraints'] as List<dynamic>? ?? const [])
+              .whereType<Map>()
+              .map(
+                (constraint) => DailyWorkConstraintModel.fromJson(
+                  constraint.map(
+                    (key, value) => MapEntry(key.toString(), value),
+                  ),
+                ),
+              )
+              .toList(),
       linkedBlockingEntities:
           (json['linked_blocking_entities'] as List<dynamic>? ?? const [])
               .whereType<Map>()
@@ -475,14 +490,15 @@ class DailyWorkConstraintModel {
   factory DailyWorkConstraintModel.fromJson(Map<String, dynamic> json) {
     final linkedActionJson = json['linked_action'];
     final linkedEntityJson = json['linked_entity'];
-    final linkedAction = linkedActionJson is Map<String, dynamic>
-        ? DailyWorkLinkedEntityModel.fromJson(linkedActionJson)
-        : linkedActionJson is Map
+    final linkedAction =
+        linkedActionJson is Map<String, dynamic>
+            ? DailyWorkLinkedEntityModel.fromJson(linkedActionJson)
+            : linkedActionJson is Map
             ? DailyWorkLinkedEntityModel.fromJson(
-                linkedActionJson.map(
-                  (key, value) => MapEntry(key.toString(), value),
-                ),
-              )
+              linkedActionJson.map(
+                (key, value) => MapEntry(key.toString(), value),
+              ),
+            )
             : null;
 
     return DailyWorkConstraintModel(
@@ -491,18 +507,17 @@ class DailyWorkConstraintModel {
       constraintType: json['constraint_type'] as String? ?? '',
       severity: json['severity'] as String? ?? '',
       status: json['status'] as String? ?? '',
-      availableActions: (json['available_actions'] as List<dynamic>? ?? const [])
-          .map((action) => action.toString())
-          .toList(),
+      availableActions: _parseActions(json['available_actions']),
       linkedAction: linkedAction,
-      linkedEntity: linkedEntityJson is Map<String, dynamic>
-          ? DailyWorkLinkedEntityModel.fromJson(linkedEntityJson)
-          : linkedEntityJson is Map
+      linkedEntity:
+          linkedEntityJson is Map<String, dynamic>
+              ? DailyWorkLinkedEntityModel.fromJson(linkedEntityJson)
+              : linkedEntityJson is Map
               ? DailyWorkLinkedEntityModel.fromJson(
-                  linkedEntityJson.map(
-                    (key, value) => MapEntry(key.toString(), value),
-                  ),
-                )
+                linkedEntityJson.map(
+                  (key, value) => MapEntry(key.toString(), value),
+                ),
+              )
               : linkedAction,
       dueDate: json['due_date'] as String?,
     );
@@ -524,9 +539,10 @@ class DailyWorkLinkedEntityModel {
     return DailyWorkLinkedEntityModel(
       type: json['type'] as String? ?? '',
       id: _parseInt(json['id']),
-      constraintId: json['constraint_id'] == null
-          ? null
-          : _parseInt(json['constraint_id']),
+      constraintId:
+          json['constraint_id'] == null
+              ? null
+              : _parseInt(json['constraint_id']),
     );
   }
 }
@@ -553,4 +569,20 @@ double _parseDouble(dynamic value) {
   }
 
   return double.tryParse(value?.toString() ?? '') ?? 0;
+}
+
+List<String> _parseActions(dynamic value) {
+  return (value as List<dynamic>? ?? const [])
+      .map((action) {
+        if (action is Map) {
+          return action['key']?.toString() ??
+              action['action']?.toString() ??
+              action['name']?.toString() ??
+              '';
+        }
+
+        return action.toString();
+      })
+      .where((action) => action.isNotEmpty)
+      .toList();
 }

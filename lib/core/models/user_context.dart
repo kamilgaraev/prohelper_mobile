@@ -1,7 +1,4 @@
-enum UserContext {
-  field,
-  office,
-}
+enum UserContext { field, office }
 
 extension UserContextX on UserContext {
   static UserContext fromSlug(String slug) {

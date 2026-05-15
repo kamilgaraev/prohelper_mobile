@@ -46,9 +46,14 @@ class SiteRequestsState {
       requests: requests ?? this.requests,
       currentPage: currentPage ?? this.currentPage,
       hasMore: hasMore ?? this.hasMore,
-      error: identical(error, _siteRequestsSentinel) ? this.error : error as String?,
-      statusFilter: clearStatusFilter ? null : (statusFilter ?? this.statusFilter),
-      projectFilter: clearProjectFilter ? null : (projectFilter ?? this.projectFilter),
+      error:
+          identical(error, _siteRequestsSentinel)
+              ? this.error
+              : error as String?,
+      statusFilter:
+          clearStatusFilter ? null : (statusFilter ?? this.statusFilter),
+      projectFilter:
+          clearProjectFilter ? null : (projectFilter ?? this.projectFilter),
       scope: scope ?? this.scope,
     );
   }
@@ -56,13 +61,13 @@ class SiteRequestsState {
 
 final siteRequestsProvider =
     StateNotifierProvider<SiteRequestsNotifier, SiteRequestsState>((ref) {
-  ref.watch(authProvider);
-  final selectedProject = ref.watch(projectsProvider).selectedProject;
-  return SiteRequestsNotifier(
-    ref.read(siteRequestsRepositoryProvider),
-    initialProjectId: selectedProject?.serverId,
-  );
-});
+      ref.watch(authProvider);
+      final selectedProject = ref.watch(projectsProvider).selectedProject;
+      return SiteRequestsNotifier(
+        ref.read(siteRequestsRepositoryProvider),
+        initialProjectId: selectedProject?.serverId,
+      );
+    });
 
 class SiteRequestsNotifier extends StateNotifier<SiteRequestsState> {
   SiteRequestsNotifier(
@@ -70,11 +75,11 @@ class SiteRequestsNotifier extends StateNotifier<SiteRequestsState> {
     int? initialProjectId,
     SiteRequestsScope initialScope = SiteRequestsScope.own,
   }) : super(
-          SiteRequestsState(
-            projectFilter: initialProjectId,
-            scope: initialScope,
-          ),
-        );
+         SiteRequestsState(
+           projectFilter: initialProjectId,
+           scope: initialScope,
+         ),
+       );
 
   final SiteRequestsRepository _repository;
 
@@ -172,7 +177,9 @@ class SiteRequestsNotifier extends StateNotifier<SiteRequestsState> {
       );
 
       final nextRequests = [...state.requests];
-      final index = nextRequests.indexWhere((request) => request.serverId == requestId);
+      final index = nextRequests.indexWhere(
+        (request) => request.serverId == requestId,
+      );
 
       if (index != -1) {
         if (state.scope == SiteRequestsScope.approvals &&

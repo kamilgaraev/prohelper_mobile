@@ -50,9 +50,9 @@ class SiteRequestCard extends StatelessWidget {
                     const SizedBox(height: 6),
                     Text(
                       _requestSubtitle(request),
-                      style: AppTypography.bodyMedium(context).copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
+                      style: AppTypography.bodyMedium(
+                        context,
+                      ).copyWith(color: theme.colorScheme.onSurfaceVariant),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -60,10 +60,7 @@ class SiteRequestCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 10),
-              _StatusBadge(
-                label: _statusLabel(request),
-                color: statusColor,
-              ),
+              _StatusBadge(label: _statusLabel(request), color: statusColor),
             ],
           ),
           const SizedBox(height: 12),
@@ -103,23 +100,22 @@ class SiteRequestCard extends StatelessWidget {
               width: double.infinity,
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               decoration: BoxDecoration(
-                color: priorityColor.withOpacity(0.08),
+                color: priorityColor.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(14),
               ),
               child: Text(
                 _attentionText(request),
-                style: AppTypography.bodyMedium(context).copyWith(
-                  color: priorityColor,
-                  fontWeight: FontWeight.w700,
-                ),
+                style: AppTypography.bodyMedium(
+                  context,
+                ).copyWith(color: priorityColor, fontWeight: FontWeight.w700),
               ),
             )
           else
             Text(
               'Заявка не требует срочного вмешательства.',
-              style: AppTypography.caption(context).copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
+              style: AppTypography.caption(
+                context,
+              ).copyWith(color: theme.colorScheme.onSurfaceVariant),
             ),
           if (primaryActionLabel != null || secondaryActionLabel != null) ...[
             const SizedBox(height: 14),
@@ -147,24 +143,31 @@ class SiteRequestCard extends StatelessWidget {
 
   String _requestSubtitle(SiteRequestModel request) {
     if ((request.materialName ?? '').trim().isNotEmpty) {
-      final quantity = request.materialQuantity != null
-          ? '${_formatQuantity(request.materialQuantity!)} ${request.materialUnit ?? ''}'.trim()
-          : request.materialUnit ?? '';
-      return [request.materialName!, quantity]
-          .where((value) => value.trim().isNotEmpty)
-          .join(' • ');
+      final quantity =
+          request.materialQuantity != null
+              ? '${_formatQuantity(request.materialQuantity!)} ${request.materialUnit ?? ''}'
+                  .trim()
+              : request.materialUnit ?? '';
+      return [
+        request.materialName!,
+        quantity,
+      ].where((value) => value.trim().isNotEmpty).join(' • ');
     }
 
     if ((request.personnelTypeLabel ?? '').trim().isNotEmpty) {
-      final count = request.personnelCount != null
-          ? '${request.personnelCount} чел.'
-          : '';
-      return [request.personnelTypeLabel!, count]
-          .where((value) => value.trim().isNotEmpty)
-          .join(' • ');
+      final count =
+          request.personnelCount != null
+              ? '${request.personnelCount} чел.'
+              : '';
+      return [
+        request.personnelTypeLabel!,
+        count,
+      ].where((value) => value.trim().isNotEmpty).join(' • ');
     }
 
-    if ((request.equipmentTypeLabel ?? request.equipmentType ?? '').trim().isNotEmpty) {
+    if ((request.equipmentTypeLabel ?? request.equipmentType ?? '')
+        .trim()
+        .isNotEmpty) {
       return request.equipmentTypeLabel ?? request.equipmentType!;
     }
 
@@ -288,10 +291,7 @@ class SiteRequestCard extends StatelessWidget {
 }
 
 class _StatusBadge extends StatelessWidget {
-  const _StatusBadge({
-    required this.label,
-    required this.color,
-  });
+  const _StatusBadge({required this.label, required this.color});
 
   final String label;
   final Color color;
@@ -301,27 +301,22 @@ class _StatusBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: color.withOpacity(0.2)),
+        border: Border.all(color: color.withValues(alpha: 0.2)),
       ),
       child: Text(
         label,
-        style: AppTypography.caption(context).copyWith(
-          color: color,
-          fontWeight: FontWeight.bold,
-        ),
+        style: AppTypography.caption(
+          context,
+        ).copyWith(color: color, fontWeight: FontWeight.bold),
       ),
     );
   }
 }
 
 class _MetaBadge extends StatelessWidget {
-  const _MetaBadge({
-    required this.icon,
-    required this.label,
-    this.color,
-  });
+  const _MetaBadge({required this.icon, required this.label, this.color});
 
   final IconData icon;
   final String label;
@@ -335,7 +330,7 @@ class _MetaBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
-        color: resolvedColor.withOpacity(0.08),
+        color: resolvedColor.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
@@ -345,10 +340,9 @@ class _MetaBadge extends StatelessWidget {
           const SizedBox(width: 6),
           Text(
             label,
-            style: AppTypography.caption(context).copyWith(
-              color: resolvedColor,
-              fontWeight: FontWeight.w600,
-            ),
+            style: AppTypography.caption(
+              context,
+            ).copyWith(color: resolvedColor, fontWeight: FontWeight.w600),
           ),
         ],
       ),

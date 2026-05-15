@@ -57,15 +57,27 @@ void main() {
     expect(plan.id, 41);
     expect(plan.availableActions, contains('record_fact'));
     expect(plan.assignments.single.plannedQuantity, 10);
-    expect(plan.assignments.single.scheduleTaskName, 'Foundation reinforcement');
-    expect(plan.assignments.single.constraints.single.severity, 'hard');
-    expect(plan.assignments.single.constraints.single.constraintType, 'material_missing');
     expect(
-      plan.assignments.single.constraints.single.availableActions,
+      plan.assignments.single.scheduleTaskName,
+      'Foundation reinforcement',
+    );
+    expect(plan.assignments.single.constraints.first.severity, 'hard');
+    expect(
+      plan.assignments.single.constraints.first.constraintType,
+      'material_missing',
+    );
+    expect(
+      plan.assignments.single.constraints.first.availableActions,
       contains('create_linked_action'),
     );
-    expect(plan.assignments.single.constraints.last.constraintType, 'safety_permit_missing');
-    expect(plan.assignments.single.constraints.last.linkedAction?.type, 'safety_incident');
+    expect(
+      plan.assignments.single.constraints.last.constraintType,
+      'safety_permit_missing',
+    );
+    expect(
+      plan.assignments.single.constraints.last.linkedAction?.type,
+      'safety_incident',
+    );
     expect(plan.assignments.single.constraints.last.linkedAction?.id, 88);
   });
 }

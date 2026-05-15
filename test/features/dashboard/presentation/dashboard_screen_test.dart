@@ -34,7 +34,7 @@ class _FakeAuthRepository extends AuthRepository {
 
 class _FakeAuthNotifier extends AuthNotifier {
   _FakeAuthNotifier(User user)
-      : super(_FakeAuthRepository(), _FakeSecureStorageService()) {
+    : super(_FakeAuthRepository(), _FakeSecureStorageService()) {
     state = AuthAuthenticated(user);
   }
 
@@ -71,26 +71,23 @@ class _FakeDashboardRepository extends DashboardRepository {
 
 class _FakeDashboardController extends DashboardController {
   _FakeDashboardController(List<DashboardWidgetModel> widgets)
-      : super(_FakeDashboardRepository(widgets), canLoad: false) {
-    state = DashboardState(
-      isLoading: false,
-      widgets: widgets,
-      error: null,
-    );
+    : super(_FakeDashboardRepository(widgets), canLoad: false) {
+    state = DashboardState(isLoading: false, widgets: widgets, error: null);
   }
 }
 
 void main() {
   User buildUser() {
-    final user = User()
-      ..serverId = 1
-      ..email = 'foreman@test.local'
-      ..name = 'Иван Прораб'
-      ..currentOrganizationId = 10
-      ..organizationName = 'Тест Строй'
-      ..organizationsJson = '[]'
-      ..roles = ['foreman']
-      ..permissionsJson = '{}';
+    final user =
+        User()
+          ..serverId = 1
+          ..email = 'foreman@test.local'
+          ..name = 'Иван Прораб'
+          ..currentOrganizationId = 10
+          ..organizationName = 'Тест Строй'
+          ..organizationsJson = '[]'
+          ..roles = ['foreman']
+          ..permissionsJson = '{}';
 
     return user;
   }
@@ -118,10 +115,7 @@ void main() {
         title: 'Склад',
         description: 'Складов: 2. Низкий остаток: 1.',
         payload: {
-          'summary': {
-            'warehouse_count': 2,
-            'low_stock_count': 1,
-          },
+          'summary': {'warehouse_count': 2, 'low_stock_count': 1},
         },
         badge: '1',
       ),
@@ -131,10 +125,7 @@ void main() {
         title: 'График работ',
         description: 'Событий на 7 дней: 4. Блокирующих: 1.',
         payload: {
-          'summary': {
-            'upcoming_count': 4,
-            'blocking_count': 1,
-          },
+          'summary': {'upcoming_count': 4, 'blocking_count': 1},
         },
       ),
     ];
@@ -153,10 +144,7 @@ void main() {
           (ref) => _FakeDashboardController(widgets),
         ),
         activeModulesProvider.overrideWith((ref) {
-          return {
-            AppModule.basicWarehouse,
-            AppModule.scheduleManagement,
-          };
+          return {AppModule.basicWarehouse, AppModule.scheduleManagement};
         }),
         permissionServiceProvider.overrideWith((ref) {
           return PermissionService(
@@ -168,9 +156,7 @@ void main() {
           );
         }),
       ],
-      child: const MaterialApp(
-        home: DashboardScreen(),
-      ),
+      child: const MaterialApp(home: DashboardScreen()),
     );
   }
 

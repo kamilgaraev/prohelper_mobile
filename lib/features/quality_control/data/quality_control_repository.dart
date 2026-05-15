@@ -5,7 +5,9 @@ import '../../../core/network/api_exception.dart';
 import '../../../core/network/dio_client.dart';
 import 'quality_defect_model.dart';
 
-final qualityControlRepositoryProvider = Provider<QualityControlRepository>((ref) {
+final qualityControlRepositoryProvider = Provider<QualityControlRepository>((
+  ref,
+) {
   return QualityControlRepository(ref.read(dioProvider));
 });
 
@@ -77,9 +79,13 @@ class QualityControlRepository {
 
   Future<QualityDefectModel> startDefect(int id, {String? comment}) async {
     try {
-      final response = await _dio.post('/quality-control/defects/$id/start', data: {
-        if (comment != null && comment.trim().isNotEmpty) 'comment': comment.trim(),
-      });
+      final response = await _dio.post(
+        '/quality-control/defects/$id/start',
+        data: {
+          if (comment != null && comment.trim().isNotEmpty)
+            'comment': comment.trim(),
+        },
+      );
       return QualityDefectModel.fromJson(response.data['data']);
     } on DioException catch (error) {
       throw ApiException.fromDio(
@@ -97,13 +103,17 @@ class QualityControlRepository {
     String? photoUrl,
   }) async {
     try {
-      final response = await _dio.post('/quality-control/defects/$id/resolve', data: {
-        if (comment != null && comment.trim().isNotEmpty) 'comment': comment.trim(),
-        if (photoUrl != null && photoUrl.trim().isNotEmpty)
-          'photos': [
-            {'type': 'after', 'url': photoUrl.trim()},
-          ],
-      });
+      final response = await _dio.post(
+        '/quality-control/defects/$id/resolve',
+        data: {
+          if (comment != null && comment.trim().isNotEmpty)
+            'comment': comment.trim(),
+          if (photoUrl != null && photoUrl.trim().isNotEmpty)
+            'photos': [
+              {'type': 'after', 'url': photoUrl.trim()},
+            ],
+        },
+      );
       return QualityDefectModel.fromJson(response.data['data']);
     } on DioException catch (error) {
       throw ApiException.fromDio(

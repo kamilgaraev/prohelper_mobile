@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/network/api_exception.dart';
@@ -19,7 +19,8 @@ class AiAssistantChatScreen extends ConsumerStatefulWidget {
   final String? initialPrompt;
 
   @override
-  ConsumerState<AiAssistantChatScreen> createState() => _AiAssistantChatScreenState();
+  ConsumerState<AiAssistantChatScreen> createState() =>
+      _AiAssistantChatScreenState();
 }
 
 class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
@@ -71,8 +72,9 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
     });
 
     try {
-      final details =
-          await ref.read(aiAssistantRepositoryProvider).fetchConversation(id);
+      final details = await ref
+          .read(aiAssistantRepositoryProvider)
+          .fetchConversation(id);
 
       setState(() {
         _conversationId = details.conversation.id;
@@ -114,10 +116,9 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
     _scrollToBottom();
 
     try {
-      final details = await ref.read(aiAssistantRepositoryProvider).sendMessage(
-            message: message,
-            conversationId: _conversationId,
-          );
+      final details = await ref
+          .read(aiAssistantRepositoryProvider)
+          .sendMessage(message: message, conversationId: _conversationId);
 
       setState(() {
         _conversationId = details.conversation.id;
@@ -126,7 +127,8 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
       });
     } catch (error) {
       setState(() {
-        _messages = _messages.where((item) => item.id != optimistic.id).toList();
+        _messages =
+            _messages.where((item) => item.id != optimistic.id).toList();
         _error = _resolveError(error);
         _isSending = false;
       });
@@ -168,19 +170,21 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(_conversationId == null ? 'Новый чат' : 'Диалог #$_conversationId'),
+        title: Text(
+          _conversationId == null ? 'Новый чат' : 'Диалог #$_conversationId',
+        ),
       ),
       body: Column(
         children: [
           Container(
             width: double.infinity,
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            color: theme.colorScheme.primary.withOpacity(0.08),
+            color: theme.colorScheme.primary.withValues(alpha: 0.08),
             child: Text(
               'Ассистент помогает держать рабочий контекст по проектам, срокам и управленческим решениям.',
-              style: AppTypography.bodyMedium(context).copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
+              style: AppTypography.bodyMedium(
+                context,
+              ).copyWith(color: theme.colorScheme.onSurfaceVariant),
             ),
           ),
           if (_error != null)
@@ -201,9 +205,9 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
                       Expanded(
                         child: Text(
                           _error!,
-                          style: AppTypography.bodyMedium(context).copyWith(
-                            color: theme.colorScheme.onErrorContainer,
-                          ),
+                          style: AppTypography.bodyMedium(
+                            context,
+                          ).copyWith(color: theme.colorScheme.onErrorContainer),
                         ),
                       ),
                     ],
@@ -212,84 +216,93 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
               ),
             ),
           Expanded(
-            child: _isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : _messages.isEmpty
+            child:
+                _isLoading
+                    ? const Center(child: CircularProgressIndicator())
+                    : _messages.isEmpty
                     ? ListView(
-                        padding: const EdgeInsets.all(16),
-                        children: [
-                          IndustrialCard(
-                            child: AppStateView(
-                              icon: Icons.smart_toy_outlined,
-                              title: 'Ассистент готов',
-                              description:
-                                  'Начните диалог с вопроса по рискам, срокам, финансам или подрядчикам.',
-                            ),
+                      padding: const EdgeInsets.all(16),
+                      children: [
+                        IndustrialCard(
+                          child: AppStateView(
+                            icon: Icons.smart_toy_outlined,
+                            title: 'Ассистент готов',
+                            description:
+                                'Начните диалог с вопроса по рискам, срокам, финансам или подрядчикам.',
                           ),
-                          const SizedBox(height: 12),
-                          Wrap(
-                            spacing: 8,
-                            runSpacing: 8,
-                            children: _quickPrompts.map((prompt) {
-                              return ActionChip(
-                                label: Text(prompt),
-                                onPressed: () {
-                                  _controller.text = prompt;
-                                  _sendMessage(prompt);
-                                },
-                              );
-                            }).toList(),
-                          ),
-                        ],
-                      )
+                        ),
+                        const SizedBox(height: 12),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children:
+                              _quickPrompts.map((prompt) {
+                                return ActionChip(
+                                  label: Text(prompt),
+                                  onPressed: () {
+                                    _controller.text = prompt;
+                                    _sendMessage(prompt);
+                                  },
+                                );
+                              }).toList(),
+                        ),
+                      ],
+                    )
                     : ListView.builder(
-                        controller: _scrollController,
-                        padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-                        itemCount: _messages.length + (_isSending ? 1 : 0),
-                        itemBuilder: (context, index) {
-                          if (_isSending && index == _messages.length) {
-                            return const Padding(
-                              padding: EdgeInsets.only(top: 8),
-                              child: Row(
-                                children: [
-                                  CircularProgressIndicator(strokeWidth: 2),
-                                  SizedBox(width: 12),
-                                  Text('Ассистент готовит ответ...'),
-                                ],
-                              ),
-                            );
-                          }
-
-                          final message = _messages[index];
-                          final isUser = message.isUser;
-
-                          return Align(
-                            alignment:
-                                isUser ? Alignment.centerRight : Alignment.centerLeft,
-                            child: Container(
-                              margin: const EdgeInsets.only(bottom: 10),
-                              padding: const EdgeInsets.all(14),
-                              constraints: BoxConstraints(
-                                maxWidth: MediaQuery.of(context).size.width * 0.84,
-                              ),
-                              decoration: BoxDecoration(
-                                color: isUser
-                                    ? theme.colorScheme.primary
-                                    : theme.colorScheme.surfaceContainerHighest,
-                                borderRadius: BorderRadius.circular(18),
-                              ),
-                              child: Text(
-                                message.content,
-                                style: AppTypography.bodyMedium(context).copyWith(
-                                  color: isUser
-                                      ? theme.colorScheme.onPrimary
-                                      : theme.colorScheme.onSurface,
-                                ),
-                              ),
+                      controller: _scrollController,
+                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+                      itemCount: _messages.length + (_isSending ? 1 : 0),
+                      itemBuilder: (context, index) {
+                        if (_isSending && index == _messages.length) {
+                          return const Padding(
+                            padding: EdgeInsets.only(top: 8),
+                            child: Row(
+                              children: [
+                                CircularProgressIndicator(strokeWidth: 2),
+                                SizedBox(width: 12),
+                                Text('Ассистент готовит ответ...'),
+                              ],
                             ),
                           );
-                        },
-                      ),
+                        }
+
+                        final message = _messages[index];
+                        final isUser = message.isUser;
+
+                        return Align(
+                          alignment:
+                              isUser
+                                  ? Alignment.centerRight
+                                  : Alignment.centerLeft,
+                          child: Container(
+                            margin: const EdgeInsets.only(bottom: 10),
+                            padding: const EdgeInsets.all(14),
+                            constraints: BoxConstraints(
+                              maxWidth:
+                                  MediaQuery.of(context).size.width * 0.84,
+                            ),
+                            decoration: BoxDecoration(
+                              color:
+                                  isUser
+                                      ? theme.colorScheme.primary
+                                      : theme
+                                          .colorScheme
+                                          .surfaceContainerHighest,
+                              borderRadius: BorderRadius.circular(18),
+                            ),
+                            child: Text(
+                              message.content,
+                              style: AppTypography.bodyMedium(context).copyWith(
+                                color:
+                                    isUser
+                                        ? theme.colorScheme.onPrimary
+                                        : theme.colorScheme.onSurface,
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
           ),
           SafeArea(
             top: false,

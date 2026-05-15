@@ -14,7 +14,9 @@ class SafetyRepository {
 
   final Dio _dio;
 
-  Future<List<SafetyWorkPermitModel>> fetchActivePermits({int? projectId}) async {
+  Future<List<SafetyWorkPermitModel>> fetchActivePermits({
+    int? projectId,
+  }) async {
     try {
       final response = await _dio.get(
         '/safety-management/work-permits/active',
@@ -23,7 +25,10 @@ class SafetyRepository {
 
       return _list(response.data).map(SafetyWorkPermitModel.fromJson).toList();
     } on DioException catch (error) {
-      throw ApiException.fromDio(error, fallbackMessage: 'Не удалось загрузить активные наряды-допуски.');
+      throw ApiException.fromDio(
+        error,
+        fallbackMessage: 'Не удалось загрузить активные наряды-допуски.',
+      );
     } catch (_) {
       throw const ApiException('Не удалось загрузить активные наряды-допуски.');
     }
@@ -38,7 +43,10 @@ class SafetyRepository {
 
       return _list(response.data).map(SafetyIncidentModel.fromJson).toList();
     } on DioException catch (error) {
-      throw ApiException.fromDio(error, fallbackMessage: 'Не удалось загрузить происшествия.');
+      throw ApiException.fromDio(
+        error,
+        fallbackMessage: 'Не удалось загрузить происшествия.',
+      );
     } catch (_) {
       throw const ApiException('Не удалось загрузить происшествия.');
     }
@@ -53,7 +61,10 @@ class SafetyRepository {
 
       return _list(response.data).map(SafetyViolationModel.fromJson).toList();
     } on DioException catch (error) {
-      throw ApiException.fromDio(error, fallbackMessage: 'Не удалось загрузить нарушения.');
+      throw ApiException.fromDio(
+        error,
+        fallbackMessage: 'Не удалось загрузить нарушения.',
+      );
     } catch (_) {
       throw const ApiException('Не удалось загрузить нарушения.');
     }
@@ -61,23 +72,37 @@ class SafetyRepository {
 
   Future<SafetyIncidentModel> createIncident(Map<String, dynamic> data) async {
     try {
-      final response = await _dio.post('/safety-management/incidents', data: data);
+      final response = await _dio.post(
+        '/safety-management/incidents',
+        data: data,
+      );
 
       return SafetyIncidentModel.fromJson(_object(response.data));
     } on DioException catch (error) {
-      throw ApiException.fromDio(error, fallbackMessage: 'Не удалось зарегистрировать происшествие.');
+      throw ApiException.fromDio(
+        error,
+        fallbackMessage: 'Не удалось зарегистрировать происшествие.',
+      );
     } catch (_) {
       throw const ApiException('Не удалось зарегистрировать происшествие.');
     }
   }
 
-  Future<SafetyViolationModel> createViolation(Map<String, dynamic> data) async {
+  Future<SafetyViolationModel> createViolation(
+    Map<String, dynamic> data,
+  ) async {
     try {
-      final response = await _dio.post('/safety-management/violations', data: data);
+      final response = await _dio.post(
+        '/safety-management/violations',
+        data: data,
+      );
 
       return SafetyViolationModel.fromJson(_object(response.data));
     } on DioException catch (error) {
-      throw ApiException.fromDio(error, fallbackMessage: 'Не удалось зарегистрировать нарушение.');
+      throw ApiException.fromDio(
+        error,
+        fallbackMessage: 'Не удалось зарегистрировать нарушение.',
+      );
     } catch (_) {
       throw const ApiException('Не удалось зарегистрировать нарушение.');
     }
@@ -92,30 +117,40 @@ class SafetyRepository {
 
       return SafetyViolationModel.fromJson(_object(response.data));
     } on DioException catch (error) {
-      throw ApiException.fromDio(error, fallbackMessage: 'Не удалось устранить нарушение.');
+      throw ApiException.fromDio(
+        error,
+        fallbackMessage: 'Не удалось устранить нарушение.',
+      );
     } catch (_) {
       throw const ApiException('Не удалось устранить нарушение.');
     }
   }
 
   List<Map<String, dynamic>> _list(dynamic responseData) {
-    final payload = responseData is Map<String, dynamic> ? responseData['data'] : null;
-    final list = payload is List
-        ? payload
-        : payload is Map && payload['data'] is List
+    final payload =
+        responseData is Map<String, dynamic> ? responseData['data'] : null;
+    final list =
+        payload is List
+            ? payload
+            : payload is Map && payload['data'] is List
             ? payload['data'] as List
             : payload is Map && payload['items'] is List
-                ? payload['items'] as List
-                : const [];
+            ? payload['items'] as List
+            : const [];
 
     return list
         .whereType<Map>()
-        .map((item) => item.map((key, value) => MapEntry(key.toString(), value)))
+        .map(
+          (item) => item.map((key, value) => MapEntry(key.toString(), value)),
+        )
         .toList();
   }
 
   Map<String, dynamic> _object(dynamic responseData) {
-    final payload = responseData is Map<String, dynamic> ? responseData['data'] : responseData;
+    final payload =
+        responseData is Map<String, dynamic>
+            ? responseData['data']
+            : responseData;
 
     if (payload is Map) {
       return payload.map((key, value) => MapEntry(key.toString(), value));

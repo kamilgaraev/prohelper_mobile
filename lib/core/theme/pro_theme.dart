@@ -7,20 +7,22 @@ class ProHelperTheme {
   static const double cardRadius = 16.0;
   static const double buttonRadius = 12.0;
   static const double borderWidth = 0.5;
+  static const double glassBlurSigma = 20.0;
+  static const double glassOpacity = 0.72;
+  static const double glassBorderOpacity = 0.12;
   static final Color borderColor = const Color(0xFF2C2C2E);
-  
+
   static List<BoxShadow> get premiumShadow => [
     BoxShadow(
-      color: Colors.black.withOpacity(0.5),
+      color: Colors.black.withValues(alpha: 0.5),
       blurRadius: 20,
       offset: const Offset(0, 8),
     ),
   ];
 
   static ThemeData get darkTheme {
-    final base = ThemeData.dark();
+    final base = ThemeData.dark(useMaterial3: true);
     return base.copyWith(
-      useMaterial3: true,
       scaffoldBackgroundColor: AppColors.background,
       colorScheme: ColorScheme.fromSeed(
         seedColor: AppColors.primary,
@@ -33,15 +35,14 @@ class ProHelperTheme {
       textTheme: _buildTextTheme(base.textTheme, true),
       cardTheme: CardTheme(
         color: AppColors.surface,
-        shadowColor: Colors.black.withOpacity(0.5),
+        shadowColor: Colors.black.withValues(alpha: 0.5),
       ),
     );
   }
 
   static ThemeData get lightTheme {
-    final base = ThemeData.light();
+    final base = ThemeData.light(useMaterial3: true);
     return base.copyWith(
-      useMaterial3: true,
       scaffoldBackgroundColor: AppColors.backgroundLight,
       colorScheme: ColorScheme.fromSeed(
         seedColor: AppColors.primary,
@@ -54,16 +55,22 @@ class ProHelperTheme {
       textTheme: _buildTextTheme(base.textTheme, false),
       cardTheme: CardTheme(
         color: AppColors.surfaceLightMode,
-        shadowColor: Colors.black.withOpacity(0.1),
+        shadowColor: Colors.black.withValues(alpha: 0.1),
       ),
     );
   }
 
   static TextTheme _buildTextTheme(TextTheme base, bool isDark) {
     return GoogleFonts.outfitTextTheme(base).copyWith(
-      displayLarge: GoogleFonts.outfit(color: isDark ? AppColors.textPrimary : AppColors.textPrimaryLight),
-      bodyLarge: GoogleFonts.inter(color: isDark ? AppColors.textPrimary : AppColors.textPrimaryLight),
-      bodyMedium: GoogleFonts.inter(color: isDark ? AppColors.textPrimary : AppColors.textPrimaryLight),
+      displayLarge: GoogleFonts.outfit(
+        color: isDark ? AppColors.textPrimary : AppColors.textPrimaryLight,
+      ),
+      bodyLarge: GoogleFonts.inter(
+        color: isDark ? AppColors.textPrimary : AppColors.textPrimaryLight,
+      ),
+      bodyMedium: GoogleFonts.inter(
+        color: isDark ? AppColors.textPrimary : AppColors.textPrimaryLight,
+      ),
       labelSmall: GoogleFonts.jetBrainsMono(
         fontSize: 12,
         color: isDark ? Colors.white70 : Colors.black54,

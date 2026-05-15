@@ -82,10 +82,7 @@ class _WarehouseScanResultScreenState
               : ListView(
                 padding: const EdgeInsets.all(16),
                 children: [
-                  _OverviewCard(
-                    result: _result,
-                    warehouse: _selectedWarehouse,
-                  ),
+                  _OverviewCard(result: _result, warehouse: _selectedWarehouse),
                   const SizedBox(height: 12),
                   _NextStepCard(
                     recommendedAction: _result.recommendedAction,
@@ -161,9 +158,9 @@ class _WarehouseScanResultScreenState
       );
 
       if (transferred == true && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Перемещение выполнено.')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Перемещение выполнено.')));
         await _refresh();
       }
       return;
@@ -246,13 +243,15 @@ class _WarehouseScanResultScreenState
     });
 
     try {
-      final refreshed = await ref.read(warehouseRepositoryProvider).resolveScan(
-        WarehouseScanPayload(
-          code: code,
-          warehouseId: _selectedWarehouseId,
-          scanContext: 'warehouse_scan_result_refresh',
-        ),
-      );
+      final refreshed = await ref
+          .read(warehouseRepositoryProvider)
+          .resolveScan(
+            WarehouseScanPayload(
+              code: code,
+              warehouseId: _selectedWarehouseId,
+              scanContext: 'warehouse_scan_result_refresh',
+            ),
+          );
 
       if (!mounted) {
         return;
@@ -337,9 +336,7 @@ class _WarehouseScanResultScreenState
   }
 
   void _showMessage(String message) {
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(
+    ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message.replaceFirst('ApiException: ', ''))),
     );
   }
@@ -364,7 +361,9 @@ class _OverviewCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            result.entity?.name ?? result.entitySummary?.name ?? 'Объект склада',
+            result.entity?.name ??
+                result.entitySummary?.name ??
+                'Объект склада',
             style: AppTypography.h2(context),
           ),
           if (subtitle.isNotEmpty) ...[
@@ -406,8 +405,7 @@ class _EntityDetailsCard extends StatelessWidget {
         'Всего: ${warehouseFormatNumber(entity.totalQuantity!)}',
       if (entity.defaultPrice != null)
         'Цена: ${warehouseFormatNumber(entity.defaultPrice!)} ₽',
-      if ((entity.fullAddress ?? '').isNotEmpty)
-        'Адрес: ${entity.fullAddress}',
+      if ((entity.fullAddress ?? '').isNotEmpty) 'Адрес: ${entity.fullAddress}',
       if (entity.storedQuantity != null)
         'Заполнено: ${warehouseFormatNumber(entity.storedQuantity!)}',
       if (entity.capacity != null)
@@ -530,9 +528,10 @@ class _ActionsCard extends StatelessWidget {
         runSpacing: 8,
         children:
             actions.map((action) {
-              final label = action == recommendedAction
-                  ? '${warehouseActionLabel(action)} / рекомендовано'
-                  : warehouseActionLabel(action);
+              final label =
+                  action == recommendedAction
+                      ? '${warehouseActionLabel(action)} / рекомендовано'
+                      : warehouseActionLabel(action);
               return FilledButton.tonal(
                 onPressed: () => onTap(action),
                 child: Text(label),
@@ -551,7 +550,8 @@ class _TasksCard extends StatelessWidget {
   });
 
   final List<WarehouseTaskModel> tasks;
-  final Future<void> Function(WarehouseTaskModel task, String targetStatus) onTap;
+  final Future<void> Function(WarehouseTaskModel task, String targetStatus)
+  onTap;
   final VoidCallback onOpenQueue;
 
   @override

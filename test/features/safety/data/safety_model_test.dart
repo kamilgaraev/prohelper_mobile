@@ -17,7 +17,11 @@ void main() {
         'valid_until': '2026-06-02T00:00:00Z',
         'project': {'id': 7, 'name': 'Башня'},
         'problem_flags': [
-          {'code': 'permit_expired', 'severity': 'critical', 'message': 'Срок истек'},
+          {
+            'code': 'permit_expired',
+            'severity': 'critical',
+            'message': 'Срок истек',
+          },
         ],
       });
 

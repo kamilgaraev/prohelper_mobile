@@ -349,9 +349,9 @@ class _WarehouseScreenState extends ConsumerState<WarehouseScreen> {
       return;
     }
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Приход успешно проведен.')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Приход успешно проведен.')));
   }
 
   Future<void> _openMovementGallery(
@@ -505,7 +505,9 @@ class _TaskQueueEntryCard extends StatelessWidget {
             width: 52,
             height: 52,
             decoration: BoxDecoration(
-              color: theme.colorScheme.secondaryContainer.withValues(alpha: 0.7),
+              color: theme.colorScheme.secondaryContainer.withValues(
+                alpha: 0.7,
+              ),
               borderRadius: BorderRadius.circular(16),
             ),
             child: Icon(
@@ -1301,9 +1303,7 @@ class _BalanceCard extends StatelessWidget {
 }
 
 class _ReceiptSheet extends ConsumerStatefulWidget {
-  const _ReceiptSheet({
-    required this.summary,
-  });
+  const _ReceiptSheet({required this.summary});
 
   final WarehouseSummaryModel summary;
 
@@ -1478,11 +1478,10 @@ class _ReceiptSheetState extends ConsumerState<_ReceiptSheet> {
                     child: Ink(
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(16),
-                        color: Theme.of(
-                          context,
-                        ).colorScheme.surfaceContainerHighest.withValues(
-                          alpha: 0.35,
-                        ),
+                        color: Theme.of(context)
+                            .colorScheme
+                            .surfaceContainerHighest
+                            .withValues(alpha: 0.35),
                       ),
                       child: Padding(
                         padding: const EdgeInsets.all(14),

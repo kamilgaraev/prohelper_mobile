@@ -61,13 +61,16 @@ class _WarehouseTaskExecutionScreenState
 
   @override
   Widget build(BuildContext context) {
-    final needsScan = _requiredSteps.isNotEmpty && widget.targetStatus == 'completed';
+    final needsScan =
+        _requiredSteps.isNotEmpty && widget.targetStatus == 'completed';
     final selectedStep = _selectedStep;
     final selectedResult =
         selectedStep == null ? null : _verified[selectedStep.key];
 
     return Scaffold(
-      appBar: AppBar(title: Text(warehouseTaskActionLabel(widget.targetStatus))),
+      appBar: AppBar(
+        title: Text(warehouseTaskActionLabel(widget.targetStatus)),
+      ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -142,11 +145,15 @@ class _WarehouseTaskExecutionScreenState
                                 ? const SizedBox(
                                   width: 18,
                                   height: 18,
-                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
                                 )
                                 : const Icon(Icons.qr_code_2_outlined),
                         label: Text(
-                          _isResolving ? 'Проверяем...' : 'Подтвердить введенный код',
+                          _isResolving
+                              ? 'Проверяем...'
+                              : 'Подтвердить введенный код',
                         ),
                       ),
                     ),
@@ -174,7 +181,9 @@ class _WarehouseTaskExecutionScreenState
                 if (_showsQuantityField()) ...[
                   TextField(
                     controller: _quantityController,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
                     decoration: InputDecoration(
                       labelText:
                           widget.task.taskType == 'cycle_count'
@@ -223,7 +232,9 @@ class _WarehouseTaskExecutionScreenState
                             )
                             : const Icon(Icons.task_alt_rounded),
                     label: Text(
-                      _isSubmitting ? 'Сохраняем...' : warehouseTaskActionLabel(widget.targetStatus),
+                      _isSubmitting
+                          ? 'Сохраняем...'
+                          : warehouseTaskActionLabel(widget.targetStatus),
                     ),
                   ),
                 ),
@@ -250,15 +261,23 @@ class _WarehouseTaskExecutionScreenState
                 verified
                     ? AppColors.success.withValues(alpha: 0.1)
                     : selected
-                    ? Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.5)
-                    : Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
+                    ? Theme.of(
+                      context,
+                    ).colorScheme.primaryContainer.withValues(alpha: 0.5)
+                    : Theme.of(context).colorScheme.surfaceContainerHighest
+                        .withValues(alpha: 0.4),
             borderRadius: BorderRadius.circular(18),
           ),
           child: Row(
             children: [
               Icon(
-                verified ? Icons.check_circle_rounded : Icons.qr_code_scanner_rounded,
-                color: verified ? AppColors.success : Theme.of(context).colorScheme.primary,
+                verified
+                    ? Icons.check_circle_rounded
+                    : Icons.qr_code_scanner_rounded,
+                color:
+                    verified
+                        ? AppColors.success
+                        : Theme.of(context).colorScheme.primary,
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -272,7 +291,10 @@ class _WarehouseTaskExecutionScreenState
                       ).copyWith(fontWeight: FontWeight.w700),
                     ),
                     const SizedBox(height: 4),
-                    Text(step.expectedName, style: AppTypography.bodyMedium(context)),
+                    Text(
+                      step.expectedName,
+                      style: AppTypography.bodyMedium(context),
+                    ),
                   ],
                 ),
               ),
@@ -311,13 +333,15 @@ class _WarehouseTaskExecutionScreenState
     }
     setState(() => _isResolving = true);
     try {
-      final result = await ref.read(warehouseRepositoryProvider).resolveScan(
-        WarehouseScanPayload(
-          code: code,
-          warehouseId: warehouseId,
-          scanContext: 'warehouse_task_execution',
-        ),
-      );
+      final result = await ref
+          .read(warehouseRepositoryProvider)
+          .resolveScan(
+            WarehouseScanPayload(
+              code: code,
+              warehouseId: warehouseId,
+              scanContext: 'warehouse_task_execution',
+            ),
+          );
       if (!mounted) {
         return;
       }
@@ -333,7 +357,9 @@ class _WarehouseTaskExecutionScreenState
       } else if (matchedStep != null) {
         _showMessage('Подтвержден шаг: ${matchedStep.label.toLowerCase()}.');
       } else {
-        _showMessage('Скан распознан, но не относится к ожидаемым шагам операции.');
+        _showMessage(
+          'Скан распознан, но не относится к ожидаемым шагам операции.',
+        );
       }
     } catch (error) {
       _showMessage(error.toString());
@@ -365,15 +391,17 @@ class _WarehouseTaskExecutionScreenState
     }
     setState(() => _isSubmitting = true);
     try {
-      final updatedTask = await ref.read(warehouseRepositoryProvider).updateTaskStatus(
-        warehouseId,
-        widget.task.id,
-        WarehouseTaskStatusPayload(
-          status: widget.targetStatus,
-          completedQuantity: quantity,
-          notes: _composeNotes(),
-        ),
-      );
+      final updatedTask = await ref
+          .read(warehouseRepositoryProvider)
+          .updateTaskStatus(
+            warehouseId,
+            widget.task.id,
+            WarehouseTaskStatusPayload(
+              status: widget.targetStatus,
+              completedQuantity: quantity,
+              notes: _composeNotes(),
+            ),
+          );
       if (!mounted) {
         return;
       }
@@ -394,7 +422,9 @@ class _WarehouseTaskExecutionScreenState
     if (widget.task.warehouseId > 0) {
       return widget.task.warehouseId;
     }
-    return widget.summary.warehouses.isEmpty ? null : widget.summary.warehouses.first.id;
+    return widget.summary.warehouses.isEmpty
+        ? null
+        : widget.summary.warehouses.first.id;
   }
 
   _TaskStep? get _selectedStep {
@@ -433,7 +463,8 @@ class _WarehouseTaskExecutionScreenState
     if (widget.task.taskType == 'cycle_count') {
       return true;
     }
-    return widget.task.plannedQuantity != null || widget.task.completedQuantity != null;
+    return widget.task.plannedQuantity != null ||
+        widget.task.completedQuantity != null;
   }
 
   String _initialQuantityValue() {
@@ -448,7 +479,8 @@ class _WarehouseTaskExecutionScreenState
 
   _TaskStep? _matchStep(WarehouseScanResultModel result) {
     for (final step in _steps) {
-      if (result.entityType == step.entityType && result.entityId == step.entityId) {
+      if (result.entityType == step.entityType &&
+          result.entityId == step.entityId) {
         return step;
       }
     }
@@ -476,6 +508,7 @@ class _WarehouseTaskExecutionScreenState
         ),
       );
     }
+
     if (task.taskType == 'placement') {
       if (task.material != null) {
         addStep(
@@ -617,8 +650,10 @@ class _WarehouseTaskExecutionScreenState
       if (result == null || !result.resolved) {
         continue;
       }
-      final scannedName = result.entity?.name ?? result.entitySummary?.name ?? '';
-      final scannedCode = result.scanEvent?.code ?? result.identifier?.code ?? '';
+      final scannedName =
+          result.entity?.name ?? result.entitySummary?.name ?? '';
+      final scannedCode =
+          result.scanEvent?.code ?? result.identifier?.code ?? '';
       parts.add(
         [
           'Подтверждено сканированием',
@@ -656,15 +691,26 @@ class _Hero extends StatelessWidget {
             spacing: 8,
             runSpacing: 8,
             children: [
-              _Badge(label: task.taskNumber, color: Theme.of(context).colorScheme.primary),
-              _Badge(label: warehouseTaskTypeLabel(task.taskType), color: AppColors.secondary),
-              _Badge(label: warehouseStatusLabel(task.status), color: Colors.blueGrey),
+              _Badge(
+                label: task.taskNumber,
+                color: Theme.of(context).colorScheme.primary,
+              ),
+              _Badge(
+                label: warehouseTaskTypeLabel(task.taskType),
+                color: AppColors.secondary,
+              ),
+              _Badge(
+                label: warehouseStatusLabel(task.status),
+                color: Colors.blueGrey,
+              ),
             ],
           ),
           const SizedBox(height: 12),
           Text(
             'Следующее действие: ${warehouseTaskActionLabel(targetStatus)}',
-            style: AppTypography.bodyLarge(context).copyWith(fontWeight: FontWeight.w700),
+            style: AppTypography.bodyLarge(
+              context,
+            ).copyWith(fontWeight: FontWeight.w700),
           ),
         ],
       ),
@@ -683,17 +729,36 @@ class _Context extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Контекст задачи', style: AppTypography.bodyLarge(context).copyWith(fontWeight: FontWeight.w800)),
+          Text(
+            'Контекст задачи',
+            style: AppTypography.bodyLarge(
+              context,
+            ).copyWith(fontWeight: FontWeight.w800),
+          ),
           const SizedBox(height: 12),
-          if (task.warehouse != null) _Info(label: 'Склад', value: _ref(task.warehouse!)),
+          if (task.warehouse != null)
+            _Info(label: 'Склад', value: _ref(task.warehouse!)),
           if (task.zone != null) _Info(label: 'Зона', value: _ref(task.zone!)),
-          if (task.cell != null) _Info(label: 'Ячейка', value: _ref(task.cell!)),
-          if (task.logisticUnit != null) _Info(label: 'Логединица', value: _ref(task.logisticUnit!)),
-          if (task.material != null) _Info(label: 'Материал', value: _ref(task.material!)),
-          if (task.project != null) _Info(label: 'Проект', value: _ref(task.project!)),
-          if (task.plannedQuantity != null) _Info(label: 'План', value: warehouseFormatNumber(task.plannedQuantity!)),
-          if (task.completedQuantity != null) _Info(label: 'Факт', value: warehouseFormatNumber(task.completedQuantity!)),
-          if (task.dueAt != null) _Info(label: 'Срок', value: warehouseFormatDateTime(task.dueAt!)),
+          if (task.cell != null)
+            _Info(label: 'Ячейка', value: _ref(task.cell!)),
+          if (task.logisticUnit != null)
+            _Info(label: 'Логединица', value: _ref(task.logisticUnit!)),
+          if (task.material != null)
+            _Info(label: 'Материал', value: _ref(task.material!)),
+          if (task.project != null)
+            _Info(label: 'Проект', value: _ref(task.project!)),
+          if (task.plannedQuantity != null)
+            _Info(
+              label: 'План',
+              value: warehouseFormatNumber(task.plannedQuantity!),
+            ),
+          if (task.completedQuantity != null)
+            _Info(
+              label: 'Факт',
+              value: warehouseFormatNumber(task.completedQuantity!),
+            ),
+          if (task.dueAt != null)
+            _Info(label: 'Срок', value: warehouseFormatDateTime(task.dueAt!)),
         ],
       ),
     );
@@ -747,10 +812,7 @@ class _StepSummary extends StatelessWidget {
 }
 
 class _ResultBanner extends StatelessWidget {
-  const _ResultBanner({
-    required this.step,
-    required this.result,
-  });
+  const _ResultBanner({required this.step, required this.result});
 
   final _TaskStep step;
   final WarehouseScanResultModel result;
@@ -781,7 +843,8 @@ class _ResultBanner extends StatelessWidget {
     }
     final scannedName = result.entity?.name ?? result.entitySummary?.name ?? '';
     final scannedType = warehouseEntityTypeLabel(result.entityType ?? '');
-    if (result.entityType == step.entityType && result.entityId == step.entityId) {
+    if (result.entityType == step.entityType &&
+        result.entityId == step.entityId) {
       return 'Подтверждено: $scannedType "$scannedName" совпадает с шагом "${step.label.toLowerCase()}".';
     }
     return 'Получен объект "$scannedName" ($scannedType), но для этого шага ожидался другой код.';
@@ -789,10 +852,7 @@ class _ResultBanner extends StatelessWidget {
 }
 
 class _Info extends StatelessWidget {
-  const _Info({
-    required this.label,
-    required this.value,
-  });
+  const _Info({required this.label, required this.value});
 
   final String label;
   final String value;
@@ -804,12 +864,17 @@ class _Info extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(width: 110, child: Text(label, style: AppTypography.caption(context))),
+          SizedBox(
+            width: 110,
+            child: Text(label, style: AppTypography.caption(context)),
+          ),
           const SizedBox(width: 12),
           Expanded(
             child: Text(
               value,
-              style: AppTypography.bodyMedium(context).copyWith(fontWeight: FontWeight.w600),
+              style: AppTypography.bodyMedium(
+                context,
+              ).copyWith(fontWeight: FontWeight.w600),
             ),
           ),
         ],
@@ -819,10 +884,7 @@ class _Info extends StatelessWidget {
 }
 
 class _Badge extends StatelessWidget {
-  const _Badge({
-    required this.label,
-    required this.color,
-  });
+  const _Badge({required this.label, required this.color});
 
   final String label;
   final Color color;
@@ -837,7 +899,9 @@ class _Badge extends StatelessWidget {
       ),
       child: Text(
         label,
-        style: AppTypography.caption(context).copyWith(color: color, fontWeight: FontWeight.w700),
+        style: AppTypography.caption(
+          context,
+        ).copyWith(color: color, fontWeight: FontWeight.w700),
       ),
     );
   }

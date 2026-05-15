@@ -10,10 +10,7 @@ void main() {
         'title': 'mobile_dashboard.widgets.warehouse.title',
         'description': 'mobile_dashboard.widgets.warehouse.description',
         'payload': {
-          'summary': {
-            'warehouse_count': 4,
-            'low_stock_count': 2,
-          },
+          'summary': {'warehouse_count': 4, 'low_stock_count': 2},
         },
       });
 

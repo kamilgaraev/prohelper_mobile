@@ -7,7 +7,11 @@ class QualityDefectRef {
   factory QualityDefectRef.fromJson(Map<String, dynamic> json) {
     return QualityDefectRef(
       id: _asInt(json['id']),
-      name: json['name']?.toString() ?? '',
+      name:
+          json['name']?.toString() ??
+          json['full_name']?.toString() ??
+          json['title']?.toString() ??
+          '',
     );
   }
 }
@@ -25,9 +29,9 @@ class QualityDefectProblemFlag {
 
   factory QualityDefectProblemFlag.fromJson(Map<String, dynamic> json) {
     return QualityDefectProblemFlag(
-      code: json['code']?.toString() ?? '',
+      code: json['code']?.toString() ?? json['key']?.toString() ?? '',
       severity: json['severity']?.toString() ?? '',
-      message: json['message']?.toString() ?? '',
+      message: json['message']?.toString() ?? json['label']?.toString() ?? '',
     );
   }
 }
@@ -93,6 +97,10 @@ class QualityDefectModel {
   final QualityDefectWorkflowSummary? workflowSummary;
   final List<QualityDefectProblemFlag> problemFlags;
 
+  int get serverId => id;
+  String get projectName => project?.name ?? '';
+  String get assignedUserName => assignedUser?.name ?? '';
+
   bool get isOverdue =>
       workflowSummary?.overdue == true ||
       problemFlags.any((flag) => flag.code == 'quality_defect_overdue');
@@ -121,11 +129,7 @@ class QualityDefectModel {
       severityLabel: json['severity_label']?.toString(),
       status: json['status']?.toString() ?? '',
       statusLabel: json['status_label']?.toString(),
-      availableActions:
-          (json['available_actions'] as List<dynamic>? ?? const [])
-              .map((item) => item.toString())
-              .where((item) => item.isNotEmpty)
-              .toList(),
+      availableActions: _actions(json['available_actions']),
       locationName: json['location_name']?.toString(),
       dueDate: json['due_date']?.toString(),
       inspectionRequired: json['inspection_required'] == true,
@@ -149,6 +153,22 @@ class QualityDefectModel {
               .toList(),
     );
   }
+}
+
+List<String> _actions(dynamic value) {
+  return (value as List<dynamic>? ?? const [])
+      .map((item) {
+        if (item is Map) {
+          return item['key']?.toString() ??
+              item['action']?.toString() ??
+              item['name']?.toString() ??
+              '';
+        }
+
+        return item.toString();
+      })
+      .where((item) => item.isNotEmpty)
+      .toList();
 }
 
 int _asInt(dynamic value) {

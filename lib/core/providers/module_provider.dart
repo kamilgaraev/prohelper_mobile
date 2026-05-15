@@ -75,10 +75,8 @@ class ModulesState {
 }
 
 class ModulesNotifier extends StateNotifier<ModulesState> {
-  ModulesNotifier(
-    this._repository, {
-    required bool canLoad,
-  }) : super(const ModulesState()) {
+  ModulesNotifier(this._repository, {required bool canLoad})
+    : super(const ModulesState()) {
     if (canLoad) {
       loadModules();
     }
@@ -91,10 +89,7 @@ class ModulesNotifier extends StateNotifier<ModulesState> {
 
     try {
       final modules = await _repository.fetchModules();
-      state = state.copyWith(
-        isLoading: false,
-        modules: modules,
-      );
+      state = state.copyWith(isLoading: false, modules: modules);
     } catch (error) {
       state = state.copyWith(
         isLoading: false,
@@ -105,7 +100,9 @@ class ModulesNotifier extends StateNotifier<ModulesState> {
   }
 }
 
-final modulesProvider = StateNotifierProvider<ModulesNotifier, ModulesState>((ref) {
+final modulesProvider = StateNotifierProvider<ModulesNotifier, ModulesState>((
+  ref,
+) {
   final authState = ref.watch(authProvider);
 
   return ModulesNotifier(
@@ -124,10 +121,13 @@ final activeModulesProvider = Provider<Set<AppModule>>((ref) {
 });
 
 final supportedMobileModulesProvider = Provider<List<MobileModuleModel>>((ref) {
-  final modules = ref.watch(modulesProvider).modules
-      .where((module) => module.supportedOnMobile)
-      .toList()
-    ..sort((left, right) => left.order.compareTo(right.order));
+  final modules =
+      ref
+          .watch(modulesProvider)
+          .modules
+          .where((module) => module.supportedOnMobile)
+          .toList()
+        ..sort((left, right) => left.order.compareTo(right.order));
 
   return modules;
 });

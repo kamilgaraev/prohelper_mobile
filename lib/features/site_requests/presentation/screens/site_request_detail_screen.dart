@@ -12,10 +12,7 @@ import 'package:prohelpers_mobile/features/site_requests/domain/site_requests_pr
 import 'package:prohelpers_mobile/features/site_requests/presentation/screens/site_request_form_screen.dart';
 
 class SiteRequestDetailScreen extends ConsumerWidget {
-  const SiteRequestDetailScreen({
-    super.key,
-    required this.id,
-  });
+  const SiteRequestDetailScreen({super.key, required this.id});
 
   final int id;
 
@@ -39,30 +36,37 @@ class SiteRequestDetailScreen extends ConsumerWidget {
           ),
           title: Text('Детали заявки', style: AppTypography.h2(context)),
         ),
-        body: state.isLoading && state.request == null
-            ? const Center(child: CircularProgressIndicator())
-            : state.error != null && state.request == null
+        body:
+            state.isLoading && state.request == null
+                ? const Center(child: CircularProgressIndicator())
+                : state.error != null && state.request == null
                 ? AppStateView(
-                    icon: Icons.error_outline_rounded,
-                    iconColor: AppColors.error,
-                    title: 'Не удалось загрузить заявку',
-                    description: state.error,
-                    action: OutlinedButton(
-                      onPressed: () => ref
-                          .read(siteRequestDetailProvider(id).notifier)
-                          .loadDetails(),
-                      child: const Text('Повторить'),
-                    ),
-                  )
+                  icon: Icons.error_outline_rounded,
+                  iconColor: AppColors.error,
+                  title: 'Не удалось загрузить заявку',
+                  description: state.error,
+                  action: OutlinedButton(
+                    onPressed:
+                        () =>
+                            ref
+                                .read(siteRequestDetailProvider(id).notifier)
+                                .loadDetails(),
+                    child: const Text('Повторить'),
+                  ),
+                )
                 : _SiteRequestDetailContent(
-                    request: state.request!,
-                    onEdit: state.request!.canBeEdited
-                        ? () async {
-                            final updated = await Navigator.of(context).push<bool>(
+                  request: state.request!,
+                  onEdit:
+                      state.request!.canBeEdited
+                          ? () async {
+                            final updated = await Navigator.of(
+                              context,
+                            ).push<bool>(
                               MaterialPageRoute(
-                                builder: (_) => SiteRequestFormScreen(
-                                  initialRequest: state.request,
-                                ),
+                                builder:
+                                    (_) => SiteRequestFormScreen(
+                                      initialRequest: state.request,
+                                    ),
                               ),
                             );
 
@@ -75,16 +79,18 @@ class SiteRequestDetailScreen extends ConsumerWidget {
                                   .loadDetails();
                             }
                           }
-                        : null,
-                  ),
-        bottomNavigationBar: state.request == null
-            ? null
-            : _SiteRequestActions(
-                transitions: _resolvedTransitions(state.request!),
-                isLoading: state.isActionLoading,
-                onTransitionSelected: (transition) =>
-                    _runTransitionAction(context, ref, transition),
-              ),
+                          : null,
+                ),
+        bottomNavigationBar:
+            state.request == null
+                ? null
+                : _SiteRequestActions(
+                  transitions: _resolvedTransitions(state.request!),
+                  isLoading: state.isActionLoading,
+                  onTransitionSelected:
+                      (transition) =>
+                          _runTransitionAction(context, ref, transition),
+                ),
       ),
     );
   }
@@ -108,9 +114,9 @@ class SiteRequestDetailScreen extends ConsumerWidget {
         return;
       }
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(error.toString())),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.toString())));
     }
   }
 
@@ -124,57 +130,61 @@ class SiteRequestDetailScreen extends ConsumerWidget {
 
     showDialog(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        backgroundColor: theme.colorScheme.surface,
-        title: Text(_transitionActionLabel(transition), style: AppTypography.h2(context)),
-        content: TextField(
-          controller: controller,
-          maxLines: 3,
-          style: AppTypography.bodyMedium(context),
-          decoration: InputDecoration(
-            hintText: 'Комментарий к решению',
-            hintStyle: TextStyle(color: theme.colorScheme.onSurfaceVariant),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Назад'),
-          ),
-          TextButton(
-            onPressed: () async {
-              Navigator.pop(dialogContext);
-
-              try {
-                await ref
-                    .read(siteRequestDetailProvider(id).notifier)
-                    .changeStatus(transition.status, notes: controller.text);
-              } catch (error) {
-                if (!context.mounted) {
-                  return;
-                }
-
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text(error.toString())),
-                );
-              }
-            },
-            child: Text(
+      builder:
+          (dialogContext) => AlertDialog(
+            backgroundColor: theme.colorScheme.surface,
+            title: Text(
               _transitionActionLabel(transition),
-              style: TextStyle(color: _transitionColor(transition.status)),
+              style: AppTypography.h2(context),
             ),
+            content: TextField(
+              controller: controller,
+              maxLines: 3,
+              style: AppTypography.bodyMedium(context),
+              decoration: InputDecoration(
+                hintText: 'Комментарий к решению',
+                hintStyle: TextStyle(color: theme.colorScheme.onSurfaceVariant),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('Назад'),
+              ),
+              TextButton(
+                onPressed: () async {
+                  Navigator.pop(dialogContext);
+
+                  try {
+                    await ref
+                        .read(siteRequestDetailProvider(id).notifier)
+                        .changeStatus(
+                          transition.status,
+                          notes: controller.text,
+                        );
+                  } catch (error) {
+                    if (!context.mounted) {
+                      return;
+                    }
+
+                    ScaffoldMessenger.of(
+                      context,
+                    ).showSnackBar(SnackBar(content: Text(error.toString())));
+                  }
+                },
+                child: Text(
+                  _transitionActionLabel(transition),
+                  style: TextStyle(color: _transitionColor(transition.status)),
+                ),
+              ),
+            ],
           ),
-        ],
-      ),
     );
   }
 }
 
 class _SiteRequestDetailContent extends StatelessWidget {
-  const _SiteRequestDetailContent({
-    required this.request,
-    this.onEdit,
-  });
+  const _SiteRequestDetailContent({required this.request, this.onEdit});
 
   final SiteRequestModel request;
   final Future<void> Function()? onEdit;
@@ -218,10 +228,7 @@ class _SiteRequestDetailContent extends StatelessWidget {
           ],
           if ((request.notes ?? '').trim().isNotEmpty) ...[
             const SizedBox(height: 16),
-            _RequestTextCard(
-              title: 'Комментарий',
-              description: request.notes!,
-            ),
+            _RequestTextCard(title: 'Комментарий', description: request.notes!),
           ],
           if ((request.description ?? '').trim().isNotEmpty) ...[
             const SizedBox(height: 16),
@@ -299,7 +306,7 @@ class _RequestAttentionBanner extends StatelessWidget {
             width: 42,
             height: 42,
             decoration: BoxDecoration(
-              color: color.withOpacity(0.12),
+              color: color.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(14),
             ),
             child: Icon(_attentionIcon(request), color: color),
@@ -311,16 +318,16 @@ class _RequestAttentionBanner extends StatelessWidget {
               children: [
                 Text(
                   _attentionTitle(request),
-                  style: AppTypography.bodyLarge(context).copyWith(
-                    fontWeight: FontWeight.w800,
-                  ),
+                  style: AppTypography.bodyLarge(
+                    context,
+                  ).copyWith(fontWeight: FontWeight.w800),
                 ),
                 const SizedBox(height: 4),
                 Text(
                   _attentionDescription(request),
-                  style: AppTypography.bodyMedium(context).copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
+                  style: AppTypography.bodyMedium(
+                    context,
+                  ).copyWith(color: theme.colorScheme.onSurfaceVariant),
                 ),
               ],
             ),
@@ -447,11 +454,14 @@ class _RequestResourcesCard extends StatelessWidget {
                 icon: Icons.format_list_numbered_outlined,
                 label: 'Количество',
                 value: [
-                  request.materialQuantity != null
-                      ? _formatQuantity(request.materialQuantity!)
-                      : null,
-                  request.materialUnit,
-                ].whereType<String>().where((value) => value.trim().isNotEmpty).join(' '),
+                      request.materialQuantity != null
+                          ? _formatQuantity(request.materialQuantity!)
+                          : null,
+                      request.materialUnit,
+                    ]
+                    .whereType<String>()
+                    .where((value) => value.trim().isNotEmpty)
+                    .join(' '),
               ),
           ],
           if ((request.personnelTypeLabel ?? '').trim().isNotEmpty ||
@@ -469,7 +479,9 @@ class _RequestResourcesCard extends StatelessWidget {
                 value: '${request.personnelCount} чел.',
               ),
           ],
-          if ((request.equipmentTypeLabel ?? request.equipmentType ?? '').trim().isNotEmpty) ...[
+          if ((request.equipmentTypeLabel ?? request.equipmentType ?? '')
+              .trim()
+              .isNotEmpty) ...[
             _ParamRow(
               icon: Icons.precision_manufacturing_outlined,
               label: 'Техника',
@@ -502,14 +514,16 @@ class _RequestProcurementCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final reserveStatus = request.materialReserved
-        ? 'Материал зарезервирован'
-        : request.purchaseOrders.isNotEmpty
+    final reserveStatus =
+        request.materialReserved
+            ? 'Материал зарезервирован'
+            : request.purchaseOrders.isNotEmpty
             ? 'Ожидается резервирование или приемка'
             : 'Закупка еще не запущена';
-    final receiptStatus = request.materialsReceived
-        ? 'Материалы приняты'
-        : request.purchaseOrders.isNotEmpty
+    final receiptStatus =
+        request.materialsReceived
+            ? 'Материалы приняты'
+            : request.purchaseOrders.isNotEmpty
             ? 'Ожидается поставка'
             : 'Поставка еще не оформлена';
 
@@ -530,9 +544,12 @@ class _RequestProcurementCard extends StatelessWidget {
               icon: Icons.scale_outlined,
               label: 'В резерве',
               value: [
-                _formatQuantity(request.reservedQuantity!),
-                request.materialUnit,
-              ].whereType<String>().where((value) => value.trim().isNotEmpty).join(' '),
+                    _formatQuantity(request.reservedQuantity!),
+                    request.materialUnit,
+                  ]
+                  .whereType<String>()
+                  .where((value) => value.trim().isNotEmpty)
+                  .join(' '),
             ),
           if (request.reservedAt != null)
             _ParamRow(
@@ -562,16 +579,20 @@ class _RequestProcurementCard extends StatelessWidget {
             const SizedBox(height: 4),
             Text(
               'Заявки на закупку',
-              style: AppTypography.bodyLarge(context).copyWith(
-                fontWeight: FontWeight.w700,
-              ),
+              style: AppTypography.bodyLarge(
+                context,
+              ).copyWith(fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 12),
             ...request.purchaseRequests.map(
               (item) => _ProcurementItemTile(
                 icon: Icons.request_quote_outlined,
-                title: item.number.isNotEmpty ? item.number : 'Заявка #${item.id}',
-                subtitle: item.createdAt != null ? _formatDateTime(item.createdAt!) : null,
+                title:
+                    item.number.isNotEmpty ? item.number : 'Заявка #${item.id}',
+                subtitle:
+                    item.createdAt != null
+                        ? _formatDateTime(item.createdAt!)
+                        : null,
                 badgeLabel: _purchaseRequestStatusLabel(item),
                 badgeColor: _statusColor(item.status),
               ),
@@ -581,20 +602,27 @@ class _RequestProcurementCard extends StatelessWidget {
             const SizedBox(height: 8),
             Text(
               'Заявки поставщикам',
-              style: AppTypography.bodyLarge(context).copyWith(
-                fontWeight: FontWeight.w700,
-              ),
+              style: AppTypography.bodyLarge(
+                context,
+              ).copyWith(fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 12),
             ...request.supplierRequests.map(
               (item) => _ProcurementItemTile(
                 icon: Icons.assignment_turned_in_outlined,
-                title: item.number.isNotEmpty ? item.number : 'Заявка поставщику #${item.id}',
+                title:
+                    item.number.isNotEmpty
+                        ? item.number
+                        : 'Заявка поставщику #${item.id}',
                 subtitle: [
-                  item.supplierName,
-                  if ((item.sentAt ?? '').trim().isNotEmpty) item.sentAt,
-                  if (item.createdAt != null) _formatDateTime(item.createdAt!),
-                ].whereType<String>().where((value) => value.trim().isNotEmpty).join(' • '),
+                      item.supplierName,
+                      if ((item.sentAt ?? '').trim().isNotEmpty) item.sentAt,
+                      if (item.createdAt != null)
+                        _formatDateTime(item.createdAt!),
+                    ]
+                    .whereType<String>()
+                    .where((value) => value.trim().isNotEmpty)
+                    .join(' • '),
                 badgeLabel: _supplierRequestStatusLabel(item),
                 badgeColor: _statusColor(item.status),
               ),
@@ -604,20 +632,26 @@ class _RequestProcurementCard extends StatelessWidget {
             const SizedBox(height: 8),
             Text(
               'Заказы поставщику',
-              style: AppTypography.bodyLarge(context).copyWith(
-                fontWeight: FontWeight.w700,
-              ),
+              style: AppTypography.bodyLarge(
+                context,
+              ).copyWith(fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 12),
             ...request.purchaseOrders.map(
               (item) => _ProcurementItemTile(
                 icon: Icons.shopping_cart_checkout_outlined,
-                title: item.number.isNotEmpty ? item.number : 'Заказ #${item.id}',
+                title:
+                    item.number.isNotEmpty ? item.number : 'Заказ #${item.id}',
                 subtitle: [
-                  item.supplierName,
-                  if ((item.deliveryDate ?? '').trim().isNotEmpty) item.deliveryDate,
-                  if (item.createdAt != null) _formatDateTime(item.createdAt!),
-                ].whereType<String>().where((value) => value.trim().isNotEmpty).join(' • '),
+                      item.supplierName,
+                      if ((item.deliveryDate ?? '').trim().isNotEmpty)
+                        item.deliveryDate,
+                      if (item.createdAt != null)
+                        _formatDateTime(item.createdAt!),
+                    ]
+                    .whereType<String>()
+                    .where((value) => value.trim().isNotEmpty)
+                    .join(' • '),
                 badgeLabel: _purchaseOrderStatusLabel(item),
                 badgeColor: _statusColor(item.status),
               ),
@@ -631,9 +665,9 @@ class _RequestProcurementCard extends StatelessWidget {
             const SizedBox(height: 4),
             Text(
               'Связанных закупок по этой заявке пока нет.',
-              style: AppTypography.bodyMedium(context).copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
+              style: AppTypography.bodyMedium(
+                context,
+              ).copyWith(color: theme.colorScheme.onSurfaceVariant),
             ),
           ],
         ],
@@ -665,7 +699,9 @@ class _ProcurementItemTile extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceVariant.withOpacity(0.35),
+        color: theme.colorScheme.surfaceContainerHighest.withValues(
+          alpha: 0.35,
+        ),
         borderRadius: BorderRadius.circular(16),
       ),
       child: Row(
@@ -679,17 +715,17 @@ class _ProcurementItemTile extends StatelessWidget {
               children: [
                 Text(
                   title,
-                  style: AppTypography.bodyLarge(context).copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
+                  style: AppTypography.bodyLarge(
+                    context,
+                  ).copyWith(fontWeight: FontWeight.w700),
                 ),
                 if ((subtitle ?? '').trim().isNotEmpty) ...[
                   const SizedBox(height: 4),
                   Text(
                     subtitle!,
-                    style: AppTypography.bodyMedium(context).copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
+                    style: AppTypography.bodyMedium(
+                      context,
+                    ).copyWith(color: theme.colorScheme.onSurfaceVariant),
                   ),
                 ],
               ],
@@ -710,23 +746,24 @@ class _RequestGroupCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final items = request.groupItems.isNotEmpty
-        ? request.groupItems
-        : [
-            SiteRequestGroupItem(
-              id: request.serverId,
-              title: request.title,
-              status: request.status,
-              statusLabel: _statusLabel(request),
-              requestType: request.requestType,
-              requestTypeLabel: _requestTypeLabel(request),
-              materialName: request.materialName,
-              materialQuantity: request.materialQuantity,
-              materialUnit: request.materialUnit,
-              assignedUserName: request.assignedUserName,
-              isCurrent: true,
-            ),
-          ];
+    final items =
+        request.groupItems.isNotEmpty
+            ? request.groupItems
+            : [
+              SiteRequestGroupItem(
+                id: request.serverId,
+                title: request.title,
+                status: request.status,
+                statusLabel: _statusLabel(request),
+                requestType: request.requestType,
+                requestTypeLabel: _requestTypeLabel(request),
+                materialName: request.materialName,
+                materialQuantity: request.materialQuantity,
+                materialUnit: request.materialUnit,
+                assignedUserName: request.assignedUserName,
+                isCurrent: true,
+              ),
+            ];
 
     return ProCard(
       child: Column(
@@ -738,9 +775,9 @@ class _RequestGroupCard extends StatelessWidget {
             request.groupTitle?.trim().isNotEmpty == true
                 ? request.groupTitle!
                 : 'Группа материалов',
-            style: AppTypography.bodyLarge(context).copyWith(
-              fontWeight: FontWeight.w700,
-            ),
+            style: AppTypography.bodyLarge(
+              context,
+            ).copyWith(fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: 4),
           Text(
@@ -752,7 +789,8 @@ class _RequestGroupCard extends StatelessWidget {
             final subtitle = [
               item.materialName ?? '',
               if (item.materialQuantity != null)
-                '${_formatQuantity(item.materialQuantity!)} ${item.materialUnit ?? ''}'.trim(),
+                '${_formatQuantity(item.materialQuantity!)} ${item.materialUnit ?? ''}'
+                    .trim(),
               item.assignedUserName ?? '',
             ].where((value) => value.trim().isNotEmpty).join(' • ');
 
@@ -762,9 +800,15 @@ class _RequestGroupCard extends StatelessWidget {
                 width: double.infinity,
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: item.isCurrent
-                      ? Theme.of(context).colorScheme.primary.withOpacity(0.08)
-                      : Theme.of(context).colorScheme.surfaceVariant.withOpacity(0.35),
+                  color:
+                      item.isCurrent
+                          ? Theme.of(
+                            context,
+                          ).colorScheme.primary.withValues(alpha: 0.08)
+                          : Theme.of(context)
+                              .colorScheme
+                              .surfaceContainerHighest
+                              .withValues(alpha: 0.35),
                   borderRadius: BorderRadius.circular(16),
                 ),
                 child: Column(
@@ -775,18 +819,19 @@ class _RequestGroupCard extends StatelessWidget {
                         Expanded(
                           child: Text(
                             item.title,
-                            style: AppTypography.bodyLarge(context).copyWith(
-                              fontWeight: FontWeight.w700,
-                            ),
+                            style: AppTypography.bodyLarge(
+                              context,
+                            ).copyWith(fontWeight: FontWeight.w700),
                           ),
                         ),
-                        if (item.isCurrent)
-                          _InfoLabel(label: 'Текущая'),
+                        if (item.isCurrent) _InfoLabel(label: 'Текущая'),
                       ],
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      subtitle.isEmpty ? (item.requestTypeLabel ?? item.requestType) : subtitle,
+                      subtitle.isEmpty
+                          ? (item.requestTypeLabel ?? item.requestType)
+                          : subtitle,
                       style: AppTypography.bodyMedium(context),
                     ),
                     const SizedBox(height: 6),
@@ -805,31 +850,8 @@ class _RequestGroupCard extends StatelessWidget {
   }
 }
 
-class _RequestDescriptionCard extends StatelessWidget {
-  const _RequestDescriptionCard({required this.description});
-
-  final String description;
-
-  @override
-  Widget build(BuildContext context) {
-    return ProCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('Описание', style: AppTypography.h2(context)),
-          const SizedBox(height: 12),
-          Text(description, style: AppTypography.bodyMedium(context)),
-        ],
-      ),
-    );
-  }
-}
-
 class _RequestTextCard extends StatelessWidget {
-  const _RequestTextCard({
-    required this.title,
-    required this.description,
-  });
+  const _RequestTextCard({required this.title, required this.description});
 
   final String title;
   final String description;
@@ -867,13 +889,16 @@ class _RequestHistoryCard extends StatelessWidget {
           ...history.asMap().entries.map((entry) {
             final index = entry.key;
             final item = entry.value;
-            final statusChange = [
-              item.oldStatusLabel,
-              item.newStatusLabel,
-            ].whereType<String>().where((value) => value.trim().isNotEmpty).toList();
+            final statusChange =
+                [item.oldStatusLabel, item.newStatusLabel]
+                    .whereType<String>()
+                    .where((value) => value.trim().isNotEmpty)
+                    .toList();
 
             return Padding(
-              padding: EdgeInsets.only(bottom: index == history.length - 1 ? 0 : 14),
+              padding: EdgeInsets.only(
+                bottom: index == history.length - 1 ? 0 : 14,
+              ),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -893,18 +918,22 @@ class _RequestHistoryCard extends StatelessWidget {
                       children: [
                         Text(
                           item.actionLabel,
-                          style: AppTypography.bodyLarge(context).copyWith(
-                            fontWeight: FontWeight.w700,
-                          ),
+                          style: AppTypography.bodyLarge(
+                            context,
+                          ).copyWith(fontWeight: FontWeight.w700),
                         ),
                         if ((item.userName ?? '').trim().isNotEmpty ||
                             item.createdAt != null) ...[
                           const SizedBox(height: 4),
                           Text(
                             [
-                              item.userName,
-                              if (item.createdAt != null) _formatDateTime(item.createdAt!),
-                            ].whereType<String>().where((value) => value.trim().isNotEmpty).join(' • '),
+                                  item.userName,
+                                  if (item.createdAt != null)
+                                    _formatDateTime(item.createdAt!),
+                                ]
+                                .whereType<String>()
+                                .where((value) => value.trim().isNotEmpty)
+                                .join(' • '),
                             style: AppTypography.caption(context).copyWith(
                               color: theme.colorScheme.onSurfaceVariant,
                             ),
@@ -959,7 +988,9 @@ class _SiteRequestActions extends StatelessWidget {
     final theme = Theme.of(context);
     final sortedTransitions = [...transitions]..sort(_compareTransitions);
     final primaryTransition = sortedTransitions.first;
-    final secondaryTransitions = sortedTransitions.skip(1).toList(growable: false);
+    final secondaryTransitions = sortedTransitions
+        .skip(1)
+        .toList(growable: false);
 
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
@@ -968,8 +999,8 @@ class _SiteRequestActions extends StatelessWidget {
         borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(
-              theme.brightness == Brightness.dark ? 0.3 : 0.05,
+            color: Colors.black.withValues(
+              alpha: theme.brightness == Brightness.dark ? 0.3 : 0.05,
             ),
             blurRadius: 20,
           ),
@@ -989,15 +1020,19 @@ class _SiteRequestActions extends StatelessWidget {
             Wrap(
               spacing: 8,
               runSpacing: 8,
-              children: secondaryTransitions.map((transition) {
-                return OutlinedButton(
-                  onPressed: isLoading ? null : () => onTransitionSelected(transition),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: _transitionColor(transition.status),
-                  ),
-                  child: Text(_transitionActionLabel(transition)),
-                );
-              }).toList(),
+              children:
+                  secondaryTransitions.map((transition) {
+                    return OutlinedButton(
+                      onPressed:
+                          isLoading
+                              ? null
+                              : () => onTransitionSelected(transition),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: _transitionColor(transition.status),
+                      ),
+                      child: Text(_transitionActionLabel(transition)),
+                    );
+                  }).toList(),
             ),
           ],
         ],
@@ -1018,7 +1053,7 @@ class _InfoLabel extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceVariant.withOpacity(0.5),
+        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Text(label, style: AppTypography.bodySmall(context)),
@@ -1027,10 +1062,7 @@ class _InfoLabel extends StatelessWidget {
 }
 
 class _StatusBadge extends StatelessWidget {
-  const _StatusBadge({
-    required this.label,
-    required this.color,
-  });
+  const _StatusBadge({required this.label, required this.color});
 
   final String label;
   final Color color;
@@ -1040,16 +1072,15 @@ class _StatusBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(0.3)),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
       child: Text(
         label,
-        style: AppTypography.bodySmall(context).copyWith(
-          color: color,
-          fontWeight: FontWeight.bold,
-        ),
+        style: AppTypography.bodySmall(
+          context,
+        ).copyWith(color: color, fontWeight: FontWeight.bold),
       ),
     );
   }
@@ -1071,7 +1102,7 @@ class _SoftBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.08),
+        color: color.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
@@ -1081,10 +1112,9 @@ class _SoftBadge extends StatelessWidget {
           const SizedBox(width: 6),
           Text(
             label,
-            style: AppTypography.caption(context).copyWith(
-              color: color,
-              fontWeight: FontWeight.w700,
-            ),
+            style: AppTypography.caption(
+              context,
+            ).copyWith(color: color, fontWeight: FontWeight.w700),
           ),
         ],
       ),
@@ -1120,17 +1150,17 @@ class _ParamRow extends StatelessWidget {
             width: 108,
             child: Text(
               label,
-              style: AppTypography.bodyMedium(context).copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
+              style: AppTypography.bodyMedium(
+                context,
+              ).copyWith(color: theme.colorScheme.onSurfaceVariant),
             ),
           ),
           Expanded(
             child: Text(
               value,
-              style: AppTypography.bodyLarge(context).copyWith(
-                color: valueColor,
-              ),
+              style: AppTypography.bodyLarge(
+                context,
+              ).copyWith(color: valueColor),
             ),
           ),
         ],
@@ -1146,12 +1176,10 @@ List<SiteRequestTransition> _resolvedTransitions(SiteRequestModel request) {
 
   return switch (request.status.trim().toLowerCase()) {
     'draft' => const [
-        SiteRequestTransition(status: 'pending'),
-        SiteRequestTransition(status: 'cancelled'),
-      ],
-    'fulfilled' => const [
-        SiteRequestTransition(status: 'completed'),
-      ],
+      SiteRequestTransition(status: 'pending'),
+      SiteRequestTransition(status: 'cancelled'),
+    ],
+    'fulfilled' => const [SiteRequestTransition(status: 'completed')],
     _ => const [],
   };
 }
@@ -1161,7 +1189,9 @@ bool _hasResourceSection(SiteRequestModel request) {
       request.materialQuantity != null ||
       (request.personnelTypeLabel ?? '').trim().isNotEmpty ||
       request.personnelCount != null ||
-      (request.equipmentTypeLabel ?? request.equipmentType ?? '').trim().isNotEmpty;
+      (request.equipmentTypeLabel ?? request.equipmentType ?? '')
+          .trim()
+          .isNotEmpty;
 }
 
 bool _hasProcurementSection(SiteRequestModel request) {
@@ -1241,9 +1271,10 @@ String _transitionActionLabel(SiteRequestTransition transition) {
     'fulfilled' => 'Отметить исполненной',
     'completed' => 'Подтвердить получение',
     'cancelled' => 'Отменить заявку',
-    _ => transition.name?.trim().isNotEmpty == true
-        ? transition.name!.trim()
-        : transition.status,
+    _ =>
+      transition.name?.trim().isNotEmpty == true
+          ? transition.name!.trim()
+          : transition.status,
   };
 }
 
@@ -1252,8 +1283,13 @@ bool _statusRequiresReason(String status) {
   return normalized == 'cancelled' || normalized == 'rejected';
 }
 
-int _compareTransitions(SiteRequestTransition left, SiteRequestTransition right) {
-  return _transitionPriority(right.status).compareTo(_transitionPriority(left.status));
+int _compareTransitions(
+  SiteRequestTransition left,
+  SiteRequestTransition right,
+) {
+  return _transitionPriority(
+    right.status,
+  ).compareTo(_transitionPriority(left.status));
 }
 
 int _transitionPriority(String status) {
@@ -1301,7 +1337,8 @@ String _attentionDescription(SiteRequestModel request) {
     'pending' || 'in_review' => 'Заявка сейчас ожидает решения или проверки.',
     'approved' => 'Заявка уже согласована и должна перейти к исполнению.',
     'in_progress' => 'Исполнение уже началось, держите срок и обратную связь.',
-    'fulfilled' => 'По заявке пришел результат, осталось подтвердить получение.',
+    'fulfilled' =>
+      'По заявке пришел результат, осталось подтвердить получение.',
     'completed' => 'Все действия по этой заявке завершены.',
     'cancelled' => 'Заявка была отменена и больше не требует действий.',
     'rejected' => 'Заявка отклонена и не пойдет в исполнение.',
@@ -1389,7 +1426,8 @@ String _requestSubtitle(SiteRequestModel request) {
   if ((request.materialName ?? '').trim().isNotEmpty) {
     final parts = <String>[
       request.materialName!,
-      if (request.materialQuantity != null) _formatQuantity(request.materialQuantity!),
+      if (request.materialQuantity != null)
+        _formatQuantity(request.materialQuantity!),
       if ((request.materialUnit ?? '').trim().isNotEmpty) request.materialUnit!,
     ];
     return parts.join(' ');
@@ -1403,7 +1441,9 @@ String _requestSubtitle(SiteRequestModel request) {
     return parts.join(' • ');
   }
 
-  if ((request.equipmentTypeLabel ?? request.equipmentType ?? '').trim().isNotEmpty) {
+  if ((request.equipmentTypeLabel ?? request.equipmentType ?? '')
+      .trim()
+      .isNotEmpty) {
     return request.equipmentTypeLabel ?? request.equipmentType!;
   }
 

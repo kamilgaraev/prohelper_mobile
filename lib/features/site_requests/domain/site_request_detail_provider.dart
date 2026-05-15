@@ -29,19 +29,29 @@ class SiteRequestDetailState {
       isLoading: isLoading ?? this.isLoading,
       isActionLoading: isActionLoading ?? this.isActionLoading,
       request: request ?? this.request,
-      error: identical(error, _siteRequestDetailSentinel) ? this.error : error as String?,
+      error:
+          identical(error, _siteRequestDetailSentinel)
+              ? this.error
+              : error as String?,
     );
   }
 }
 
 final siteRequestDetailProvider = StateNotifierProvider.family<
-    SiteRequestDetailNotifier, SiteRequestDetailState, int>((ref, id) {
-  return SiteRequestDetailNotifier(ref.read(siteRequestsRepositoryProvider), ref, id);
+  SiteRequestDetailNotifier,
+  SiteRequestDetailState,
+  int
+>((ref, id) {
+  return SiteRequestDetailNotifier(
+    ref.read(siteRequestsRepositoryProvider),
+    ref,
+    id,
+  );
 });
 
 class SiteRequestDetailNotifier extends StateNotifier<SiteRequestDetailState> {
   SiteRequestDetailNotifier(this._repository, this._ref, this._id)
-      : super(SiteRequestDetailState()) {
+    : super(SiteRequestDetailState()) {
     loadDetails();
   }
 
@@ -64,11 +74,15 @@ class SiteRequestDetailNotifier extends StateNotifier<SiteRequestDetailState> {
   }
 
   Future<void> cancel({String? notes}) async {
-    await _performAction(() => _repository.cancelSiteRequest(_id, notes: notes));
+    await _performAction(
+      () => _repository.cancelSiteRequest(_id, notes: notes),
+    );
   }
 
   Future<void> complete({String? notes}) async {
-    await _performAction(() => _repository.completeSiteRequest(_id, notes: notes));
+    await _performAction(
+      () => _repository.completeSiteRequest(_id, notes: notes),
+    );
   }
 
   Future<void> changeStatus(String status, {String? notes}) async {
@@ -77,12 +91,16 @@ class SiteRequestDetailNotifier extends StateNotifier<SiteRequestDetailState> {
     );
   }
 
-  Future<void> _performAction(Future<SiteRequestModel> Function() action) async {
+  Future<void> _performAction(
+    Future<SiteRequestModel> Function() action,
+  ) async {
     state = state.copyWith(isActionLoading: true, error: null);
     try {
       final updatedRequest = await action();
       state = state.copyWith(isActionLoading: false, request: updatedRequest);
-      await _ref.read(siteRequestsProvider.notifier).loadRequests(refresh: true);
+      await _ref
+          .read(siteRequestsProvider.notifier)
+          .loadRequests(refresh: true);
     } catch (e) {
       state = state.copyWith(isActionLoading: false, error: e.toString());
       rethrow;

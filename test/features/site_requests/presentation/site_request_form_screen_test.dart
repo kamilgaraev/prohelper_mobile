@@ -73,7 +73,7 @@ class _FakeSiteRequestsRepository extends SiteRequestsRepository {
 
 class _FakeSiteRequestsNotifier extends SiteRequestsNotifier {
   _FakeSiteRequestsNotifier()
-      : super(_FakeSiteRequestsRepository(), initialProjectId: 15) {
+    : super(_FakeSiteRequestsRepository(), initialProjectId: 15) {
     state = SiteRequestsState(
       isLoading: false,
       requests: const [],
@@ -177,7 +177,9 @@ void main() {
     );
   }
 
-  testWidgets('показывает контекст объекта и переключает секции формы', (tester) async {
+  testWidgets('показывает контекст объекта и переключает секции формы', (
+    tester,
+  ) async {
     await tester.pumpWidget(createWidget());
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
@@ -216,18 +218,21 @@ void main() {
     expect(find.text('Количество человек'), findsNothing);
   });
 
-  testWidgets('подставляет существующие позиции при редактировании группы материалов', (tester) async {
-    await tester.pumpWidget(
-      createWidget(initialRequest: buildEditableGroupRequest()),
-    );
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 50));
+  testWidgets(
+    'подставляет существующие позиции при редактировании группы материалов',
+    (tester) async {
+      await tester.pumpWidget(
+        createWidget(initialRequest: buildEditableGroupRequest()),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
 
-    expect(find.text('Редактирование заявки'), findsOneWidget);
-    expect(find.text('Материал 1'), findsOneWidget);
-    expect(find.text('Материал 2'), findsOneWidget);
-    expect(find.text('Бетон М300'), findsWidgets);
-    expect(find.text('Арматура А500'), findsWidgets);
-    expect(find.text('Сохранить группу'), findsOneWidget);
-  });
+      expect(find.text('Редактирование заявки'), findsOneWidget);
+      expect(find.text('Материал 1'), findsOneWidget);
+      expect(find.text('Материал 2'), findsOneWidget);
+      expect(find.text('Бетон М300'), findsWidgets);
+      expect(find.text('Арматура А500'), findsWidgets);
+      expect(find.text('Сохранить группу'), findsOneWidget);
+    },
+  );
 }

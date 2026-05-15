@@ -39,7 +39,8 @@ class SiteRequestsRepository {
       );
 
       final List<dynamic> list;
-      if (response.data['data'] != null && response.data['data']['data'] is List) {
+      if (response.data['data'] != null &&
+          response.data['data']['data'] is List) {
         list = response.data['data']['data'];
       } else if (response.data['data'] is List) {
         list = response.data['data'];
@@ -120,7 +121,10 @@ class SiteRequestsRepository {
     Map<String, dynamic> data,
   ) async {
     try {
-      final response = await _dio.put('/site-requests/groups/$groupId', data: data);
+      final response = await _dio.put(
+        '/site-requests/groups/$groupId',
+        data: data,
+      );
       return _parseSiteRequestResponse(response.data['data']);
     } on DioException catch (error) {
       throw ApiException.fromDio(
@@ -148,9 +152,10 @@ class SiteRequestsRepository {
 
   Future<SiteRequestModel> cancelSiteRequest(int id, {String? notes}) async {
     try {
-      final response = await _dio.post('/site-requests/$id/cancel', data: {
-        if (notes != null) 'notes': notes,
-      });
+      final response = await _dio.post(
+        '/site-requests/$id/cancel',
+        data: {if (notes != null) 'notes': notes},
+      );
       return SiteRequestModel.fromJson(response.data['data']);
     } on DioException catch (error) {
       throw ApiException.fromDio(
@@ -164,9 +169,10 @@ class SiteRequestsRepository {
 
   Future<SiteRequestModel> completeSiteRequest(int id, {String? notes}) async {
     try {
-      final response = await _dio.post('/site-requests/$id/complete', data: {
-        if (notes != null) 'notes': notes,
-      });
+      final response = await _dio.post(
+        '/site-requests/$id/complete',
+        data: {if (notes != null) 'notes': notes},
+      );
       return SiteRequestModel.fromJson(response.data['data']);
     } on DioException catch (error) {
       throw ApiException.fromDio(
@@ -184,10 +190,13 @@ class SiteRequestsRepository {
     String? notes,
   }) async {
     try {
-      final response = await _dio.post('/site-requests/$id/status', data: {
-        'status': status,
-        if (notes != null && notes.trim().isNotEmpty) 'notes': notes.trim(),
-      });
+      final response = await _dio.post(
+        '/site-requests/$id/status',
+        data: {
+          'status': status,
+          if (notes != null && notes.trim().isNotEmpty) 'notes': notes.trim(),
+        },
+      );
       return SiteRequestModel.fromJson(response.data['data']);
     } on DioException catch (error) {
       throw ApiException.fromDio(
@@ -213,12 +222,15 @@ class SiteRequestsRepository {
     }
   }
 
-  Future<SiteRequestModel> createFromTemplate(int templateId, int projectId) async {
+  Future<SiteRequestModel> createFromTemplate(
+    int templateId,
+    int projectId,
+  ) async {
     try {
-      final response =
-          await _dio.post('/site-requests/from-template/$templateId', data: {
-        'project_id': projectId,
-      });
+      final response = await _dio.post(
+        '/site-requests/from-template/$templateId',
+        data: {'project_id': projectId},
+      );
       return SiteRequestModel.fromJson(response.data['data']);
     } on DioException catch (error) {
       throw ApiException.fromDio(
@@ -250,7 +262,8 @@ class SiteRequestsRepository {
         return SiteRequestModel.fromJson(responseData['primary_request']);
       }
 
-      if (responseData['requests'] is List && (responseData['requests'] as List).isNotEmpty) {
+      if (responseData['requests'] is List &&
+          (responseData['requests'] as List).isNotEmpty) {
         final first = (responseData['requests'] as List).first;
         if (first is Map<String, dynamic>) {
           return SiteRequestModel.fromJson(first);

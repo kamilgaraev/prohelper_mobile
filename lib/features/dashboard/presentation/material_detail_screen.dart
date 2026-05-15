@@ -1,5 +1,4 @@
-import 'package:flutter/material.dart';
-import '../../../core/theme/app_colors.dart';
+﻿import 'package:flutter/material.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../core/widgets/industrial_card.dart';
 
@@ -17,8 +16,11 @@ class MaterialDetailScreen extends StatelessWidget {
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: BackButton(color: theme.colorScheme.onSurface),
-        title: Text('ДЕТАЛИ МАТЕРИАЛА', 
-          style: AppTypography.h2(context).copyWith(fontSize: 16, letterSpacing: 1.5)
+        title: Text(
+          'ДЕТАЛИ МАТЕРИАЛА',
+          style: AppTypography.h2(
+            context,
+          ).copyWith(fontSize: 16, letterSpacing: 1.5),
         ),
       ),
       body: SingleChildScrollView(
@@ -36,14 +38,22 @@ class MaterialDetailScreen extends StatelessWidget {
                     Container(
                       padding: const EdgeInsets.all(20),
                       decoration: BoxDecoration(
-                        color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.5),
+                        color: theme.colorScheme.surfaceContainerHighest
+                            .withValues(alpha: 0.5),
                         shape: BoxShape.circle,
                       ),
-                      child: Icon(Icons.inventory_2_rounded, size: 48, color: theme.colorScheme.primary),
+                      child: Icon(
+                        Icons.inventory_2_rounded,
+                        size: 48,
+                        color: theme.colorScheme.primary,
+                      ),
                     ),
                     const SizedBox(height: 20),
-                    Text('БЕТОН М400', 
-                      style: AppTypography.h1(context).copyWith(fontSize: 24, letterSpacing: 1)
+                    Text(
+                      'БЕТОН М400',
+                      style: AppTypography.h1(
+                        context,
+                      ).copyWith(fontSize: 24, letterSpacing: 1),
                     ),
                   ],
                 ),
@@ -54,9 +64,15 @@ class MaterialDetailScreen extends StatelessWidget {
               child: Column(
                 children: [
                   _buildDetailRow(context, 'Объем', '12.5 м³'),
-                  Divider(color: theme.colorScheme.outline.withOpacity(0.1), height: 24),
+                  Divider(
+                    color: theme.colorScheme.outline.withValues(alpha: 0.1),
+                    height: 24,
+                  ),
                   _buildDetailRow(context, 'Поставщик', 'ООО "СтройБетон"'),
-                  Divider(color: theme.colorScheme.outline.withOpacity(0.1), height: 24),
+                  Divider(
+                    color: theme.colorScheme.outline.withValues(alpha: 0.1),
+                    height: 24,
+                  ),
                   _buildDetailRow(context, 'Время прибытия', '15:40'),
                 ],
               ),
@@ -72,11 +88,14 @@ class MaterialDetailScreen extends StatelessWidget {
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         Text(label, style: AppTypography.caption(context)),
-        Text(value, style: AppTypography.bodySmall(context).copyWith(
-          color: Theme.of(context).colorScheme.onSurface, 
-          fontWeight: FontWeight.bold,
-          fontSize: 14,
-        )),
+        Text(
+          value,
+          style: AppTypography.bodySmall(context).copyWith(
+            color: Theme.of(context).colorScheme.onSurface,
+            fontWeight: FontWeight.bold,
+            fontSize: 14,
+          ),
+        ),
       ],
     );
   }

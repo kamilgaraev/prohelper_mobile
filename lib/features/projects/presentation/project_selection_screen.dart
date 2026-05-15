@@ -45,9 +45,9 @@ class ProjectSelectionScreen extends ConsumerWidget {
                         const SizedBox(height: 4),
                         Text(
                           'Выберите объект для работы',
-                          style: AppTypography.bodyMedium(context).copyWith(
-                            color: theme.colorScheme.onSurfaceVariant,
-                          ),
+                          style: AppTypography.bodyMedium(
+                            context,
+                          ).copyWith(color: theme.colorScheme.onSurfaceVariant),
                         ),
                       ],
                     ),
@@ -63,40 +63,50 @@ class ProjectSelectionScreen extends ConsumerWidget {
               ),
               const SizedBox(height: 32),
               Expanded(
-                child: switch ((state.isLoading, state.error, state.projects.isEmpty)) {
-                  (true, _, _) => const Center(child: CircularProgressIndicator()),
+                child: switch ((
+                  state.isLoading,
+                  state.error,
+                  state.projects.isEmpty,
+                )) {
+                  (true, _, _) => const Center(
+                    child: CircularProgressIndicator(),
+                  ),
                   (_, final String error, true) => AppStateView(
-                      icon: Icons.error_outline_rounded,
-                      iconColor: AppColors.error,
-                      title: 'Не удалось загрузить объекты',
-                      description: error,
-                      action: OutlinedButton(
-                        onPressed: () =>
-                            ref.read(projectsProvider.notifier).loadProjects(),
-                        child: const Text('Повторить'),
-                      ),
+                    icon: Icons.error_outline_rounded,
+                    iconColor: AppColors.error,
+                    title: 'Не удалось загрузить объекты',
+                    description: error,
+                    action: OutlinedButton(
+                      onPressed:
+                          () =>
+                              ref
+                                  .read(projectsProvider.notifier)
+                                  .loadProjects(),
+                      child: const Text('Повторить'),
                     ),
+                  ),
                   (_, _, true) => const AppStateView(
-                      icon: Icons.folder_off_outlined,
-                      title: 'Нет доступных объектов',
-                      description:
-                          'Попросите администратора выдать вам доступ к проекту.',
-                    ),
+                    icon: Icons.folder_off_outlined,
+                    title: 'Нет доступных объектов',
+                    description:
+                        'Попросите администратора выдать вам доступ к проекту.',
+                  ),
                   _ => ListView.separated(
-                      itemCount: state.projects.length,
-                      separatorBuilder: (_, _) => const SizedBox(height: 16),
-                      itemBuilder: (context, index) {
-                        final project = state.projects[index];
-                        return ProjectCard(
-                          project: project,
-                          isSelected:
-                              state.selectedProject?.serverId == project.serverId,
-                          onTap: () => ref
-                              .read(projectsProvider.notifier)
-                              .selectProject(project),
-                        );
-                      },
-                    ),
+                    itemCount: state.projects.length,
+                    separatorBuilder: (_, _) => const SizedBox(height: 16),
+                    itemBuilder: (context, index) {
+                      final project = state.projects[index];
+                      return ProjectCard(
+                        project: project,
+                        isSelected:
+                            state.selectedProject?.serverId == project.serverId,
+                        onTap:
+                            () => ref
+                                .read(projectsProvider.notifier)
+                                .selectProject(project),
+                      );
+                    },
+                  ),
                 },
               ),
             ],

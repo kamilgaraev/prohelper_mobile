@@ -143,7 +143,9 @@ class WarehouseScanResultModel {
       entitySummary:
           _asMap(json['entity_summary']).isEmpty
               ? null
-              : WarehouseEntityRefModel.fromJson(_asMap(json['entity_summary'])),
+              : WarehouseEntityRefModel.fromJson(
+                _asMap(json['entity_summary']),
+              ),
       entity:
           _asMap(json['entity']).isEmpty
               ? null
@@ -273,10 +275,7 @@ class WarehouseEntityRefModel {
 }
 
 class WarehouseScannedEntityModel {
-  const WarehouseScannedEntityModel({
-    required this.type,
-    required this.raw,
-  });
+  const WarehouseScannedEntityModel({required this.type, required this.raw});
 
   final String type;
   final Map<String, dynamic> raw;

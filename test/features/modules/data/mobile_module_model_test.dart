@@ -14,7 +14,10 @@ void main() {
       });
 
       expect(module.title, 'Склад');
-      expect(module.description, 'Остатки, движения и приемка материалов по организации.');
+      expect(
+        module.description,
+        'Остатки, движения и приемка материалов по организации.',
+      );
     });
 
     test('подставляет читаемые тексты для охраны труда', () {
@@ -28,7 +31,10 @@ void main() {
       });
 
       expect(module.title, 'Охрана труда');
-      expect(module.description, 'Наряды-допуски, происшествия и нарушения на объекте.');
+      expect(
+        module.description,
+        'Наряды-допуски, происшествия и нарушения на объекте.',
+      );
     });
 
     test('сохраняет человекочитаемое описание без подмены', () {
@@ -48,7 +54,8 @@ void main() {
       final machinery = MobileModuleModel.fromJson({
         'slug': 'machinery-operations',
         'title': 'mobile_modules.modules.machinery-operations.title',
-        'description': 'mobile_modules.modules.machinery-operations.description',
+        'description':
+            'mobile_modules.modules.machinery-operations.description',
         'icon': 'machinery',
         'supported_on_mobile': true,
         'order': 44,
@@ -63,9 +70,15 @@ void main() {
       });
 
       expect(machinery.title, 'Техника');
-      expect(machinery.description, 'Сменные рапорты, простои и ГСМ по технике на объекте.');
+      expect(
+        machinery.description,
+        'Сменные рапорты, простои и ГСМ по технике на объекте.',
+      );
       expect(labor.title, 'Наряды');
-      expect(labor.description, 'Наряды, табели и выработка бригад на объекте.');
+      expect(
+        labor.description,
+        'Наряды, табели и выработка бригад на объекте.',
+      );
     });
   });
 }

@@ -35,14 +35,19 @@ class ConstructionJournalState {
       items: items ?? this.items,
       summary: summary ?? this.summary,
       availableActions: availableActions ?? this.availableActions,
-      project: identical(project, _sentinel) ? this.project : project as ConstructionJournalProjectRef?,
+      project:
+          identical(project, _sentinel)
+              ? this.project
+              : project as ConstructionJournalProjectRef?,
       error: identical(error, _sentinel) ? this.error : error as String?,
     );
   }
 }
 
-class ConstructionJournalNotifier extends StateNotifier<ConstructionJournalState> {
-  ConstructionJournalNotifier(this._repository) : super(const ConstructionJournalState());
+class ConstructionJournalNotifier
+    extends StateNotifier<ConstructionJournalState> {
+  ConstructionJournalNotifier(this._repository)
+    : super(const ConstructionJournalState());
 
   final ConstructionJournalRepository _repository;
 
@@ -69,17 +74,18 @@ class ConstructionJournalNotifier extends StateNotifier<ConstructionJournalState
         project: payload.project,
       );
     } catch (error) {
-      state = state.copyWith(
-        isLoading: false,
-        error: error.toString(),
-      );
+      state = state.copyWith(isLoading: false, error: error.toString());
     }
   }
 }
 
-final constructionJournalProvider =
-    StateNotifierProvider<ConstructionJournalNotifier, ConstructionJournalState>((ref) {
-  return ConstructionJournalNotifier(ref.read(constructionJournalRepositoryProvider));
+final constructionJournalProvider = StateNotifierProvider<
+  ConstructionJournalNotifier,
+  ConstructionJournalState
+>((ref) {
+  return ConstructionJournalNotifier(
+    ref.read(constructionJournalRepositoryProvider),
+  );
 });
 
 class ConstructionJournalDetailState {
@@ -112,10 +118,16 @@ class ConstructionJournalDetailState {
   }) {
     return ConstructionJournalDetailState(
       isLoading: isLoading ?? this.isLoading,
-      journal: identical(journal, _sentinel) ? this.journal : journal as ConstructionJournalModel?,
+      journal:
+          identical(journal, _sentinel)
+              ? this.journal
+              : journal as ConstructionJournalModel?,
       entries: entries ?? this.entries,
       entriesSummary: entriesSummary ?? this.entriesSummary,
-      entriesMeta: identical(entriesMeta, _sentinel) ? this.entriesMeta : entriesMeta as JournalPaginationMeta?,
+      entriesMeta:
+          identical(entriesMeta, _sentinel)
+              ? this.entriesMeta
+              : entriesMeta as JournalPaginationMeta?,
       availableActions: availableActions ?? this.availableActions,
       error: identical(error, _sentinel) ? this.error : error as String?,
     );
@@ -123,16 +135,20 @@ class ConstructionJournalDetailState {
 }
 
 final constructionJournalDetailProvider = StateNotifierProvider.family<
-    ConstructionJournalDetailNotifier, ConstructionJournalDetailState, int>((ref, journalId) {
+  ConstructionJournalDetailNotifier,
+  ConstructionJournalDetailState,
+  int
+>((ref, journalId) {
   return ConstructionJournalDetailNotifier(
     ref.read(constructionJournalRepositoryProvider),
     journalId,
   )..load();
 });
 
-class ConstructionJournalDetailNotifier extends StateNotifier<ConstructionJournalDetailState> {
+class ConstructionJournalDetailNotifier
+    extends StateNotifier<ConstructionJournalDetailState> {
   ConstructionJournalDetailNotifier(this._repository, this._journalId)
-      : super(const ConstructionJournalDetailState());
+    : super(const ConstructionJournalDetailState());
 
   final ConstructionJournalRepository _repository;
   final int _journalId;
@@ -174,23 +190,30 @@ class ConstructionJournalEntryDetailState {
   }) {
     return ConstructionJournalEntryDetailState(
       isLoading: isLoading ?? this.isLoading,
-      entry: identical(entry, _sentinel) ? this.entry : entry as ConstructionJournalEntryModel?,
+      entry:
+          identical(entry, _sentinel)
+              ? this.entry
+              : entry as ConstructionJournalEntryModel?,
       error: identical(error, _sentinel) ? this.error : error as String?,
     );
   }
 }
 
 final constructionJournalEntryDetailProvider = StateNotifierProvider.family<
-    ConstructionJournalEntryDetailNotifier, ConstructionJournalEntryDetailState, int>((ref, entryId) {
+  ConstructionJournalEntryDetailNotifier,
+  ConstructionJournalEntryDetailState,
+  int
+>((ref, entryId) {
   return ConstructionJournalEntryDetailNotifier(
     ref.read(constructionJournalRepositoryProvider),
     entryId,
   )..load();
 });
 
-class ConstructionJournalEntryDetailNotifier extends StateNotifier<ConstructionJournalEntryDetailState> {
+class ConstructionJournalEntryDetailNotifier
+    extends StateNotifier<ConstructionJournalEntryDetailState> {
   ConstructionJournalEntryDetailNotifier(this._repository, this._entryId)
-      : super(const ConstructionJournalEntryDetailState());
+    : super(const ConstructionJournalEntryDetailState());
 
   final ConstructionJournalRepository _repository;
   final int _entryId;

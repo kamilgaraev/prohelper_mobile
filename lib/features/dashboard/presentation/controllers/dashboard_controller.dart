@@ -24,16 +24,15 @@ class DashboardState {
     return DashboardState(
       isLoading: isLoading ?? this.isLoading,
       widgets: widgets ?? this.widgets,
-      error: identical(error, _dashboardSentinel) ? this.error : error as String?,
+      error:
+          identical(error, _dashboardSentinel) ? this.error : error as String?,
     );
   }
 }
 
 class DashboardController extends StateNotifier<DashboardState> {
-  DashboardController(
-    this._repository, {
-    required bool canLoad,
-  }) : super(const DashboardState()) {
+  DashboardController(this._repository, {required bool canLoad})
+    : super(const DashboardState()) {
     if (canLoad) {
       loadDashboard();
     }
@@ -46,10 +45,7 @@ class DashboardController extends StateNotifier<DashboardState> {
 
     try {
       final widgets = await _repository.fetchWidgets();
-      state = state.copyWith(
-        isLoading: false,
-        widgets: widgets,
-      );
+      state = state.copyWith(isLoading: false, widgets: widgets);
     } catch (error) {
       state = state.copyWith(
         isLoading: false,
@@ -62,10 +58,10 @@ class DashboardController extends StateNotifier<DashboardState> {
 
 final dashboardControllerProvider =
     StateNotifierProvider<DashboardController, DashboardState>((ref) {
-  final authState = ref.watch(authProvider);
+      final authState = ref.watch(authProvider);
 
-  return DashboardController(
-    ref.read(dashboardRepositoryProvider),
-    canLoad: authState is AuthAuthenticated,
-  );
-});
+      return DashboardController(
+        ref.read(dashboardRepositoryProvider),
+        canLoad: authState is AuthAuthenticated,
+      );
+    });

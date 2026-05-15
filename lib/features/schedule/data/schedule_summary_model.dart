@@ -1,8 +1,5 @@
 class ScheduleSummaryModel {
-  const ScheduleSummaryModel({
-    required this.summary,
-    required this.events,
-  });
+  const ScheduleSummaryModel({required this.summary, required this.events});
 
   final ScheduleSummaryData summary;
   final List<ScheduleEventModel> events;
@@ -16,17 +13,18 @@ class ScheduleSummaryModel {
         summaryJson is Map<String, dynamic>
             ? summaryJson
             : summaryJson is Map
-                ? summaryJson.map((key, value) => MapEntry(key.toString(), value))
-                : const {},
+            ? summaryJson.map((key, value) => MapEntry(key.toString(), value))
+            : const {},
       ),
-      events: (eventsJson as List<dynamic>? ?? const [])
-          .whereType<Map>()
-          .map(
-            (event) => ScheduleEventModel.fromJson(
-              event.map((key, value) => MapEntry(key.toString(), value)),
-            ),
-          )
-          .toList(),
+      events:
+          (eventsJson as List<dynamic>? ?? const [])
+              .whereType<Map>()
+              .map(
+                (event) => ScheduleEventModel.fromJson(
+                  event.map((key, value) => MapEntry(key.toString(), value)),
+                ),
+              )
+              .toList(),
     );
   }
 }
@@ -112,9 +110,10 @@ class ScheduleEventModel {
       description: json['description'] as String?,
       projectId: json['project_id'] as int?,
       projectName: json['project_name'] as String?,
-      eventDate: json['event_date'] != null
-          ? DateTime.tryParse(json['event_date'].toString())
-          : null,
+      eventDate:
+          json['event_date'] != null
+              ? DateTime.tryParse(json['event_date'].toString())
+              : null,
       eventTime: json['event_time'] as String?,
       location: json['location'] as String?,
     );

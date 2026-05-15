@@ -7,8 +7,8 @@ import 'handover_acceptance_model.dart';
 
 final handoverAcceptanceRepositoryProvider =
     Provider<HandoverAcceptanceRepository>((ref) {
-  return HandoverAcceptanceRepository(ref.read(dioProvider));
-});
+      return HandoverAcceptanceRepository(ref.read(dioProvider));
+    });
 
 class HandoverAcceptanceRepository {
   HandoverAcceptanceRepository(this._dio);
@@ -19,9 +19,7 @@ class HandoverAcceptanceRepository {
     try {
       final response = await _dio.get(
         '/handover-acceptance/scopes',
-        queryParameters: {
-          if (projectId != null) 'project_id': projectId,
-        },
+        queryParameters: {if (projectId != null) 'project_id': projectId},
       );
 
       final payload = response.data['data'];
@@ -106,7 +104,9 @@ class HandoverAcceptanceRepository {
         fallbackMessage: 'Не удалось отправить зону на повторную проверку.',
       );
     } catch (_) {
-      throw const ApiException('Не удалось отправить зону на повторную проверку.');
+      throw const ApiException(
+        'Не удалось отправить зону на повторную проверку.',
+      );
     }
   }
 }

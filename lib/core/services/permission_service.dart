@@ -5,10 +5,7 @@ import '../providers/context_provider.dart';
 import '../providers/module_provider.dart';
 
 class PermissionService {
-  PermissionService({
-    required this.context,
-    required this.activeModules,
-  });
+  PermissionService({required this.context, required this.activeModules});
 
   final UserContext context;
   final Set<AppModule> activeModules;
@@ -20,20 +17,25 @@ class PermissionService {
   bool canProcessAction(String action) {
     return switch (action) {
       'receive_material' =>
-        context == UserContext.field && canAccessModule(AppModule.basicWarehouse),
+        context == UserContext.field &&
+            canAccessModule(AppModule.basicWarehouse),
       'scan_qr' =>
-        context == UserContext.field && canAccessModule(AppModule.basicWarehouse),
+        context == UserContext.field &&
+            canAccessModule(AppModule.basicWarehouse),
       'create_site_request' =>
         context == UserContext.field && canAccessModule(AppModule.siteRequests),
       'approve_request' =>
-        context == UserContext.office && canAccessModule(AppModule.siteRequests),
+        context == UserContext.office &&
+            canAccessModule(AppModule.siteRequests),
       'view_schedule' => canAccessModule(AppModule.scheduleManagement),
       'view_budget' => canAccessModule(AppModule.budgetEstimates),
       'track_time' => canAccessModule(AppModule.timeTracking),
       'record_machinery_shift' =>
-        context == UserContext.field && canAccessModule(AppModule.machineryOperations),
+        context == UserContext.field &&
+            canAccessModule(AppModule.machineryOperations),
       'record_labor_output' =>
-        context == UserContext.field && canAccessModule(AppModule.productionLabor),
+        context == UserContext.field &&
+            canAccessModule(AppModule.productionLabor),
       _ => false,
     };
   }
@@ -43,8 +45,5 @@ final permissionServiceProvider = Provider<PermissionService>((ref) {
   final context = ref.watch(userContextProvider);
   final modules = ref.watch(activeModulesProvider);
 
-  return PermissionService(
-    context: context,
-    activeModules: modules,
-  );
+  return PermissionService(context: context, activeModules: modules);
 });

@@ -10,10 +10,7 @@ import '../../../core/storage/secure_storage_service.dart';
 import 'user_model.dart';
 
 final authRepositoryProvider = Provider<AuthRepository>((ref) {
-  return AuthRepository(
-    ref.read(dioProvider),
-    ref.read(secureStorageProvider),
-  );
+  return AuthRepository(ref.read(dioProvider), ref.read(secureStorageProvider));
 });
 
 class AuthRepository {
@@ -24,10 +21,10 @@ class AuthRepository {
 
   Future<User> login(String email, String password) async {
     try {
-      final response = await _dio.post('/auth/login', data: {
-        'email': email,
-        'password': password,
-      });
+      final response = await _dio.post(
+        '/auth/login',
+        data: {'email': email, 'password': password},
+      );
 
       final data = response.data['data'];
       final token = data['token'];
@@ -47,9 +44,10 @@ class AuthRepository {
 
   Future<User> switchOrganization(int organizationId) async {
     try {
-      final response = await _dio.post('/auth/switch-organization', data: {
-        'organization_id': organizationId,
-      });
+      final response = await _dio.post(
+        '/auth/switch-organization',
+        data: {'organization_id': organizationId},
+      );
 
       final data = response.data['data'];
       final token = data['token'];
@@ -85,7 +83,8 @@ class AuthRepository {
   }
 
   User _mapJsonToUser(Map<String, dynamic> json) {
-    final organizations = (json['organizations'] as List<dynamic>?)
+    final organizations =
+        (json['organizations'] as List<dynamic>?)
             ?.map((e) => e as Map<String, dynamic>)
             .toList() ??
         [];

@@ -28,19 +28,23 @@ class ProjectsState {
     return ProjectsState(
       isLoading: isLoading ?? this.isLoading,
       projects: projects ?? this.projects,
-      selectedProject: identical(selectedProject, _projectsSentinel)
-          ? this.selectedProject
-          : selectedProject as Project?,
-      error: identical(error, _projectsSentinel) ? this.error : error as String?,
+      selectedProject:
+          identical(selectedProject, _projectsSentinel)
+              ? this.selectedProject
+              : selectedProject as Project?,
+      error:
+          identical(error, _projectsSentinel) ? this.error : error as String?,
     );
   }
 }
 
 // Provider
-final projectsProvider = StateNotifierProvider<ProjectsNotifier, ProjectsState>((ref) {
-  ref.watch(authProvider);
-  return ProjectsNotifier(ref.read(projectsRepositoryProvider));
-});
+final projectsProvider = StateNotifierProvider<ProjectsNotifier, ProjectsState>(
+  (ref) {
+    ref.watch(authProvider);
+    return ProjectsNotifier(ref.read(projectsRepositoryProvider));
+  },
+);
 
 class ProjectsNotifier extends StateNotifier<ProjectsState> {
   final ProjectsRepository _repository;
@@ -51,7 +55,7 @@ class ProjectsNotifier extends StateNotifier<ProjectsState> {
     state = state.copyWith(isLoading: true, error: null);
     try {
       final projects = await _repository.fetchProjects();
-      
+
       Project? selected;
       if (projects.length == 1) {
         selected = projects.first;

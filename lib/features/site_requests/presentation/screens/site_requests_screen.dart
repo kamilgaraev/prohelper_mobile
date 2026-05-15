@@ -12,15 +12,7 @@ import 'package:prohelpers_mobile/features/site_requests/presentation/screens/si
 import 'package:prohelpers_mobile/features/site_requests/presentation/screens/site_request_form_screen.dart';
 import 'package:prohelpers_mobile/features/site_requests/presentation/widgets/site_request_card.dart';
 
-enum _RequestFilter {
-  all,
-  attention,
-  pending,
-  review,
-  inWork,
-  urgent,
-  done,
-}
+enum _RequestFilter { all, attention, pending, review, inWork, urgent, done }
 
 class _FilterOption {
   const _FilterOption(this.filter, this.label);
@@ -30,10 +22,7 @@ class _FilterOption {
 }
 
 class SiteRequestsScreen extends ConsumerStatefulWidget {
-  const SiteRequestsScreen({
-    super.key,
-    this.scope = SiteRequestsScope.own,
-  });
+  const SiteRequestsScreen({super.key, this.scope = SiteRequestsScope.own});
 
   final SiteRequestsScope scope;
 
@@ -113,9 +102,9 @@ class _SiteRequestsScreenState extends ConsumerState<SiteRequestsScreen> {
         return;
       }
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(error.toString())),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.toString())));
     }
   }
 
@@ -131,31 +120,40 @@ class _SiteRequestsScreenState extends ConsumerState<SiteRequestsScreen> {
     return () => _changeRequestStatus(context, request, status);
   }
 
-  Future<String?> _askForTransitionComment(BuildContext context, String status) async {
+  Future<String?> _askForTransitionComment(
+    BuildContext context,
+    String status,
+  ) async {
     final controller = TextEditingController();
 
     return showDialog<String>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text(status == 'rejected' ? 'Причина отклонения' : 'Комментарий к отмене'),
-        content: TextField(
-          controller: controller,
-          maxLines: 3,
-          decoration: const InputDecoration(
-            hintText: 'Добавьте комментарий',
+      builder:
+          (dialogContext) => AlertDialog(
+            title: Text(
+              status == 'rejected'
+                  ? 'Причина отклонения'
+                  : 'Комментарий к отмене',
+            ),
+            content: TextField(
+              controller: controller,
+              maxLines: 3,
+              decoration: const InputDecoration(
+                hintText: 'Добавьте комментарий',
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('Назад'),
+              ),
+              TextButton(
+                onPressed:
+                    () => Navigator.pop(dialogContext, controller.text.trim()),
+                child: const Text('Подтвердить'),
+              ),
+            ],
           ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Назад'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, controller.text.trim()),
-            child: const Text('Подтвердить'),
-          ),
-        ],
-      ),
     );
   }
 
@@ -164,14 +162,15 @@ class _SiteRequestsScreenState extends ConsumerState<SiteRequestsScreen> {
     final state = ref.watch(siteRequestsProvider);
     final selectedProject = ref.watch(projectsProvider).selectedProject;
     final theme = Theme.of(context);
-    final filteredRequests = state.requests
-        .where(
-          (request) =>
-              _matchesFilter(request, _selectedFilter, widget.scope) &&
-              _matchesSearch(request, _searchQuery),
-        )
-        .toList()
-      ..sort(_compareRequests);
+    final filteredRequests =
+        state.requests
+            .where(
+              (request) =>
+                  _matchesFilter(request, _selectedFilter, widget.scope) &&
+                  _matchesSearch(request, _searchQuery),
+            )
+            .toList()
+          ..sort(_compareRequests);
 
     final urgentCount = state.requests.where(_isUrgentRequest).length;
     final pendingCount = state.requests.where(_isPendingReview).length;
@@ -181,14 +180,16 @@ class _SiteRequestsScreenState extends ConsumerState<SiteRequestsScreen> {
 
     ref.listen<SiteRequestsState>(siteRequestsProvider, (previous, next) {
       final shouldShowError =
-          next.error != null && next.error != previous?.error && next.requests.isNotEmpty;
+          next.error != null &&
+          next.error != previous?.error &&
+          next.requests.isNotEmpty;
       if (!shouldShowError || !mounted) {
         return;
       }
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(next.error!)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(next.error!)));
     });
 
     if (state.scope != widget.scope && !state.isLoading) {
@@ -200,7 +201,9 @@ class _SiteRequestsScreenState extends ConsumerState<SiteRequestsScreen> {
 
     if (selectedProject?.serverId != state.projectFilter && !state.isLoading) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        ref.read(siteRequestsProvider.notifier).syncProject(selectedProject?.serverId);
+        ref
+            .read(siteRequestsProvider.notifier)
+            .syncProject(selectedProject?.serverId);
         ref.read(siteRequestsProvider.notifier).loadRequests(refresh: true);
       });
     }
@@ -217,15 +220,17 @@ class _SiteRequestsScreenState extends ConsumerState<SiteRequestsScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                _isApprovalsMode ? 'Нуждаются в рассмотрении' : 'Заявки с объекта',
+                _isApprovalsMode
+                    ? 'Нуждаются в рассмотрении'
+                    : 'Заявки с объекта',
                 style: AppTypography.h1(context),
               ),
               if (selectedProject != null)
                 Text(
                   selectedProject.name,
-                  style: AppTypography.caption(context).copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
+                  style: AppTypography.caption(
+                    context,
+                  ).copyWith(color: theme.colorScheme.onSurfaceVariant),
                 ),
             ],
           ),
@@ -234,8 +239,12 @@ class _SiteRequestsScreenState extends ConsumerState<SiteRequestsScreen> {
         body: RefreshIndicator(
           onRefresh: () async {
             ref.read(siteRequestsProvider.notifier).syncScope(widget.scope);
-            ref.read(siteRequestsProvider.notifier).syncProject(selectedProject?.serverId);
-            await ref.read(siteRequestsProvider.notifier).loadRequests(refresh: true);
+            ref
+                .read(siteRequestsProvider.notifier)
+                .syncProject(selectedProject?.serverId);
+            await ref
+                .read(siteRequestsProvider.notifier)
+                .loadRequests(refresh: true);
           },
           child: CustomScrollView(
             controller: _scrollController,
@@ -254,14 +263,16 @@ class _SiteRequestsScreenState extends ConsumerState<SiteRequestsScreen> {
                 SliverFillRemaining(
                   child: AppStateView(
                     icon: Icons.error_outline_rounded,
-                    title: _isApprovalsMode
-                        ? 'Не удалось загрузить очередь согласования'
-                        : 'Не удалось загрузить заявки',
+                    title:
+                        _isApprovalsMode
+                            ? 'Не удалось загрузить очередь согласования'
+                            : 'Не удалось загрузить заявки',
                     description: state.error,
                     action: OutlinedButton(
-                      onPressed: () => ref
-                          .read(siteRequestsProvider.notifier)
-                          .loadRequests(refresh: true),
+                      onPressed:
+                          () => ref
+                              .read(siteRequestsProvider.notifier)
+                              .loadRequests(refresh: true),
                       child: const Text('Повторить'),
                     ),
                   ),
@@ -289,34 +300,39 @@ class _SiteRequestsScreenState extends ConsumerState<SiteRequestsScreen> {
                       resultCount: filteredRequests.length,
                       totalCount: state.requests.length,
                       options: filterOptions,
-                      searchHint: _isApprovalsMode
-                          ? 'Поиск по заявкам, материалам и исполнителям'
-                          : 'Поиск по заявкам, материалам и статусам',
+                      searchHint:
+                          _isApprovalsMode
+                              ? 'Поиск по заявкам, материалам и исполнителям'
+                              : 'Поиск по заявкам, материалам и статусам',
                       onFilterChanged: (filter) {
                         setState(() {
                           _selectedFilter = filter;
                         });
                       },
-                      onClearSearch: _searchQuery.isEmpty
-                          ? null
-                          : () {
-                              _searchController.clear();
-                            },
+                      onClearSearch:
+                          _searchQuery.isEmpty
+                              ? null
+                              : () {
+                                _searchController.clear();
+                              },
                     ),
                   ),
                 ),
                 if (state.requests.isEmpty && !state.isLoading)
                   SliverFillRemaining(
                     child: AppStateView(
-                      icon: _isApprovalsMode
-                          ? Icons.fact_check_outlined
-                          : Icons.inventory_2_outlined,
-                      title: _isApprovalsMode
-                          ? 'Нет заявок на согласование'
-                          : 'Заявок пока нет',
-                      description: _isApprovalsMode
-                          ? 'Сейчас на этом объекте нет заявок, которые ждут решения.'
-                          : 'Создайте первую заявку для текущего объекта.',
+                      icon:
+                          _isApprovalsMode
+                              ? Icons.fact_check_outlined
+                              : Icons.inventory_2_outlined,
+                      title:
+                          _isApprovalsMode
+                              ? 'Нет заявок на согласование'
+                              : 'Заявок пока нет',
+                      description:
+                          _isApprovalsMode
+                              ? 'Сейчас на этом объекте нет заявок, которые ждут решения.'
+                              : 'Создайте первую заявку для текущего объекта.',
                     ),
                   )
                 else if (filteredRequests.isEmpty)
@@ -332,39 +348,43 @@ class _SiteRequestsScreenState extends ConsumerState<SiteRequestsScreen> {
                   SliverPadding(
                     padding: const EdgeInsets.all(16),
                     sliver: SliverList(
-                      delegate: SliverChildBuilderDelegate(
-                        (context, index) {
-                          final request = filteredRequests[index];
-                          return Padding(
-                            padding: const EdgeInsets.only(bottom: 16),
-                            child: SiteRequestCard(
-                              request: request,
-                              primaryActionLabel: _primaryActionLabel(request, widget.scope),
-                              onPrimaryAction: _buildActionCallback(
-                                context,
-                                request,
-                                _primaryActionStatus(request, widget.scope),
-                              ),
-                              secondaryActionLabel: _secondaryActionLabel(request, widget.scope),
-                              onSecondaryAction: _buildActionCallback(
-                                context,
-                                request,
-                                _secondaryActionStatus(request, widget.scope),
-                              ),
-                              onTap: () {
-                                Navigator.of(context).push(
-                                  MaterialPageRoute(
-                                    builder: (_) => SiteRequestDetailScreen(
-                                      id: request.serverId,
-                                    ),
-                                  ),
-                                );
-                              },
+                      delegate: SliverChildBuilderDelegate((context, index) {
+                        final request = filteredRequests[index];
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 16),
+                          child: SiteRequestCard(
+                            request: request,
+                            primaryActionLabel: _primaryActionLabel(
+                              request,
+                              widget.scope,
                             ),
-                          );
-                        },
-                        childCount: filteredRequests.length,
-                      ),
+                            onPrimaryAction: _buildActionCallback(
+                              context,
+                              request,
+                              _primaryActionStatus(request, widget.scope),
+                            ),
+                            secondaryActionLabel: _secondaryActionLabel(
+                              request,
+                              widget.scope,
+                            ),
+                            onSecondaryAction: _buildActionCallback(
+                              context,
+                              request,
+                              _secondaryActionStatus(request, widget.scope),
+                            ),
+                            onTap: () {
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder:
+                                      (_) => SiteRequestDetailScreen(
+                                        id: request.serverId,
+                                      ),
+                                ),
+                              );
+                            },
+                          ),
+                        );
+                      }, childCount: filteredRequests.length),
                     ),
                   ),
                 if (state.isLoading)
@@ -379,26 +399,33 @@ class _SiteRequestsScreenState extends ConsumerState<SiteRequestsScreen> {
             ],
           ),
         ),
-        floatingActionButton: _isApprovalsMode
-            ? null
-            : FloatingActionButton(
-                onPressed: () {
-                  if (selectedProject == null) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Сначала выберите объект.')),
-                    );
-                    return;
-                  }
+        floatingActionButton:
+            _isApprovalsMode
+                ? null
+                : FloatingActionButton(
+                  onPressed: () {
+                    if (selectedProject == null) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Сначала выберите объект.'),
+                        ),
+                      );
+                      return;
+                    }
 
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => const SiteRequestFormScreen(),
-                    ),
-                  );
-                },
-                backgroundColor: theme.colorScheme.primary,
-                child: const Icon(Icons.add_rounded, color: Colors.white, size: 32),
-              ),
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const SiteRequestFormScreen(),
+                      ),
+                    );
+                  },
+                  backgroundColor: theme.colorScheme.primary,
+                  child: const Icon(
+                    Icons.add_rounded,
+                    color: Colors.white,
+                    size: 32,
+                  ),
+                ),
       ),
     );
   }
@@ -409,21 +436,22 @@ class _SiteRequestsScreenState extends ConsumerState<SiteRequestsScreen> {
     }
 
     final normalizedQuery = query.toLowerCase();
-    final haystack = [
-      request.title,
-      request.description ?? '',
-      request.notes ?? '',
-      request.projectName ?? '',
-      request.userName ?? '',
-      request.assignedUserName ?? '',
-      request.groupTitle ?? '',
-      request.materialName ?? '',
-      request.requestTypeLabel ?? request.requestType,
-      request.statusLabel ?? request.status,
-      request.priorityLabel ?? request.priority,
-      request.personnelTypeLabel ?? '',
-      request.equipmentTypeLabel ?? request.equipmentType ?? '',
-    ].join(' ').toLowerCase();
+    final haystack =
+        [
+          request.title,
+          request.description ?? '',
+          request.notes ?? '',
+          request.projectName ?? '',
+          request.userName ?? '',
+          request.assignedUserName ?? '',
+          request.groupTitle ?? '',
+          request.materialName ?? '',
+          request.requestTypeLabel ?? request.requestType,
+          request.statusLabel ?? request.status,
+          request.priorityLabel ?? request.priority,
+          request.personnelTypeLabel ?? '',
+          request.equipmentTypeLabel ?? request.equipmentType ?? '',
+        ].join(' ').toLowerCase();
 
     return haystack.contains(normalizedQuery);
   }
@@ -460,7 +488,8 @@ bool _matchesFilter(
     _RequestFilter.review => _isInReview(request),
     _RequestFilter.inWork => _isInWork(request.status),
     _RequestFilter.urgent => _isUrgentRequest(request),
-    _RequestFilter.done => scope == SiteRequestsScope.own && _isDone(request.status),
+    _RequestFilter.done =>
+      scope == SiteRequestsScope.own && _isDone(request.status),
   };
 }
 
@@ -473,7 +502,10 @@ String? _primaryActionLabel(SiteRequestModel request, SiteRequestsScope scope) {
   return _actionLabel(actions.first);
 }
 
-String? _secondaryActionLabel(SiteRequestModel request, SiteRequestsScope scope) {
+String? _secondaryActionLabel(
+  SiteRequestModel request,
+  SiteRequestsScope scope,
+) {
   final actions = _quickActions(request, scope);
   if (actions.length < 2) {
     return null;
@@ -482,12 +514,18 @@ String? _secondaryActionLabel(SiteRequestModel request, SiteRequestsScope scope)
   return _actionLabel(actions[1]);
 }
 
-String? _primaryActionStatus(SiteRequestModel request, SiteRequestsScope scope) {
+String? _primaryActionStatus(
+  SiteRequestModel request,
+  SiteRequestsScope scope,
+) {
   final actions = _quickActions(request, scope);
   return actions.isEmpty ? null : actions.first;
 }
 
-String? _secondaryActionStatus(SiteRequestModel request, SiteRequestsScope scope) {
+String? _secondaryActionStatus(
+  SiteRequestModel request,
+  SiteRequestsScope scope,
+) {
   final actions = _quickActions(request, scope);
   return actions.length < 2 ? null : actions[1];
 }
@@ -499,28 +537,30 @@ List<String> _quickActions(SiteRequestModel request, SiteRequestsScope scope) {
       .toList(growable: false);
 
   if (statuses.isNotEmpty) {
-    final priorities = scope == SiteRequestsScope.approvals
-        ? <String, int>{
-            'in_review': 100,
-            'approved': 90,
-            'rejected': 80,
-            'in_progress': 70,
-            'fulfilled': 60,
-            'completed': 50,
-            'cancelled': 40,
-            'pending': 30,
-          }
-        : <String, int>{
-            'pending': 100,
-            'completed': 90,
-            'cancelled': 80,
-            'in_progress': 70,
-            'fulfilled': 60,
-          };
+    final priorities =
+        scope == SiteRequestsScope.approvals
+            ? <String, int>{
+              'in_review': 100,
+              'approved': 90,
+              'rejected': 80,
+              'in_progress': 70,
+              'fulfilled': 60,
+              'completed': 50,
+              'cancelled': 40,
+              'pending': 30,
+            }
+            : <String, int>{
+              'pending': 100,
+              'completed': 90,
+              'cancelled': 80,
+              'in_progress': 70,
+              'fulfilled': 60,
+            };
 
     final sorted = [...statuses]..sort(
-        (left, right) => (priorities[right] ?? 0).compareTo(priorities[left] ?? 0),
-      );
+      (left, right) =>
+          (priorities[right] ?? 0).compareTo(priorities[left] ?? 0),
+    );
 
     return sorted.take(2).toList(growable: false);
   }
@@ -579,25 +619,26 @@ class _RequestsOperationalBanner extends StatelessWidget {
     final hasAttention =
         pendingCount > 0 || inReviewCount > 0 || urgentCount > 0;
 
-    final title = scope == SiteRequestsScope.approvals
-        ? (hasAttention
-            ? 'Есть заявки, которые ждут решения'
-            : 'Очередь согласования под контролем')
-        : (hasAttention
-            ? 'Есть заявки, требующие реакции'
-            : 'Поток заявок под контролем');
+    final title =
+        scope == SiteRequestsScope.approvals
+            ? (hasAttention
+                ? 'Есть заявки, которые ждут решения'
+                : 'Очередь согласования под контролем')
+            : (hasAttention
+                ? 'Есть заявки, требующие реакции'
+                : 'Поток заявок под контролем');
 
-    final description = scope == SiteRequestsScope.approvals
-        ? (hasAttention
-            ? 'На согласовании: $pendingCount. На рассмотрении: $inReviewCount. Срочных: $urgentCount.'
-            : 'Всего заявок в очереди: $totalCount.')
-        : (hasAttention
-            ? 'На согласовании: $pendingCount. Срочных: $urgentCount. В работе: $inWorkCount.'
-            : 'Всего заявок: $totalCount. Активных в работе: $inWorkCount.');
+    final description =
+        scope == SiteRequestsScope.approvals
+            ? (hasAttention
+                ? 'На согласовании: $pendingCount. На рассмотрении: $inReviewCount. Срочных: $urgentCount.'
+                : 'Всего заявок в очереди: $totalCount.')
+            : (hasAttention
+                ? 'На согласовании: $pendingCount. Срочных: $urgentCount. В работе: $inWorkCount.'
+                : 'Всего заявок: $totalCount. Активных в работе: $inWorkCount.');
 
-    final accentColor = hasAttention
-        ? theme.colorScheme.secondary
-        : theme.colorScheme.primary;
+    final accentColor =
+        hasAttention ? theme.colorScheme.secondary : theme.colorScheme.primary;
 
     return ProCard(
       child: Row(
@@ -607,11 +648,13 @@ class _RequestsOperationalBanner extends StatelessWidget {
             width: 44,
             height: 44,
             decoration: BoxDecoration(
-              color: accentColor.withOpacity(0.12),
+              color: accentColor.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(14),
             ),
             child: Icon(
-              hasAttention ? Icons.priority_high_rounded : Icons.assignment_turned_in,
+              hasAttention
+                  ? Icons.priority_high_rounded
+                  : Icons.assignment_turned_in,
               color: accentColor,
             ),
           ),
@@ -622,16 +665,16 @@ class _RequestsOperationalBanner extends StatelessWidget {
               children: [
                 Text(
                   title,
-                  style: AppTypography.bodyLarge(context).copyWith(
-                    fontWeight: FontWeight.w800,
-                  ),
+                  style: AppTypography.bodyLarge(
+                    context,
+                  ).copyWith(fontWeight: FontWeight.w800),
                 ),
                 const SizedBox(height: 4),
                 Text(
                   description,
-                  style: AppTypography.bodyMedium(context).copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
+                  style: AppTypography.bodyMedium(
+                    context,
+                  ).copyWith(color: theme.colorScheme.onSurfaceVariant),
                 ),
               ],
             ),
@@ -677,15 +720,17 @@ class _RequestsFiltersCard extends StatelessWidget {
             decoration: InputDecoration(
               hintText: searchHint,
               prefixIcon: const Icon(Icons.search_rounded),
-              suffixIcon: onClearSearch == null
-                  ? null
-                  : IconButton(
-                      onPressed: onClearSearch,
-                      icon: const Icon(Icons.close_rounded),
-                    ),
+              suffixIcon:
+                  onClearSearch == null
+                      ? null
+                      : IconButton(
+                        onPressed: onClearSearch,
+                        icon: const Icon(Icons.close_rounded),
+                      ),
               filled: true,
-              fillColor:
-                  theme.colorScheme.surfaceContainerHighest.withOpacity(0.45),
+              fillColor: theme.colorScheme.surfaceContainerHighest.withValues(
+                alpha: 0.45,
+              ),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(16),
                 borderSide: BorderSide.none,
@@ -700,24 +745,25 @@ class _RequestsFiltersCard extends StatelessWidget {
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: Row(
-              children: options.map((option) {
-                return Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: FilterChip(
-                    selected: selectedFilter == option.filter,
-                    label: Text(option.label),
-                    onSelected: (_) => onFilterChanged(option.filter),
-                  ),
-                );
-              }).toList(),
+              children:
+                  options.map((option) {
+                    return Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: FilterChip(
+                        selected: selectedFilter == option.filter,
+                        label: Text(option.label),
+                        onSelected: (_) => onFilterChanged(option.filter),
+                      ),
+                    );
+                  }).toList(),
             ),
           ),
           const SizedBox(height: 12),
           Text(
             'Найдено: $resultCount из $totalCount',
-            style: AppTypography.caption(context).copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
+            style: AppTypography.caption(
+              context,
+            ).copyWith(color: theme.colorScheme.onSurfaceVariant),
           ),
         ],
       ),
@@ -726,14 +772,16 @@ class _RequestsFiltersCard extends StatelessWidget {
 }
 
 int _compareRequests(SiteRequestModel left, SiteRequestModel right) {
-  final urgentCompare =
-      _boolPriority(_isUrgentRequest(right)).compareTo(_boolPriority(_isUrgentRequest(left)));
+  final urgentCompare = _boolPriority(
+    _isUrgentRequest(right),
+  ).compareTo(_boolPriority(_isUrgentRequest(left)));
   if (urgentCompare != 0) {
     return urgentCompare;
   }
 
-  final attentionCompare =
-      _boolPriority(_needsAttention(right)).compareTo(_boolPriority(_needsAttention(left)));
+  final attentionCompare = _boolPriority(
+    _needsAttention(right),
+  ).compareTo(_boolPriority(_needsAttention(left)));
   if (attentionCompare != 0) {
     return attentionCompare;
   }

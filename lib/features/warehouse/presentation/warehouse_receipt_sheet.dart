@@ -206,11 +206,10 @@ class _WarehouseReceiptSheetState extends ConsumerState<WarehouseReceiptSheet> {
                     child: Ink(
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(16),
-                        color: Theme.of(
-                          context,
-                        ).colorScheme.surfaceContainerHighest.withValues(
-                          alpha: 0.35,
-                        ),
+                        color: Theme.of(context)
+                            .colorScheme
+                            .surfaceContainerHighest
+                            .withValues(alpha: 0.35),
                       ),
                       child: Padding(
                         padding: const EdgeInsets.all(14),
@@ -486,17 +485,19 @@ class _WarehouseReceiptSheetState extends ConsumerState<WarehouseReceiptSheet> {
     });
 
     try {
-      await ref.read(warehouseRepositoryProvider).createReceipt(
-        WarehouseReceiptPayload(
-          warehouseId: warehouseId,
-          materialId: material.id,
-          quantity: quantity,
-          price: price,
-          documentNumber: _documentController.text.trim(),
-          reason: _reasonController.text.trim(),
-          photos: _photoPaths,
-        ),
-      );
+      await ref
+          .read(warehouseRepositoryProvider)
+          .createReceipt(
+            WarehouseReceiptPayload(
+              warehouseId: warehouseId,
+              materialId: material.id,
+              quantity: quantity,
+              price: price,
+              documentNumber: _documentController.text.trim(),
+              reason: _reasonController.text.trim(),
+              photos: _photoPaths,
+            ),
+          );
 
       if (!mounted) {
         return;
@@ -522,9 +523,7 @@ class _WarehouseReceiptSheetState extends ConsumerState<WarehouseReceiptSheet> {
   }
 
   String _formatNumber(double value) {
-    return value.toStringAsFixed(
-      value.truncateToDouble() == value ? 0 : 2,
-    );
+    return value.toStringAsFixed(value.truncateToDouble() == value ? 0 : 2);
   }
 
   void _showMessage(String message) {

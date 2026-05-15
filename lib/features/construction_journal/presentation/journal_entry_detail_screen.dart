@@ -24,12 +24,12 @@ class JournalEntryDetailScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(constructionJournalEntryDetailProvider(entryId));
-    final notifier = ref.read(constructionJournalEntryDetailProvider(entryId).notifier);
+    final notifier = ref.read(
+      constructionJournalEntryDetailProvider(entryId).notifier,
+    );
 
     if (state.isLoading && state.entry == null) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
     if (state.error != null && state.entry == null) {
@@ -62,7 +62,10 @@ class JournalEntryDetailScreen extends ConsumerWidget {
       appBar: AppBar(
         title: Text('Запись №${entry.entryNumber}'),
         actions: [
-          IconButton(onPressed: notifier.load, icon: const Icon(Icons.refresh_rounded)),
+          IconButton(
+            onPressed: notifier.load,
+            icon: const Icon(Icons.refresh_rounded),
+          ),
         ],
       ),
       body: RefreshIndicator(
@@ -80,9 +83,15 @@ class JournalEntryDetailScreen extends ConsumerWidget {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text('Запись №${entry.entryNumber}', style: AppTypography.h2(context)),
+                            Text(
+                              'Запись №${entry.entryNumber}',
+                              style: AppTypography.h2(context),
+                            ),
                             const SizedBox(height: 4),
-                            Text(_formatDate(entry.entryDate), style: AppTypography.caption(context)),
+                            Text(
+                              _formatDate(entry.entryDate),
+                              style: AppTypography.caption(context),
+                            ),
                           ],
                         ),
                       ),
@@ -90,10 +99,16 @@ class JournalEntryDetailScreen extends ConsumerWidget {
                     ],
                   ),
                   const SizedBox(height: 16),
-                  Text(entry.workDescription, style: AppTypography.bodyMedium(context)),
+                  Text(
+                    entry.workDescription,
+                    style: AppTypography.bodyMedium(context),
+                  ),
                   if ((entry.problemsDescription ?? '').trim().isNotEmpty) ...[
                     const SizedBox(height: 12),
-                    _Section(title: 'Проблемы', value: entry.problemsDescription!),
+                    _Section(
+                      title: 'Проблемы',
+                      value: entry.problemsDescription!,
+                    ),
                   ],
                   if ((entry.safetyNotes ?? '').trim().isNotEmpty) ...[
                     const SizedBox(height: 12),
@@ -101,7 +116,10 @@ class JournalEntryDetailScreen extends ConsumerWidget {
                   ],
                   if ((entry.visitorsNotes ?? '').trim().isNotEmpty) ...[
                     const SizedBox(height: 12),
-                    _Section(title: 'Замечания посетителей', value: entry.visitorsNotes!),
+                    _Section(
+                      title: 'Замечания посетителей',
+                      value: entry.visitorsNotes!,
+                    ),
                   ],
                   if ((entry.qualityNotes ?? '').trim().isNotEmpty) ...[
                     const SizedBox(height: 12),
@@ -134,10 +152,11 @@ class JournalEntryDetailScreen extends ConsumerWidget {
                     onPressed: () async {
                       final updated = await Navigator.of(context).push<bool>(
                         MaterialPageRoute(
-                          builder: (_) => JournalEntryFormScreen(
-                            journalId: journalId,
-                            initialEntry: entry,
-                          ),
+                          builder:
+                              (_) => JournalEntryFormScreen(
+                                journalId: journalId,
+                                initialEntry: entry,
+                              ),
                         ),
                       );
 
@@ -151,7 +170,9 @@ class JournalEntryDetailScreen extends ConsumerWidget {
                 if (entry.availableActions.contains('submit'))
                   ElevatedButton.icon(
                     onPressed: () async {
-                      await ref.read(constructionJournalRepositoryProvider).submitEntry(entryId);
+                      await ref
+                          .read(constructionJournalRepositoryProvider)
+                          .submitEntry(entryId);
                       await notifier.load();
                     },
                     icon: const Icon(Icons.send_outlined),
@@ -160,7 +181,9 @@ class JournalEntryDetailScreen extends ConsumerWidget {
                 if (entry.availableActions.contains('approve'))
                   ElevatedButton.icon(
                     onPressed: () async {
-                      await ref.read(constructionJournalRepositoryProvider).approveEntry(entryId);
+                      await ref
+                          .read(constructionJournalRepositoryProvider)
+                          .approveEntry(entryId);
                       await notifier.load();
                     },
                     icon: const Icon(Icons.check_circle_outline_rounded),
@@ -168,14 +191,18 @@ class JournalEntryDetailScreen extends ConsumerWidget {
                   ),
                 if (entry.availableActions.contains('reject'))
                   OutlinedButton.icon(
-                    onPressed: () => _showRejectDialog(context, ref, notifier, entryId),
+                    onPressed:
+                        () =>
+                            _showRejectDialog(context, ref, notifier, entryId),
                     icon: const Icon(Icons.close_rounded),
                     label: const Text('Отклонить'),
                   ),
                 if (entry.availableActions.contains('delete'))
                   OutlinedButton.icon(
                     onPressed: () async {
-                      await ref.read(constructionJournalRepositoryProvider).deleteEntry(entryId);
+                      await ref
+                          .read(constructionJournalRepositoryProvider)
+                          .deleteEntry(entryId);
                       if (context.mounted) {
                         Navigator.of(context).pop(true);
                       }
@@ -186,13 +213,19 @@ class JournalEntryDetailScreen extends ConsumerWidget {
                 if (entry.availableActions.contains('export_daily_report'))
                   OutlinedButton.icon(
                     onPressed: () async {
-                      final url = await ref.read(constructionJournalRepositoryProvider).exportDailyReport(entryId);
+                      final url = await ref
+                          .read(constructionJournalRepositoryProvider)
+                          .exportDailyReport(entryId);
                       if (url.isNotEmpty) {
                         await Clipboard.setData(ClipboardData(text: url));
                       }
                       if (context.mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Ссылка на дневной отчет скопирована в буфер.')),
+                          const SnackBar(
+                            content: Text(
+                              'Ссылка на дневной отчет скопирована в буфер.',
+                            ),
+                          ),
                         );
                       }
                     },
@@ -221,10 +254,9 @@ class _BlockersCard extends StatelessWidget {
         children: [
           Text(
             'Запись пока нельзя утвердить',
-            style: AppTypography.bodyLarge(context).copyWith(
-              color: AppColors.warning,
-              fontWeight: FontWeight.w700,
-            ),
+            style: AppTypography.bodyLarge(
+              context,
+            ).copyWith(color: AppColors.warning, fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: 8),
           ...blockers.map(
@@ -255,16 +287,13 @@ class _WorkVolumesReadOnlyCard extends StatelessWidget {
         children: [
           Text(
             'Объемы выполненных работ',
-            style: AppTypography.bodyLarge(context).copyWith(
-              fontWeight: FontWeight.w700,
-            ),
+            style: AppTypography.bodyLarge(
+              context,
+            ).copyWith(fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: 8),
           if (volumes.isEmpty)
-            Text(
-              'Список работ пуст',
-              style: AppTypography.bodyMedium(context),
-            )
+            Text('Список работ пуст', style: AppTypography.bodyMedium(context))
           else
             ...volumes.map(
               (volume) => Padding(
@@ -274,13 +303,14 @@ class _WorkVolumesReadOnlyCard extends StatelessWidget {
                   children: [
                     Text(
                       volume.title ?? volume.notes ?? 'Работа',
-                      style: AppTypography.bodyMedium(context).copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
+                      style: AppTypography.bodyMedium(
+                        context,
+                      ).copyWith(fontWeight: FontWeight.w700),
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      '${volume.quantity} ${volume.measurementUnitName ?? ''}'.trim(),
+                      '${volume.quantity} ${volume.measurementUnitName ?? ''}'
+                          .trim(),
                       style: AppTypography.caption(context),
                     ),
                     if ((volume.notes ?? '').trim().isNotEmpty) ...[
@@ -301,11 +331,7 @@ class _WorkVolumesReadOnlyCard extends StatelessWidget {
 }
 
 class _Section extends StatelessWidget {
-  const _Section({
-    required this.title,
-    required this.value,
-    this.color,
-  });
+  const _Section({required this.title, required this.value, this.color});
 
   final String title;
   final String value;
@@ -320,13 +346,17 @@ class _Section extends StatelessWidget {
       children: [
         Text(
           title,
-          style: AppTypography.caption(context).copyWith(
-            color: resolvedColor,
-            fontWeight: FontWeight.w700,
-          ),
+          style: AppTypography.caption(
+            context,
+          ).copyWith(color: resolvedColor, fontWeight: FontWeight.w700),
         ),
         const SizedBox(height: 4),
-        Text(value, style: AppTypography.bodyMedium(context).copyWith(color: resolvedColor)),
+        Text(
+          value,
+          style: AppTypography.bodyMedium(
+            context,
+          ).copyWith(color: resolvedColor),
+        ),
       ],
     );
   }
@@ -360,10 +390,9 @@ class _StatusBadge extends StatelessWidget {
       ),
       child: Text(
         label,
-        style: AppTypography.caption(context).copyWith(
-          color: color,
-          fontWeight: FontWeight.w700,
-        ),
+        style: AppTypography.caption(
+          context,
+        ).copyWith(color: color, fontWeight: FontWeight.w700),
       ),
     );
   }
@@ -398,10 +427,9 @@ Future<void> _showRejectDialog(
           ),
           ElevatedButton(
             onPressed: () async {
-              await ref.read(constructionJournalRepositoryProvider).rejectEntry(
-                    entryId,
-                    controller.text.trim(),
-                  );
+              await ref
+                  .read(constructionJournalRepositoryProvider)
+                  .rejectEntry(entryId, controller.text.trim());
               if (context.mounted) {
                 Navigator.of(context).pop();
               }

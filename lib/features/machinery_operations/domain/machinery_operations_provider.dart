@@ -37,8 +37,10 @@ class MachineryOperationsState {
   }
 }
 
-class MachineryOperationsNotifier extends StateNotifier<MachineryOperationsState> {
-  MachineryOperationsNotifier(this._repository) : super(const MachineryOperationsState());
+class MachineryOperationsNotifier
+    extends StateNotifier<MachineryOperationsState> {
+  MachineryOperationsNotifier(this._repository)
+    : super(const MachineryOperationsState());
 
   final MachineryOperationsRepository _repository;
 
@@ -54,9 +56,17 @@ class MachineryOperationsNotifier extends StateNotifier<MachineryOperationsState
     state = state.copyWith(isLoading: true, error: null);
 
     try {
-      final assets = await _repository.fetchAssets(projectId: state.projectFilter);
-      final shifts = await _repository.fetchShiftReports(projectId: state.projectFilter);
-      state = state.copyWith(isLoading: false, assets: assets, shiftReports: shifts);
+      final assets = await _repository.fetchAssets(
+        projectId: state.projectFilter,
+      );
+      final shifts = await _repository.fetchShiftReports(
+        projectId: state.projectFilter,
+      );
+      state = state.copyWith(
+        isLoading: false,
+        assets: assets,
+        shiftReports: shifts,
+      );
     } catch (error) {
       state = state.copyWith(isLoading: false, error: error.toString());
     }
@@ -84,7 +94,11 @@ class MachineryOperationsNotifier extends StateNotifier<MachineryOperationsState
       throw const FormatException('Выберите объект');
     }
 
-    await _repository.createDowntime(assetId: asset.id, projectId: projectId, durationMinutes: 30);
+    await _repository.createDowntime(
+      assetId: asset.id,
+      projectId: projectId,
+      durationMinutes: 30,
+    );
     await load();
   }
 
@@ -94,11 +108,20 @@ class MachineryOperationsNotifier extends StateNotifier<MachineryOperationsState
       throw const FormatException('Выберите объект');
     }
 
-    await _repository.createFuelIssue(assetId: asset.id, projectId: projectId, quantity: 50);
+    await _repository.createFuelIssue(
+      assetId: asset.id,
+      projectId: projectId,
+      quantity: 50,
+    );
     await load();
   }
 }
 
-final machineryOperationsProvider = StateNotifierProvider<MachineryOperationsNotifier, MachineryOperationsState>((ref) {
-  return MachineryOperationsNotifier(ref.read(machineryOperationsRepositoryProvider));
+final machineryOperationsProvider = StateNotifierProvider<
+  MachineryOperationsNotifier,
+  MachineryOperationsState
+>((ref) {
+  return MachineryOperationsNotifier(
+    ref.read(machineryOperationsRepositoryProvider),
+  );
 });

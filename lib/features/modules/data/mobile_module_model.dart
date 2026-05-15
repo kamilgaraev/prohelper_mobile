@@ -25,14 +25,18 @@ class MobileModuleModel {
     return MobileModuleModel(
       slug: slug,
       title: _resolveModuleTitle(slug, json['title'] as String?),
-      description: _resolveModuleDescription(slug, json['description'] as String?),
+      description: _resolveModuleDescription(
+        slug,
+        json['description'] as String?,
+      ),
       icon: json['icon'] as String? ?? 'grid',
       supportedOnMobile: json['supported_on_mobile'] as bool? ?? false,
       order: json['order'] as int? ?? 0,
       route: json['route'] as String?,
-      permissions: (json['permissions'] as List<dynamic>? ?? const [])
-          .whereType<String>()
-          .toList(),
+      permissions:
+          (json['permissions'] as List<dynamic>? ?? const [])
+              .whereType<String>()
+              .toList(),
     );
   }
 }
@@ -66,17 +70,25 @@ String _resolveModuleDescription(String slug, String? rawDescription) {
 
   return switch (slug) {
     'site-requests' => 'Создание, просмотр и согласование заявок по объекту.',
-    'basic-warehouse' => 'Остатки, движения и приемка материалов по организации.',
+    'basic-warehouse' =>
+      'Остатки, движения и приемка материалов по организации.',
     'schedule-management' => 'Графики работ, прогресс и задачи по объектам.',
-    'ai-assistant' => 'История диалогов, управленческие вопросы и быстрый доступ к AI-помощнику.',
-    'workflow-management' => 'Маршруты согласований и статусы бизнес-процессов.',
+    'ai-assistant' =>
+      'История диалогов, управленческие вопросы и быстрый доступ к AI-помощнику.',
+    'workflow-management' =>
+      'Маршруты согласований и статусы бизнес-процессов.',
     'time-tracking' => 'Отметки, смены и контроль рабочего времени.',
-    'budget-estimates' => 'Ежедневные записи, статусы согласования и экспорт журнала работ.',
-    'quality-control' => 'Замечания, дефекты и повторная проверка выполненных работ.',
-    'safety-management' => 'Наряды-допуски, происшествия и нарушения на объекте.',
-    'machinery-operations' => 'Сменные рапорты, простои и ГСМ по технике на объекте.',
+    'budget-estimates' =>
+      'Ежедневные записи, статусы согласования и экспорт журнала работ.',
+    'quality-control' =>
+      'Замечания, дефекты и повторная проверка выполненных работ.',
+    'safety-management' =>
+      'Наряды-допуски, происшествия и нарушения на объекте.',
+    'machinery-operations' =>
+      'Сменные рапорты, простои и ГСМ по технике на объекте.',
     'production-labor' => 'Наряды, табели и выработка бригад на объекте.',
-    'handover-acceptance' => 'Зоны, punch-list и передача готовых помещений заказчику.',
+    'handover-acceptance' =>
+      'Зоны, punch-list и передача готовых помещений заказчику.',
     _ => '',
   };
 }

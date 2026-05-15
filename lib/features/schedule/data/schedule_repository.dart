@@ -18,9 +18,7 @@ class ScheduleRepository {
     try {
       final response = await _dio.get(
         '/schedule',
-        queryParameters: {
-          'project_id': projectId,
-        },
+        queryParameters: {'project_id': projectId},
       );
       final data = response.data;
       final payload = data is Map<String, dynamic> ? data['data'] : null;
@@ -146,7 +144,9 @@ class ScheduleRepository {
         );
       }
 
-      throw const ApiException('Сервер вернул пустой ответ по факту дневного задания.');
+      throw const ApiException(
+        'Сервер вернул пустой ответ по факту дневного задания.',
+      );
     } on DioException catch (error) {
       throw ApiException.fromDio(
         error,
@@ -157,7 +157,9 @@ class ScheduleRepository {
         rethrow;
       }
 
-      throw const ApiException('Не удалось зафиксировать факт дневного задания.');
+      throw const ApiException(
+        'Не удалось зафиксировать факт дневного задания.',
+      );
     }
   }
 
@@ -168,9 +170,7 @@ class ScheduleRepository {
     try {
       await _dio.post(
         '/schedule/work-constraints/$constraintId/linked-action',
-        data: {
-          if (comment != null) 'comment': comment,
-        },
+        data: {if (comment != null) 'comment': comment},
       );
     } on DioException catch (error) {
       throw ApiException.fromDio(
@@ -193,9 +193,7 @@ class ScheduleRepository {
     try {
       final response = await _dio.post(
         '/schedule/daily-plans/$dailyPlanId/submit',
-        data: {
-          if (summaryComment != null) 'summary_comment': summaryComment,
-        },
+        data: {if (summaryComment != null) 'summary_comment': summaryComment},
       );
       final data = response.data;
       final payload = data is Map<String, dynamic> ? data['data'] : null;

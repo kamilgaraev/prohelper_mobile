@@ -51,7 +51,10 @@ class MachineryAssetModel {
       availableActions: _stringList(json['available_actions']),
       projectId: _asNullableInt(json['project_id']),
       projectName: _nestedName(json['project']),
-      problemFlags: _mapList(json['problem_flags']).map(MachineryProblemFlagModel.fromJson).toList(),
+      problemFlags:
+          _mapList(
+            json['problem_flags'],
+          ).map(MachineryProblemFlagModel.fromJson).toList(),
     );
   }
 }
@@ -109,7 +112,9 @@ List<Map<String, dynamic>> _mapList(dynamic value) {
 }
 
 List<String> _stringList(dynamic value) {
-  return (value as List<dynamic>? ?? const []).map((item) => item.toString()).toList();
+  return (value as List<dynamic>? ?? const [])
+      .map((item) => item.toString())
+      .toList();
 }
 
 String? _nestedName(dynamic value) {

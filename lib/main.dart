@@ -10,11 +10,7 @@ import 'features/projects/presentation/project_selection_screen.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  runApp(
-    const ProviderScope(
-      child: ProHelperApp(),
-    ),
-  );
+  runApp(const ProviderScope(child: ProHelperApp()));
 }
 
 class ProHelperApp extends ConsumerWidget {
@@ -27,15 +23,12 @@ class ProHelperApp extends ConsumerWidget {
     final Widget home;
 
     if (authState is AuthAuthenticated) {
-      home = projectsState.selectedProject != null
-          ? const DashboardScreen()
-          : const ProjectSelectionScreen();
+      home =
+          projectsState.selectedProject != null
+              ? const DashboardScreen()
+              : const ProjectSelectionScreen();
     } else if (authState is AuthInitial) {
-      home = const Scaffold(
-        body: Center(
-          child: CircularProgressIndicator(),
-        ),
-      );
+      home = const Scaffold(body: Center(child: CircularProgressIndicator()));
     } else {
       home = const LoginScreen();
     }

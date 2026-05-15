@@ -13,7 +13,8 @@ class ProductionLaborScreen extends ConsumerStatefulWidget {
   const ProductionLaborScreen({super.key});
 
   @override
-  ConsumerState<ProductionLaborScreen> createState() => _ProductionLaborScreenState();
+  ConsumerState<ProductionLaborScreen> createState() =>
+      _ProductionLaborScreenState();
 }
 
 class _ProductionLaborScreenState extends ConsumerState<ProductionLaborScreen> {
@@ -52,44 +53,62 @@ class _ProductionLaborScreenState extends ConsumerState<ProductionLaborScreen> {
           actions: [
             IconButton(
               tooltip: 'Обновить',
-              onPressed: () => ref.read(productionLaborProvider.notifier).load(),
+              onPressed:
+                  () => ref.read(productionLaborProvider.notifier).load(),
               icon: const Icon(Icons.refresh_rounded),
             ),
           ],
         ),
-        body: state.isLoading && state.workOrders.isEmpty
-            ? const Center(child: CircularProgressIndicator())
-            : state.error != null && state.workOrders.isEmpty
+        body:
+            state.isLoading && state.workOrders.isEmpty
+                ? const Center(child: CircularProgressIndicator())
+                : state.error != null && state.workOrders.isEmpty
                 ? AppStateView(
-                    icon: Icons.engineering_outlined,
-                    title: 'Не удалось загрузить наряды',
-                    description: state.error,
-                    action: OutlinedButton(
-                      onPressed: () => ref.read(productionLaborProvider.notifier).load(),
-                      child: const Text('Повторить'),
-                    ),
-                  )
+                  icon: Icons.engineering_outlined,
+                  title: 'Не удалось загрузить наряды',
+                  description: state.error,
+                  action: OutlinedButton(
+                    onPressed:
+                        () => ref.read(productionLaborProvider.notifier).load(),
+                    child: const Text('Повторить'),
+                  ),
+                )
                 : RefreshIndicator(
-                    onRefresh: () => ref.read(productionLaborProvider.notifier).load(),
-                    child: state.workOrders.isEmpty
-                        ? const AppStateView(
+                  onRefresh:
+                      () => ref.read(productionLaborProvider.notifier).load(),
+                  child:
+                      state.workOrders.isEmpty
+                          ? const AppStateView(
                             icon: Icons.engineering_outlined,
                             title: 'Нарядов пока нет',
-                            description: 'Для выбранного объекта нет выданных нарядов.',
+                            description:
+                                'Для выбранного объекта нет выданных нарядов.',
                           )
-                        : ListView.separated(
+                          : ListView.separated(
                             padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
                             itemCount: state.workOrders.length,
-                            separatorBuilder: (_, __) => const SizedBox(height: 12),
-                            itemBuilder: (context, index) => _WorkOrderCard(
-                              workOrder: state.workOrders[index],
-                              onRecordOutput: (workOrder, line) => _runAction(
-                                () => ref.read(productionLaborProvider.notifier).recordOutput(workOrder, line),
-                              ),
-                              onCreateTimesheet: (workOrder, line) => _showTimesheetSheet(context, workOrder, line),
-                            ),
+                            separatorBuilder:
+                                (_, __) => const SizedBox(height: 12),
+                            itemBuilder:
+                                (context, index) => _WorkOrderCard(
+                                  workOrder: state.workOrders[index],
+                                  onRecordOutput:
+                                      (workOrder, line) => _runAction(
+                                        () => ref
+                                            .read(
+                                              productionLaborProvider.notifier,
+                                            )
+                                            .recordOutput(workOrder, line),
+                                      ),
+                                  onCreateTimesheet:
+                                      (workOrder, line) => _showTimesheetSheet(
+                                        context,
+                                        workOrder,
+                                        line,
+                                      ),
+                                ),
                           ),
-                  ),
+                ),
       ),
     );
   }
@@ -105,62 +124,73 @@ class _ProductionLaborScreenState extends ConsumerState<ProductionLaborScreen> {
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      builder: (sheetContext) => StatefulBuilder(
-        builder: (context, setSheetState) => Padding(
-          padding: EdgeInsets.only(
-            left: 16,
-            right: 16,
-            top: 20,
-            bottom: MediaQuery.of(context).viewInsets.bottom + 20,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Табель смены', style: AppTypography.h2(context)),
-              const SizedBox(height: 8),
-              Text(line.name, style: AppTypography.bodyMedium(context)),
-              if (line.requiresSafetyPermit) ...[
-                const SizedBox(height: 12),
-                TextField(
-                  controller: permitController,
-                  decoration: const InputDecoration(labelText: 'Допуск'),
-                ),
-              ],
-              const SizedBox(height: 16),
-              FilledButton(
-                onPressed: submitting
-                    ? null
-                    : () async {
-                        if (line.requiresSafetyPermit && permitController.text.trim().isEmpty) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Укажите допуск')),
-                          );
-                          return;
-                        }
+      builder:
+          (sheetContext) => StatefulBuilder(
+            builder:
+                (context, setSheetState) => Padding(
+                  padding: EdgeInsets.only(
+                    left: 16,
+                    right: 16,
+                    top: 20,
+                    bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Табель смены', style: AppTypography.h2(context)),
+                      const SizedBox(height: 8),
+                      Text(line.name, style: AppTypography.bodyMedium(context)),
+                      if (line.requiresSafetyPermit) ...[
+                        const SizedBox(height: 12),
+                        TextField(
+                          controller: permitController,
+                          decoration: const InputDecoration(
+                            labelText: 'Допуск',
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 16),
+                      FilledButton(
+                        onPressed:
+                            submitting
+                                ? null
+                                : () async {
+                                  if (line.requiresSafetyPermit &&
+                                      permitController.text.trim().isEmpty) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text('Укажите допуск'),
+                                      ),
+                                    );
+                                    return;
+                                  }
 
-                        setSheetState(() => submitting = true);
-                        try {
-                          await ref.read(productionLaborProvider.notifier).createTimesheet(
-                                workOrder,
-                                line,
-                                safetyPermitReference: permitController.text.trim(),
-                              );
-                          if (sheetContext.mounted) {
-                            Navigator.pop(sheetContext);
-                          }
-                        } finally {
-                          if (context.mounted) {
-                            setSheetState(() => submitting = false);
-                          }
-                        }
-                      },
-                child: Text(submitting ? 'Сохранение...' : 'Сохранить'),
-              ),
-            ],
+                                  setSheetState(() => submitting = true);
+                                  try {
+                                    await ref
+                                        .read(productionLaborProvider.notifier)
+                                        .createTimesheet(
+                                          workOrder,
+                                          line,
+                                          safetyPermitReference:
+                                              permitController.text.trim(),
+                                        );
+                                    if (sheetContext.mounted) {
+                                      Navigator.pop(sheetContext);
+                                    }
+                                  } finally {
+                                    if (context.mounted) {
+                                      setSheetState(() => submitting = false);
+                                    }
+                                  }
+                                },
+                        child: Text(submitting ? 'Сохранение...' : 'Сохранить'),
+                      ),
+                    ],
+                  ),
+                ),
           ),
-        ),
-      ),
     );
   }
 
@@ -172,7 +202,9 @@ class _ProductionLaborScreenState extends ConsumerState<ProductionLaborScreen> {
         return;
       }
 
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.toString())));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.toString())));
     }
   }
 }
@@ -185,8 +217,16 @@ class _WorkOrderCard extends StatelessWidget {
   });
 
   final LaborWorkOrderModel workOrder;
-  final void Function(LaborWorkOrderModel workOrder, LaborWorkOrderLineModel line) onRecordOutput;
-  final void Function(LaborWorkOrderModel workOrder, LaborWorkOrderLineModel line) onCreateTimesheet;
+  final void Function(
+    LaborWorkOrderModel workOrder,
+    LaborWorkOrderLineModel line,
+  )
+  onRecordOutput;
+  final void Function(
+    LaborWorkOrderModel workOrder,
+    LaborWorkOrderLineModel line,
+  )
+  onCreateTimesheet;
 
   @override
   Widget build(BuildContext context) {
@@ -205,12 +245,23 @@ class _WorkOrderCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(workOrder.title, style: AppTypography.bodyLarge(context).copyWith(fontWeight: FontWeight.w800)),
-                    Text(workOrder.orderNumber, style: AppTypography.caption(context)),
+                    Text(
+                      workOrder.title,
+                      style: AppTypography.bodyLarge(
+                        context,
+                      ).copyWith(fontWeight: FontWeight.w800),
+                    ),
+                    Text(
+                      workOrder.orderNumber,
+                      style: AppTypography.caption(context),
+                    ),
                   ],
                 ),
               ),
-              Chip(label: Text(workOrder.statusLabel), visualDensity: VisualDensity.compact),
+              Chip(
+                label: Text(workOrder.statusLabel),
+                visualDensity: VisualDensity.compact,
+              ),
             ],
           ),
           if (line != null) ...[
@@ -226,7 +277,10 @@ class _WorkOrderCard extends StatelessWidget {
               children: [
                 Expanded(
                   child: OutlinedButton.icon(
-                    onPressed: workOrder.canRecordFact ? () => onRecordOutput(workOrder, line) : null,
+                    onPressed:
+                        workOrder.canRecordFact
+                            ? () => onRecordOutput(workOrder, line)
+                            : null,
                     icon: const Icon(Icons.done_all_rounded),
                     label: const Text('Выработка'),
                   ),
@@ -234,7 +288,10 @@ class _WorkOrderCard extends StatelessWidget {
                 const SizedBox(width: 8),
                 Expanded(
                   child: FilledButton.icon(
-                    onPressed: workOrder.canRecordFact ? () => onCreateTimesheet(workOrder, line) : null,
+                    onPressed:
+                        workOrder.canRecordFact
+                            ? () => onCreateTimesheet(workOrder, line)
+                            : null,
                     icon: const Icon(Icons.access_time_rounded),
                     label: const Text('Табель'),
                   ),

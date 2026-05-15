@@ -6,11 +6,7 @@ import '../data/ai_assistant_repository.dart';
 const _homeSentinel = Object();
 
 class AiAssistantHomeState {
-  const AiAssistantHomeState({
-    this.isLoading = false,
-    this.home,
-    this.error,
-  });
+  const AiAssistantHomeState({this.isLoading = false, this.home, this.error});
 
   final bool isLoading;
   final AiAssistantHomeModel? home;
@@ -23,14 +19,18 @@ class AiAssistantHomeState {
   }) {
     return AiAssistantHomeState(
       isLoading: isLoading ?? this.isLoading,
-      home: identical(home, _homeSentinel) ? this.home : home as AiAssistantHomeModel?,
+      home:
+          identical(home, _homeSentinel)
+              ? this.home
+              : home as AiAssistantHomeModel?,
       error: identical(error, _homeSentinel) ? this.error : error as String?,
     );
   }
 }
 
 class AiAssistantHomeNotifier extends StateNotifier<AiAssistantHomeState> {
-  AiAssistantHomeNotifier(this._repository) : super(const AiAssistantHomeState()) {
+  AiAssistantHomeNotifier(this._repository)
+    : super(const AiAssistantHomeState()) {
     load();
   }
 
@@ -41,20 +41,14 @@ class AiAssistantHomeNotifier extends StateNotifier<AiAssistantHomeState> {
 
     try {
       final home = await _repository.fetchHome();
-      state = state.copyWith(
-        isLoading: false,
-        home: home,
-      );
+      state = state.copyWith(isLoading: false, home: home);
     } catch (error) {
-      state = state.copyWith(
-        isLoading: false,
-        error: error.toString(),
-      );
+      state = state.copyWith(isLoading: false, error: error.toString());
     }
   }
 }
 
 final aiAssistantHomeProvider =
     StateNotifierProvider<AiAssistantHomeNotifier, AiAssistantHomeState>((ref) {
-  return AiAssistantHomeNotifier(ref.read(aiAssistantRepositoryProvider));
-});
+      return AiAssistantHomeNotifier(ref.read(aiAssistantRepositoryProvider));
+    });

@@ -50,7 +50,9 @@ class QualityControlNotifier extends StateNotifier<QualityControlState> {
     state = state.copyWith(isLoading: true, error: null);
 
     try {
-      final defects = await _repository.fetchDefects(projectId: state.projectFilter);
+      final defects = await _repository.fetchDefects(
+        projectId: state.projectFilter,
+      );
       state = state.copyWith(isLoading: false, defects: defects);
     } catch (error) {
       state = state.copyWith(isLoading: false, error: error.toString());
@@ -67,7 +69,11 @@ class QualityControlNotifier extends StateNotifier<QualityControlState> {
     await loadDefects();
   }
 
-  Future<void> resolveDefect(int id, {String? comment, String? photoUrl}) async {
+  Future<void> resolveDefect(
+    int id, {
+    String? comment,
+    String? photoUrl,
+  }) async {
     await _repository.resolveDefect(id, comment: comment, photoUrl: photoUrl);
     await loadDefects();
   }
@@ -75,5 +81,5 @@ class QualityControlNotifier extends StateNotifier<QualityControlState> {
 
 final qualityControlProvider =
     StateNotifierProvider<QualityControlNotifier, QualityControlState>((ref) {
-  return QualityControlNotifier(ref.read(qualityControlRepositoryProvider));
-});
+      return QualityControlNotifier(ref.read(qualityControlRepositoryProvider));
+    });

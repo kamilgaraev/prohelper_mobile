@@ -169,22 +169,24 @@ class _JournalEntryFormScreenState
 
   Widget _buildEstimateSelector() {
     return DropdownButtonFormField<int>(
-      value: _estimates.any((estimate) => estimate.id == _selectedEstimateId)
-          ? _selectedEstimateId
-          : null,
+      value:
+          _estimates.any((estimate) => estimate.id == _selectedEstimateId)
+              ? _selectedEstimateId
+              : null,
       decoration: InputDecoration(
         labelText: 'Смета',
         helperText: _isLoadingOptions ? 'Загрузка смет и видов работ...' : null,
         border: const OutlineInputBorder(),
       ),
-      items: _estimates
-          .map(
-            (estimate) => DropdownMenuItem<int>(
-              value: estimate.id,
-              child: Text(estimate.displayName),
-            ),
-          )
-          .toList(),
+      items:
+          _estimates
+              .map(
+                (estimate) => DropdownMenuItem<int>(
+                  value: estimate.id,
+                  child: Text(estimate.displayName),
+                ),
+              )
+              .toList(),
       onChanged: (value) {
         setState(() {
           _selectedEstimateId = value;
@@ -260,23 +262,25 @@ class _JournalEntryFormScreenState
     return Column(
       children: [
         DropdownButtonFormField<int>(
-          value: _selectedEstimateItems.any(
-            (item) => item.id == _selectedEstimateItemId,
-          )
-              ? _selectedEstimateItemId
-              : null,
+          value:
+              _selectedEstimateItems.any(
+                    (item) => item.id == _selectedEstimateItemId,
+                  )
+                  ? _selectedEstimateItemId
+                  : null,
           decoration: const InputDecoration(
             labelText: 'Позиция сметы',
             border: OutlineInputBorder(),
           ),
-          items: _selectedEstimateItems
-              .map(
-                (item) => DropdownMenuItem<int>(
-                  value: item.id,
-                  child: Text(item.displayName),
-                ),
-              )
-              .toList(),
+          items:
+              _selectedEstimateItems
+                  .map(
+                    (item) => DropdownMenuItem<int>(
+                      value: item.id,
+                      child: Text(item.displayName),
+                    ),
+                  )
+                  .toList(),
           onChanged: (value) {
             setState(() {
               _selectedEstimateItemId = value;
@@ -287,9 +291,10 @@ class _JournalEntryFormScreenState
         Align(
           alignment: Alignment.centerLeft,
           child: FilledButton.tonalIcon(
-            onPressed: _selectedEstimateItemId == null
-                ? null
-                : _addSelectedEstimateItem,
+            onPressed:
+                _selectedEstimateItemId == null
+                    ? null
+                    : _addSelectedEstimateItem,
             icon: const Icon(Icons.playlist_add_rounded),
             label: const Text('Добавить из сметы'),
           ),
@@ -384,29 +389,30 @@ class _JournalEntryFormScreenState
 
     try {
       final repository = ref.read(constructionJournalRepositoryProvider);
-      final entry = _isEdit
-          ? await repository.updateEntry(
-              entryId: widget.initialEntry!.id,
-              entryDate: _entryDate.toIso8601String().split('T').first,
-              workDescription: _descriptionController.text.trim(),
-              estimateId: _selectedEstimateId,
-              problemsDescription: _problemsController.text.trim(),
-              safetyNotes: _safetyController.text.trim(),
-              visitorsNotes: _visitorsController.text.trim(),
-              qualityNotes: _qualityController.text.trim(),
-              workVolumes: workVolumes,
-            )
-          : await repository.createEntry(
-              journalId: widget.journalId,
-              entryDate: _entryDate.toIso8601String().split('T').first,
-              workDescription: _descriptionController.text.trim(),
-              estimateId: _selectedEstimateId,
-              problemsDescription: _problemsController.text.trim(),
-              safetyNotes: _safetyController.text.trim(),
-              visitorsNotes: _visitorsController.text.trim(),
-              qualityNotes: _qualityController.text.trim(),
-              workVolumes: workVolumes,
-            );
+      final entry =
+          _isEdit
+              ? await repository.updateEntry(
+                entryId: widget.initialEntry!.id,
+                entryDate: _entryDate.toIso8601String().split('T').first,
+                workDescription: _descriptionController.text.trim(),
+                estimateId: _selectedEstimateId,
+                problemsDescription: _problemsController.text.trim(),
+                safetyNotes: _safetyController.text.trim(),
+                visitorsNotes: _visitorsController.text.trim(),
+                qualityNotes: _qualityController.text.trim(),
+                workVolumes: workVolumes,
+              )
+              : await repository.createEntry(
+                journalId: widget.journalId,
+                entryDate: _entryDate.toIso8601String().split('T').first,
+                workDescription: _descriptionController.text.trim(),
+                estimateId: _selectedEstimateId,
+                problemsDescription: _problemsController.text.trim(),
+                safetyNotes: _safetyController.text.trim(),
+                visitorsNotes: _visitorsController.text.trim(),
+                qualityNotes: _qualityController.text.trim(),
+                workVolumes: workVolumes,
+              );
 
       if (!isDraft) {
         await repository.submitEntry(entry.id);
@@ -453,9 +459,9 @@ class _JournalEntryFormScreenState
   }
 
   void _showMessage(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 }
 
@@ -486,23 +492,25 @@ class _WorkVolumeCard extends StatelessWidget {
               children: [
                 Expanded(
                   child: DropdownButtonFormField<int>(
-                    value: workTypes.any(
-                      (workType) => workType.id == input.workTypeId,
-                    )
-                        ? input.workTypeId
-                        : null,
+                    value:
+                        workTypes.any(
+                              (workType) => workType.id == input.workTypeId,
+                            )
+                            ? input.workTypeId
+                            : null,
                     decoration: const InputDecoration(
                       labelText: 'Вид работ',
                       border: OutlineInputBorder(),
                     ),
-                    items: workTypes
-                        .map(
-                          (workType) => DropdownMenuItem<int>(
-                            value: workType.id,
-                            child: Text(workType.name),
-                          ),
-                        )
-                        .toList(),
+                    items:
+                        workTypes
+                            .map(
+                              (workType) => DropdownMenuItem<int>(
+                                value: workType.id,
+                                child: Text(workType.name),
+                              ),
+                            )
+                            .toList(),
                     onChanged: (value) {
                       final selected = workTypes.where(
                         (workType) => workType.id == value,
@@ -585,8 +593,8 @@ class _WorkVolumeInput {
     this.sourceLabel,
     String quantity = '',
     String notes = '',
-  })  : quantityController = TextEditingController(text: quantity),
-        notesController = TextEditingController(text: notes);
+  }) : quantityController = TextEditingController(text: quantity),
+       notesController = TextEditingController(text: notes);
 
   final int? id;
   int? estimateItemId;

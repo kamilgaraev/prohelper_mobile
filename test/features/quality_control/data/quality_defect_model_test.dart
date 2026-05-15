@@ -26,7 +26,8 @@ void main() {
     expect(defect.serverId, 7);
     expect(defect.projectName, 'Tower');
     expect(defect.assignedUserName, 'Foreman');
-    expect(defect.problemFlags, ['Needs acceptance']);
+    expect(defect.problemFlags.single.code, 'verification_required');
+    expect(defect.problemFlags.single.message, 'Needs acceptance');
     expect(defect.availableActions, ['verify', 'reject']);
     expect(defect.inspectionRequired, isTrue);
   });

@@ -15,10 +15,7 @@ import 'package:prohelpers_mobile/features/site_requests/domain/site_requests_me
 import 'package:prohelpers_mobile/features/site_requests/domain/site_requests_provider.dart';
 
 class SiteRequestFormScreen extends HookConsumerWidget {
-  const SiteRequestFormScreen({
-    super.key,
-    this.initialRequest,
-  });
+  const SiteRequestFormScreen({super.key, this.initialRequest});
 
   final SiteRequestModel? initialRequest;
 
@@ -27,34 +24,56 @@ class SiteRequestFormScreen extends HookConsumerWidget {
     final theme = Theme.of(context);
     final metaAsync = ref.watch(siteRequestsMetaProvider);
     final isEditing = initialRequest != null;
-    final isMaterialGroupEditing = initialRequest != null &&
+    final isMaterialGroupEditing =
+        initialRequest != null &&
         initialRequest!.requestType == 'material_request' &&
         initialRequest!.siteRequestGroupId != null &&
         initialRequest!.groupRequestCount > 1;
     final allowMultipleMaterials = !isEditing || isMaterialGroupEditing;
 
-    final titleController =
-        useTextEditingController(text: initialRequest?.title ?? '');
-    final descriptionController =
-        useTextEditingController(text: initialRequest?.description ?? '');
+    final titleController = useTextEditingController(
+      text: initialRequest?.title ?? '',
+    );
+    final descriptionController = useTextEditingController(
+      text: initialRequest?.description ?? '',
+    );
     final personnelCountController = useTextEditingController(
       text: initialRequest?.personnelCount?.toString() ?? '1',
     );
-    final selectedPersonnelType = useState<String?>(initialRequest?.personnelType);
-    final workStartDate = useState<DateTime?>(_tryParseDate(initialRequest?.workStartDate));
-    final workEndDate = useState<DateTime?>(_tryParseDate(initialRequest?.workEndDate));
-    final selectedEquipmentType = useState<String?>(initialRequest?.equipmentType);
-    final rentalStartDate = useState<DateTime?>(_tryParseDate(initialRequest?.rentalStartDate));
-    final rentalEndDate = useState<DateTime?>(_tryParseDate(initialRequest?.rentalEndDate));
-    final selectedPriority = useState<String>(initialRequest?.priority ?? 'medium');
-    final requestType = useState<String>(initialRequest?.requestType ?? 'material_request');
+    final selectedPersonnelType = useState<String?>(
+      initialRequest?.personnelType,
+    );
+    final workStartDate = useState<DateTime?>(
+      _tryParseDate(initialRequest?.workStartDate),
+    );
+    final workEndDate = useState<DateTime?>(
+      _tryParseDate(initialRequest?.workEndDate),
+    );
+    final selectedEquipmentType = useState<String?>(
+      initialRequest?.equipmentType,
+    );
+    final rentalStartDate = useState<DateTime?>(
+      _tryParseDate(initialRequest?.rentalStartDate),
+    );
+    final rentalEndDate = useState<DateTime?>(
+      _tryParseDate(initialRequest?.rentalEndDate),
+    );
+    final selectedPriority = useState<String>(
+      initialRequest?.priority ?? 'medium',
+    );
+    final requestType = useState<String>(
+      initialRequest?.requestType ?? 'material_request',
+    );
     final materialItems = useState<List<_MaterialRequestItemDraft>>(
       _buildInitialMaterialItems(initialRequest),
     );
     final screenTitle = isEditing ? 'Редактирование заявки' : 'Новая заявка';
-    final submitButtonLabel = isEditing
-        ? (isMaterialGroupEditing ? 'Сохранить группу' : 'Сохранить изменения')
-        : 'Создать заявку';
+    final submitButtonLabel =
+        isEditing
+            ? (isMaterialGroupEditing
+                ? 'Сохранить группу'
+                : 'Сохранить изменения')
+            : 'Создать заявку';
 
     final selectedProject = ref.watch(projectsProvider).selectedProject;
     final isLoading = useState(false);
@@ -73,9 +92,9 @@ class SiteRequestFormScreen extends HookConsumerWidget {
       );
 
       if (validationError != null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(validationError)),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(validationError)));
         return;
       }
 
@@ -83,7 +102,8 @@ class SiteRequestFormScreen extends HookConsumerWidget {
 
       try {
         var createdPositions = 1;
-        var successMessage = isEditing ? 'Заявка обновлена.' : 'Заявка создана.';
+        var successMessage =
+            isEditing ? 'Заявка обновлена.' : 'Заявка создана.';
         final data = <String, dynamic>{
           'project_id': selectedProject!.serverId,
           'title': titleController.text.trim(),
@@ -112,7 +132,8 @@ class SiteRequestFormScreen extends HookConsumerWidget {
               'material_name': payloadItems.first['name'],
               'material_quantity': payloadItems.first['quantity'],
               'material_unit': payloadItems.first['unit'],
-              if (payloadItems.first['note'] != null) 'notes': payloadItems.first['note'],
+              if (payloadItems.first['note'] != null)
+                'notes': payloadItems.first['note'],
             });
           } else {
             data['materials'] = payloadItems;
@@ -135,13 +156,16 @@ class SiteRequestFormScreen extends HookConsumerWidget {
         data.removeWhere((_, value) => value == null);
 
         if (isEditing) {
-          if (requestType.value == 'material_request' && isMaterialGroupEditing) {
+          if (requestType.value == 'material_request' &&
+              isMaterialGroupEditing) {
             data['materials'] = materialItems.value
                 .map(
                   (item) => {
                     if (item.requestId != null) 'id': item.requestId,
                     'name': item.nameController.text.trim(),
-                    'quantity': double.parse(item.quantityController.text.trim()),
+                    'quantity': double.parse(
+                      item.quantityController.text.trim(),
+                    ),
                     'unit': item.unit,
                     if (item.noteController.text.trim().isNotEmpty)
                       'note': item.noteController.text.trim(),
@@ -155,7 +179,10 @@ class SiteRequestFormScreen extends HookConsumerWidget {
 
             await ref
                 .read(siteRequestsRepositoryProvider)
-                .updateSiteRequestGroup(initialRequest!.siteRequestGroupId!, data);
+                .updateSiteRequestGroup(
+                  initialRequest!.siteRequestGroupId!,
+                  data,
+                );
             successMessage = 'Группа материалов обновлена.';
           } else {
             await ref
@@ -163,15 +190,21 @@ class SiteRequestFormScreen extends HookConsumerWidget {
                 .updateSiteRequest(initialRequest!.serverId, data);
           }
         } else {
-          await ref.read(siteRequestsRepositoryProvider).createSiteRequest(data);
+          await ref
+              .read(siteRequestsRepositoryProvider)
+              .createSiteRequest(data);
         }
-        await ref.read(siteRequestsProvider.notifier).loadRequests(refresh: true);
+        await ref
+            .read(siteRequestsProvider.notifier)
+            .loadRequests(refresh: true);
 
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(
-                !isEditing && requestType.value == 'material_request' && createdPositions > 1
+                !isEditing &&
+                        requestType.value == 'material_request' &&
+                        createdPositions > 1
                     ? 'Создано $createdPositions позиций материалов в одной группе заявок.'
                     : successMessage,
               ),
@@ -181,9 +214,9 @@ class SiteRequestFormScreen extends HookConsumerWidget {
         }
       } catch (error) {
         if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(error.toString())),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text(error.toString())));
         }
       } finally {
         isLoading.value = false;
@@ -202,140 +235,147 @@ class SiteRequestFormScreen extends HookConsumerWidget {
             onPressed: () => Navigator.pop(context),
           ),
         ),
-        body: selectedProject == null
-            ? const AppStateView(
-                icon: Icons.apartment_outlined,
-                title: 'Объект не выбран',
-                description:
-                    'Сначала выберите объект, а затем создавайте заявку.',
-              )
-            : metaAsync.when(
-                data: (meta) {
-                  final units = (meta['units'] as List<dynamic>? ?? const []);
-                  final requestTypes =
-                      (meta['request_types'] as List<dynamic>? ?? const []);
-                  final personnelTypes =
-                      (meta['personnel_types'] as List<dynamic>? ?? const []);
-                  final equipmentTypes =
-                      (meta['equipment_types'] as List<dynamic>? ?? const []);
+        body:
+            selectedProject == null
+                ? const AppStateView(
+                  icon: Icons.apartment_outlined,
+                  title: 'Объект не выбран',
+                  description:
+                      'Сначала выберите объект, а затем создавайте заявку.',
+                )
+                : metaAsync.when(
+                  data: (meta) {
+                    final units = (meta['units'] as List<dynamic>? ?? const []);
+                    final requestTypes =
+                        (meta['request_types'] as List<dynamic>? ?? const []);
+                    final personnelTypes =
+                        (meta['personnel_types'] as List<dynamic>? ?? const []);
+                    final equipmentTypes =
+                        (meta['equipment_types'] as List<dynamic>? ?? const []);
 
-                  if (materialItems.value.any((item) => item.unit == null) &&
-                      units.isNotEmpty) {
-                    WidgetsBinding.instance.addPostFrameCallback((_) {
-                      final defaultUnit = units.first['short_name']?.toString();
-                      if (defaultUnit == null || defaultUnit.isEmpty) {
-                        return;
-                      }
+                    if (materialItems.value.any((item) => item.unit == null) &&
+                        units.isNotEmpty) {
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        final defaultUnit =
+                            units.first['short_name']?.toString();
+                        if (defaultUnit == null || defaultUnit.isEmpty) {
+                          return;
+                        }
 
-                      for (final item in materialItems.value) {
-                        item.unit ??= defaultUnit;
-                      }
-                    });
-                  }
+                        for (final item in materialItems.value) {
+                          item.unit ??= defaultUnit;
+                        }
+                      });
+                    }
 
-                  return SingleChildScrollView(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _ProjectContextCard(projectName: selectedProject.name),
-                        const SizedBox(height: 16),
-                        _RequestFlowBanner(
-                          requestType: requestType.value,
-                          priority: selectedPriority.value,
-                          isEditing: isEditing,
-                        ),
-                        const SizedBox(height: 16),
-                        _buildTypeSelector(
-                          context,
-                          requestType,
-                          requestTypes,
-                          enabled: !isEditing,
-                        ),
-                        if (isEditing) ...[
-                          const SizedBox(height: 8),
+                    return SingleChildScrollView(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _ProjectContextCard(
+                            projectName: selectedProject.name,
+                          ),
+                          const SizedBox(height: 16),
+                          _RequestFlowBanner(
+                            requestType: requestType.value,
+                            priority: selectedPriority.value,
+                            isEditing: isEditing,
+                          ),
+                          const SizedBox(height: 16),
+                          _buildTypeSelector(
+                            context,
+                            requestType,
+                            requestTypes,
+                            enabled: !isEditing,
+                          ),
+                          if (isEditing) ...[
+                            const SizedBox(height: 8),
+                            Text(
+                              'Тип заявки зафиксирован. Для другой категории создайте новую заявку.',
+                              style: AppTypography.bodySmall(context).copyWith(
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                          ],
+                          const SizedBox(height: 16),
+                          _buildPrioritySelector(context, selectedPriority),
+                          const SizedBox(height: 24),
                           Text(
-                            'Тип заявки зафиксирован. Для другой категории создайте новую заявку.',
-                            style: AppTypography.bodySmall(context).copyWith(
-                              color: theme.colorScheme.onSurfaceVariant,
+                            'Основная информация',
+                            style: AppTypography.caption(context),
+                          ),
+                          const SizedBox(height: 12),
+                          ProCard(
+                            child: Column(
+                              children: [
+                                _buildField(
+                                  context,
+                                  'Заголовок заявки',
+                                  titleController,
+                                ),
+                                const SizedBox(height: 16),
+                                _buildField(
+                                  context,
+                                  'Описание или комментарий',
+                                  descriptionController,
+                                  maxLines: 3,
+                                ),
+                              ],
                             ),
                           ),
+                          const SizedBox(height: 24),
+                          if (requestType.value == 'material_request')
+                            _buildMaterialFields(
+                              context,
+                              materialItems,
+                              units,
+                              allowMultipleMaterials,
+                              isEditing: isEditing,
+                              isGroupEditing: isMaterialGroupEditing,
+                            ),
+                          if (requestType.value == 'personnel_request')
+                            _buildPersonnelFields(
+                              context,
+                              personnelCountController,
+                              selectedPersonnelType,
+                              workStartDate,
+                              workEndDate,
+                              personnelTypes,
+                            ),
+                          if (requestType.value == 'equipment_request')
+                            _buildEquipmentFields(
+                              context,
+                              selectedEquipmentType,
+                              rentalStartDate,
+                              rentalEndDate,
+                              equipmentTypes,
+                            ),
+                          const SizedBox(height: 100),
                         ],
-                        const SizedBox(height: 16),
-                        _buildPrioritySelector(context, selectedPriority),
-                        const SizedBox(height: 24),
-                        Text(
-                          'Основная информация',
-                          style: AppTypography.caption(context),
-                        ),
-                        const SizedBox(height: 12),
-                        ProCard(
-                          child: Column(
-                            children: [
-                              _buildField(
-                                context,
-                                'Заголовок заявки',
-                                titleController,
-                              ),
-                              const SizedBox(height: 16),
-                              _buildField(
-                                context,
-                                'Описание или комментарий',
-                                descriptionController,
-                                maxLines: 3,
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 24),
-                        if (requestType.value == 'material_request')
-                          _buildMaterialFields(
-                            context,
-                            materialItems,
-                            units,
-                            allowMultipleMaterials,
-                            isEditing: isEditing,
-                            isGroupEditing: isMaterialGroupEditing,
-                          ),
-                        if (requestType.value == 'personnel_request')
-                          _buildPersonnelFields(
-                            context,
-                            personnelCountController,
-                            selectedPersonnelType,
-                            workStartDate,
-                            workEndDate,
-                            personnelTypes,
-                          ),
-                        if (requestType.value == 'equipment_request')
-                          _buildEquipmentFields(
-                            context,
-                            selectedEquipmentType,
-                            rentalStartDate,
-                            rentalEndDate,
-                            equipmentTypes,
-                          ),
-                        const SizedBox(height: 100),
-                      ],
-                    ),
-                  );
-                },
-                loading: () => const Center(child: CircularProgressIndicator()),
-                error: (error, _) => AppStateView(
-                  icon: Icons.error_outline_rounded,
-                  title: 'Не удалось загрузить справочники',
-                  description: error.toString(),
+                      ),
+                    );
+                  },
+                  loading:
+                      () => const Center(child: CircularProgressIndicator()),
+                  error:
+                      (error, _) => AppStateView(
+                        icon: Icons.error_outline_rounded,
+                        title: 'Не удалось загрузить справочники',
+                        description: error.toString(),
+                      ),
                 ),
-              ),
-        bottomNavigationBar: selectedProject == null
-            ? null
-            : Container(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
-                child: ProButton(
-                  text: submitButtonLabel,
-                  isLoading: isLoading.value,
-                  onPressed: submit,
+        bottomNavigationBar:
+            selectedProject == null
+                ? null
+                : Container(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+                  child: ProButton(
+                    text: submitButtonLabel,
+                    isLoading: isLoading.value,
+                    onPressed: submit,
+                  ),
                 ),
-              ),
       ),
     );
   }
@@ -366,7 +406,9 @@ class SiteRequestFormScreen extends HookConsumerWidget {
 
       for (var index = 0; index < materialItems.length; index += 1) {
         final item = materialItems[index];
-        final parsedQuantity = double.tryParse(item.quantityController.text.trim());
+        final parsedQuantity = double.tryParse(
+          item.quantityController.text.trim(),
+        );
 
         if (item.nameController.text.trim().isEmpty) {
           return 'Укажите материал в позиции ${index + 1}.';
@@ -423,9 +465,9 @@ class SiteRequestFormScreen extends HookConsumerWidget {
   Widget _buildTypeSelector(
     BuildContext context,
     ValueNotifier<String> currentType,
-    List<dynamic> types,
-    {required bool enabled}
-  ) {
+    List<dynamic> types, {
+    required bool enabled,
+  }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -444,17 +486,20 @@ class SiteRequestFormScreen extends HookConsumerWidget {
               return ChoiceChip(
                 label: Text(type['label'].toString()),
                 selected: isSelected,
-                onSelected: !enabled
-                    ? null
-                    : (selected) {
-                  if (selected) {
-                    currentType.value = type['value'].toString();
-                  }
-                },
-                selectedColor:
-                    Theme.of(context).colorScheme.primary.withOpacity(0.2),
+                onSelected:
+                    !enabled
+                        ? null
+                        : (selected) {
+                          if (selected) {
+                            currentType.value = type['value'].toString();
+                          }
+                        },
+                selectedColor: Theme.of(
+                  context,
+                ).colorScheme.primary.withValues(alpha: 0.2),
                 labelStyle: AppTypography.bodySmall(context).copyWith(
-                  color: isSelected ? Theme.of(context).colorScheme.primary : null,
+                  color:
+                      isSelected ? Theme.of(context).colorScheme.primary : null,
                   fontWeight: isSelected ? FontWeight.bold : null,
                 ),
               );
@@ -484,25 +529,26 @@ class SiteRequestFormScreen extends HookConsumerWidget {
         Wrap(
           spacing: 8,
           runSpacing: 8,
-          children: priorities.map((entry) {
-            final isSelected = currentPriority.value == entry.$1;
-            final color = _priorityColor(entry.$1);
+          children:
+              priorities.map((entry) {
+                final isSelected = currentPriority.value == entry.$1;
+                final color = _priorityColor(entry.$1);
 
-            return ChoiceChip(
-              label: Text(entry.$2),
-              selected: isSelected,
-              onSelected: (selected) {
-                if (selected) {
-                  currentPriority.value = entry.$1;
-                }
-              },
-              selectedColor: color.withOpacity(0.18),
-              labelStyle: AppTypography.bodySmall(context).copyWith(
-                color: isSelected ? color : null,
-                fontWeight: isSelected ? FontWeight.w700 : null,
-              ),
-            );
-          }).toList(),
+                return ChoiceChip(
+                  label: Text(entry.$2),
+                  selected: isSelected,
+                  onSelected: (selected) {
+                    if (selected) {
+                      currentPriority.value = entry.$1;
+                    }
+                  },
+                  selectedColor: color.withValues(alpha: 0.18),
+                  labelStyle: AppTypography.bodySmall(context).copyWith(
+                    color: isSelected ? color : null,
+                    fontWeight: isSelected ? FontWeight.w700 : null,
+                  ),
+                );
+              }).toList(),
         ),
       ],
     );
@@ -512,14 +558,16 @@ class SiteRequestFormScreen extends HookConsumerWidget {
     BuildContext context,
     ValueNotifier<List<_MaterialRequestItemDraft>> itemsState,
     List<dynamic> units,
-    bool allowMultiple,
-    {required bool isEditing, required bool isGroupEditing}
-  ) {
-    final unitOptions = units
-        .map((item) => item['short_name']?.toString() ?? '')
-        .where((value) => value.isNotEmpty)
-        .toSet()
-        .toList();
+    bool allowMultiple, {
+    required bool isEditing,
+    required bool isGroupEditing,
+  }) {
+    final unitOptions =
+        units
+            .map((item) => item['short_name']?.toString() ?? '')
+            .where((value) => value.isNotEmpty)
+            .toSet()
+            .toList();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -531,7 +579,9 @@ class SiteRequestFormScreen extends HookConsumerWidget {
           final item = entry.value;
 
           return Padding(
-            padding: EdgeInsets.only(bottom: index == itemsState.value.length - 1 ? 0 : 12),
+            padding: EdgeInsets.only(
+              bottom: index == itemsState.value.length - 1 ? 0 : 12,
+            ),
             child: _MaterialItemCard(
               index: index,
               item: item,
@@ -548,16 +598,17 @@ class SiteRequestFormScreen extends HookConsumerWidget {
         }),
         const SizedBox(height: 12),
         OutlinedButton.icon(
-          onPressed: !allowMultiple
-              ? null
-              : () {
-                  itemsState.value = [
-                    ...itemsState.value,
-                    _MaterialRequestItemDraft(
-                      unit: unitOptions.isNotEmpty ? unitOptions.first : null,
-                    ),
-                  ];
-                },
+          onPressed:
+              !allowMultiple
+                  ? null
+                  : () {
+                    itemsState.value = [
+                      ...itemsState.value,
+                      _MaterialRequestItemDraft(
+                        unit: unitOptions.isNotEmpty ? unitOptions.first : null,
+                      ),
+                    ];
+                  },
           icon: const Icon(Icons.add_rounded),
           label: const Text('+ Добавить материал'),
         ),
@@ -566,11 +617,11 @@ class SiteRequestFormScreen extends HookConsumerWidget {
           isGroupEditing
               ? 'Изменения применятся ко всей группе материалов сразу.'
               : isEditing
-                  ? 'В этом режиме редактируется только текущая позиция материала.'
-                  : 'Каждая позиция создастся как отдельная заявка в одной общей группе.',
-          style: AppTypography.bodySmall(context).copyWith(
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
-          ),
+              ? 'В этом режиме редактируется только текущая позиция материала.'
+              : 'Каждая позиция создастся как отдельная заявка в одной общей группе.',
+          style: AppTypography.bodySmall(
+            context,
+          ).copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
         ),
       ],
     );
@@ -595,17 +646,18 @@ class SiteRequestFormScreen extends HookConsumerWidget {
               DropdownButtonFormField<String>(
                 isExpanded: true,
                 value: type.value,
-                items: types
-                    .map(
-                      (item) => DropdownMenuItem<String>(
-                        value: item['value'].toString(),
-                        child: Text(
-                          item['label'].toString(),
-                          style: AppTypography.bodyMedium(context),
-                        ),
-                      ),
-                    )
-                    .toList(),
+                items:
+                    types
+                        .map(
+                          (item) => DropdownMenuItem<String>(
+                            value: item['value'].toString(),
+                            child: Text(
+                              item['label'].toString(),
+                              style: AppTypography.bodyMedium(context),
+                            ),
+                          ),
+                        )
+                        .toList(),
                 onChanged: (value) => type.value = value,
                 decoration: InputDecoration(
                   labelText: 'Специальность',
@@ -648,17 +700,18 @@ class SiteRequestFormScreen extends HookConsumerWidget {
               DropdownButtonFormField<String>(
                 isExpanded: true,
                 value: type.value,
-                items: types
-                    .map(
-                      (item) => DropdownMenuItem<String>(
-                        value: item['value'].toString(),
-                        child: Text(
-                          item['label'].toString(),
-                          style: AppTypography.bodyMedium(context),
-                        ),
-                      ),
-                    )
-                    .toList(),
+                items:
+                    types
+                        .map(
+                          (item) => DropdownMenuItem<String>(
+                            value: item['value'].toString(),
+                            child: Text(
+                              item['label'].toString(),
+                              style: AppTypography.bodyMedium(context),
+                            ),
+                          ),
+                        )
+                        .toList(),
                 onChanged: (value) => type.value = value,
                 decoration: InputDecoration(
                   labelText: 'Тип техники',
@@ -727,8 +780,9 @@ class SiteRequestFormScreen extends HookConsumerWidget {
         labelText: label,
         labelStyle: AppTypography.caption(context),
         enabledBorder: UnderlineInputBorder(
-          borderSide:
-              BorderSide(color: theme.colorScheme.outline.withOpacity(0.2)),
+          borderSide: BorderSide(
+            color: theme.colorScheme.outline.withValues(alpha: 0.2),
+          ),
         ),
         focusedBorder: UnderlineInputBorder(
           borderSide: BorderSide(color: theme.colorScheme.primary),
@@ -767,9 +821,9 @@ class _MaterialItemCard extends StatelessWidget {
                   Expanded(
                     child: Text(
                       'Материал ${index + 1}',
-                      style: AppTypography.bodyLarge(context).copyWith(
-                        fontWeight: FontWeight.w800,
-                      ),
+                      style: AppTypography.bodyLarge(
+                        context,
+                      ).copyWith(fontWeight: FontWeight.w800),
                     ),
                   ),
                   if (canRemove)
@@ -791,8 +845,9 @@ class _MaterialItemCard extends StatelessWidget {
                     child: _FormField(
                       label: 'Количество',
                       controller: item.quantityController,
-                      keyboardType:
-                          const TextInputType.numberWithOptions(decimal: true),
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
                     ),
                   ),
                   const SizedBox(width: 16),
@@ -800,17 +855,18 @@ class _MaterialItemCard extends StatelessWidget {
                     child: DropdownButtonFormField<String>(
                       isExpanded: true,
                       value: item.unit,
-                      items: unitOptions
-                          .map(
-                            (shortName) => DropdownMenuItem<String>(
-                              value: shortName,
-                              child: Text(
-                                shortName,
-                                style: AppTypography.bodyMedium(context),
-                              ),
-                            ),
-                          )
-                          .toList(),
+                      items:
+                          unitOptions
+                              .map(
+                                (shortName) => DropdownMenuItem<String>(
+                                  value: shortName,
+                                  child: Text(
+                                    shortName,
+                                    style: AppTypography.bodyMedium(context),
+                                  ),
+                                ),
+                              )
+                              .toList(),
                       onChanged: (value) => setState(() => item.unit = value),
                       decoration: InputDecoration(
                         labelText: 'Ед. изм.',
@@ -860,8 +916,9 @@ class _FormField extends StatelessWidget {
         labelText: label,
         labelStyle: AppTypography.caption(context),
         enabledBorder: UnderlineInputBorder(
-          borderSide:
-              BorderSide(color: theme.colorScheme.outline.withOpacity(0.2)),
+          borderSide: BorderSide(
+            color: theme.colorScheme.outline.withValues(alpha: 0.2),
+          ),
         ),
         focusedBorder: UnderlineInputBorder(
           borderSide: BorderSide(color: theme.colorScheme.primary),
@@ -887,7 +944,7 @@ class _ProjectContextCard extends StatelessWidget {
             width: 44,
             height: 44,
             decoration: BoxDecoration(
-              color: theme.colorScheme.primary.withOpacity(0.12),
+              color: theme.colorScheme.primary.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(14),
             ),
             child: Icon(
@@ -900,16 +957,13 @@ class _ProjectContextCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  'Текущий объект',
-                  style: AppTypography.caption(context),
-                ),
+                Text('Текущий объект', style: AppTypography.caption(context)),
                 const SizedBox(height: 4),
                 Text(
                   projectName,
-                  style: AppTypography.bodyLarge(context).copyWith(
-                    fontWeight: FontWeight.w800,
-                  ),
+                  style: AppTypography.bodyLarge(
+                    context,
+                  ).copyWith(fontWeight: FontWeight.w800),
                 ),
               ],
             ),
@@ -944,13 +998,10 @@ class _RequestFlowBanner extends StatelessWidget {
             width: 44,
             height: 44,
             decoration: BoxDecoration(
-              color: color.withOpacity(0.12),
+              color: color.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(14),
             ),
-            child: Icon(
-              Icons.edit_note_rounded,
-              color: color,
-            ),
+            child: Icon(Icons.edit_note_rounded, color: color),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -959,16 +1010,16 @@ class _RequestFlowBanner extends StatelessWidget {
               children: [
                 Text(
                   _bannerTitle(requestType, priority),
-                  style: AppTypography.bodyLarge(context).copyWith(
-                    fontWeight: FontWeight.w800,
-                  ),
+                  style: AppTypography.bodyLarge(
+                    context,
+                  ).copyWith(fontWeight: FontWeight.w800),
                 ),
                 const SizedBox(height: 4),
                 Text(
                   _bannerDescription(requestType),
-                  style: AppTypography.bodyMedium(context).copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
+                  style: AppTypography.bodyMedium(
+                    context,
+                  ).copyWith(color: theme.colorScheme.onSurfaceVariant),
                 ),
               ],
             ),
@@ -1028,9 +1079,9 @@ class _MaterialRequestItemDraft {
     String? quantity,
     String? note,
     this.unit,
-  })  : nameController = TextEditingController(text: name ?? ''),
-        quantityController = TextEditingController(text: quantity ?? ''),
-        noteController = TextEditingController(text: note ?? '');
+  }) : nameController = TextEditingController(text: name ?? ''),
+       quantityController = TextEditingController(text: quantity ?? ''),
+       noteController = TextEditingController(text: note ?? '');
 
   final int? requestId;
   final TextEditingController nameController;
@@ -1045,7 +1096,9 @@ class _MaterialRequestItemDraft {
   }
 }
 
-List<_MaterialRequestItemDraft> _buildInitialMaterialItems(SiteRequestModel? request) {
+List<_MaterialRequestItemDraft> _buildInitialMaterialItems(
+  SiteRequestModel? request,
+) {
   if (request == null || request.requestType != 'material_request') {
     return [_MaterialRequestItemDraft()];
   }

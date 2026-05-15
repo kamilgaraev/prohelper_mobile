@@ -52,8 +52,7 @@ class _WarehouseTasksScreenState extends ConsumerState<WarehouseTasksScreen> {
     super.initState();
     _searchController = TextEditingController();
     _selectedWarehouseId =
-        widget.initialWarehouseId ??
-        widget.summary.warehouses.firstOrNull?.id;
+        widget.initialWarehouseId ?? widget.summary.warehouses.firstOrNull?.id;
     _selectedStatus = widget.initialStatus;
     _selectedTaskType = widget.initialTaskType;
     _loadTasks();
@@ -75,7 +74,8 @@ class _WarehouseTasksScreenState extends ConsumerState<WarehouseTasksScreen> {
         title: const Text('Задачи склада'),
         actions: [
           IconButton(
-            onPressed: _isRefreshing ? null : () => _loadTasks(refreshOnly: true),
+            onPressed:
+                _isRefreshing ? null : () => _loadTasks(refreshOnly: true),
             icon:
                 _isRefreshing
                     ? const SizedBox(
@@ -173,13 +173,17 @@ class _WarehouseTasksScreenState extends ConsumerState<WarehouseTasksScreen> {
                       _QueueSummary(
                         tasksCount: _tasks.length,
                         queuedCount:
-                            _tasks.where((task) => task.status == 'queued').length,
+                            _tasks
+                                .where((task) => task.status == 'queued')
+                                .length,
                         inProgressCount:
                             _tasks
                                 .where((task) => task.status == 'in_progress')
                                 .length,
                         blockedCount:
-                            _tasks.where((task) => task.status == 'blocked').length,
+                            _tasks
+                                .where((task) => task.status == 'blocked')
+                                .length,
                       ),
                       const SizedBox(height: 12),
                       ..._tasks.map(
@@ -188,7 +192,8 @@ class _WarehouseTasksScreenState extends ConsumerState<WarehouseTasksScreen> {
                           child: _TaskCard(
                             task: task,
                             onDetails: () => _openTaskDetails(task),
-                            onAction: (status) => _changeTaskStatus(task, status),
+                            onAction:
+                                (status) => _changeTaskStatus(task, status),
                           ),
                         ),
                       ),
@@ -230,15 +235,17 @@ class _WarehouseTasksScreenState extends ConsumerState<WarehouseTasksScreen> {
     });
 
     try {
-      final tasks = await ref.read(warehouseRepositoryProvider).fetchTasks(
-        warehouseId,
-        status: _selectedStatus,
-        taskType: _selectedTaskType,
-        entityType: widget.initialEntityType,
-        entityId: widget.initialEntityId,
-        query: _searchController.text.trim(),
-        limit: 60,
-      );
+      final tasks = await ref
+          .read(warehouseRepositoryProvider)
+          .fetchTasks(
+            warehouseId,
+            status: _selectedStatus,
+            taskType: _selectedTaskType,
+            entityType: widget.initialEntityType,
+            entityId: widget.initialEntityId,
+            query: _searchController.text.trim(),
+            limit: 60,
+          );
 
       if (!mounted) {
         return;
@@ -445,10 +452,7 @@ class _FiltersCard extends StatelessWidget {
 }
 
 class _ScanContextBanner extends StatelessWidget {
-  const _ScanContextBanner({
-    required this.entityType,
-    required this.entityId,
-  });
+  const _ScanContextBanner({required this.entityType, required this.entityId});
 
   final String entityType;
   final int entityId;
@@ -625,7 +629,8 @@ class _TaskCard extends StatelessWidget {
                 ),
               if (task.progressPercent != null)
                 _TaskBadge(
-                  label: 'Готово ${warehouseFormatNumber(task.progressPercent!)}%',
+                  label:
+                      'Готово ${warehouseFormatNumber(task.progressPercent!)}%',
                   color: AppColors.success,
                 ),
             ],
@@ -690,10 +695,7 @@ class _TaskCard extends StatelessWidget {
 }
 
 class _TaskContextLine extends StatelessWidget {
-  const _TaskContextLine({
-    required this.icon,
-    required this.values,
-  });
+  const _TaskContextLine({required this.icon, required this.values});
 
   final IconData icon;
   final List<String> values;
@@ -728,10 +730,7 @@ class _TaskContextLine extends StatelessWidget {
 }
 
 class _TaskBadge extends StatelessWidget {
-  const _TaskBadge({
-    required this.label,
-    required this.color,
-  });
+  const _TaskBadge({required this.label, required this.color});
 
   final String label;
   final Color color;
@@ -790,10 +789,7 @@ class _TaskDetailsSheet extends StatelessWidget {
           if (task.cell != null)
             _DetailRow(label: 'Ячейка', value: task.cell!.name),
           if (task.logisticUnit != null)
-            _DetailRow(
-              label: 'Логединица',
-              value: task.logisticUnit!.name,
-            ),
+            _DetailRow(label: 'Логединица', value: task.logisticUnit!.name),
           if (task.material != null)
             _DetailRow(label: 'Материал', value: task.material!.name),
           if (task.plannedQuantity != null)
@@ -829,10 +825,7 @@ class _TaskDetailsSheet extends StatelessWidget {
 }
 
 class _DetailRow extends StatelessWidget {
-  const _DetailRow({
-    required this.label,
-    required this.value,
-  });
+  const _DetailRow({required this.label, required this.value});
 
   final String label;
   final String value;

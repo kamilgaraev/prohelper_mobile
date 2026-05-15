@@ -37,15 +37,19 @@ class PremiumGlassCard extends StatelessWidget {
             width: width,
             padding: padding,
             decoration: BoxDecoration(
-              color: const Color(0xFF1E1E22).withOpacity(ProHelperTheme.glassOpacity),
+              color: const Color(
+                0xFF1E1E22,
+              ).withValues(alpha: ProHelperTheme.glassOpacity),
               borderRadius: BorderRadius.circular(ProHelperTheme.cardRadius),
               border: Border.all(
-                color: Colors.white.withOpacity(ProHelperTheme.glassBorderOpacity),
+                color: Colors.white.withValues(
+                  alpha: ProHelperTheme.glassBorderOpacity,
+                ),
                 width: 1.5,
               ),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.3),
+                  color: Colors.black.withValues(alpha: 0.3),
                   blurRadius: 20,
                   offset: const Offset(0, 10),
                 ),
@@ -58,13 +62,14 @@ class PremiumGlassCard extends StatelessWidget {
                   displayColor: Colors.white,
                 ),
               ),
-              child: showShimmer
-                  ? Shimmer.fromColors(
-                      baseColor: Colors.white.withOpacity(0.1),
-                      highlightColor: Colors.white.withOpacity(0.3),
-                      child: child,
-                    )
-                  : child,
+              child:
+                  showShimmer
+                      ? Shimmer.fromColors(
+                        baseColor: Colors.white.withValues(alpha: 0.1),
+                        highlightColor: Colors.white.withValues(alpha: 0.3),
+                        child: child,
+                      )
+                      : child,
             ),
           ),
         ),

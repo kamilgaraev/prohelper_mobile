@@ -1,5 +1,4 @@
-import 'package:flutter/material.dart';
-import '../../../../core/theme/app_colors.dart';
+﻿import 'package:flutter/material.dart';
 import '../../../../core/theme/app_typography.dart';
 import '../../../../core/widgets/industrial_card.dart';
 import '../../data/project_model.dart';
@@ -23,12 +22,14 @@ class ProjectCard extends StatelessWidget {
     return IndustrialCard(
       onTap: onTap,
       padding: const EdgeInsets.all(16),
-      backgroundColor: isSelected 
-          ? theme.colorScheme.primaryContainer.withOpacity(0.1)
-          : theme.cardTheme.color,
-      border: isSelected 
-          ? Border.all(color: theme.colorScheme.primary, width: 2)
-          : null,
+      backgroundColor:
+          isSelected
+              ? theme.colorScheme.primaryContainer.withValues(alpha: 0.1)
+              : theme.cardTheme.color,
+      border:
+          isSelected
+              ? Border.all(color: theme.colorScheme.primary, width: 2)
+              : null,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -37,27 +38,32 @@ class ProjectCard extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: isSelected 
-                      ? theme.colorScheme.primary.withOpacity(0.1) 
-                      : theme.colorScheme.surfaceContainerHighest,
+                  color:
+                      isSelected
+                          ? theme.colorScheme.primary.withValues(alpha: 0.1)
+                          : theme.colorScheme.surfaceContainerHighest,
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Icon(
                   Icons.apartment_rounded,
-                  color: isSelected ? theme.colorScheme.primary : theme.colorScheme.onSurfaceVariant,
+                  color:
+                      isSelected
+                          ? theme.colorScheme.primary
+                          : theme.colorScheme.onSurfaceVariant,
                 ),
               ),
               const SizedBox(width: 12),
               Expanded(
                 child: Text(
                   project.name,
-                  style: AppTypography.h2(context).copyWith(
-                    fontSize: 16,
-                  ),
+                  style: AppTypography.h2(context).copyWith(fontSize: 16),
                 ),
               ),
               if (isSelected)
-                Icon(Icons.check_circle_rounded, color: theme.colorScheme.primary),
+                Icon(
+                  Icons.check_circle_rounded,
+                  color: theme.colorScheme.primary,
+                ),
             ],
           ),
           if (project.address != null) ...[

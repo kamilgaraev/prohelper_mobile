@@ -162,9 +162,7 @@ class QuickActionSheet extends ConsumerWidget {
         return;
       case 'safety':
       case 'safety-management':
-        navigator.push(
-          MaterialPageRoute(builder: (_) => const SafetyScreen()),
-        );
+        navigator.push(MaterialPageRoute(builder: (_) => const SafetyScreen()));
         return;
       case 'machinery_operations':
       case 'machinery-operations':

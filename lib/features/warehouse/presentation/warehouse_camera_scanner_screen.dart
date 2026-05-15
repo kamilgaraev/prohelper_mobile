@@ -59,10 +59,7 @@ class _WarehouseCameraScannerScreenState
       body: Stack(
         fit: StackFit.expand,
         children: [
-          MobileScanner(
-            controller: _controller,
-            onDetect: _handleDetect,
-          ),
+          MobileScanner(controller: _controller, onDetect: _handleDetect),
           IgnorePointer(
             child: Container(
               decoration: BoxDecoration(

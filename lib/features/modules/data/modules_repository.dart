@@ -19,7 +19,8 @@ class ModulesRepository {
       final response = await _dio.get('/modules');
       final data = response.data;
       final payload = data is Map<String, dynamic> ? data['data'] : null;
-      final modules = payload is Map<String, dynamic> ? payload['modules'] : null;
+      final modules =
+          payload is Map<String, dynamic> ? payload['modules'] : null;
 
       if (modules is! List) {
         return const [];

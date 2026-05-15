@@ -34,7 +34,8 @@ class ProductionLaborState {
 }
 
 class ProductionLaborNotifier extends StateNotifier<ProductionLaborState> {
-  ProductionLaborNotifier(this._repository) : super(const ProductionLaborState());
+  ProductionLaborNotifier(this._repository)
+    : super(const ProductionLaborState());
 
   final ProductionLaborRepository _repository;
 
@@ -50,14 +51,19 @@ class ProductionLaborNotifier extends StateNotifier<ProductionLaborState> {
     state = state.copyWith(isLoading: true, error: null);
 
     try {
-      final workOrders = await _repository.fetchWorkOrders(projectId: state.projectFilter);
+      final workOrders = await _repository.fetchWorkOrders(
+        projectId: state.projectFilter,
+      );
       state = state.copyWith(isLoading: false, workOrders: workOrders);
     } catch (error) {
       state = state.copyWith(isLoading: false, error: error.toString());
     }
   }
 
-  Future<void> recordOutput(LaborWorkOrderModel workOrder, LaborWorkOrderLineModel line) async {
+  Future<void> recordOutput(
+    LaborWorkOrderModel workOrder,
+    LaborWorkOrderLineModel line,
+  ) async {
     await _repository.recordOutput(
       workOrderLineId: line.id,
       quantity: line.remainingQuantity > 0 ? 1 : line.plannedQuantity,
@@ -84,6 +90,9 @@ class ProductionLaborNotifier extends StateNotifier<ProductionLaborState> {
   }
 }
 
-final productionLaborProvider = StateNotifierProvider<ProductionLaborNotifier, ProductionLaborState>((ref) {
-  return ProductionLaborNotifier(ref.read(productionLaborRepositoryProvider));
-});
+final productionLaborProvider =
+    StateNotifierProvider<ProductionLaborNotifier, ProductionLaborState>((ref) {
+      return ProductionLaborNotifier(
+        ref.read(productionLaborRepositoryProvider),
+      );
+    });

@@ -16,7 +16,7 @@ class _FakeModulesRepository extends ModulesRepository {
 
 class _FakeModulesNotifier extends ModulesNotifier {
   _FakeModulesNotifier(ModulesState initialState)
-      : super(_FakeModulesRepository(), canLoad: false) {
+    : super(_FakeModulesRepository(), canLoad: false) {
     state = initialState;
   }
 }
@@ -27,29 +27,24 @@ void main() {
       overrides: [
         modulesProvider.overrideWith((ref) => _FakeModulesNotifier(state)),
       ],
-      child: const MaterialApp(
-        home: Scaffold(
-          body: QuickActionSheet(),
-        ),
-      ),
+      child: const MaterialApp(home: Scaffold(body: QuickActionSheet())),
     );
   }
 
   testWidgets('показывает пустое состояние без модулей', (tester) async {
     await tester.pumpWidget(
       createWidget(
-        const ModulesState(
-          isLoading: false,
-          modules: [],
-          error: null,
-        ),
+        const ModulesState(isLoading: false, modules: [], error: null),
       ),
     );
 
     await tester.pumpAndSettle();
 
     expect(find.text('Быстрые действия'), findsOneWidget);
-    expect(find.text('Для вашей роли пока нет мобильных модулей.'), findsOneWidget);
+    expect(
+      find.text('Для вашей роли пока нет мобильных модулей.'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('показывает доступные мобильные модули', (tester) async {

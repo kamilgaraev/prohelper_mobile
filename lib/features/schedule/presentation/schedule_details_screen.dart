@@ -21,10 +21,7 @@ enum _TaskFilter {
 }
 
 class ScheduleDetailsScreen extends ConsumerStatefulWidget {
-  const ScheduleDetailsScreen({
-    super.key,
-    required this.scheduleId,
-  });
+  const ScheduleDetailsScreen({super.key, required this.scheduleId});
 
   final int scheduleId;
 
@@ -68,39 +65,49 @@ class _ScheduleDetailsScreenState extends ConsumerState<ScheduleDetailsScreen> {
     final state = ref.watch(scheduleDetailProvider(widget.scheduleId));
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Детали графика'),
-        centerTitle: false,
-      ),
-      body: state.isLoading && state.detail == null
-          ? const Center(child: CircularProgressIndicator())
-          : state.error != null && state.detail == null
+      appBar: AppBar(title: const Text('Детали графика'), centerTitle: false),
+      body:
+          state.isLoading && state.detail == null
+              ? const Center(child: CircularProgressIndicator())
+              : state.error != null && state.detail == null
               ? AppStateView(
-                  icon: Icons.error_outline_rounded,
-                  title: 'Не удалось загрузить график',
-                  description: state.error,
-                  action: OutlinedButton(
-                    onPressed: () => ref
-                        .read(scheduleDetailProvider(widget.scheduleId).notifier)
-                        .load(),
-                    child: const Text('Повторить'),
-                  ),
-                )
-              : _ScheduleDetailsContent(
-                  detail: state.detail!,
-                  searchController: _searchController,
-                  searchQuery: _searchQuery,
-                  selectedFilter: _selectedFilter,
-                  onFilterChanged: (filter) {
-                    setState(() {
-                      _selectedFilter = filter;
-                    });
-                  },
-                  onRefresh: () => ref
-                      .read(scheduleDetailProvider(widget.scheduleId).notifier)
-                      .load(),
-                  isRefreshing: state.isLoading,
+                icon: Icons.error_outline_rounded,
+                title: 'Не удалось загрузить график',
+                description: state.error,
+                action: OutlinedButton(
+                  onPressed:
+                      () =>
+                          ref
+                              .read(
+                                scheduleDetailProvider(
+                                  widget.scheduleId,
+                                ).notifier,
+                              )
+                              .load(),
+                  child: const Text('Повторить'),
                 ),
+              )
+              : _ScheduleDetailsContent(
+                detail: state.detail!,
+                searchController: _searchController,
+                searchQuery: _searchQuery,
+                selectedFilter: _selectedFilter,
+                onFilterChanged: (filter) {
+                  setState(() {
+                    _selectedFilter = filter;
+                  });
+                },
+                onRefresh:
+                    () =>
+                        ref
+                            .read(
+                              scheduleDetailProvider(
+                                widget.scheduleId,
+                              ).notifier,
+                            )
+                            .load(),
+                isRefreshing: state.isLoading,
+              ),
     );
   }
 }
@@ -181,21 +188,19 @@ class _ScheduleDetailsContent extends StatelessWidget {
                 resultCount: filteredTasks.length,
                 totalCount: detail.tasks.length,
                 onFilterChanged: onFilterChanged,
-                onClearSearch: searchQuery.isEmpty
-                    ? null
-                    : () {
-                        searchController.clear();
-                      },
+                onClearSearch:
+                    searchQuery.isEmpty
+                        ? null
+                        : () {
+                          searchController.clear();
+                        },
               ),
             ),
           ),
           SliverPadding(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
             sliver: SliverToBoxAdapter(
-              child: Text(
-                'Задачи графика',
-                style: AppTypography.h2(context),
-              ),
+              child: Text('Задачи графика', style: AppTypography.h2(context)),
             ),
           ),
           if (detail.tasks.isEmpty)
@@ -227,18 +232,19 @@ class _ScheduleDetailsContent extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
               sliver: SliverToBoxAdapter(
                 child: Column(
-                  children: sections
-                      .map(
-                        (section) => Padding(
-                          padding: const EdgeInsets.only(bottom: 16),
-                          child: _TaskSection(
-                            title: section.title,
-                            subtitle: section.subtitle,
-                            tasks: section.tasks,
-                          ),
-                        ),
-                      )
-                      .toList(),
+                  children:
+                      sections
+                          .map(
+                            (section) => Padding(
+                              padding: const EdgeInsets.only(bottom: 16),
+                              child: _TaskSection(
+                                title: section.title,
+                                subtitle: section.subtitle,
+                                tasks: section.tasks,
+                              ),
+                            ),
+                          )
+                          .toList(),
                 ),
               ),
             ),
@@ -287,10 +293,7 @@ class _ScheduleDetailHeader extends StatelessWidget {
                         ),
                       ),
                     const SizedBox(height: 4),
-                    Text(
-                      schedule.name,
-                      style: AppTypography.h1(context),
-                    ),
+                    Text(schedule.name, style: AppTypography.h1(context)),
                   ],
                 ),
               ),
@@ -307,10 +310,7 @@ class _ScheduleDetailHeader extends StatelessWidget {
             spacing: 8,
             runSpacing: 8,
             children: [
-              _StatusBadge(
-                label: schedule.statusLabel,
-                color: statusColor,
-              ),
+              _StatusBadge(label: schedule.statusLabel, color: statusColor),
               _TypeBadge(
                 label:
                     'Прогресс ${schedule.overallProgressPercent.toStringAsFixed(1)}%',
@@ -330,8 +330,9 @@ class _ScheduleDetailHeader extends StatelessWidget {
               value: (schedule.overallProgressPercent.clamp(0, 100)) / 100,
               minHeight: 8,
               color: progressColor,
-              backgroundColor:
-                  Theme.of(context).colorScheme.outline.withOpacity(0.12),
+              backgroundColor: Theme.of(
+                context,
+              ).colorScheme.outline.withValues(alpha: 0.12),
             ),
           ),
         ],
@@ -398,10 +399,7 @@ class _ScheduleDetailSummary extends StatelessWidget {
 }
 
 class _TaskOperationalBanner extends StatelessWidget {
-  const _TaskOperationalBanner({
-    required this.tasks,
-    required this.summary,
-  });
+  const _TaskOperationalBanner({required this.tasks, required this.summary});
 
   final List<ScheduleTaskModel> tasks;
   final ScheduleDetailsSummaryModel summary;
@@ -413,19 +411,24 @@ class _TaskOperationalBanner extends StatelessWidget {
     final theme = Theme.of(context);
 
     return IndustrialCard(
-      backgroundColor: hasAttention
-          ? theme.colorScheme.secondaryContainer.withOpacity(0.45)
-          : theme.colorScheme.primaryContainer.withOpacity(0.35),
-      borderColor: hasAttention
-          ? theme.colorScheme.secondary.withOpacity(0.3)
-          : theme.colorScheme.primary.withOpacity(0.2),
+      backgroundColor:
+          hasAttention
+              ? theme.colorScheme.secondaryContainer.withValues(alpha: 0.45)
+              : theme.colorScheme.primaryContainer.withValues(alpha: 0.35),
+      borderColor:
+          hasAttention
+              ? theme.colorScheme.secondary.withValues(alpha: 0.3)
+              : theme.colorScheme.primary.withValues(alpha: 0.2),
       child: Row(
         children: [
           Icon(
-            hasAttention ? Icons.report_problem_outlined : Icons.task_alt_rounded,
-            color: hasAttention
-                ? theme.colorScheme.secondary
-                : theme.colorScheme.primary,
+            hasAttention
+                ? Icons.report_problem_outlined
+                : Icons.task_alt_rounded,
+            color:
+                hasAttention
+                    ? theme.colorScheme.secondary
+                    : theme.colorScheme.primary,
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -433,19 +436,21 @@ class _TaskOperationalBanner extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  hasAttention ? 'Есть риски по задачам' : 'График выглядит стабильно',
-                  style: AppTypography.bodyLarge(context).copyWith(
-                    fontWeight: FontWeight.w800,
-                  ),
+                  hasAttention
+                      ? 'Есть риски по задачам'
+                      : 'График выглядит стабильно',
+                  style: AppTypography.bodyLarge(
+                    context,
+                  ).copyWith(fontWeight: FontWeight.w800),
                 ),
                 const SizedBox(height: 4),
                 Text(
                   hasAttention
                       ? 'Просроченных задач: ${summary.overdueTasksCount}. Критических задач: $criticalCount.'
                       : 'Просроченных и критических задач сейчас нет.',
-                  style: AppTypography.bodyMedium(context).copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
+                  style: AppTypography.bodyMedium(
+                    context,
+                  ).copyWith(color: theme.colorScheme.onSurfaceVariant),
                 ),
               ],
             ),
@@ -487,15 +492,17 @@ class _TaskFiltersCard extends StatelessWidget {
             decoration: InputDecoration(
               hintText: 'Поиск по названию, описанию и типу задачи',
               prefixIcon: const Icon(Icons.search_rounded),
-              suffixIcon: onClearSearch == null
-                  ? null
-                  : IconButton(
-                      onPressed: onClearSearch,
-                      icon: const Icon(Icons.close_rounded),
-                    ),
+              suffixIcon:
+                  onClearSearch == null
+                      ? null
+                      : IconButton(
+                        onPressed: onClearSearch,
+                        icon: const Icon(Icons.close_rounded),
+                      ),
               filled: true,
-              fillColor: theme.colorScheme.surfaceContainerHighest
-                  .withOpacity(0.45),
+              fillColor: theme.colorScheme.surfaceContainerHighest.withValues(
+                alpha: 0.45,
+              ),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(16),
                 borderSide: BorderSide.none,
@@ -510,24 +517,25 @@ class _TaskFiltersCard extends StatelessWidget {
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: Row(
-              children: _TaskFilter.values.map((filter) {
-                return Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: FilterChip(
-                    selected: selectedFilter == filter,
-                    label: Text(filter.label),
-                    onSelected: (_) => onFilterChanged(filter),
-                  ),
-                );
-              }).toList(),
+              children:
+                  _TaskFilter.values.map((filter) {
+                    return Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: FilterChip(
+                        selected: selectedFilter == filter,
+                        label: Text(filter.label),
+                        onSelected: (_) => onFilterChanged(filter),
+                      ),
+                    );
+                  }).toList(),
             ),
           ),
           const SizedBox(height: 12),
           Text(
             'Найдено: $resultCount из $totalCount',
-            style: AppTypography.caption(context).copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
+            style: AppTypography.caption(
+              context,
+            ).copyWith(color: theme.colorScheme.onSurfaceVariant),
           ),
         ],
       ),
@@ -576,10 +584,7 @@ class _ScheduleInfoCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Параметры графика',
-            style: AppTypography.h2(context),
-          ),
+          Text('Параметры графика', style: AppTypography.h2(context)),
           const SizedBox(height: 16),
           _InfoRow(
             label: 'Плановый период',
@@ -588,17 +593,19 @@ class _ScheduleInfoCard extends StatelessWidget {
           ),
           _InfoRow(
             label: 'Длительность',
-            value: schedule.plannedDurationDays != null
-                ? '${schedule.plannedDurationDays} дн.'
-                : 'Не указана',
+            value:
+                schedule.plannedDurationDays != null
+                    ? '${schedule.plannedDurationDays} дн.'
+                    : 'Не указана',
           ),
           _InfoRow(
             label: 'Критический путь',
-            value: schedule.criticalPathCalculated
-                ? (schedule.criticalPathDurationDays != null
-                    ? 'Рассчитан, ${schedule.criticalPathDurationDays} дн.'
-                    : 'Рассчитан')
-                : 'Не рассчитан',
+            value:
+                schedule.criticalPathCalculated
+                    ? (schedule.criticalPathDurationDays != null
+                        ? 'Рассчитан, ${schedule.criticalPathDurationDays} дн.'
+                        : 'Рассчитан')
+                    : 'Не рассчитан',
           ),
           _InfoRow(
             label: 'Задач',
@@ -606,10 +613,7 @@ class _ScheduleInfoCard extends StatelessWidget {
                 '${schedule.completedTasksCount}/${schedule.tasksCount} завершено',
           ),
           if ((schedule.description ?? '').trim().isNotEmpty)
-            _InfoRow(
-              label: 'Описание',
-              value: schedule.description!,
-            ),
+            _InfoRow(label: 'Описание', value: schedule.description!),
         ],
       ),
     );
@@ -617,10 +621,7 @@ class _ScheduleInfoCard extends StatelessWidget {
 }
 
 class _InfoRow extends StatelessWidget {
-  const _InfoRow({
-    required this.label,
-    required this.value,
-  });
+  const _InfoRow({required this.label, required this.value});
 
   final String label;
   final String value;
@@ -638,17 +639,12 @@ class _InfoRow extends StatelessWidget {
             width: 120,
             child: Text(
               label,
-              style: AppTypography.bodyMedium(context).copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
+              style: AppTypography.bodyMedium(
+                context,
+              ).copyWith(color: theme.colorScheme.onSurfaceVariant),
             ),
           ),
-          Expanded(
-            child: Text(
-              value,
-              style: AppTypography.bodyLarge(context),
-            ),
-          ),
+          Expanded(child: Text(value, style: AppTypography.bodyLarge(context))),
         ],
       ),
     );
@@ -671,16 +667,13 @@ class _TaskSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          title,
-          style: AppTypography.h2(context),
-        ),
+        Text(title, style: AppTypography.h2(context)),
         const SizedBox(height: 4),
         Text(
           subtitle,
-          style: AppTypography.bodyMedium(context).copyWith(
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
-          ),
+          style: AppTypography.bodyMedium(
+            context,
+          ).copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
         ),
         const SizedBox(height: 12),
         ...tasks.map(
@@ -708,9 +701,10 @@ class _TaskCard extends StatelessWidget {
     );
     final leftPadding = (task.level * 14).clamp(0, 42).toDouble();
     final isOverdue = _isOverdueTask(task);
-    final borderColor = isOverdue
-        ? AppColors.warning
-        : task.isCritical
+    final borderColor =
+        isOverdue
+            ? AppColors.warning
+            : task.isCritical
             ? AppColors.secondary
             : null;
 
@@ -718,9 +712,10 @@ class _TaskCard extends StatelessWidget {
       padding: EdgeInsets.only(left: leftPadding),
       child: IndustrialCard(
         borderColor: borderColor,
-        backgroundColor: isOverdue
-            ? theme.colorScheme.secondaryContainer.withOpacity(0.16)
-            : null,
+        backgroundColor:
+            isOverdue
+                ? theme.colorScheme.secondaryContainer.withValues(alpha: 0.16)
+                : null,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -733,9 +728,9 @@ class _TaskCard extends StatelessWidget {
                     children: [
                       Text(
                         task.name,
-                        style: AppTypography.bodyLarge(context).copyWith(
-                          fontWeight: FontWeight.w700,
-                        ),
+                        style: AppTypography.bodyLarge(
+                          context,
+                        ).copyWith(fontWeight: FontWeight.w700),
                       ),
                       const SizedBox(height: 6),
                       Wrap(
@@ -764,9 +759,9 @@ class _TaskCard extends StatelessWidget {
                 ),
                 Text(
                   '${task.progressPercent.toStringAsFixed(1)}%',
-                  style: AppTypography.bodyLarge(context).copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
+                  style: AppTypography.bodyLarge(
+                    context,
+                  ).copyWith(fontWeight: FontWeight.w700),
                 ),
               ],
             ),
@@ -777,7 +772,9 @@ class _TaskCard extends StatelessWidget {
                 value: (task.progressPercent.clamp(0, 100)) / 100,
                 minHeight: 8,
                 color: statusColor,
-                backgroundColor: theme.colorScheme.outline.withOpacity(0.12),
+                backgroundColor: theme.colorScheme.outline.withValues(
+                  alpha: 0.12,
+                ),
               ),
             ),
             const SizedBox(height: 12),
@@ -803,9 +800,12 @@ class _TaskCard extends StatelessWidget {
                 if (task.quantity != null)
                   _TaskMeta(
                     icon: Icons.straighten_rounded,
-                    label: task.completedQuantity != null
-                        ? '${_formatQuantity(task.completedQuantity!)}/${_formatQuantity(task.quantity!)} ${task.measurementUnit ?? ''}'.trim()
-                        : '${_formatQuantity(task.quantity!)} ${task.measurementUnit ?? ''}'.trim(),
+                    label:
+                        task.completedQuantity != null
+                            ? '${_formatQuantity(task.completedQuantity!)}/${_formatQuantity(task.quantity!)} ${task.measurementUnit ?? ''}'
+                                .trim()
+                            : '${_formatQuantity(task.quantity!)} ${task.measurementUnit ?? ''}'
+                                .trim(),
                   ),
               ],
             ),
@@ -813,9 +813,9 @@ class _TaskCard extends StatelessWidget {
               const SizedBox(height: 10),
               Text(
                 task.description!,
-                style: AppTypography.bodyMedium(context).copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
+                style: AppTypography.bodyMedium(
+                  context,
+                ).copyWith(color: theme.colorScheme.onSurfaceVariant),
               ),
             ],
           ],
@@ -826,10 +826,7 @@ class _TaskCard extends StatelessWidget {
 }
 
 class _StatusBadge extends StatelessWidget {
-  const _StatusBadge({
-    required this.label,
-    required this.color,
-  });
+  const _StatusBadge({required this.label, required this.color});
 
   final String label;
   final Color color;
@@ -839,25 +836,21 @@ class _StatusBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.12),
+        color: color.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(
         label,
-        style: AppTypography.caption(context).copyWith(
-          color: color,
-          fontWeight: FontWeight.w700,
-        ),
+        style: AppTypography.caption(
+          context,
+        ).copyWith(color: color, fontWeight: FontWeight.w700),
       ),
     );
   }
 }
 
 class _TypeBadge extends StatelessWidget {
-  const _TypeBadge({
-    required this.label,
-    this.color,
-  });
+  const _TypeBadge({required this.label, this.color});
 
   final String label;
   final Color? color;
@@ -870,25 +863,21 @@ class _TypeBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: resolvedColor.withOpacity(0.08),
+        color: resolvedColor.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(
         label,
-        style: AppTypography.caption(context).copyWith(
-          color: resolvedColor,
-          fontWeight: FontWeight.w600,
-        ),
+        style: AppTypography.caption(
+          context,
+        ).copyWith(color: resolvedColor, fontWeight: FontWeight.w600),
       ),
     );
   }
 }
 
 class _TaskMeta extends StatelessWidget {
-  const _TaskMeta({
-    required this.icon,
-    required this.label,
-  });
+  const _TaskMeta({required this.icon, required this.label});
 
   final IconData icon;
   final String label;
@@ -900,17 +889,13 @@ class _TaskMeta extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
-        color: theme.colorScheme.onSurfaceVariant.withOpacity(0.08),
+        color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
-            icon,
-            size: 16,
-            color: theme.colorScheme.onSurfaceVariant,
-          ),
+          Icon(icon, size: 16, color: theme.colorScheme.onSurfaceVariant),
           const SizedBox(width: 6),
           Text(
             label,
@@ -993,19 +978,23 @@ List<_TaskSectionData> _buildSections(List<ScheduleTaskModel> tasks) {
 
 List<ScheduleTaskModel> _sortTasks(List<ScheduleTaskModel> tasks) {
   tasks.sort((left, right) {
-    final overdueCompare = _boolPriority(_isOverdueTask(right))
-        .compareTo(_boolPriority(_isOverdueTask(left)));
+    final overdueCompare = _boolPriority(
+      _isOverdueTask(right),
+    ).compareTo(_boolPriority(_isOverdueTask(left)));
     if (overdueCompare != 0) {
       return overdueCompare;
     }
 
-    final criticalCompare =
-        _boolPriority(right.isCritical).compareTo(_boolPriority(left.isCritical));
+    final criticalCompare = _boolPriority(
+      right.isCritical,
+    ).compareTo(_boolPriority(left.isCritical));
     if (criticalCompare != 0) {
       return criticalCompare;
     }
 
-    final progressCompare = right.progressPercent.compareTo(left.progressPercent);
+    final progressCompare = right.progressPercent.compareTo(
+      left.progressPercent,
+    );
     if (progressCompare != 0) {
       return progressCompare > 0 ? 1 : -1;
     }
@@ -1032,12 +1021,13 @@ bool _matchesSearch(ScheduleTaskModel task, String query) {
   }
 
   final normalizedQuery = query.toLowerCase();
-  final haystack = [
-    task.name,
-    task.description ?? '',
-    task.taskTypeLabel,
-    task.statusLabel,
-  ].join(' ').toLowerCase();
+  final haystack =
+      [
+        task.name,
+        task.description ?? '',
+        task.taskTypeLabel,
+        task.statusLabel,
+      ].join(' ').toLowerCase();
 
   return haystack.contains(normalizedQuery);
 }
@@ -1047,8 +1037,7 @@ bool _isOverdueTask(ScheduleTaskModel task) {
     return false;
   }
 
-  final normalized =
-      '${task.status} ${task.statusLabel}'.trim().toLowerCase();
+  final normalized = '${task.status} ${task.statusLabel}'.trim().toLowerCase();
   if (normalized.contains('overdue') || normalized.contains('просроч')) {
     return true;
   }
@@ -1075,8 +1064,7 @@ bool _isInProgressTask(ScheduleTaskModel task) {
     return false;
   }
 
-  final normalized =
-      '${task.status} ${task.statusLabel}'.trim().toLowerCase();
+  final normalized = '${task.status} ${task.statusLabel}'.trim().toLowerCase();
   return normalized.contains('progress') ||
       normalized.contains('active') ||
       normalized.contains('started') ||
@@ -1086,8 +1074,7 @@ bool _isInProgressTask(ScheduleTaskModel task) {
 }
 
 bool _isCompletedTask(ScheduleTaskModel task) {
-  final normalized =
-      '${task.status} ${task.statusLabel}'.trim().toLowerCase();
+  final normalized = '${task.status} ${task.statusLabel}'.trim().toLowerCase();
   return normalized.contains('completed') ||
       normalized.contains('done') ||
       normalized.contains('finished') ||

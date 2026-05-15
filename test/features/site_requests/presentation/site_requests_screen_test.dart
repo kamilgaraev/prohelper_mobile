@@ -49,7 +49,11 @@ class _FakeSiteRequestsNotifier extends SiteRequestsNotifier {
   _FakeSiteRequestsNotifier({
     required List<SiteRequestModel> requests,
     required SiteRequestsScope scope,
-  }) : super(_FakeSiteRequestsRepository(), initialProjectId: 15, initialScope: scope) {
+  }) : super(
+         _FakeSiteRequestsRepository(),
+         initialProjectId: 15,
+         initialScope: scope,
+       ) {
     state = SiteRequestsState(
       isLoading: false,
       requests: requests,
@@ -135,19 +139,22 @@ void main() {
       overrides: [
         projectsProvider.overrideWith((ref) => _FakeProjectsNotifier(project)),
         siteRequestsProvider.overrideWith(
-          (ref) => _FakeSiteRequestsNotifier(requests: resolvedRequests, scope: scope),
+          (ref) => _FakeSiteRequestsNotifier(
+            requests: resolvedRequests,
+            scope: scope,
+          ),
         ),
       ],
       child: TickerMode(
         enabled: false,
-        child: MaterialApp(
-          home: SiteRequestsScreen(scope: scope),
-        ),
+        child: MaterialApp(home: SiteRequestsScreen(scope: scope)),
       ),
     );
   }
 
-  testWidgets('показывает заявки и фильтрует их по срочности и поиску', (tester) async {
+  testWidgets('показывает заявки и фильтрует их по срочности и поиску', (
+    tester,
+  ) async {
     await tester.pumpWidget(createWidget());
     await tester.pump();
 
@@ -181,7 +188,9 @@ void main() {
     expect(find.text('Автокран на разгрузку'), findsNothing);
   });
 
-  testWidgets('в режиме согласования показывает быстрые действия по workflow', (tester) async {
+  testWidgets('в режиме согласования показывает быстрые действия по workflow', (
+    tester,
+  ) async {
     final approvalRequests = [
       _buildRequest(
         serverId: 2001,
@@ -231,39 +240,39 @@ void main() {
     expect(find.text('Отклонить'), findsOneWidget);
   });
 
-  testWidgets('для черновика показывает рабочие действия из available transitions', (tester) async {
-    final draftRequests = [
-      _buildRequest(
-        serverId: 3001,
-        title: 'Материалы на плиту',
-        status: 'draft',
-        statusLabel: 'Черновик',
-        priority: 'medium',
-        priorityLabel: 'Средний',
-        requestType: 'material_request',
-        requestTypeLabel: 'Материалы',
-        materialName: 'Щебень 20-40',
-        materialQuantity: 8,
-        materialUnit: 'м3',
-        createdAt: DateTime(2026, 3, 14),
-      )
-        ..availableTransitions = const [
-          SiteRequestTransition(status: 'pending'),
-          SiteRequestTransition(status: 'cancelled'),
-        ],
-    ];
+  testWidgets(
+    'для черновика показывает рабочие действия из available transitions',
+    (tester) async {
+      final draftRequests = [
+        _buildRequest(
+            serverId: 3001,
+            title: 'Материалы на плиту',
+            status: 'draft',
+            statusLabel: 'Черновик',
+            priority: 'medium',
+            priorityLabel: 'Средний',
+            requestType: 'material_request',
+            requestTypeLabel: 'Материалы',
+            materialName: 'Щебень 20-40',
+            materialQuantity: 8,
+            materialUnit: 'м3',
+            createdAt: DateTime(2026, 3, 14),
+          )
+          ..availableTransitions = const [
+            SiteRequestTransition(status: 'pending'),
+            SiteRequestTransition(status: 'cancelled'),
+          ],
+      ];
 
-    await tester.pumpWidget(
-      createWidget(
-        scope: SiteRequestsScope.own,
-        requests: draftRequests,
-      ),
-    );
-    await tester.pump();
+      await tester.pumpWidget(
+        createWidget(scope: SiteRequestsScope.own, requests: draftRequests),
+      );
+      await tester.pump();
 
-    expect(find.text('Отправить'), findsOneWidget);
-    expect(find.text('Отменить'), findsOneWidget);
-  });
+      expect(find.text('Отправить'), findsOneWidget);
+      expect(find.text('Отменить'), findsOneWidget);
+    },
+  );
 }
 
 SiteRequestModel _buildRequest({

@@ -36,7 +36,7 @@ const _errorSentinel = Object();
 class HandoverAcceptanceNotifier
     extends StateNotifier<HandoverAcceptanceState> {
   HandoverAcceptanceNotifier(this._repository)
-      : super(const HandoverAcceptanceState());
+    : super(const HandoverAcceptanceState());
 
   final HandoverAcceptanceRepository _repository;
 
@@ -52,17 +52,16 @@ class HandoverAcceptanceNotifier
     state = state.copyWith(isLoading: true, error: null);
 
     try {
-      final scopes = await _repository.fetchScopes(projectId: state.projectFilter);
+      final scopes = await _repository.fetchScopes(
+        projectId: state.projectFilter,
+      );
       state = state.copyWith(isLoading: false, scopes: scopes);
     } catch (error) {
       state = state.copyWith(isLoading: false, error: error.toString());
     }
   }
 
-  Future<void> createFinding(
-    int sessionId,
-    Map<String, dynamic> data,
-  ) async {
+  Future<void> createFinding(int sessionId, Map<String, dynamic> data) async {
     await _repository.createFinding(sessionId, data);
     await loadScopes();
   }
@@ -84,9 +83,11 @@ class HandoverAcceptanceNotifier
   }
 }
 
-final handoverAcceptanceProvider = StateNotifierProvider<
-    HandoverAcceptanceNotifier, HandoverAcceptanceState>((ref) {
-  return HandoverAcceptanceNotifier(
-    ref.read(handoverAcceptanceRepositoryProvider),
-  );
-});
+final handoverAcceptanceProvider =
+    StateNotifierProvider<HandoverAcceptanceNotifier, HandoverAcceptanceState>((
+      ref,
+    ) {
+      return HandoverAcceptanceNotifier(
+        ref.read(handoverAcceptanceRepositoryProvider),
+      );
+    });

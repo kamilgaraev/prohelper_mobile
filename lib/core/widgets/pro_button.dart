@@ -21,7 +21,8 @@ class ProButton extends StatefulWidget {
   State<ProButton> createState() => _ProButtonState();
 }
 
-class _ProButtonState extends State<ProButton> with SingleTickerProviderStateMixin {
+class _ProButtonState extends State<ProButton>
+    with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _scaleAnimation;
 
@@ -32,9 +33,10 @@ class _ProButtonState extends State<ProButton> with SingleTickerProviderStateMix
       vsync: this,
       duration: const Duration(milliseconds: 100),
     );
-    _scaleAnimation = Tween<double>(begin: 1.0, end: 0.95).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
-    );
+    _scaleAnimation = Tween<double>(
+      begin: 1.0,
+      end: 0.95,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
   }
 
   @override
@@ -63,35 +65,33 @@ class _ProButtonState extends State<ProButton> with SingleTickerProviderStateMix
             borderRadius: BorderRadius.circular(20),
             boxShadow: [
               BoxShadow(
-                color: effectiveColor.withOpacity(0.3),
+                color: effectiveColor.withValues(alpha: 0.3),
                 blurRadius: 12,
                 offset: const Offset(0, 6),
               ),
             ],
           ),
           child: Center(
-            child: widget.isLoading
-                ? const SizedBox(
-                    height: 24,
-                    width: 24,
-                    child: CircularProgressIndicator(
-                      color: Colors.white,
-                      strokeWidth: 2,
-                    ),
-                  )
-                : Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      if (widget.icon != null) ...[
-                        widget.icon!,
-                        const SizedBox(width: 8),
-                      ],
-                      Text(
-                        widget.text,
-                        style: AppTypography.button,
+            child:
+                widget.isLoading
+                    ? const SizedBox(
+                      height: 24,
+                      width: 24,
+                      child: CircularProgressIndicator(
+                        color: Colors.white,
+                        strokeWidth: 2,
                       ),
-                    ],
-                  ),
+                    )
+                    : Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        if (widget.icon != null) ...[
+                          widget.icon!,
+                          const SizedBox(width: 8),
+                        ],
+                        Text(widget.text, style: AppTypography.button),
+                      ],
+                    ),
           ),
         ),
       ),

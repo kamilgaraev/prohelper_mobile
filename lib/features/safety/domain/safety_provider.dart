@@ -58,9 +58,15 @@ class SafetyNotifier extends StateNotifier<SafetyState> {
     state = state.copyWith(isLoading: true, error: null);
 
     try {
-      final permits = await _repository.fetchActivePermits(projectId: state.projectFilter);
-      final incidents = await _repository.fetchIncidents(projectId: state.projectFilter);
-      final violations = await _repository.fetchViolations(projectId: state.projectFilter);
+      final permits = await _repository.fetchActivePermits(
+        projectId: state.projectFilter,
+      );
+      final incidents = await _repository.fetchIncidents(
+        projectId: state.projectFilter,
+      );
+      final violations = await _repository.fetchViolations(
+        projectId: state.projectFilter,
+      );
 
       state = state.copyWith(
         isLoading: false,
@@ -89,6 +95,8 @@ class SafetyNotifier extends StateNotifier<SafetyState> {
   }
 }
 
-final safetyProvider = StateNotifierProvider<SafetyNotifier, SafetyState>((ref) {
+final safetyProvider = StateNotifierProvider<SafetyNotifier, SafetyState>((
+  ref,
+) {
   return SafetyNotifier(ref.read(safetyRepositoryProvider));
 });

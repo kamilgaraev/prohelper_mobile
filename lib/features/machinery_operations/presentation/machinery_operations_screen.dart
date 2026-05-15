@@ -13,10 +13,12 @@ class MachineryOperationsScreen extends ConsumerStatefulWidget {
   const MachineryOperationsScreen({super.key});
 
   @override
-  ConsumerState<MachineryOperationsScreen> createState() => _MachineryOperationsScreenState();
+  ConsumerState<MachineryOperationsScreen> createState() =>
+      _MachineryOperationsScreenState();
 }
 
-class _MachineryOperationsScreenState extends ConsumerState<MachineryOperationsScreen> {
+class _MachineryOperationsScreenState
+    extends ConsumerState<MachineryOperationsScreen> {
   @override
   void initState() {
     super.initState();
@@ -52,55 +54,85 @@ class _MachineryOperationsScreenState extends ConsumerState<MachineryOperationsS
           actions: [
             IconButton(
               tooltip: 'Обновить',
-              onPressed: () => ref.read(machineryOperationsProvider.notifier).load(),
+              onPressed:
+                  () => ref.read(machineryOperationsProvider.notifier).load(),
               icon: const Icon(Icons.refresh_rounded),
             ),
           ],
         ),
-        body: state.isLoading && state.assets.isEmpty && state.shiftReports.isEmpty
-            ? const Center(child: CircularProgressIndicator())
-            : state.error != null && state.assets.isEmpty && state.shiftReports.isEmpty
+        body:
+            state.isLoading &&
+                    state.assets.isEmpty &&
+                    state.shiftReports.isEmpty
+                ? const Center(child: CircularProgressIndicator())
+                : state.error != null &&
+                    state.assets.isEmpty &&
+                    state.shiftReports.isEmpty
                 ? AppStateView(
-                    icon: Icons.precision_manufacturing_outlined,
-                    title: 'Не удалось загрузить технику',
-                    description: state.error,
-                    action: OutlinedButton(
-                      onPressed: () => ref.read(machineryOperationsProvider.notifier).load(),
-                      child: const Text('Повторить'),
-                    ),
-                  )
-                : RefreshIndicator(
-                    onRefresh: () => ref.read(machineryOperationsProvider.notifier).load(),
-                    child: ListView(
-                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
-                      children: [
-                        _SummaryStrip(state: state),
-                        const SizedBox(height: 12),
-                        if (state.assets.isEmpty)
-                          const AppStateView(
-                            icon: Icons.precision_manufacturing_outlined,
-                            title: 'Техника пока не назначена',
-                            description: 'Для выбранного объекта нет доступных единиц техники.',
-                          )
-                        else
-                          ...state.assets.map((asset) => Padding(
-                                padding: const EdgeInsets.only(bottom: 12),
-                                child: _AssetCard(
-                                  asset: asset,
-                                  onShift: (asset) => _runAction(
-                                    () => ref.read(machineryOperationsProvider.notifier).createShiftReport(asset),
-                                  ),
-                                  onDowntime: (asset) => _runAction(
-                                    () => ref.read(machineryOperationsProvider.notifier).createDowntime(asset),
-                                  ),
-                                  onFuel: (asset) => _runAction(
-                                    () => ref.read(machineryOperationsProvider.notifier).createFuelIssue(asset),
-                                  ),
-                                ),
-                              )),
-                      ],
-                    ),
+                  icon: Icons.precision_manufacturing_outlined,
+                  title: 'Не удалось загрузить технику',
+                  description: state.error,
+                  action: OutlinedButton(
+                    onPressed:
+                        () =>
+                            ref
+                                .read(machineryOperationsProvider.notifier)
+                                .load(),
+                    child: const Text('Повторить'),
                   ),
+                )
+                : RefreshIndicator(
+                  onRefresh:
+                      () =>
+                          ref.read(machineryOperationsProvider.notifier).load(),
+                  child: ListView(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
+                    children: [
+                      _SummaryStrip(state: state),
+                      const SizedBox(height: 12),
+                      if (state.assets.isEmpty)
+                        const AppStateView(
+                          icon: Icons.precision_manufacturing_outlined,
+                          title: 'Техника пока не назначена',
+                          description:
+                              'Для выбранного объекта нет доступных единиц техники.',
+                        )
+                      else
+                        ...state.assets.map(
+                          (asset) => Padding(
+                            padding: const EdgeInsets.only(bottom: 12),
+                            child: _AssetCard(
+                              asset: asset,
+                              onShift:
+                                  (asset) => _runAction(
+                                    () => ref
+                                        .read(
+                                          machineryOperationsProvider.notifier,
+                                        )
+                                        .createShiftReport(asset),
+                                  ),
+                              onDowntime:
+                                  (asset) => _runAction(
+                                    () => ref
+                                        .read(
+                                          machineryOperationsProvider.notifier,
+                                        )
+                                        .createDowntime(asset),
+                                  ),
+                              onFuel:
+                                  (asset) => _runAction(
+                                    () => ref
+                                        .read(
+                                          machineryOperationsProvider.notifier,
+                                        )
+                                        .createFuelIssue(asset),
+                                  ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
       ),
     );
   }
@@ -113,7 +145,9 @@ class _MachineryOperationsScreenState extends ConsumerState<MachineryOperationsS
         return;
       }
 
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.toString())));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.toString())));
     }
   }
 }
@@ -125,15 +159,36 @@ class _SummaryStrip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final fuel = state.shiftReports.fold<double>(0, (total, report) => total + report.fuelConsumed);
+    final fuel = state.shiftReports.fold<double>(
+      0,
+      (total, report) => total + report.fuelConsumed,
+    );
 
     return Row(
       children: [
-        Expanded(child: _MetricCard(label: 'Техника', value: state.assets.length.toString(), icon: Icons.precision_manufacturing_outlined)),
+        Expanded(
+          child: _MetricCard(
+            label: 'Техника',
+            value: state.assets.length.toString(),
+            icon: Icons.precision_manufacturing_outlined,
+          ),
+        ),
         const SizedBox(width: 8),
-        Expanded(child: _MetricCard(label: 'Рапорты', value: state.shiftReports.length.toString(), icon: Icons.assignment_outlined)),
+        Expanded(
+          child: _MetricCard(
+            label: 'Рапорты',
+            value: state.shiftReports.length.toString(),
+            icon: Icons.assignment_outlined,
+          ),
+        ),
         const SizedBox(width: 8),
-        Expanded(child: _MetricCard(label: 'ГСМ', value: _formatNumber(fuel), icon: Icons.local_gas_station_outlined)),
+        Expanded(
+          child: _MetricCard(
+            label: 'ГСМ',
+            value: _formatNumber(fuel),
+            icon: Icons.local_gas_station_outlined,
+          ),
+        ),
       ],
     );
   }
@@ -167,12 +222,23 @@ class _AssetCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(asset.name, style: AppTypography.bodyLarge(context).copyWith(fontWeight: FontWeight.w800)),
-                    Text(asset.assetCode, style: AppTypography.caption(context)),
+                    Text(
+                      asset.name,
+                      style: AppTypography.bodyLarge(
+                        context,
+                      ).copyWith(fontWeight: FontWeight.w800),
+                    ),
+                    Text(
+                      asset.assetCode,
+                      style: AppTypography.caption(context),
+                    ),
                   ],
                 ),
               ),
-              Chip(label: Text(asset.statusLabel), visualDensity: VisualDensity.compact),
+              Chip(
+                label: Text(asset.statusLabel),
+                visualDensity: VisualDensity.compact,
+              ),
             ],
           ),
           const SizedBox(height: 12),

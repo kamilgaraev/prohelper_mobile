@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../../core/theme/app_colors.dart';
@@ -9,10 +9,7 @@ import '../../data/user_model.dart';
 import '../../domain/auth_provider.dart';
 
 class UserProfileBottomSheet extends ConsumerWidget {
-  const UserProfileBottomSheet({
-    super.key,
-    required this.user,
-  });
+  const UserProfileBottomSheet({super.key, required this.user});
 
   final User user;
 
@@ -48,17 +45,20 @@ class UserProfileBottomSheet extends ConsumerWidget {
                 radius: 32,
                 backgroundColor: theme.colorScheme.primary,
                 backgroundImage:
-                    user.avatarUrl != null ? NetworkImage(user.avatarUrl!) : null,
-                child: user.avatarUrl == null
-                    ? Text(
-                        user.name.substring(0, 1).toUpperCase(),
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      )
-                    : null,
+                    user.avatarUrl != null
+                        ? NetworkImage(user.avatarUrl!)
+                        : null,
+                child:
+                    user.avatarUrl == null
+                        ? Text(
+                          user.name.substring(0, 1).toUpperCase(),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 24,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        )
+                        : null,
               ),
               const SizedBox(width: 16),
               Expanded(
@@ -71,12 +71,17 @@ class UserProfileBottomSheet extends ConsumerWidget {
                     ),
                     const SizedBox(height: 4),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
                       decoration: BoxDecoration(
-                        color: theme.colorScheme.primary.withOpacity(0.1),
+                        color: theme.colorScheme.primary.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(8),
                         border: Border.all(
-                          color: theme.colorScheme.primary.withOpacity(0.3),
+                          color: theme.colorScheme.primary.withValues(
+                            alpha: 0.3,
+                          ),
                         ),
                       ),
                       child: Text(
@@ -95,10 +100,7 @@ class UserProfileBottomSheet extends ConsumerWidget {
             ],
           ),
           const SizedBox(height: 32),
-          Text(
-            'Организация',
-            style: AppTypography.caption(context),
-          ),
+          Text('Организация', style: AppTypography.caption(context)),
           const SizedBox(height: 12),
           ...organizations.map((org) {
             final orgId = org['id'] as int;
@@ -114,7 +116,9 @@ class UserProfileBottomSheet extends ConsumerWidget {
                   }
 
                   try {
-                    await ref.read(authProvider.notifier).switchOrganization(orgId);
+                    await ref
+                        .read(authProvider.notifier)
+                        .switchOrganization(orgId);
                     if (context.mounted) {
                       Navigator.pop(context);
                     }
@@ -123,25 +127,31 @@ class UserProfileBottomSheet extends ConsumerWidget {
                       return;
                     }
 
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text(error.toString())),
-                    );
+                    ScaffoldMessenger.of(
+                      context,
+                    ).showSnackBar(SnackBar(content: Text(error.toString())));
                   }
                 },
                 padding: const EdgeInsets.all(16),
-                backgroundColor: isSelected
-                    ? theme.colorScheme.primary.withOpacity(0.05)
-                    : theme.cardTheme.color,
-                border: isSelected
-                    ? Border.all(color: theme.colorScheme.primary, width: 1.5)
-                    : null,
+                backgroundColor:
+                    isSelected
+                        ? theme.colorScheme.primary.withValues(alpha: 0.05)
+                        : theme.cardTheme.color,
+                border:
+                    isSelected
+                        ? Border.all(
+                          color: theme.colorScheme.primary,
+                          width: 1.5,
+                        )
+                        : null,
                 child: Row(
                   children: [
                     Icon(
                       Icons.business_rounded,
-                      color: isSelected
-                          ? theme.colorScheme.primary
-                          : theme.colorScheme.onSurfaceVariant,
+                      color:
+                          isSelected
+                              ? theme.colorScheme.primary
+                              : theme.colorScheme.onSurfaceVariant,
                     ),
                     const SizedBox(width: 16),
                     Expanded(
@@ -150,9 +160,10 @@ class UserProfileBottomSheet extends ConsumerWidget {
                         style: AppTypography.bodyMedium(context).copyWith(
                           fontWeight:
                               isSelected ? FontWeight.bold : FontWeight.normal,
-                          color: isSelected
-                              ? theme.colorScheme.primary
-                              : theme.colorScheme.onSurface,
+                          color:
+                              isSelected
+                                  ? theme.colorScheme.primary
+                                  : theme.colorScheme.onSurface,
                         ),
                       ),
                     ),
@@ -235,7 +246,7 @@ class UserProfileBottomSheet extends ConsumerWidget {
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
-                backgroundColor: AppColors.error.withOpacity(0.05),
+                backgroundColor: AppColors.error.withValues(alpha: 0.05),
               ),
               icon: const Icon(Icons.logout_rounded, color: AppColors.error),
               label: Text(

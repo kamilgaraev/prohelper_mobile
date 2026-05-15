@@ -11,7 +11,10 @@ class AuthInterceptor extends Interceptor {
   AuthInterceptor(this._ref);
 
   @override
-  Future<void> onRequest(RequestOptions options, RequestInterceptorHandler handler) async {
+  Future<void> onRequest(
+    RequestOptions options,
+    RequestInterceptorHandler handler,
+  ) async {
     final token = await _ref.read(secureStorageProvider).getToken();
     if (token != null && token.isNotEmpty) {
       options.headers['Authorization'] = 'Bearer $token';
@@ -20,7 +23,10 @@ class AuthInterceptor extends Interceptor {
   }
 
   @override
-  Future<void> onError(DioException err, ErrorInterceptorHandler handler) async {
+  Future<void> onError(
+    DioException err,
+    ErrorInterceptorHandler handler,
+  ) async {
     if (err.response?.statusCode != 401) {
       handler.next(err);
       return;
@@ -50,10 +56,7 @@ class AuthInterceptor extends Interceptor {
     }
 
     requestOptions.headers['Authorization'] = 'Bearer $refreshedToken';
-    requestOptions.extra = {
-      ...requestOptions.extra,
-      'auth_retry': true,
-    };
+    requestOptions.extra = {...requestOptions.extra, 'auth_retry': true};
 
     try {
       final response = await Dio().fetch<dynamic>(requestOptions);
@@ -81,22 +84,25 @@ class AuthInterceptor extends Interceptor {
         return completer.future;
       }
 
-      final refreshClient = Dio(BaseOptions(
-        baseUrl: requestOptions.baseUrl,
-        connectTimeout: requestOptions.connectTimeout,
-        receiveTimeout: requestOptions.receiveTimeout,
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $currentToken',
-        },
-      ));
+      final refreshClient = Dio(
+        BaseOptions(
+          baseUrl: requestOptions.baseUrl,
+          connectTimeout: requestOptions.connectTimeout,
+          receiveTimeout: requestOptions.receiveTimeout,
+          headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer $currentToken',
+          },
+        ),
+      );
 
       final response = await refreshClient.post('/auth/refresh');
       final responseData = response.data;
-      final payload = responseData is Map<String, dynamic>
-          ? responseData['data'] as Map<String, dynamic>?
-          : null;
+      final payload =
+          responseData is Map<String, dynamic>
+              ? responseData['data'] as Map<String, dynamic>?
+              : null;
       final refreshedToken = payload != null ? payload['token'] : null;
 
       if (refreshedToken is String && refreshedToken.isNotEmpty) {

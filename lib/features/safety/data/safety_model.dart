@@ -155,9 +155,10 @@ class SafetyViolationModel {
       severity: _asString(json['severity']),
       status: _asString(json['status']),
       statusLabel: _asString(json['status_label']),
-      availableActions: (json['available_actions'] as List<dynamic>? ?? const [])
-          .whereType<String>()
-          .toList(),
+      availableActions:
+          (json['available_actions'] as List<dynamic>? ?? const [])
+              .whereType<String>()
+              .toList(),
       locationName: _asNullableString(json['location_name']),
       description: _asNullableString(json['description']),
       correctiveAction: _asNullableString(json['corrective_action']),

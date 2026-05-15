@@ -55,61 +55,70 @@ class _HandoverAcceptanceScreenState
           actions: [
             IconButton(
               tooltip: 'Обновить',
-              onPressed: () =>
-                  ref.read(handoverAcceptanceProvider.notifier).loadScopes(),
+              onPressed:
+                  () =>
+                      ref
+                          .read(handoverAcceptanceProvider.notifier)
+                          .loadScopes(),
               icon: const Icon(Icons.refresh_rounded),
             ),
           ],
         ),
-        body: state.isLoading && state.scopes.isEmpty
-            ? const Center(child: CircularProgressIndicator())
-            : state.error != null && state.scopes.isEmpty
+        body:
+            state.isLoading && state.scopes.isEmpty
+                ? const Center(child: CircularProgressIndicator())
+                : state.error != null && state.scopes.isEmpty
                 ? AppStateView(
-                    icon: Icons.error_outline_rounded,
-                    title: 'Не удалось загрузить приемку',
-                    description: state.error,
-                    action: OutlinedButton(
-                      onPressed: () => ref
-                          .read(handoverAcceptanceProvider.notifier)
-                          .loadScopes(),
-                      child: const Text('Повторить'),
-                    ),
-                  )
+                  icon: Icons.error_outline_rounded,
+                  title: 'Не удалось загрузить приемку',
+                  description: state.error,
+                  action: OutlinedButton(
+                    onPressed:
+                        () =>
+                            ref
+                                .read(handoverAcceptanceProvider.notifier)
+                                .loadScopes(),
+                    child: const Text('Повторить'),
+                  ),
+                )
                 : RefreshIndicator(
-                    onRefresh: () => ref
-                        .read(handoverAcceptanceProvider.notifier)
-                        .loadScopes(),
-                    child: ListView(
-                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
-                      children: [
-                        _SummaryStrip(scopes: state.scopes),
-                        const SizedBox(height: 12),
-                        if (state.scopes.isEmpty)
-                          const AppStateView(
-                            icon: Icons.assignment_turned_in_outlined,
-                            title: 'Зон приемки нет',
-                            description:
-                                'Когда зона будет готова к осмотру, она появится в этом списке.',
-                          )
-                        else
-                          ...state.scopes.map(
-                            (scope) => Padding(
-                              padding: const EdgeInsets.only(bottom: 12),
-                              child: _ScopeCard(
-                                scope: scope,
-                                onCreateFinding: () =>
-                                    _showFindingSheet(context, scope),
-                                onResolveFinding: () =>
-                                    _resolveFirstFinding(context, scope),
-                                onReadyForReinspection: () => ref
-                                    .read(handoverAcceptanceProvider.notifier)
-                                    .readyForReinspection(scope.id),
-                              ),
+                  onRefresh:
+                      () =>
+                          ref
+                              .read(handoverAcceptanceProvider.notifier)
+                              .loadScopes(),
+                  child: ListView(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
+                    children: [
+                      _SummaryStrip(scopes: state.scopes),
+                      const SizedBox(height: 12),
+                      if (state.scopes.isEmpty)
+                        const AppStateView(
+                          icon: Icons.assignment_turned_in_outlined,
+                          title: 'Зон приемки нет',
+                          description:
+                              'Когда зона будет готова к осмотру, она появится в этом списке.',
+                        )
+                      else
+                        ...state.scopes.map(
+                          (scope) => Padding(
+                            padding: const EdgeInsets.only(bottom: 12),
+                            child: _ScopeCard(
+                              scope: scope,
+                              onCreateFinding:
+                                  () => _showFindingSheet(context, scope),
+                              onResolveFinding:
+                                  () => _resolveFirstFinding(context, scope),
+                              onReadyForReinspection:
+                                  () => ref
+                                      .read(handoverAcceptanceProvider.notifier)
+                                      .readyForReinspection(scope.id),
                             ),
                           ),
-                      ],
-                    ),
+                        ),
+                    ],
                   ),
+                ),
       ),
     );
   }
@@ -131,69 +140,84 @@ class _HandoverAcceptanceScreenState
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      builder: (sheetContext) => StatefulBuilder(
-        builder: (context, setSheetState) => Padding(
-          padding: EdgeInsets.only(
-            left: 16,
-            right: 16,
-            top: 20,
-            bottom: MediaQuery.of(context).viewInsets.bottom + 20,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Новое замечание', style: AppTypography.h2(context)),
-              const SizedBox(height: 16),
-              TextField(
-                controller: titleController,
-                decoration: const InputDecoration(labelText: 'Замечание'),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: descriptionController,
-                decoration: const InputDecoration(labelText: 'Описание'),
-                maxLines: 3,
-              ),
-              SwitchListTile(
-                value: createQualityDefect,
-                onChanged: (value) =>
-                    setSheetState(() => createQualityDefect = value),
-                title: const Text('Создать дефект качества'),
-              ),
-              const SizedBox(height: 12),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton(
-                  onPressed: submitting
-                      ? null
-                      : () async {
-                          final title = titleController.text.trim();
-                          if (title.isEmpty) {
-                            return;
-                          }
-                          setSheetState(() => submitting = true);
-                          await ref
-                              .read(handoverAcceptanceProvider.notifier)
-                              .createFinding(session.id, {
-                            'title': title,
-                            if (descriptionController.text.trim().isNotEmpty)
-                              'description':
-                                  descriptionController.text.trim(),
-                            'severity': 'major',
-                            'create_quality_defect': createQualityDefect,
-                          });
-                          if (context.mounted) {
-                            Navigator.of(sheetContext).pop();
-                          }
-                        },
-                  child: const Text('Добавить'),
+      builder:
+          (sheetContext) => StatefulBuilder(
+            builder:
+                (context, setSheetState) => Padding(
+                  padding: EdgeInsets.only(
+                    left: 16,
+                    right: 16,
+                    top: 20,
+                    bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Новое замечание', style: AppTypography.h2(context)),
+                      const SizedBox(height: 16),
+                      TextField(
+                        controller: titleController,
+                        decoration: const InputDecoration(
+                          labelText: 'Замечание',
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: descriptionController,
+                        decoration: const InputDecoration(
+                          labelText: 'Описание',
+                        ),
+                        maxLines: 3,
+                      ),
+                      SwitchListTile(
+                        value: createQualityDefect,
+                        onChanged:
+                            (value) => setSheetState(
+                              () => createQualityDefect = value,
+                            ),
+                        title: const Text('Создать дефект качества'),
+                      ),
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        child: FilledButton(
+                          onPressed:
+                              submitting
+                                  ? null
+                                  : () async {
+                                    final title = titleController.text.trim();
+                                    if (title.isEmpty) {
+                                      return;
+                                    }
+                                    setSheetState(() => submitting = true);
+                                    await ref
+                                        .read(
+                                          handoverAcceptanceProvider.notifier,
+                                        )
+                                        .createFinding(session.id, {
+                                          'title': title,
+                                          if (descriptionController.text
+                                              .trim()
+                                              .isNotEmpty)
+                                            'description':
+                                                descriptionController.text
+                                                    .trim(),
+                                          'severity': 'major',
+                                          'create_quality_defect':
+                                              createQualityDefect,
+                                        });
+                                    if (context.mounted) {
+                                      Navigator.of(sheetContext).pop();
+                                    }
+                                  },
+                          child: const Text('Добавить'),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            ],
           ),
-        ),
-      ),
     );
   }
 
@@ -213,10 +237,9 @@ class _HandoverAcceptanceScreenState
       return;
     }
 
-    await ref.read(handoverAcceptanceProvider.notifier).resolveFinding(
-          finding.id,
-          resolutionComment: 'Устранено с объекта',
-        );
+    await ref
+        .read(handoverAcceptanceProvider.notifier)
+        .resolveFinding(finding.id, resolutionComment: 'Устранено с объекта');
   }
 }
 
@@ -231,9 +254,13 @@ class _SummaryStrip extends StatelessWidget {
       0,
       (total, scope) => total + scope.openFindings,
     );
-    final accepted = scopes
-        .where((scope) => scope.status == 'accepted' || scope.status == 'handed_over')
-        .length;
+    final accepted =
+        scopes
+            .where(
+              (scope) =>
+                  scope.status == 'accepted' || scope.status == 'handed_over',
+            )
+            .length;
 
     return Row(
       children: [
@@ -330,9 +357,8 @@ class _ScopeCard extends StatelessWidget {
                 label: const Text('Устранено'),
               ),
               FilledButton.icon(
-                onPressed: scope.openFindings == 0
-                    ? onReadyForReinspection
-                    : null,
+                onPressed:
+                    scope.openFindings == 0 ? onReadyForReinspection : null,
                 icon: const Icon(Icons.fact_check_rounded),
                 label: const Text('На проверку'),
               ),

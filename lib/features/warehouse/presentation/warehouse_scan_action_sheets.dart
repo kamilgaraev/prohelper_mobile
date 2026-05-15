@@ -65,7 +65,9 @@ class _WarehouseTaskStatusSheetState extends State<WarehouseTaskStatusSheet> {
           if (needsQuantity) ...[
             TextField(
               controller: _quantityController,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
               decoration: const InputDecoration(
                 labelText: 'Фактическое количество',
                 border: OutlineInputBorder(),
@@ -243,16 +245,18 @@ class _WarehouseTransferSheetState
     });
 
     try {
-      await ref.read(warehouseRepositoryProvider).createTransfer(
-        WarehouseTransferPayload(
-          fromWarehouseId: fromWarehouseId,
-          toWarehouseId: toWarehouseId,
-          materialId: widget.entity.id,
-          quantity: quantity,
-          documentNumber: _documentController.text.trim(),
-          reason: _reasonController.text.trim(),
-        ),
-      );
+      await ref
+          .read(warehouseRepositoryProvider)
+          .createTransfer(
+            WarehouseTransferPayload(
+              fromWarehouseId: fromWarehouseId,
+              toWarehouseId: toWarehouseId,
+              materialId: widget.entity.id,
+              quantity: quantity,
+              documentNumber: _documentController.text.trim(),
+              reason: _reasonController.text.trim(),
+            ),
+          );
 
       if (!mounted) {
         return;
