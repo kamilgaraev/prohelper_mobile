@@ -36,6 +36,9 @@ class PermissionService {
       'record_labor_output' =>
         context == UserContext.field &&
             canAccessModule(AppModule.productionLabor),
+      'confirm_workforce_attendance' =>
+        context == UserContext.field &&
+            canAccessModule(AppModule.workforceManagement),
       _ => false,
     };
   }

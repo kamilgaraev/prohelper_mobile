@@ -12,6 +12,7 @@ import '../../features/safety/presentation/safety_screen.dart';
 import '../../features/schedule/presentation/schedule_screen.dart';
 import '../../features/site_requests/presentation/screens/site_requests_screen.dart';
 import '../../features/warehouse/presentation/warehouse_screen.dart';
+import '../../features/workforce/presentation/workforce_attendance_screen.dart';
 import '../providers/module_provider.dart';
 import '../theme/app_typography.dart';
 
@@ -176,6 +177,13 @@ class QuickActionSheet extends ConsumerWidget {
           MaterialPageRoute(builder: (_) => const ProductionLaborScreen()),
         );
         return;
+      case 'workforce':
+      case 'workforce_management':
+      case 'workforce-management':
+        navigator.push(
+          MaterialPageRoute(builder: (_) => const WorkforceAttendanceScreen()),
+        );
+        return;
       case 'construction_journal':
         navigator.push(
           MaterialPageRoute(builder: (_) => const ConstructionJournalScreen()),
@@ -210,6 +218,8 @@ class QuickActionSheet extends ConsumerWidget {
       'calculate' => Icons.calculate_outlined,
       'machinery' => Icons.precision_manufacturing_outlined,
       'engineer' => Icons.engineering_outlined,
+      'people' => Icons.groups_rounded,
+      'workforce' => Icons.groups_rounded,
       _ => Icons.grid_view_rounded,
     };
   }
@@ -225,6 +235,9 @@ class QuickActionSheet extends ConsumerWidget {
       'machinery-operations' => Colors.indigo,
       'production_labor' => Colors.brown,
       'production-labor' => Colors.brown,
+      'workforce' => Colors.teal,
+      'workforce_management' => Colors.teal,
+      'workforce-management' => Colors.teal,
       'construction_journal' => Colors.orange,
       'ai_assistant' => Colors.teal,
       _ => theme.colorScheme.onSurfaceVariant,

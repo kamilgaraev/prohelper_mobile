@@ -113,7 +113,9 @@ class ActionHub extends ConsumerWidget {
     var icon = Icons.grid_view_rounded;
 
     if (userContext == UserContext.field) {
-      if (permissions.canAccessModule(AppModule.basicWarehouse)) {
+      if (permissions.canAccessModule(AppModule.workforceManagement)) {
+        icon = Icons.qr_code_2_rounded;
+      } else if (permissions.canAccessModule(AppModule.basicWarehouse)) {
         icon = Icons.qr_code_scanner_rounded;
       } else if (permissions.canAccessModule(AppModule.siteRequests)) {
         icon = Icons.add_task_rounded;

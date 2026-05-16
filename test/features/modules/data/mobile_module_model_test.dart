@@ -80,5 +80,23 @@ void main() {
         'Наряды, табели и выработка бригад на объекте.',
       );
     });
+
+    test('подставляет тексты для явки сотрудников', () {
+      final workforce = MobileModuleModel.fromJson({
+        'slug': 'workforce-management',
+        'title': 'mobile_modules.modules.workforce-management.title',
+        'description': 'mobile_modules.modules.workforce-management.description',
+        'icon': 'workforce',
+        'route': 'workforce-management',
+        'supported_on_mobile': true,
+        'order': 70,
+      });
+
+      expect(workforce.title, 'Явка сотрудников');
+      expect(
+        workforce.description,
+        'QR-подтверждение присутствия, табель и контроль сотрудников на объекте.',
+      );
+    });
   });
 }

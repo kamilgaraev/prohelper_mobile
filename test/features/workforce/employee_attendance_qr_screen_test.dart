@@ -1,0 +1,55 @@
+import 'package:dio/dio.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:prohelpers_mobile/features/workforce/data/workforce_attendance_model.dart';
+import 'package:prohelpers_mobile/features/workforce/data/workforce_repository.dart';
+import 'package:prohelpers_mobile/features/workforce/presentation/employee_attendance_qr_screen.dart';
+
+class _FakeWorkforceRepository extends WorkforceRepository {
+  _FakeWorkforceRepository() : super(Dio());
+
+  @override
+  Future<AttendanceQrModel> issueAttendanceQr({
+    int? projectId,
+    DateTime? workDate,
+  }) async {
+    return AttendanceQrModel(
+      qrToken: 'signed-token-value',
+      expiresAt: DateTime(2026, 5, 16, 9, 5),
+      employeeLabel: 'Иванов Иван',
+      projectId: projectId,
+      projectLabel: 'Объект Литейная',
+      workDate: workDate ?? DateTime(2026, 5, 16),
+      statusLabel: 'Покажите QR-код ответственному сотруднику.',
+    );
+  }
+}
+
+void main() {
+  testWidgets('показывает QR сотрудника без раскрытия токена текстом', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          workforceRepositoryProvider.overrideWithValue(
+            _FakeWorkforceRepository(),
+          ),
+        ],
+        child: const MaterialApp(home: EmployeeAttendanceQrScreen()),
+      ),
+    );
+
+    await tester.pump();
+    await tester.pump();
+
+    expect(
+      find.text('Показать QR для подтверждения явки'),
+      findsOneWidget,
+    );
+    expect(find.text('Иванов Иван'), findsOneWidget);
+    expect(find.text('Объект Литейная'), findsOneWidget);
+    expect(find.text('signed-token-value'), findsNothing);
+  });
+}

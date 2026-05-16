@@ -16,6 +16,7 @@ enum AppModule {
   safetyManagement,
   machineryOperations,
   productionLabor,
+  workforceManagement,
   handoverAcceptance,
 }
 
@@ -33,6 +34,7 @@ extension AppModuleX on AppModule {
       AppModule.safetyManagement => 'safety-management',
       AppModule.machineryOperations => 'machinery-operations',
       AppModule.productionLabor => 'production-labor',
+      AppModule.workforceManagement => 'workforce-management',
       AppModule.handoverAcceptance => 'handover-acceptance',
     };
   }

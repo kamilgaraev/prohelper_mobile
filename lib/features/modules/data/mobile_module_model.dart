@@ -58,6 +58,7 @@ String _resolveModuleTitle(String slug, String? rawTitle) {
     'safety-management' => 'Охрана труда',
     'machinery-operations' => 'Техника',
     'production-labor' => 'Наряды',
+    'workforce-management' => 'Явка сотрудников',
     'handover-acceptance' => 'Приемка зон',
     _ => 'Модуль',
   };
@@ -87,6 +88,8 @@ String _resolveModuleDescription(String slug, String? rawDescription) {
     'machinery-operations' =>
       'Сменные рапорты, простои и ГСМ по технике на объекте.',
     'production-labor' => 'Наряды, табели и выработка бригад на объекте.',
+    'workforce-management' =>
+      'QR-подтверждение присутствия, табель и контроль сотрудников на объекте.',
     'handover-acceptance' =>
       'Зоны, punch-list и передача готовых помещений заказчику.',
     _ => '',
