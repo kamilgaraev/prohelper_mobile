@@ -47,6 +47,8 @@ class ProjectMaterialDeliveryModel {
     required this.reservedQuantity,
     required this.shippedQuantity,
     required this.acceptedQuantity,
+    required this.usedQuantity,
+    required this.availableQuantity,
     required this.remainingToShip,
     required this.remainingToAccept,
     required this.canReceive,
@@ -86,6 +88,8 @@ class ProjectMaterialDeliveryModel {
   final double reservedQuantity;
   final double shippedQuantity;
   final double acceptedQuantity;
+  final double usedQuantity;
+  final double availableQuantity;
   final double remainingToShip;
   final double remainingToAccept;
   final String? plannedDeliveryDate;
@@ -125,6 +129,8 @@ class ProjectMaterialDeliveryModel {
       reservedQuantity: _asDouble(json['reserved_quantity']) ?? 0,
       shippedQuantity: _asDouble(json['shipped_quantity']) ?? 0,
       acceptedQuantity: _asDouble(json['accepted_quantity']) ?? 0,
+      usedQuantity: _asDouble(json['used_quantity']) ?? 0,
+      availableQuantity: _asDouble(json['available_quantity']) ?? 0,
       remainingToShip: _asDouble(json['remaining_to_ship']) ?? 0,
       remainingToAccept: _asDouble(json['remaining_to_accept']) ?? 0,
       plannedDeliveryDate: json['planned_delivery_date']?.toString(),

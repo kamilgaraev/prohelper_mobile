@@ -354,6 +354,7 @@ class ConstructionJournalProjectMaterialOption {
 class ConstructionJournalMaterialUsageModel {
   const ConstructionJournalMaterialUsageModel({
     this.materialId,
+    this.projectMaterialDeliveryId,
     required this.materialName,
     required this.quantity,
     required this.measurementUnit,
@@ -361,6 +362,7 @@ class ConstructionJournalMaterialUsageModel {
   });
 
   final int? materialId;
+  final int? projectMaterialDeliveryId;
   final String materialName;
   final double quantity;
   final String measurementUnit;
@@ -369,6 +371,8 @@ class ConstructionJournalMaterialUsageModel {
   Map<String, dynamic> toJson() {
     return {
       if (materialId != null) 'material_id': materialId,
+      if (projectMaterialDeliveryId != null)
+        'project_material_delivery_id': projectMaterialDeliveryId,
       'material_name': materialName,
       'quantity': quantity,
       'measurement_unit': measurementUnit,

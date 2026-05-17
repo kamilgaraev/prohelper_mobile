@@ -555,6 +555,7 @@ class _JournalEntryFormScreenState
 
           return ConstructionJournalMaterialUsageModel(
             materialId: material.materialId,
+            projectMaterialDeliveryId: material.projectMaterialDeliveryId,
             materialName: material.materialName,
             quantity: quantity,
             measurementUnit: material.measurementUnit,
@@ -834,6 +835,7 @@ class _MaterialUsageCard extends StatelessWidget {
 class _MaterialUsageInput {
   _MaterialUsageInput({
     required this.materialId,
+    required this.projectMaterialDeliveryId,
     required this.materialName,
     required this.measurementUnit,
     String quantity = '',
@@ -842,6 +844,7 @@ class _MaterialUsageInput {
        notesController = TextEditingController(text: notes);
 
   final int? materialId;
+  final int? projectMaterialDeliveryId;
   final String materialName;
   final String measurementUnit;
   final TextEditingController quantityController;
@@ -852,6 +855,7 @@ class _MaterialUsageInput {
   ) {
     return _MaterialUsageInput(
       materialId: material.materialId,
+      projectMaterialDeliveryId: material.deliveryId,
       materialName: material.materialName,
       measurementUnit: material.measurementUnit,
       quantity:
