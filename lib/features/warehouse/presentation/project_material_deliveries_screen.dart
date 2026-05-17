@@ -18,7 +18,7 @@ class ProjectMaterialDeliveriesScreen extends ConsumerStatefulWidget {
 
 class _ProjectMaterialDeliveriesScreenState
     extends ConsumerState<ProjectMaterialDeliveriesScreen> {
-  late Future<List<ProjectMaterialDeliveryModel>> _future;
+  late Future<_ProjectMaterialsData> _future;
 
   @override
   void initState() {
@@ -26,10 +26,12 @@ class _ProjectMaterialDeliveriesScreenState
     _future = _load();
   }
 
-  Future<List<ProjectMaterialDeliveryModel>> _load() {
-    return ref
-        .read(warehouseRepositoryProvider)
-        .fetchProjectMaterialDeliveries();
+  Future<_ProjectMaterialsData> _load() async {
+    final repository = ref.read(warehouseRepositoryProvider);
+    final deliveries = await repository.fetchProjectMaterialDeliveries();
+    final stock = await repository.fetchProjectMaterialStock();
+
+    return _ProjectMaterialsData(deliveries: deliveries, stock: stock);
   }
 
   Future<void> _refresh() async {
@@ -43,7 +45,7 @@ class _ProjectMaterialDeliveriesScreenState
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Материалы на объект')),
-      body: FutureBuilder<List<ProjectMaterialDeliveryModel>>(
+      body: FutureBuilder<_ProjectMaterialsData>(
         future: _future,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
@@ -62,34 +64,58 @@ class _ProjectMaterialDeliveriesScreenState
             );
           }
 
-          final items = snapshot.data ?? const <ProjectMaterialDeliveryModel>[];
+          final data = snapshot.data ?? _ProjectMaterialsData.empty();
+          final deliveries = data.deliveries;
+          final stockItems = data.stock.items;
+          final isEmpty = deliveries.isEmpty && stockItems.isEmpty;
 
           return RefreshIndicator(
             onRefresh: _refresh,
-            child: items.isEmpty
-                ? const AppStateView(
-                    icon: Icons.local_shipping_outlined,
-                    title: 'Ожидаемых материалов нет',
-                    description:
-                        'Когда снабжение отправит материал на объект, поставка появится здесь.',
-                  )
-                : ListView.separated(
-                    physics: const AlwaysScrollableScrollPhysics(),
-                    padding: const EdgeInsets.all(16),
-                    itemCount: items.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 12),
-                    itemBuilder: (context, index) {
-                      final delivery = items[index];
-
-                      return _DeliveryCard(
-                        delivery: delivery,
-                        onReceive:
-                            delivery.canReceive
-                                ? () => _showReceiveSheet(delivery)
-                                : null,
-                      );
-                    },
-                  ),
+            child:
+                isEmpty
+                    ? const AppStateView(
+                      icon: Icons.local_shipping_outlined,
+                      title: 'Ожидаемых материалов нет',
+                      description:
+                          'Когда снабжение отправит материал на объект, поставка появится здесь.',
+                    )
+                    : ListView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: const EdgeInsets.all(16),
+                      children: [
+                        if (stockItems.isNotEmpty) ...[
+                          _StockSummaryCard(stock: data.stock),
+                          const SizedBox(height: 12),
+                          ...stockItems.map(
+                            (stock) => Padding(
+                              padding: const EdgeInsets.only(bottom: 12),
+                              child: _StockCard(stock: stock),
+                            ),
+                          ),
+                        ],
+                        if (deliveries.isNotEmpty) ...[
+                          Text(
+                            'Ожидают приемки',
+                            style: AppTypography.bodyLarge(
+                              context,
+                            ).copyWith(fontWeight: FontWeight.w800),
+                          ),
+                          const SizedBox(height: 12),
+                          ...deliveries.map(
+                            (delivery) => Padding(
+                              padding: const EdgeInsets.only(bottom: 12),
+                              child: _DeliveryCard(
+                                delivery: delivery,
+                                onReceive:
+                                    delivery.canReceive
+                                        ? () => _showReceiveSheet(delivery)
+                                        : null,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
           );
         },
       ),
@@ -130,8 +156,9 @@ class _ProjectMaterialDeliveriesScreenState
                 const SizedBox(height: 16),
                 TextField(
                   controller: quantityController,
-                  keyboardType:
-                      const TextInputType.numberWithOptions(decimal: true),
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
                   decoration: InputDecoration(
                     labelText: 'Количество',
                     helperText:
@@ -183,9 +210,10 @@ class _ProjectMaterialDeliveriesScreenState
                           ScaffoldMessenger.of(sheetContext).showSnackBar(
                             SnackBar(
                               content: Text(
-                                error
-                                    .toString()
-                                    .replaceFirst('ApiException: ', ''),
+                                error.toString().replaceFirst(
+                                  'ApiException: ',
+                                  '',
+                                ),
                               ),
                             ),
                           );
@@ -212,6 +240,191 @@ class _ProjectMaterialDeliveriesScreenState
         );
       }
     }
+  }
+}
+
+class _ProjectMaterialsData {
+  const _ProjectMaterialsData({required this.deliveries, required this.stock});
+
+  final List<ProjectMaterialDeliveryModel> deliveries;
+  final ProjectMaterialStockModel stock;
+
+  factory _ProjectMaterialsData.empty() {
+    return _ProjectMaterialsData(
+      deliveries: const <ProjectMaterialDeliveryModel>[],
+      stock: ProjectMaterialStockModel(
+        items: const <ProjectMaterialStockItemModel>[],
+        summary: ProjectMaterialStockSummaryModel(
+          materialsCount: 0,
+          deliveriesCount: 0,
+          acceptedQuantity: 0,
+          usedQuantity: 0,
+          availableQuantity: 0,
+        ),
+      ),
+    );
+  }
+}
+
+class _StockSummaryCard extends StatelessWidget {
+  const _StockSummaryCard({required this.stock});
+
+  final ProjectMaterialStockModel stock;
+
+  @override
+  Widget build(BuildContext context) {
+    return IndustrialCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Остатки на объекте',
+            style: AppTypography.bodyLarge(
+              context,
+            ).copyWith(fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: _Metric(
+                  label: 'Материалов',
+                  value: stock.summary.materialsCount.toString(),
+                ),
+              ),
+              Expanded(
+                child: _Metric(
+                  label: 'Доступно',
+                  value: _formatQuantity(stock.summary.availableQuantity),
+                  alignEnd: true,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: _Metric(
+                  label: 'Принято',
+                  value: _formatQuantity(stock.summary.acceptedQuantity),
+                ),
+              ),
+              Expanded(
+                child: _Metric(
+                  label: 'Списано',
+                  value: _formatQuantity(stock.summary.usedQuantity),
+                  alignEnd: true,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StockCard extends StatelessWidget {
+  const _StockCard({required this.stock});
+
+  final ProjectMaterialStockItemModel stock;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final latestUsage = stock.usages.isEmpty ? null : stock.usages.first;
+
+    return IndustrialCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: AppColors.success.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: const Icon(
+                  Icons.inventory_2_outlined,
+                  color: AppColors.success,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      stock.materialName ?? 'Материал',
+                      style: AppTypography.bodyLarge(
+                        context,
+                      ).copyWith(fontWeight: FontWeight.w800),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      stock.projectName ?? 'Объект не указан',
+                      style: AppTypography.bodyMedium(
+                        context,
+                      ).copyWith(color: theme.colorScheme.onSurfaceVariant),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(
+                child: _Metric(
+                  label: 'Доступно',
+                  value:
+                      '${_formatQuantity(stock.availableQuantity)} ${stock.materialUnit ?? ''}',
+                ),
+              ),
+              Expanded(
+                child: _Metric(
+                  label: 'Списано',
+                  value:
+                      '${_formatQuantity(stock.usedQuantity)} ${stock.materialUnit ?? ''}',
+                  alignEnd: true,
+                ),
+              ),
+            ],
+          ),
+          if (latestUsage != null) ...[
+            const SizedBox(height: 12),
+            Text(
+              'Последнее списание: запись №${latestUsage.entryNumber ?? latestUsage.journalEntryId ?? '-'}',
+              style: AppTypography.caption(
+                context,
+              ).copyWith(color: theme.colorScheme.onSurfaceVariant),
+            ),
+          ],
+          if (stock.deliveries.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            ...stock.deliveries
+                .take(3)
+                .map(
+                  (delivery) => Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: Text(
+                      'Поставка #${delivery.id}: доступно ${_formatQuantity(delivery.availableQuantity)} ${stock.materialUnit ?? ''}',
+                      style: AppTypography.caption(
+                        context,
+                      ).copyWith(color: theme.colorScheme.onSurfaceVariant),
+                    ),
+                  ),
+                ),
+          ],
+        ],
+      ),
+    );
   }
 }
 
@@ -256,9 +469,9 @@ class _DeliveryCard extends StatelessWidget {
                     const SizedBox(height: 4),
                     Text(
                       delivery.projectName ?? 'Объект не указан',
-                      style: AppTypography.bodyMedium(context).copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
+                      style: AppTypography.bodyMedium(
+                        context,
+                      ).copyWith(color: theme.colorScheme.onSurfaceVariant),
                     ),
                   ],
                 ),

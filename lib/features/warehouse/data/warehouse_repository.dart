@@ -106,6 +106,26 @@ class WarehouseRepository {
     }
   }
 
+  Future<ProjectMaterialStockModel> fetchProjectMaterialStock({
+    int? projectId,
+  }) async {
+    try {
+      final response = await _dio.get(
+        '/warehouse/project-material-deliveries/project-stock',
+        queryParameters: <String, dynamic>{
+          if (projectId != null) 'project_id': projectId,
+        },
+      );
+
+      return ProjectMaterialStockModel.fromJson(_extractData(response.data));
+    } on DioException catch (error) {
+      throw ApiException.fromDio(
+        error,
+        fallbackMessage: 'Не удалось загрузить остатки материалов на объекте.',
+      );
+    }
+  }
+
   Future<ProjectMaterialDeliveryModel> fetchProjectMaterialDelivery(
     int deliveryId,
   ) async {
