@@ -575,6 +575,13 @@ class _RequestProcurementCard extends StatelessWidget {
               label: 'Принято',
               value: _formatDateTime(request.materialsReceivedAt!),
             ),
+          if (request.deliverySummary != null) ...[
+            const SizedBox(height: 4),
+            _DeliverySummaryBox(
+              summary: request.deliverySummary!,
+              unit: request.materialUnit,
+            ),
+          ],
           if (request.purchaseRequests.isNotEmpty) ...[
             const SizedBox(height: 4),
             Text(
@@ -670,6 +677,68 @@ class _RequestProcurementCard extends StatelessWidget {
               ).copyWith(color: theme.colorScheme.onSurfaceVariant),
             ),
           ],
+        ],
+      ),
+    );
+  }
+}
+
+class _DeliverySummaryBox extends StatelessWidget {
+  const _DeliverySummaryBox({required this.summary, this.unit});
+
+  final SiteRequestDeliverySummary summary;
+  final String? unit;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = _statusColor(summary.status);
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: color.withValues(alpha: 0.22)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.local_shipping_outlined, size: 20, color: color),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  summary.statusLabel ?? _deliveryStatusLabel(summary.status),
+                  style: AppTypography.bodyLarge(
+                    context,
+                  ).copyWith(color: color, fontWeight: FontWeight.w800),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 12,
+            runSpacing: 8,
+            children: [
+              _InfoLabel(
+                label:
+                    'Заказано ${_formatOptionalQuantity(summary.requestedQuantity, unit)}',
+              ),
+              _InfoLabel(
+                label:
+                    'Отправлено ${_formatOptionalQuantity(summary.shippedQuantity, unit)}',
+              ),
+              _InfoLabel(
+                label:
+                    'Принято ${_formatOptionalQuantity(summary.acceptedQuantity, unit)}',
+              ),
+              if ((summary.plannedDeliveryDate ?? '').trim().isNotEmpty)
+                _InfoLabel(label: 'План ${summary.plannedDeliveryDate}'),
+            ],
+          ),
         ],
       ),
     );
@@ -1198,6 +1267,7 @@ bool _hasProcurementSection(SiteRequestModel request) {
   return request.purchaseRequests.isNotEmpty ||
       request.supplierRequests.isNotEmpty ||
       request.purchaseOrders.isNotEmpty ||
+      request.deliverySummary != null ||
       request.materialReserved ||
       request.materialsReceived ||
       request.reservedQuantity != null ||
@@ -1258,6 +1328,22 @@ String _purchaseOrderStatusLabel(SiteRequestPurchaseOrderSummary item) {
     'cancelled' => 'Отменен',
     'approved' => 'Подтвержден',
     _ => item.status.isNotEmpty ? item.status : 'Без статуса',
+  };
+}
+
+String _deliveryStatusLabel(String status) {
+  return switch (status.trim().toLowerCase()) {
+    'requested' => 'Запрошено',
+    'processing' => 'В обработке',
+    'reserved' => 'Зарезервировано',
+    'preparing' => 'Готовится',
+    'in_transit' => 'В доставке',
+    'partially_delivered' => 'Частично принято',
+    'delivered' => 'Доставлено',
+    'accepted' => 'Принято',
+    'problem' => 'Проблема',
+    'cancelled' => 'Отменено',
+    _ => status,
   };
 }
 
@@ -1499,6 +1585,17 @@ bool _isUrgent(String priority) {
 
 String _formatQuantity(double value) {
   return value.toStringAsFixed(value.truncateToDouble() == value ? 0 : 2);
+}
+
+String _formatOptionalQuantity(double? value, String? unit) {
+  if (value == null) {
+    return 'не указано';
+  }
+
+  return [
+    _formatQuantity(value),
+    unit,
+  ].whereType<String>().where((item) => item.trim().isNotEmpty).join(' ');
 }
 
 String _formatDate(DateTime date) {

@@ -235,6 +235,47 @@ class SiteRequestSupplierRequestSummary {
   }
 }
 
+class SiteRequestDeliverySummary {
+  const SiteRequestDeliverySummary({
+    required this.status,
+    this.statusLabel,
+    this.statusColor,
+    this.requestedQuantity,
+    this.reservedQuantity,
+    this.shippedQuantity,
+    this.acceptedQuantity,
+    this.plannedDeliveryDate,
+    this.latestDeliveryId,
+    this.canReceive = false,
+  });
+
+  final String status;
+  final String? statusLabel;
+  final String? statusColor;
+  final double? requestedQuantity;
+  final double? reservedQuantity;
+  final double? shippedQuantity;
+  final double? acceptedQuantity;
+  final String? plannedDeliveryDate;
+  final int? latestDeliveryId;
+  final bool canReceive;
+
+  factory SiteRequestDeliverySummary.fromJson(Map<String, dynamic> json) {
+    return SiteRequestDeliverySummary(
+      status: json['status']?.toString() ?? '',
+      statusLabel: _cleanLabel(json['status_label']),
+      statusColor: json['status_color']?.toString(),
+      requestedQuantity: _asDouble(json['requested_quantity']),
+      reservedQuantity: _asDouble(json['reserved_quantity']),
+      shippedQuantity: _asDouble(json['shipped_quantity']),
+      acceptedQuantity: _asDouble(json['accepted_quantity']),
+      plannedDeliveryDate: json['planned_delivery_date']?.toString(),
+      latestDeliveryId: _asNullableInt(json['latest_delivery_id']),
+      canReceive: json['can_receive'] == true,
+    );
+  }
+}
+
 class SiteRequestModel {
   Id id = Isar.autoIncrement;
 
@@ -290,6 +331,7 @@ class SiteRequestModel {
   List<SiteRequestPurchaseRequestSummary> purchaseRequests = const [];
   List<SiteRequestSupplierRequestSummary> supplierRequests = const [];
   List<SiteRequestPurchaseOrderSummary> purchaseOrders = const [];
+  SiteRequestDeliverySummary? deliverySummary;
 
   SiteRequestModel();
 
@@ -375,6 +417,7 @@ class SiteRequestModel {
             : const <SiteRequestPurchaseOrderSummary>[];
     final user = json['user'];
     final assignedUser = json['assigned_user'];
+    final rawDeliverySummary = json['delivery_summary'] ?? json['deliverySummary'];
 
     return SiteRequestModel()
       ..serverId = _asInt(json['id'])
@@ -449,7 +492,14 @@ class SiteRequestModel {
       ..groupItems = groupItems
       ..purchaseRequests = purchaseRequests
       ..supplierRequests = supplierRequests
-      ..purchaseOrders = purchaseOrders;
+      ..purchaseOrders = purchaseOrders
+      ..deliverySummary = rawDeliverySummary is Map
+          ? SiteRequestDeliverySummary.fromJson(
+              rawDeliverySummary.map(
+                (key, value) => MapEntry(key.toString(), value),
+              ),
+            )
+          : null;
   }
 }
 

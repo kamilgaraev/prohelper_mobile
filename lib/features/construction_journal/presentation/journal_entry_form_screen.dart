@@ -28,6 +28,7 @@ class _JournalEntryFormScreenState
   late final TextEditingController _visitorsController;
   late final TextEditingController _qualityController;
   final List<_WorkVolumeInput> _workVolumes = [];
+  final List<_MaterialUsageInput> _materials = [];
   late DateTime _entryDate;
   ConstructionJournalEntryFormOptions? _options;
   int? _selectedEstimateId;
@@ -42,6 +43,9 @@ class _JournalEntryFormScreenState
 
   List<ConstructionJournalWorkTypeOption> get _workTypes =>
       _options?.workTypes ?? const [];
+
+  List<ConstructionJournalProjectMaterialOption> get _projectMaterials =>
+      _options?.projectMaterials ?? const [];
 
   List<ConstructionJournalEstimateItemOption> get _selectedEstimateItems {
     final estimate = _estimates.where((item) => item.id == _selectedEstimateId);
@@ -91,6 +95,9 @@ class _JournalEntryFormScreenState
     for (final volume in _workVolumes) {
       volume.dispose();
     }
+    for (final material in _materials) {
+      material.dispose();
+    }
     super.dispose();
   }
 
@@ -120,6 +127,8 @@ class _JournalEntryFormScreenState
           ),
           const SizedBox(height: 16),
           _buildWorkVolumes(),
+          const SizedBox(height: 16),
+          _buildMaterials(),
           const SizedBox(height: 16),
           _buildField(
             controller: _problemsController,
@@ -258,6 +267,59 @@ class _JournalEntryFormScreenState
     );
   }
 
+  Widget _buildMaterials() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Материалы объекта',
+          style: Theme.of(context).textTheme.titleMedium,
+        ),
+        const SizedBox(height: 8),
+        if (_projectMaterials.isEmpty)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 8),
+            child: Text(
+              'Принятых материалов по объекту пока нет. После приемки доставки они появятся в этом списке.',
+            ),
+          )
+        else
+          DropdownButtonFormField<int>(
+            value: null,
+            decoration: const InputDecoration(
+              labelText: 'Добавить принятый материал',
+              border: OutlineInputBorder(),
+            ),
+            items:
+                _projectMaterials
+                    .map(
+                      (material) => DropdownMenuItem<int>(
+                        value: material.deliveryId,
+                        child: Text(
+                          '${material.materialName} · ${_formatMaterialQuantity(material.availableQuantity)} ${material.measurementUnit}',
+                        ),
+                      ),
+                    )
+                    .toList(),
+            onChanged: _addProjectMaterial,
+          ),
+        ..._materials.asMap().entries.map(
+          (entry) => Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: _MaterialUsageCard(
+              input: entry.value,
+              onRemove: () {
+                setState(() {
+                  _materials.removeAt(entry.key).dispose();
+                });
+              },
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildEstimateItemPicker() {
     return Column(
       children: [
@@ -371,6 +433,25 @@ class _JournalEntryFormScreenState
     return found.isEmpty ? null : found.first;
   }
 
+  void _addProjectMaterial(int? deliveryId) {
+    if (deliveryId == null) {
+      return;
+    }
+
+    final selected = _projectMaterials.where(
+      (material) => material.deliveryId == deliveryId,
+    );
+
+    if (selected.isEmpty) {
+      return;
+    }
+
+    final material = selected.first;
+    setState(() {
+      _materials.add(_MaterialUsageInput.fromProjectMaterial(material));
+    });
+  }
+
   Future<void> _save({required bool isDraft}) async {
     if (_descriptionController.text.trim().isEmpty) {
       _showMessage('Добавьте описание работ.');
@@ -378,6 +459,7 @@ class _JournalEntryFormScreenState
     }
 
     final workVolumes = _normalizedWorkVolumes();
+    final materials = _normalizedMaterials();
     if (!isDraft && workVolumes.isEmpty) {
       _showMessage('Добавьте хотя бы один объем выполненных работ.');
       return;
@@ -401,6 +483,7 @@ class _JournalEntryFormScreenState
                 visitorsNotes: _visitorsController.text.trim(),
                 qualityNotes: _qualityController.text.trim(),
                 workVolumes: workVolumes,
+                materials: materials,
               )
               : await repository.createEntry(
                 journalId: widget.journalId,
@@ -412,6 +495,7 @@ class _JournalEntryFormScreenState
                 visitorsNotes: _visitorsController.text.trim(),
                 qualityNotes: _qualityController.text.trim(),
                 workVolumes: workVolumes,
+                materials: materials,
               );
 
       if (!isDraft) {
@@ -455,6 +539,29 @@ class _JournalEntryFormScreenState
           );
         })
         .whereType<ConstructionJournalWorkVolumeModel>()
+        .toList();
+  }
+
+  List<ConstructionJournalMaterialUsageModel> _normalizedMaterials() {
+    return _materials
+        .map((material) {
+          final quantity = double.tryParse(
+            material.quantityController.text.trim().replaceAll(',', '.'),
+          );
+
+          if (quantity == null || quantity <= 0) {
+            return null;
+          }
+
+          return ConstructionJournalMaterialUsageModel(
+            materialId: material.materialId,
+            materialName: material.materialName,
+            quantity: quantity,
+            measurementUnit: material.measurementUnit,
+            notes: material.notesController.text,
+          );
+        })
+        .whereType<ConstructionJournalMaterialUsageModel>()
         .toList();
   }
 
@@ -647,8 +754,126 @@ class _WorkVolumeInput {
   }
 }
 
+class _MaterialUsageCard extends StatelessWidget {
+  const _MaterialUsageCard({required this.input, required this.onRemove});
+
+  final _MaterialUsageInput input;
+  final VoidCallback onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    input.materialName,
+                    style: Theme.of(context).textTheme.titleSmall,
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'Удалить материал',
+                  onPressed: onRemove,
+                  icon: const Icon(Icons.delete_outline),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  flex: 2,
+                  child: TextField(
+                    controller: input.quantityController,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    inputFormatters: [
+                      FilteringTextInputFormatter.allow(RegExp(r'[0-9,.]')),
+                    ],
+                    decoration: const InputDecoration(
+                      labelText: 'Списано в работу',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: InputDecorator(
+                    decoration: const InputDecoration(
+                      labelText: 'Ед. изм.',
+                      border: OutlineInputBorder(),
+                    ),
+                    child: Text(input.measurementUnit),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: input.notesController,
+              decoration: const InputDecoration(
+                labelText: 'Примечание',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MaterialUsageInput {
+  _MaterialUsageInput({
+    required this.materialId,
+    required this.materialName,
+    required this.measurementUnit,
+    String quantity = '',
+    String notes = '',
+  }) : quantityController = TextEditingController(text: quantity),
+       notesController = TextEditingController(text: notes);
+
+  final int? materialId;
+  final String materialName;
+  final String measurementUnit;
+  final TextEditingController quantityController;
+  final TextEditingController notesController;
+
+  factory _MaterialUsageInput.fromProjectMaterial(
+    ConstructionJournalProjectMaterialOption material,
+  ) {
+    return _MaterialUsageInput(
+      materialId: material.materialId,
+      materialName: material.materialName,
+      measurementUnit: material.measurementUnit,
+      quantity:
+          material.availableQuantity == 0
+              ? ''
+              : _formatMaterialQuantity(material.availableQuantity),
+      notes: 'Материал принят на объект по поставке #${material.deliveryId}',
+    );
+  }
+
+  void dispose() {
+    quantityController.dispose();
+    notesController.dispose();
+  }
+}
+
 String _formatDate(DateTime date) {
   final day = date.day.toString().padLeft(2, '0');
   final month = date.month.toString().padLeft(2, '0');
   return '$day.$month.${date.year}';
+}
+
+String _formatMaterialQuantity(double value) {
+  return value.toStringAsFixed(value.truncateToDouble() == value ? 0 : 2);
 }

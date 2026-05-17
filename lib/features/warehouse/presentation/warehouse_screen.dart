@@ -14,6 +14,7 @@ import '../domain/warehouse_provider.dart';
 import 'warehouse_receipt_sheet.dart';
 import 'warehouse_scan_screen.dart';
 import 'warehouse_tasks_screen.dart';
+import 'project_material_deliveries_screen.dart';
 
 enum _MovementFilter {
   all('Все'),
@@ -147,6 +148,21 @@ class _WarehouseScreenState extends ConsumerState<WarehouseScreen> {
                 sliver: SliverToBoxAdapter(
                   child: _TaskQueueEntryCard(
                     onTap: () => _openTasksScreen(context, data),
+                  ),
+                ),
+              ),
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                sliver: SliverToBoxAdapter(
+                  child: _ProjectDeliveriesEntryCard(
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder:
+                              (_) => const ProjectMaterialDeliveriesScreen(),
+                        ),
+                      );
+                    },
                   ),
                 ),
               ),
@@ -538,6 +554,62 @@ class _TaskQueueEntryCard extends StatelessWidget {
           ),
           const SizedBox(width: 12),
           const Icon(Icons.chevron_right_rounded),
+        ],
+      ),
+    );
+  }
+}
+
+class _ProjectDeliveriesEntryCard extends StatelessWidget {
+  const _ProjectDeliveriesEntryCard({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return IndustrialCard(
+      onTap: onTap,
+      child: Row(
+        children: [
+          Container(
+            width: 52,
+            height: 52,
+            decoration: BoxDecoration(
+              color: AppColors.success.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: const Icon(
+              Icons.local_shipping_outlined,
+              color: AppColors.success,
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Материалы на объект',
+                  style: AppTypography.bodyLarge(
+                    context,
+                  ).copyWith(fontWeight: FontWeight.w800),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Отслеживай поставки из склада и закупок, принимай доставку на объект.',
+                  style: AppTypography.bodyMedium(
+                    context,
+                  ).copyWith(color: theme.colorScheme.onSurfaceVariant),
+                ),
+              ],
+            ),
+          ),
+          Icon(
+            Icons.chevron_right_rounded,
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
         ],
       ),
     );

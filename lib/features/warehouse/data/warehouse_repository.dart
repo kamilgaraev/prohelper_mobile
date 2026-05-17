@@ -6,6 +6,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/network/api_exception.dart';
 import '../../../core/network/dio_client.dart';
+import 'project_material_delivery_model.dart';
 import 'warehouse_scan_model.dart';
 import 'warehouse_summary_model.dart';
 
@@ -80,6 +81,67 @@ class WarehouseRepository {
       throw ApiException.fromDio(
         error,
         fallbackMessage: 'Не удалось найти материалы для оприходования.',
+      );
+    }
+  }
+
+  Future<List<ProjectMaterialDeliveryModel>> fetchProjectMaterialDeliveries({
+    int? projectId,
+  }) async {
+    try {
+      final response = await _dio.get(
+        '/warehouse/project-material-deliveries',
+        queryParameters: <String, dynamic>{
+          if (projectId != null) 'project_id': projectId,
+        },
+      );
+      final payload = _extractList(response.data);
+
+      return payload.map(ProjectMaterialDeliveryModel.fromJson).toList();
+    } on DioException catch (error) {
+      throw ApiException.fromDio(
+        error,
+        fallbackMessage: 'Не удалось загрузить ожидаемые материалы.',
+      );
+    }
+  }
+
+  Future<ProjectMaterialDeliveryModel> fetchProjectMaterialDelivery(
+    int deliveryId,
+  ) async {
+    try {
+      final response = await _dio.get(
+        '/warehouse/project-material-deliveries/$deliveryId',
+      );
+
+      return ProjectMaterialDeliveryModel.fromJson(_extractData(response.data));
+    } on DioException catch (error) {
+      throw ApiException.fromDio(
+        error,
+        fallbackMessage: 'Не удалось загрузить поставку материала.',
+      );
+    }
+  }
+
+  Future<ProjectMaterialDeliveryModel> receiveProjectMaterialDelivery({
+    required int deliveryId,
+    required double quantity,
+    String? notes,
+  }) async {
+    try {
+      final response = await _dio.post(
+        '/warehouse/project-material-deliveries/$deliveryId/receive',
+        data: <String, dynamic>{
+          'quantity': quantity,
+          if ((notes ?? '').trim().isNotEmpty) 'notes': notes!.trim(),
+        },
+      );
+
+      return ProjectMaterialDeliveryModel.fromJson(_extractData(response.data));
+    } on DioException catch (error) {
+      throw ApiException.fromDio(
+        error,
+        fallbackMessage: 'Не удалось подтвердить приемку материала.',
       );
     }
   }
@@ -361,6 +423,10 @@ class WarehouseRepository {
       payload = responseData['data'];
     } else {
       payload = responseData;
+    }
+
+    if (payload is Map<String, dynamic> && payload['items'] is List) {
+      payload = payload['items'];
     }
 
     if (payload is! List) {

@@ -264,10 +264,12 @@ class ConstructionJournalEntryFormOptions {
   const ConstructionJournalEntryFormOptions({
     required this.estimates,
     required this.workTypes,
+    this.projectMaterials = const [],
   });
 
   final List<ConstructionJournalEstimateOption> estimates;
   final List<ConstructionJournalWorkTypeOption> workTypes;
+  final List<ConstructionJournalProjectMaterialOption> projectMaterials;
 
   factory ConstructionJournalEntryFormOptions.fromJson(
     Map<String, dynamic> json,
@@ -291,7 +293,87 @@ class ConstructionJournalEntryFormOptions {
                 ),
               )
               .toList(),
+      projectMaterials:
+          (json['project_materials'] as List<dynamic>? ?? const [])
+              .whereType<Map>()
+              .map(
+                (material) => ConstructionJournalProjectMaterialOption.fromJson(
+                  material.map((key, value) => MapEntry(key.toString(), value)),
+                ),
+              )
+              .where((material) => material.materialId > 0)
+              .toList(),
     );
+  }
+}
+
+class ConstructionJournalProjectMaterialOption {
+  const ConstructionJournalProjectMaterialOption({
+    required this.deliveryId,
+    required this.materialId,
+    required this.materialName,
+    required this.availableQuantity,
+    required this.measurementUnit,
+    this.status,
+    this.acceptedAt,
+  });
+
+  final int deliveryId;
+  final int materialId;
+  final String materialName;
+  final double availableQuantity;
+  final String measurementUnit;
+  final String? status;
+  final String? acceptedAt;
+
+  factory ConstructionJournalProjectMaterialOption.fromJson(
+    Map<String, dynamic> json,
+  ) {
+    final measurementUnit = _asMap(json['measurement_unit']);
+
+    return ConstructionJournalProjectMaterialOption(
+      deliveryId:
+          (json['delivery_id'] as num?)?.toInt() ??
+          (json['project_material_delivery_id'] as num?)?.toInt() ??
+          0,
+      materialId: (json['material_id'] as num?)?.toInt() ?? 0,
+      materialName:
+          json['material_name'] as String? ?? json['name'] as String? ?? '',
+      availableQuantity: _parseNullableDouble(json['available_quantity']) ?? 0,
+      measurementUnit:
+          measurementUnit['short_name'] as String? ??
+          measurementUnit['name'] as String? ??
+          json['measurement_unit'] as String? ??
+          '',
+      status: json['status'] as String?,
+      acceptedAt: json['accepted_at'] as String?,
+    );
+  }
+}
+
+class ConstructionJournalMaterialUsageModel {
+  const ConstructionJournalMaterialUsageModel({
+    this.materialId,
+    required this.materialName,
+    required this.quantity,
+    required this.measurementUnit,
+    this.notes,
+  });
+
+  final int? materialId;
+  final String materialName;
+  final double quantity;
+  final String measurementUnit;
+  final String? notes;
+
+  Map<String, dynamic> toJson() {
+    return {
+      if (materialId != null) 'material_id': materialId,
+      'material_name': materialName,
+      'quantity': quantity,
+      'measurement_unit': measurementUnit,
+      if ((notes ?? '').trim().isNotEmpty) 'notes': notes!.trim(),
+    };
   }
 }
 

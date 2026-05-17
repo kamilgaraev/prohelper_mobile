@@ -228,6 +228,7 @@ class ConstructionJournalRepository {
     String? visitorsNotes,
     String? qualityNotes,
     List<ConstructionJournalWorkVolumeModel> workVolumes = const [],
+    List<ConstructionJournalMaterialUsageModel> materials = const [],
   }) async {
     try {
       final response = await _dio.post(
@@ -242,6 +243,7 @@ class ConstructionJournalRepository {
           'visitors_notes': visitorsNotes,
           'quality_notes': qualityNotes,
           'work_volumes': workVolumes.map((volume) => volume.toJson()).toList(),
+          'materials': materials.map((material) => material.toJson()).toList(),
         },
       );
 
@@ -267,6 +269,7 @@ class ConstructionJournalRepository {
     String? visitorsNotes,
     String? qualityNotes,
     List<ConstructionJournalWorkVolumeModel> workVolumes = const [],
+    List<ConstructionJournalMaterialUsageModel> materials = const [],
   }) async {
     try {
       final response = await _dio.put(
@@ -281,6 +284,7 @@ class ConstructionJournalRepository {
           'visitors_notes': visitorsNotes,
           'quality_notes': qualityNotes,
           'work_volumes': workVolumes.map((volume) => volume.toJson()).toList(),
+          'materials': materials.map((material) => material.toJson()).toList(),
         },
       );
 
