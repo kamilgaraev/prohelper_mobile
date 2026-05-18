@@ -4,6 +4,7 @@ import '../data/safety_model.dart';
 import '../data/safety_repository.dart';
 
 const _errorSentinel = Object();
+const _projectFilterSentinel = Object();
 
 class SafetyState {
   const SafetyState({
@@ -24,7 +25,7 @@ class SafetyState {
 
   SafetyState copyWith({
     bool? isLoading,
-    int? projectFilter,
+    Object? projectFilter = _projectFilterSentinel,
     List<SafetyWorkPermitModel>? activePermits,
     List<SafetyIncidentModel>? incidents,
     List<SafetyViolationModel>? violations,
@@ -32,7 +33,10 @@ class SafetyState {
   }) {
     return SafetyState(
       isLoading: isLoading ?? this.isLoading,
-      projectFilter: projectFilter ?? this.projectFilter,
+      projectFilter:
+          identical(projectFilter, _projectFilterSentinel)
+              ? this.projectFilter
+              : projectFilter as int?,
       activePermits: activePermits ?? this.activePermits,
       incidents: incidents ?? this.incidents,
       violations: violations ?? this.violations,
@@ -51,28 +55,30 @@ class SafetyNotifier extends StateNotifier<SafetyState> {
       return;
     }
 
-    state = state.copyWith(projectFilter: projectId);
+    state = state.copyWith(
+      projectFilter: projectId,
+      activePermits: const [],
+      incidents: const [],
+      violations: const [],
+      error: null,
+    );
   }
 
   Future<void> load() async {
     state = state.copyWith(isLoading: true, error: null);
 
     try {
-      final permits = await _repository.fetchActivePermits(
-        projectId: state.projectFilter,
-      );
-      final incidents = await _repository.fetchIncidents(
-        projectId: state.projectFilter,
-      );
-      final violations = await _repository.fetchViolations(
-        projectId: state.projectFilter,
-      );
+      final result = await Future.wait<Object>([
+        _repository.fetchActivePermits(projectId: state.projectFilter),
+        _repository.fetchIncidents(projectId: state.projectFilter),
+        _repository.fetchViolations(projectId: state.projectFilter),
+      ]);
 
       state = state.copyWith(
         isLoading: false,
-        activePermits: permits,
-        incidents: incidents,
-        violations: violations,
+        activePermits: result[0] as List<SafetyWorkPermitModel>,
+        incidents: result[1] as List<SafetyIncidentModel>,
+        violations: result[2] as List<SafetyViolationModel>,
       );
     } catch (error) {
       state = state.copyWith(isLoading: false, error: error.toString());

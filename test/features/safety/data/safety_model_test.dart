@@ -46,5 +46,30 @@ void main() {
       expect(violation.availableActions, ['resolve']);
       expect(violation.correctiveAction, 'Выдать СИЗ');
     });
+
+    test('parses incident immediate actions and flags', () {
+      final incident = SafetyIncidentModel.fromJson({
+        'id': 20,
+        'project_id': 7,
+        'incident_number': 'INC-7-001',
+        'title': 'Опасное условие',
+        'incident_type': 'unsafe_condition',
+        'severity': 'high',
+        'status': 'reported',
+        'status_label': 'Зарегистрировано',
+        'occurred_at': '2026-06-01T10:00:00Z',
+        'immediate_actions': 'Зона ограждена',
+        'problem_flags': [
+          {
+            'code': 'investigation_required',
+            'severity': 'warning',
+            'message': 'Требуется расследование',
+          },
+        ],
+      });
+
+      expect(incident.immediateActions, 'Зона ограждена');
+      expect(incident.problemFlags.single.code, 'investigation_required');
+    });
   });
 }

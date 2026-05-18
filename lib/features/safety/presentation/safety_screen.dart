@@ -25,7 +25,9 @@ class _SafetyScreenState extends ConsumerState<SafetyScreen> {
       final selectedProject = ref.read(projectsProvider).selectedProject;
       final notifier = ref.read(safetyProvider.notifier);
       notifier.syncProject(selectedProject?.serverId);
-      notifier.load();
+      if (selectedProject != null) {
+        notifier.load();
+      }
     });
   }
 
@@ -38,7 +40,9 @@ class _SafetyScreenState extends ConsumerState<SafetyScreen> {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         final notifier = ref.read(safetyProvider.notifier);
         notifier.syncProject(selectedProject?.serverId);
-        notifier.load();
+        if (selectedProject != null) {
+          notifier.load();
+        }
       });
     }
 
@@ -52,7 +56,10 @@ class _SafetyScreenState extends ConsumerState<SafetyScreen> {
           actions: [
             IconButton(
               tooltip: 'Обновить',
-              onPressed: () => ref.read(safetyProvider.notifier).load(),
+              onPressed:
+                  selectedProject == null
+                      ? null
+                      : () => ref.read(safetyProvider.notifier).load(),
               icon: const Icon(Icons.refresh_rounded),
             ),
           ],
@@ -66,7 +73,14 @@ class _SafetyScreenState extends ConsumerState<SafetyScreen> {
                   label: const Text('Запись'),
                 ),
         body:
-            state.isLoading &&
+            selectedProject == null
+                ? const AppStateView(
+                  icon: Icons.apartment_rounded,
+                  title: 'Выберите проект',
+                  description:
+                      'Записи охраны труда ведутся в контексте конкретного проекта.',
+                )
+                : state.isLoading &&
                     state.activePermits.isEmpty &&
                     state.incidents.isEmpty &&
                     state.violations.isEmpty
@@ -89,6 +103,11 @@ class _SafetyScreenState extends ConsumerState<SafetyScreen> {
                   child: ListView(
                     padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
                     children: [
+                      _ProjectContextCard(
+                        name: selectedProject.name,
+                        address: selectedProject.address,
+                      ),
+                      const SizedBox(height: 12),
                       _SummaryStrip(state: state),
                       const SizedBox(height: 12),
                       _PermitsSection(permits: state.activePermits),
@@ -117,160 +136,268 @@ class _SafetyScreenState extends ConsumerState<SafetyScreen> {
     final titleController = TextEditingController();
     final descriptionController = TextEditingController();
     final locationController = TextEditingController();
+    final immediateActionsController = TextEditingController();
+    final correctiveActionController = TextEditingController();
     var mode = 'incident';
     var severity = 'major';
+    DateTime? dueDate;
     var submitting = false;
 
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      builder:
-          (sheetContext) => StatefulBuilder(
-            builder:
-                (context, setSheetState) => Padding(
-                  padding: EdgeInsets.only(
-                    left: 16,
-                    right: 16,
-                    top: 20,
-                    bottom: MediaQuery.of(context).viewInsets.bottom + 20,
-                  ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Новая запись охраны труда',
-                        style: AppTypography.h2(context),
+    try {
+      await showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        builder:
+            (sheetContext) => StatefulBuilder(
+              builder:
+                  (context, setSheetState) => SafeArea(
+                    child: SingleChildScrollView(
+                      padding: EdgeInsets.only(
+                        left: 16,
+                        right: 16,
+                        top: 20,
+                        bottom: MediaQuery.of(context).viewInsets.bottom + 20,
                       ),
-                      const SizedBox(height: 16),
-                      SegmentedButton<String>(
-                        segments: const [
-                          ButtonSegment(
-                            value: 'incident',
-                            label: Text('Происшествие'),
-                            icon: Icon(Icons.report_problem_outlined),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Новая запись охраны труда',
+                            style: AppTypography.h2(context),
                           ),
-                          ButtonSegment(
-                            value: 'violation',
-                            label: Text('Нарушение'),
-                            icon: Icon(Icons.gpp_bad_outlined),
+                          const SizedBox(height: 4),
+                          Text(
+                            selectedProject.name,
+                            style: AppTypography.caption(context),
                           ),
-                        ],
-                        selected: {mode},
-                        onSelectionChanged:
-                            (value) => setSheetState(() => mode = value.first),
-                      ),
-                      const SizedBox(height: 12),
-                      TextField(
-                        controller: titleController,
-                        decoration: const InputDecoration(
-                          labelText: 'Название',
-                        ),
-                      ),
-                      TextField(
-                        controller: locationController,
-                        decoration: const InputDecoration(labelText: 'Локация'),
-                      ),
-                      DropdownButtonFormField<String>(
-                        value: severity,
-                        decoration: const InputDecoration(labelText: 'Тяжесть'),
-                        items: const [
-                          DropdownMenuItem(
-                            value: 'minor',
-                            child: Text('Низкая'),
+                          const SizedBox(height: 16),
+                          SegmentedButton<String>(
+                            segments: const [
+                              ButtonSegment(
+                                value: 'incident',
+                                label: Text('Происшествие'),
+                                icon: Icon(Icons.report_problem_outlined),
+                              ),
+                              ButtonSegment(
+                                value: 'violation',
+                                label: Text('Нарушение'),
+                                icon: Icon(Icons.gpp_bad_outlined),
+                              ),
+                            ],
+                            selected: {mode},
+                            onSelectionChanged:
+                                (value) =>
+                                    setSheetState(() => mode = value.first),
                           ),
-                          DropdownMenuItem(
-                            value: 'major',
-                            child: Text('Серьезная'),
-                          ),
-                          DropdownMenuItem(
-                            value: 'high',
-                            child: Text('Высокая'),
-                          ),
-                          DropdownMenuItem(
-                            value: 'critical',
-                            child: Text('Критичная'),
-                          ),
-                        ],
-                        onChanged:
-                            (value) => setSheetState(
-                              () => severity = value ?? 'major',
+                          const SizedBox(height: 12),
+                          TextField(
+                            controller: titleController,
+                            textInputAction: TextInputAction.next,
+                            decoration: const InputDecoration(
+                              labelText: 'Название',
                             ),
-                      ),
-                      TextField(
-                        controller: descriptionController,
-                        minLines: 3,
-                        maxLines: 5,
-                        decoration: const InputDecoration(
-                          labelText: 'Описание',
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      FilledButton(
-                        onPressed:
-                            submitting
-                                ? null
-                                : () async {
-                                  final title = titleController.text.trim();
-                                  if (title.isEmpty) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(
-                                        content: Text('Укажите название'),
-                                      ),
-                                    );
-                                    return;
-                                  }
+                          ),
+                          TextField(
+                            controller: locationController,
+                            textInputAction: TextInputAction.next,
+                            decoration: const InputDecoration(
+                              labelText: 'Локация',
+                            ),
+                          ),
+                          DropdownButtonFormField<String>(
+                            value: severity,
+                            decoration: const InputDecoration(
+                              labelText: 'Тяжесть',
+                            ),
+                            items: const [
+                              DropdownMenuItem(
+                                value: 'minor',
+                                child: Text('Низкая'),
+                              ),
+                              DropdownMenuItem(
+                                value: 'major',
+                                child: Text('Серьезная'),
+                              ),
+                              DropdownMenuItem(
+                                value: 'high',
+                                child: Text('Высокая'),
+                              ),
+                              DropdownMenuItem(
+                                value: 'critical',
+                                child: Text('Критичная'),
+                              ),
+                            ],
+                            onChanged:
+                                (value) => setSheetState(
+                                  () => severity = value ?? 'major',
+                                ),
+                          ),
+                          TextField(
+                            controller: descriptionController,
+                            minLines: 3,
+                            maxLines: 5,
+                            decoration: const InputDecoration(
+                              labelText: 'Описание',
+                            ),
+                          ),
+                          if (mode == 'incident') ...[
+                            TextField(
+                              controller: immediateActionsController,
+                              minLines: 2,
+                              maxLines: 4,
+                              decoration: const InputDecoration(
+                                labelText: 'Немедленные меры',
+                              ),
+                            ),
+                          ] else ...[
+                            const SizedBox(height: 8),
+                            OutlinedButton.icon(
+                              onPressed: () async {
+                                final selected = await showDatePicker(
+                                  context: context,
+                                  firstDate: DateTime.now(),
+                                  lastDate: DateTime.now().add(
+                                    const Duration(days: 365),
+                                  ),
+                                  initialDate: dueDate ?? DateTime.now(),
+                                );
 
-                                  setSheetState(() => submitting = true);
-                                  try {
-                                    final data = {
-                                      'project_id': selectedProject.serverId,
-                                      'title': title,
-                                      'severity': severity,
-                                      if (locationController.text
-                                          .trim()
-                                          .isNotEmpty)
-                                        'location_name':
-                                            locationController.text.trim(),
-                                      if (descriptionController.text
-                                          .trim()
-                                          .isNotEmpty)
-                                        'description':
-                                            descriptionController.text.trim(),
-                                    };
+                                if (selected != null) {
+                                  setSheetState(() => dueDate = selected);
+                                }
+                              },
+                              icon: const Icon(Icons.event_outlined),
+                              label: Text(
+                                dueDate == null
+                                    ? 'Срок устранения'
+                                    : 'Срок: ${_formatDate(_apiDate(dueDate!))}',
+                              ),
+                            ),
+                            TextField(
+                              controller: correctiveActionController,
+                              minLines: 2,
+                              maxLines: 4,
+                              decoration: const InputDecoration(
+                                labelText: 'Что нужно сделать',
+                              ),
+                            ),
+                          ],
+                          const SizedBox(height: 16),
+                          SizedBox(
+                            width: double.infinity,
+                            child: FilledButton(
+                              onPressed:
+                                  submitting
+                                      ? null
+                                      : () async {
+                                        final title =
+                                            titleController.text.trim();
+                                        if (title.isEmpty) {
+                                          ScaffoldMessenger.of(
+                                            context,
+                                          ).showSnackBar(
+                                            const SnackBar(
+                                              content: Text(
+                                                'Укажите название',
+                                              ),
+                                            ),
+                                          );
+                                          return;
+                                        }
 
-                                    if (mode == 'incident') {
-                                      await ref
-                                          .read(safetyProvider.notifier)
-                                          .createIncident({
-                                            ...data,
-                                            'incident_type': 'unsafe_condition',
-                                            'occurred_at':
-                                                DateTime.now()
-                                                    .toIso8601String(),
-                                          });
-                                    } else {
-                                      await ref
-                                          .read(safetyProvider.notifier)
-                                          .createViolation(data);
-                                    }
+                                        setSheetState(() => submitting = true);
+                                        try {
+                                          final data = {
+                                            'project_id':
+                                                selectedProject.serverId,
+                                            'title': title,
+                                            'severity': severity,
+                                            'metadata': const {
+                                              'source': 'mobile_field_report',
+                                            },
+                                            if (locationController.text
+                                                .trim()
+                                                .isNotEmpty)
+                                              'location_name':
+                                                  locationController.text
+                                                      .trim(),
+                                            if (descriptionController.text
+                                                .trim()
+                                                .isNotEmpty)
+                                              'description':
+                                                  descriptionController.text
+                                                      .trim(),
+                                          };
 
-                                    if (sheetContext.mounted) {
-                                      Navigator.pop(sheetContext);
-                                    }
-                                  } finally {
-                                    if (context.mounted) {
-                                      setSheetState(() => submitting = false);
-                                    }
-                                  }
-                                },
-                        child: Text(submitting ? 'Сохранение...' : 'Сохранить'),
+                                          if (mode == 'incident') {
+                                            await ref
+                                                .read(safetyProvider.notifier)
+                                                .createIncident({
+                                                  ...data,
+                                                  'incident_type':
+                                                      'unsafe_condition',
+                                                  'occurred_at':
+                                                      DateTime.now()
+                                                          .toIso8601String(),
+                                                  if (immediateActionsController
+                                                      .text
+                                                      .trim()
+                                                      .isNotEmpty)
+                                                    'immediate_actions':
+                                                        immediateActionsController
+                                                            .text
+                                                            .trim(),
+                                                });
+                                          } else {
+                                            await ref
+                                                .read(safetyProvider.notifier)
+                                                .createViolation({
+                                                  ...data,
+                                                  if (dueDate != null)
+                                                    'due_date': _apiDate(
+                                                      dueDate!,
+                                                    ),
+                                                  if (correctiveActionController
+                                                      .text
+                                                      .trim()
+                                                      .isNotEmpty)
+                                                    'corrective_action':
+                                                        correctiveActionController
+                                                            .text
+                                                            .trim(),
+                                                });
+                                          }
+
+                                          if (sheetContext.mounted) {
+                                            Navigator.pop(sheetContext);
+                                          }
+                                        } finally {
+                                          if (context.mounted) {
+                                            setSheetState(
+                                              () => submitting = false,
+                                            );
+                                          }
+                                        }
+                                      },
+                              child: Text(
+                                submitting ? 'Сохранение...' : 'Сохранить',
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
-                    ],
+                    ),
                   ),
-                ),
-          ),
-    );
+            ),
+      );
+    } finally {
+      titleController.dispose();
+      descriptionController.dispose();
+      locationController.dispose();
+      immediateActionsController.dispose();
+      correctiveActionController.dispose();
+    }
   }
 
   Future<void> _showResolveSheet(
@@ -280,83 +407,99 @@ class _SafetyScreenState extends ConsumerState<SafetyScreen> {
     final commentController = TextEditingController();
     var submitting = false;
 
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      builder:
-          (sheetContext) => StatefulBuilder(
-            builder:
-                (context, setSheetState) => Padding(
-                  padding: EdgeInsets.only(
-                    left: 16,
-                    right: 16,
-                    top: 20,
-                    bottom: MediaQuery.of(context).viewInsets.bottom + 20,
-                  ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Устранить нарушение',
-                        style: AppTypography.h2(context),
+    try {
+      await showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        builder:
+            (sheetContext) => StatefulBuilder(
+              builder:
+                  (context, setSheetState) => SafeArea(
+                    child: SingleChildScrollView(
+                      padding: EdgeInsets.only(
+                        left: 16,
+                        right: 16,
+                        top: 20,
+                        bottom: MediaQuery.of(context).viewInsets.bottom + 20,
                       ),
-                      const SizedBox(height: 8),
-                      Text(
-                        violation.title,
-                        style: AppTypography.bodyMedium(context),
-                      ),
-                      const SizedBox(height: 16),
-                      TextField(
-                        controller: commentController,
-                        minLines: 3,
-                        maxLines: 5,
-                        decoration: const InputDecoration(
-                          labelText: 'Что сделано',
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      FilledButton(
-                        onPressed:
-                            submitting
-                                ? null
-                                : () async {
-                                  final comment = commentController.text.trim();
-                                  if (comment.isEmpty) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(
-                                        content: Text(
-                                          'Укажите результат устранения',
-                                        ),
-                                      ),
-                                    );
-                                    return;
-                                  }
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Устранить нарушение',
+                            style: AppTypography.h2(context),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            violation.title,
+                            style: AppTypography.bodyMedium(context),
+                          ),
+                          const SizedBox(height: 16),
+                          TextField(
+                            controller: commentController,
+                            minLines: 3,
+                            maxLines: 5,
+                            decoration: const InputDecoration(
+                              labelText: 'Что сделано',
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          SizedBox(
+                            width: double.infinity,
+                            child: FilledButton(
+                              onPressed:
+                                  submitting
+                                      ? null
+                                      : () async {
+                                        final comment =
+                                            commentController.text.trim();
+                                        if (comment.isEmpty) {
+                                          ScaffoldMessenger.of(
+                                            context,
+                                          ).showSnackBar(
+                                            const SnackBar(
+                                              content: Text(
+                                                'Укажите результат устранения',
+                                              ),
+                                            ),
+                                          );
+                                          return;
+                                        }
 
-                                  setSheetState(() => submitting = true);
-                                  try {
-                                    await ref
-                                        .read(safetyProvider.notifier)
-                                        .resolveViolation(
-                                          violation.id,
-                                          comment,
-                                        );
-                                    if (sheetContext.mounted) {
-                                      Navigator.pop(sheetContext);
-                                    }
-                                  } finally {
-                                    if (context.mounted) {
-                                      setSheetState(() => submitting = false);
-                                    }
-                                  }
-                                },
-                        child: Text(submitting ? 'Сохранение...' : 'Сохранить'),
+                                        setSheetState(() => submitting = true);
+                                        try {
+                                          await ref
+                                              .read(safetyProvider.notifier)
+                                              .resolveViolation(
+                                                violation.id,
+                                                comment,
+                                              );
+                                          if (sheetContext.mounted) {
+                                            Navigator.pop(sheetContext);
+                                          }
+                                        } finally {
+                                          if (context.mounted) {
+                                            setSheetState(
+                                              () => submitting = false,
+                                            );
+                                          }
+                                        }
+                                      },
+                              child: Text(
+                                submitting ? 'Сохранение...' : 'Сохранить',
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
-                    ],
+                    ),
                   ),
-                ),
-          ),
-    );
+            ),
+      );
+    } finally {
+      commentController.dispose();
+    }
   }
 }
 
@@ -373,33 +516,116 @@ class _SummaryStrip extends StatelessWidget {
         state.violations
             .where((violation) => violation.status == 'open')
             .length;
+    final riskFlags = [
+      ...state.activePermits.expand((permit) => permit.problemFlags),
+      ...state.incidents.expand((incident) => incident.problemFlags),
+      ...state.violations.expand((violation) => violation.problemFlags),
+    ];
 
-    return Row(
+    return Column(
       children: [
-        Expanded(
-          child: _MetricCard(
-            label: 'Допуски',
-            value: state.activePermits.length.toString(),
-            icon: Icons.assignment_turned_in_outlined,
-          ),
+        Row(
+          children: [
+            Expanded(
+              child: _MetricCard(
+                label: 'Допуски',
+                value: state.activePermits.length.toString(),
+                icon: Icons.assignment_turned_in_outlined,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _MetricCard(
+                label: 'Происшествия',
+                value: openIncidents.toString(),
+                icon: Icons.report_problem_outlined,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _MetricCard(
+                label: 'Нарушения',
+                value: openViolations.toString(),
+                icon: Icons.gpp_bad_outlined,
+              ),
+            ),
+          ],
         ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: _MetricCard(
-            label: 'Происшествия',
-            value: openIncidents.toString(),
-            icon: Icons.report_problem_outlined,
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: _MetricCard(
-            label: 'Нарушения',
-            value: openViolations.toString(),
-            icon: Icons.gpp_bad_outlined,
-          ),
-        ),
+        if (riskFlags.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          _RiskBanner(flags: riskFlags),
+        ],
       ],
+    );
+  }
+}
+
+class _ProjectContextCard extends StatelessWidget {
+  const _ProjectContextCard({required this.name, this.address});
+
+  final String name;
+  final String? address;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return ProCard(
+      child: Row(
+        children: [
+          Icon(Icons.apartment_rounded, color: theme.colorScheme.primary),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(name, style: AppTypography.bodyLarge(context)),
+                if (address != null && address!.trim().isNotEmpty)
+                  Text(address!, style: AppTypography.caption(context)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RiskBanner extends StatelessWidget {
+  const _RiskBanner({required this.flags});
+
+  final List<SafetyProblemFlagModel> flags;
+
+  @override
+  Widget build(BuildContext context) {
+    final criticalCount =
+        flags.where((flag) => flag.severity == 'critical').length;
+    final theme = Theme.of(context);
+
+    return ProCard(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            criticalCount > 0
+                ? Icons.priority_high_rounded
+                : Icons.warning_amber_rounded,
+            color:
+                criticalCount > 0
+                    ? theme.colorScheme.error
+                    : theme.colorScheme.tertiary,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              criticalCount > 0
+                  ? 'Критичные риски: $criticalCount'
+                  : 'Есть предупреждения по охране труда',
+              style: AppTypography.bodyMedium(context),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -520,6 +746,23 @@ class _PermitCard extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(permit.permitNumber, style: AppTypography.caption(context)),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _InfoChip(
+                icon: Icons.shield_outlined,
+                label: _riskLabel(permit.riskLevel),
+              ),
+              if (permit.projectName != null)
+                _InfoChip(
+                  icon: Icons.apartment_rounded,
+                  label: permit.projectName!,
+                ),
+            ],
+          ),
+          const SizedBox(height: 8),
           if (permit.locationName != null)
             Text(
               permit.locationName!,
@@ -529,6 +772,7 @@ class _PermitCard extends StatelessWidget {
             'Действует до: ${_formatDate(permit.validUntil)}',
             style: AppTypography.bodyMedium(context),
           ),
+          _ProblemFlags(flags: permit.problemFlags),
         ],
       ),
     );
@@ -553,6 +797,23 @@ class _IncidentCard extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(incident.incidentNumber, style: AppTypography.caption(context)),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _InfoChip(
+                icon: Icons.speed_rounded,
+                label: _severityLabel(incident.severity),
+              ),
+              if (incident.locationName != null)
+                _InfoChip(
+                  icon: Icons.place_outlined,
+                  label: incident.locationName!,
+                ),
+            ],
+          ),
+          const SizedBox(height: 8),
           Text(
             'Дата: ${_formatDate(incident.occurredAt)}',
             style: AppTypography.bodyMedium(context),
@@ -562,6 +823,12 @@ class _IncidentCard extends StatelessWidget {
               incident.description!,
               style: AppTypography.bodyMedium(context),
             ),
+          if (incident.immediateActions != null)
+            Text(
+              'Немедленные меры: ${incident.immediateActions!}',
+              style: AppTypography.bodyMedium(context),
+            ),
+          _ProblemFlags(flags: incident.problemFlags),
         ],
       ),
     );
@@ -590,9 +857,31 @@ class _ViolationCard extends StatelessWidget {
             violation.violationNumber,
             style: AppTypography.caption(context),
           ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _InfoChip(
+                icon: Icons.speed_rounded,
+                label: _severityLabel(violation.severity),
+              ),
+              if (violation.locationName != null)
+                _InfoChip(
+                  icon: Icons.place_outlined,
+                  label: violation.locationName!,
+                ),
+            ],
+          ),
+          const SizedBox(height: 8),
           if (violation.dueDate != null)
             Text(
               'Срок: ${_formatDate(violation.dueDate!)}',
+              style: AppTypography.bodyMedium(context),
+            ),
+          if (violation.description != null)
+            Text(
+              violation.description!,
               style: AppTypography.bodyMedium(context),
             ),
           if (violation.correctiveAction != null)
@@ -600,6 +889,7 @@ class _ViolationCard extends StatelessWidget {
               violation.correctiveAction!,
               style: AppTypography.bodyMedium(context),
             ),
+          _ProblemFlags(flags: violation.problemFlags),
           if (violation.availableActions.contains('resolve')) ...[
             const SizedBox(height: 12),
             Align(
@@ -648,6 +938,74 @@ class _CardHeader extends StatelessWidget {
         const SizedBox(width: 8),
         Chip(label: Text(label), visualDensity: VisualDensity.compact),
       ],
+    );
+  }
+}
+
+class _InfoChip extends StatelessWidget {
+  const _InfoChip({required this.icon, required this.label});
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Chip(
+      avatar: Icon(icon, size: 16),
+      label: Text(label),
+      visualDensity: VisualDensity.compact,
+    );
+  }
+}
+
+class _ProblemFlags extends StatelessWidget {
+  const _ProblemFlags({required this.flags});
+
+  final List<SafetyProblemFlagModel> flags;
+
+  @override
+  Widget build(BuildContext context) {
+    if (flags.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    final theme = Theme.of(context);
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children:
+            flags
+                .map(
+                  (flag) => Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(
+                          flag.severity == 'critical'
+                              ? Icons.error_outline_rounded
+                              : Icons.warning_amber_rounded,
+                          size: 18,
+                          color:
+                              flag.severity == 'critical'
+                                  ? theme.colorScheme.error
+                                  : theme.colorScheme.tertiary,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            flag.message,
+                            style: AppTypography.bodyMedium(context),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+                .toList(),
+      ),
     );
   }
 }
@@ -712,4 +1070,28 @@ String _formatDate(String value) {
   }
 
   return '${parsed.day.toString().padLeft(2, '0')}.${parsed.month.toString().padLeft(2, '0')}.${parsed.year}';
+}
+
+String _apiDate(DateTime value) {
+  return '${value.year.toString().padLeft(4, '0')}-${value.month.toString().padLeft(2, '0')}-${value.day.toString().padLeft(2, '0')}';
+}
+
+String _severityLabel(String value) {
+  return switch (value) {
+    'minor' => 'Низкая',
+    'major' => 'Серьезная',
+    'high' => 'Высокая',
+    'critical' => 'Критичная',
+    _ => value,
+  };
+}
+
+String _riskLabel(String value) {
+  return switch (value) {
+    'low' => 'Низкий риск',
+    'medium' => 'Средний риск',
+    'high' => 'Высокий риск',
+    'critical' => 'Критичный риск',
+    _ => value,
+  };
 }

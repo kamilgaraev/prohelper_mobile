@@ -81,6 +81,7 @@ class SafetyIncidentModel {
     required this.occurredAt,
     this.locationName,
     this.description,
+    this.immediateActions,
     this.problemFlags = const [],
   });
 
@@ -95,6 +96,7 @@ class SafetyIncidentModel {
   final String occurredAt;
   final String? locationName;
   final String? description;
+  final String? immediateActions;
   final List<SafetyProblemFlagModel> problemFlags;
 
   factory SafetyIncidentModel.fromJson(Map<String, dynamic> json) {
@@ -110,6 +112,7 @@ class SafetyIncidentModel {
       occurredAt: _asString(json['occurred_at']),
       locationName: _asNullableString(json['location_name']),
       description: _asNullableString(json['description']),
+      immediateActions: _asNullableString(json['immediate_actions']),
       problemFlags: _flags(json['problem_flags']),
     );
   }
