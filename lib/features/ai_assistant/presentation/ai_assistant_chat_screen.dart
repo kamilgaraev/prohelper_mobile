@@ -1,5 +1,6 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/network/api_exception.dart';
 import '../../../core/theme/app_typography.dart';
@@ -164,6 +165,35 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
     });
   }
 
+  Future<void> _openReportArtifact(AiAssistantArtifact artifact) async {
+    final rawUrl = artifact.trustedUrl;
+    final uri = Uri.tryParse(rawUrl ?? '');
+
+    if (uri == null) {
+      _showSnackBar('Ссылка на отчет недоступна.');
+      return;
+    }
+
+    try {
+      final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!opened) {
+        _showSnackBar('Не удалось открыть отчет.');
+      }
+    } catch (_) {
+      _showSnackBar('Не удалось открыть отчет.');
+    }
+  }
+
+  void _showSnackBar(String message) {
+    if (!mounted) {
+      return;
+    }
+
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -268,6 +298,12 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
 
                         final message = _messages[index];
                         final isUser = message.isUser;
+                        final reportArtifacts =
+                            isUser
+                                ? const <AiAssistantArtifact>[]
+                                : message.artifacts
+                                    .where((artifact) => artifact.isReport)
+                                    .toList(growable: false);
 
                         return Align(
                           alignment:
@@ -290,14 +326,39 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
                                           .surfaceContainerHighest,
                               borderRadius: BorderRadius.circular(18),
                             ),
-                            child: Text(
-                              message.content,
-                              style: AppTypography.bodyMedium(context).copyWith(
-                                color:
-                                    isUser
-                                        ? theme.colorScheme.onPrimary
-                                        : theme.colorScheme.onSurface,
-                              ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (message.content.trim().isNotEmpty)
+                                  Text(
+                                    message.content,
+                                    style: AppTypography.bodyMedium(
+                                      context,
+                                    ).copyWith(
+                                      color:
+                                          isUser
+                                              ? theme.colorScheme.onPrimary
+                                              : theme.colorScheme.onSurface,
+                                    ),
+                                  ),
+                                if (reportArtifacts.isNotEmpty)
+                                  ...reportArtifacts.map(
+                                    (artifact) => Padding(
+                                      padding: EdgeInsets.only(
+                                        top:
+                                            message.content.trim().isEmpty
+                                                ? 0
+                                                : 12,
+                                      ),
+                                      child: _ReportArtifactCard(
+                                        artifact: artifact,
+                                        onOpen:
+                                            () => _openReportArtifact(artifact),
+                                      ),
+                                    ),
+                                  ),
+                              ],
                             ),
                           ),
                         );
@@ -334,6 +395,189 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
       ),
     );
   }
+}
+
+class _ReportArtifactCard extends StatelessWidget {
+  const _ReportArtifactCard({required this.artifact, required this.onOpen});
+
+  final AiAssistantArtifact artifact;
+  final VoidCallback onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final url = artifact.trustedUrl;
+    final rows = _artifactRows(artifact);
+
+    return Material(
+      color: theme.colorScheme.surface,
+      borderRadius: BorderRadius.circular(16),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(
+                  Icons.description_outlined,
+                  color: theme.colorScheme.primary,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        artifact.displayTitle,
+                        style: AppTypography.bodyMedium(
+                          context,
+                        ).copyWith(fontWeight: FontWeight.w700),
+                      ),
+                      const SizedBox(height: 6),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        children: [
+                          Chip(
+                            label: Text(_reportTypeLabel(artifact.reportType)),
+                            visualDensity: VisualDensity.compact,
+                          ),
+                          Chip(
+                            label: Text(_artifactTypeLabel(artifact)),
+                            visualDensity: VisualDensity.compact,
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            if (rows.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children:
+                    rows
+                        .map(
+                          (row) => Chip(
+                            label: Text('${row.label}: ${row.value}'),
+                            visualDensity: VisualDensity.compact,
+                          ),
+                        )
+                        .toList(),
+              ),
+            ],
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: url == null ? null : onOpen,
+                icon: const Icon(Icons.download_rounded),
+                label: Text(url == null ? 'Файл недоступен' : 'Открыть отчет'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ArtifactRow {
+  const _ArtifactRow(this.label, this.value);
+
+  final String label;
+  final String value;
+}
+
+List<_ArtifactRow> _artifactRows(AiAssistantArtifact artifact) {
+  final rows = <_ArtifactRow>[];
+  final dateFrom = _dateLabel(artifact.filters['date_from']);
+  final dateTo = _dateLabel(artifact.filters['date_to']);
+
+  if (dateFrom != null || dateTo != null) {
+    rows.add(
+      _ArtifactRow(
+        'Период',
+        [dateFrom, dateTo].whereType<String>().join(' - '),
+      ),
+    );
+  }
+
+  const labels = {
+    'project_id': 'Проект',
+    'warehouse_id': 'Склад',
+    'contractor_id': 'Подрядчик',
+    'user_id': 'Сотрудник',
+  };
+
+  labels.forEach((key, label) {
+    final value = artifact.filters[key];
+    if (value is String || value is num) {
+      rows.add(_ArtifactRow(label, value.toString()));
+    }
+  });
+
+  final expiresAt = _dateLabel(artifact.expiresAt);
+  if (expiresAt != null) {
+    rows.add(_ArtifactRow('Доступен до', expiresAt));
+  }
+
+  return rows;
+}
+
+String _reportTypeLabel(String? value) {
+  return switch (value) {
+    'project_profitability' => 'Рентабельность',
+    'work_completion' => 'Выполнение работ',
+    'material_movements' => 'Движение материалов',
+    'contractor_settlements' => 'Расчеты с подрядчиками',
+    'warehouse_stock' => 'Остатки склада',
+    'time_tracking' => 'Трудозатраты',
+    'contract_payments' => 'Платежи по договорам',
+    'project_timelines' => 'График работ',
+    _ => 'Готовый отчет',
+  };
+}
+
+String _artifactTypeLabel(AiAssistantArtifact artifact) {
+  final raw = (artifact.type ?? artifact.mimeType ?? '').toLowerCase();
+
+  if (raw.contains('pdf')) {
+    return 'PDF';
+  }
+
+  if (raw.contains('excel') ||
+      raw.contains('spreadsheet') ||
+      raw.contains('xls')) {
+    return 'Excel';
+  }
+
+  return 'Файл';
+}
+
+String? _dateLabel(Object? value) {
+  final raw = value?.toString();
+  if (raw == null || raw.trim().isEmpty) {
+    return null;
+  }
+
+  final match = RegExp(r'^(\d{4})-(\d{2})-(\d{2})').firstMatch(raw);
+  if (match != null) {
+    return '${match.group(3)}.${match.group(2)}.${match.group(1)}';
+  }
+
+  final parsed = DateTime.tryParse(raw);
+  if (parsed == null) {
+    return null;
+  }
+
+  return '${parsed.day.toString().padLeft(2, '0')}.${parsed.month.toString().padLeft(2, '0')}.${parsed.year}';
 }
 
 const _quickPrompts = [
