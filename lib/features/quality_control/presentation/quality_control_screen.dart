@@ -112,6 +112,7 @@ class _QualityControlScreenState extends ConsumerState<QualityControlScreen> {
                             padding: const EdgeInsets.only(bottom: 12),
                             child: _QualityDefectCard(
                               defect: defect,
+                              onOpen: () => _showDefectDetail(context, defect),
                               onStart:
                                   () => _submitAction(
                                     context,
@@ -330,6 +331,52 @@ class _QualityControlScreenState extends ConsumerState<QualityControlScreen> {
     );
   }
 
+  Future<void> _showDefectDetail(
+    BuildContext context,
+    QualityDefectModel defect,
+  ) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder:
+          (sheetContext) => SafeArea(
+            child: FutureBuilder<QualityDefectModel>(
+              future: ref
+                  .read(qualityControlProvider.notifier)
+                  .fetchDefect(defect.id),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState != ConnectionState.done) {
+                  return const AppLoadingState(
+                    message: 'Загружаем замечание',
+                    minHeight: 260,
+                  );
+                }
+
+                if (snapshot.hasError || !snapshot.hasData) {
+                  return AppErrorState(
+                    title: 'Не удалось загрузить замечание',
+                    description: snapshot.error?.toString(),
+                    minHeight: 260,
+                  );
+                }
+
+                final detail = snapshot.data!;
+
+                return SingleChildScrollView(
+                  padding: EdgeInsets.only(
+                    left: 16,
+                    right: 16,
+                    top: 20,
+                    bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+                  ),
+                  child: _QualityDefectDetail(defect: detail),
+                );
+              },
+            ),
+          ),
+    );
+  }
+
   Future<void> _submitAction(
     BuildContext context,
     QualityDefectModel defect,
@@ -493,6 +540,22 @@ class _SummaryTile extends StatelessWidget {
   }
 }
 
+class _InfoChip extends StatelessWidget {
+  const _InfoChip({required this.icon, required this.label});
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Chip(
+      avatar: Icon(icon, size: 16),
+      label: Text(label),
+      visualDensity: VisualDensity.compact,
+    );
+  }
+}
+
 class _QualityFilterBar extends StatelessWidget {
   const _QualityFilterBar({
     required this.state,
@@ -560,14 +623,186 @@ class _QualityFilterBar extends StatelessWidget {
   }
 }
 
+class _QualityDefectDetail extends StatelessWidget {
+  const _QualityDefectDetail({required this.defect});
+
+  final QualityDefectModel defect;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Замечание качества', style: AppTypography.h2(context)),
+        const SizedBox(height: 6),
+        Text(defect.title, style: AppTypography.bodyLarge(context)),
+        const SizedBox(height: 12),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            _StatusBadge(status: defect.status, label: defect.statusLabel),
+            _InfoChip(
+              icon: Icons.confirmation_number_outlined,
+              label: defect.defectNumber,
+            ),
+            _InfoChip(
+              icon: Icons.fact_check_outlined,
+              label:
+                  defect.inspectionRequired
+                      ? 'Проверка требуется'
+                      : 'Проверка не требуется',
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        _QualityDetailLine(label: 'Критичность', value: _severityText(defect)),
+        if (defect.projectName.isNotEmpty)
+          _QualityDetailLine(label: 'Проект', value: defect.projectName),
+        if (defect.assignedUserName.isNotEmpty)
+          _QualityDetailLine(
+            label: 'Ответственный',
+            value: defect.assignedUserName,
+          ),
+        if (defect.locationName?.isNotEmpty == true)
+          _QualityDetailLine(label: 'Локация', value: defect.locationName!),
+        if (defect.dueDate?.isNotEmpty == true)
+          _QualityDetailLine(
+            label: 'Срок',
+            value: _formatQualityDate(defect.dueDate!),
+          ),
+        if (defect.description?.isNotEmpty == true) ...[
+          const SizedBox(height: 8),
+          Text('Описание', style: AppTypography.caption(context)),
+          const SizedBox(height: 4),
+          Text(defect.description!, style: AppTypography.bodyMedium(context)),
+        ],
+        if (defect.photos.isNotEmpty) ...[
+          const SizedBox(height: 16),
+          Text('Фото', style: AppTypography.h2(context)),
+          const SizedBox(height: 8),
+          ...defect.photos.map((photo) => _QualityPhotoRow(photo: photo)),
+        ],
+        if (defect.statusHistory.isNotEmpty) ...[
+          const SizedBox(height: 16),
+          Text('История', style: AppTypography.h2(context)),
+          const SizedBox(height: 8),
+          ...defect.statusHistory.map(
+            (entry) => _QualityHistoryRow(entry: entry),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _QualityDetailLine extends StatelessWidget {
+  const _QualityDetailLine({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 120,
+            child: Text(label, style: AppTypography.caption(context)),
+          ),
+          Expanded(
+            child: Text(value, style: AppTypography.bodyMedium(context)),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _QualityPhotoRow extends StatelessWidget {
+  const _QualityPhotoRow({required this.photo});
+
+  final QualityDefectPhotoModel photo;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.photo_outlined, size: 20),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  photo.caption ?? _photoTypeLabel(photo.type),
+                  style: AppTypography.bodyMedium(context),
+                ),
+                Text(photo.url, style: AppTypography.caption(context)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _QualityHistoryRow extends StatelessWidget {
+  const _QualityHistoryRow({required this.entry});
+
+  final QualityDefectHistoryModel entry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.history_rounded, size: 20),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _qualityStatusLabel(entry.toStatus),
+                  style: AppTypography.bodyMedium(context),
+                ),
+                if (entry.comment != null)
+                  Text(entry.comment!, style: AppTypography.caption(context)),
+                if (entry.changedAt != null)
+                  Text(
+                    _formatQualityDate(entry.changedAt!),
+                    style: AppTypography.caption(context),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _QualityDefectCard extends StatelessWidget {
   const _QualityDefectCard({
     required this.defect,
+    required this.onOpen,
     required this.onStart,
     required this.onResolve,
   });
 
   final QualityDefectModel defect;
+  final VoidCallback onOpen;
   final VoidCallback onStart;
   final VoidCallback onResolve;
 
@@ -620,13 +855,20 @@ class _QualityDefectCard extends StatelessWidget {
             ),
           ],
           const SizedBox(height: 12),
-          Row(
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               _SeverityPill(
                 severity: defect.severity,
                 label: defect.severityLabel,
               ),
-              const Spacer(),
+              TextButton.icon(
+                onPressed: onOpen,
+                icon: const Icon(Icons.open_in_new_rounded),
+                label: const Text('Подробнее'),
+              ),
               if (canStart)
                 TextButton.icon(
                   onPressed: onStart,
@@ -705,6 +947,49 @@ class _SeverityPill extends StatelessWidget {
       ).copyWith(color: color, fontWeight: FontWeight.w800),
     );
   }
+}
+
+String _severityText(QualityDefectModel defect) {
+  return defect.severityLabel ??
+      switch (defect.severity) {
+        'minor' => 'Низкая',
+        'major' => 'Средняя',
+        'critical' => 'Критичная',
+        _ => 'Критичность указана',
+      };
+}
+
+String _qualityStatusLabel(String status) {
+  return switch (status) {
+    'draft' => 'Черновик',
+    'open' => 'Открыт',
+    'assigned' => 'Назначен',
+    'in_progress' => 'В работе',
+    'ready_for_review' => 'На проверке',
+    'resolved' => 'Устранен',
+    'rejected' => 'Возвращен',
+    'cancelled' => 'Отменен',
+    _ => 'Статус указан',
+  };
+}
+
+String _photoTypeLabel(String type) {
+  return switch (type) {
+    'before' => 'До устранения',
+    'after' => 'После устранения',
+    'evidence' => 'Подтверждение',
+    'other' => 'Фото',
+    _ => 'Фото',
+  };
+}
+
+String _formatQualityDate(String value) {
+  final parsed = DateTime.tryParse(value);
+  if (parsed == null) {
+    return value;
+  }
+
+  return '${parsed.day.toString().padLeft(2, '0')}.${parsed.month.toString().padLeft(2, '0')}.${parsed.year}';
 }
 
 enum _QualityAction { start, resolve }

@@ -57,6 +57,18 @@ class QualityControlRepository {
     }
   }
 
+  Future<QualityDefectModel> fetchDefect(int id) async {
+    try {
+      final response = await _dio.get('/quality-control/defects/$id');
+
+      return QualityDefectModel.fromJson(
+        MobileApiResponse.dataMap(response.data),
+      );
+    } on DioException catch (error) {
+      throw ApiException.fromDio(error);
+    }
+  }
+
   Future<QualityDefectModel> startDefect(int id, {String? comment}) async {
     try {
       final response = await _dio.post(

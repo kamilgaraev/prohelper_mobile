@@ -11,6 +11,7 @@ class _FakeQualityControlRepository extends QualityControlRepository {
   String? loadedStatus;
   String? loadedSeverity;
   bool? loadedOverdueOnly;
+  int? fetchedDefectId;
   int? startedDefectId;
   int? resolvedDefectId;
   Map<String, dynamic>? createdData;
@@ -34,6 +35,12 @@ class _FakeQualityControlRepository extends QualityControlRepository {
   @override
   Future<QualityDefectModel> createDefect(Map<String, dynamic> data) async {
     createdData = data;
+    return _defect;
+  }
+
+  @override
+  Future<QualityDefectModel> fetchDefect(int id) async {
+    fetchedDefectId = id;
     return _defect;
   }
 
@@ -114,5 +121,15 @@ void main() {
     expect(repository.loadedStatus, isNull);
     expect(repository.loadedSeverity, isNull);
     expect(repository.loadedOverdueOnly, isFalse);
+  });
+
+  test('загружает детальную карточку дефекта', () async {
+    final repository = _FakeQualityControlRepository();
+    final notifier = QualityControlNotifier(repository);
+
+    final defect = await notifier.fetchDefect(7);
+
+    expect(repository.fetchedDefectId, 7);
+    expect(defect.id, 7);
   });
 }

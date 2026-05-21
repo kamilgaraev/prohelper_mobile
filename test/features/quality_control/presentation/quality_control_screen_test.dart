@@ -17,6 +17,7 @@ class _RecordingQualityRepository extends QualityControlRepository {
   String? loadedStatus;
   String? loadedSeverity;
   bool? loadedOverdueOnly;
+  int? fetchedDefectId;
   Map<String, dynamic>? createPayload;
 
   @override
@@ -33,7 +34,13 @@ class _RecordingQualityRepository extends QualityControlRepository {
     loadedSeverity = severity;
     loadedOverdueOnly = overdueOnly;
 
-    return const [];
+    return [_defect];
+  }
+
+  @override
+  Future<QualityDefectModel> fetchDefect(int id) async {
+    fetchedDefectId = id;
+    return _detailDefect;
   }
 
   @override
@@ -51,6 +58,51 @@ class _RecordingQualityRepository extends QualityControlRepository {
     );
   }
 }
+
+const _defect = QualityDefectModel(
+  id: 3,
+  defectNumber: 'QD-3',
+  title: 'Скол плитки',
+  severity: 'major',
+  severityLabel: 'Существенный',
+  status: 'open',
+  statusLabel: 'Открыт',
+  availableActions: ['start', 'resolve'],
+  inspectionRequired: true,
+);
+
+const _detailDefect = QualityDefectModel(
+  id: 3,
+  defectNumber: 'QD-3',
+  title: 'Скол плитки',
+  description: 'Повреждение кромки плитки',
+  severity: 'major',
+  severityLabel: 'Существенный',
+  status: 'ready_for_review',
+  statusLabel: 'На проверке',
+  locationName: 'Секция А',
+  dueDate: '2026-05-22',
+  availableActions: ['resolve'],
+  inspectionRequired: true,
+  photos: [
+    QualityDefectPhotoModel(
+      id: 8,
+      type: 'after',
+      url: 'https://cdn.example.test/qc-after.jpg',
+      caption: 'Фото результата',
+      createdAt: '2026-05-22T10:00:00Z',
+    ),
+  ],
+  statusHistory: [
+    QualityDefectHistoryModel(
+      id: 9,
+      fromStatus: 'in_progress',
+      toStatus: 'ready_for_review',
+      comment: 'Исправлено',
+      changedAt: '2026-05-22T11:00:00Z',
+    ),
+  ],
+);
 
 class _TestProjectsRepository extends ProjectsRepository {
   _TestProjectsRepository() : super(Dio());
@@ -145,5 +197,23 @@ void main() {
     await tester.tap(find.widgetWithText(FilterChip, 'Просроченные'));
     await pumpUi(tester);
     expect(repository.loadedOverdueOnly, isTrue);
+  });
+
+  testWidgets('opens quality defect detail with photos and history', (
+    tester,
+  ) async {
+    final repository = _RecordingQualityRepository();
+
+    await tester.pumpWidget(buildScreen(repository));
+    await pumpUi(tester);
+
+    await tester.tap(find.text('Подробнее').first);
+    await pumpUi(tester);
+
+    expect(repository.fetchedDefectId, 3);
+    expect(find.text('Замечание качества'), findsOneWidget);
+    expect(find.text('Фото результата'), findsOneWidget);
+    expect(find.text('https://cdn.example.test/qc-after.jpg'), findsOneWidget);
+    expect(find.text('Исправлено'), findsOneWidget);
   });
 }

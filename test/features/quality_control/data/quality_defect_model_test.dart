@@ -14,6 +14,24 @@ void main() {
       'location_name': 'Section A',
       'project': {'name': 'Tower'},
       'assigned_user': {'full_name': 'Foreman'},
+      'photos': [
+        {
+          'id': 4,
+          'type': 'after',
+          'url': 'https://cdn.example.test/qc-after.jpg',
+          'caption': 'Result photo',
+          'created_at': '2026-05-22T10:00:00Z',
+        },
+      ],
+      'status_history': [
+        {
+          'id': 5,
+          'from_status': 'in_progress',
+          'to_status': 'ready_for_review',
+          'comment': 'Fixed',
+          'changed_at': '2026-05-22T11:00:00Z',
+        },
+      ],
       'problem_flags': [
         {'key': 'verification_required', 'label': 'Needs acceptance'},
       ],
@@ -30,6 +48,8 @@ void main() {
     expect(defect.problemFlags.single.message, 'Needs acceptance');
     expect(defect.availableActions, ['verify', 'reject']);
     expect(defect.inspectionRequired, isTrue);
+    expect(defect.photos.single.url, 'https://cdn.example.test/qc-after.jpg');
+    expect(defect.statusHistory.single.comment, 'Fixed');
   });
 
   test('rejects defect payload without explicit severity', () {

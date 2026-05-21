@@ -115,6 +115,10 @@ class QualityControlNotifier extends StateNotifier<QualityControlState> {
     await loadDefects();
   }
 
+  Future<QualityDefectModel> fetchDefect(int id) {
+    return _repository.fetchDefect(id);
+  }
+
   Future<void> startDefect(int id, {String? comment}) async {
     await _repository.startDefect(id, comment: comment);
     await loadDefects();

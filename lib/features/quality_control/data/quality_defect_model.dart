@@ -58,6 +58,58 @@ class QualityDefectWorkflowSummary {
   }
 }
 
+class QualityDefectPhotoModel {
+  const QualityDefectPhotoModel({
+    required this.id,
+    required this.type,
+    required this.url,
+    this.caption,
+    this.createdAt,
+  });
+
+  final int id;
+  final String type;
+  final String url;
+  final String? caption;
+  final String? createdAt;
+
+  factory QualityDefectPhotoModel.fromJson(Map<String, dynamic> json) {
+    return QualityDefectPhotoModel(
+      id: _requiredInt(json, 'id'),
+      type: _requiredString(json, 'type'),
+      url: _requiredString(json, 'url'),
+      caption: _asNullableString(json['caption']),
+      createdAt: _asNullableString(json['created_at']),
+    );
+  }
+}
+
+class QualityDefectHistoryModel {
+  const QualityDefectHistoryModel({
+    required this.id,
+    required this.toStatus,
+    this.fromStatus,
+    this.comment,
+    this.changedAt,
+  });
+
+  final int id;
+  final String toStatus;
+  final String? fromStatus;
+  final String? comment;
+  final String? changedAt;
+
+  factory QualityDefectHistoryModel.fromJson(Map<String, dynamic> json) {
+    return QualityDefectHistoryModel(
+      id: _requiredInt(json, 'id'),
+      fromStatus: _asNullableString(json['from_status']),
+      toStatus: _requiredString(json, 'to_status'),
+      comment: _asNullableString(json['comment']),
+      changedAt: _asNullableString(json['changed_at']),
+    );
+  }
+}
+
 class QualityDefectModel {
   const QualityDefectModel({
     required this.id,
@@ -76,6 +128,8 @@ class QualityDefectModel {
     this.contractor,
     this.assignedUser,
     this.workflowSummary,
+    this.photos = const [],
+    this.statusHistory = const [],
     this.problemFlags = const [],
   });
 
@@ -95,6 +149,8 @@ class QualityDefectModel {
   final QualityDefectRef? contractor;
   final QualityDefectRef? assignedUser;
   final QualityDefectWorkflowSummary? workflowSummary;
+  final List<QualityDefectPhotoModel> photos;
+  final List<QualityDefectHistoryModel> statusHistory;
   final List<QualityDefectProblemFlag> problemFlags;
 
   int get serverId => id;
@@ -142,6 +198,8 @@ class QualityDefectModel {
           workflow.isEmpty
               ? null
               : QualityDefectWorkflowSummary.fromJson(workflow),
+      photos: _photos(json['photos']),
+      statusHistory: _history(json['status_history']),
       problemFlags:
           (json['problem_flags'] as List<dynamic>? ?? const [])
               .whereType<Map>()
@@ -153,6 +211,28 @@ class QualityDefectModel {
               .toList(),
     );
   }
+}
+
+List<QualityDefectPhotoModel> _photos(dynamic value) {
+  return (value as List<dynamic>? ?? const [])
+      .whereType<Map>()
+      .map(
+        (item) => QualityDefectPhotoModel.fromJson(
+          item.map((key, value) => MapEntry(key.toString(), value)),
+        ),
+      )
+      .toList();
+}
+
+List<QualityDefectHistoryModel> _history(dynamic value) {
+  return (value as List<dynamic>? ?? const [])
+      .whereType<Map>()
+      .map(
+        (item) => QualityDefectHistoryModel.fromJson(
+          item.map((key, value) => MapEntry(key.toString(), value)),
+        ),
+      )
+      .toList();
 }
 
 List<String> _actions(dynamic value) {
@@ -195,6 +275,12 @@ String _requiredString(Map<String, dynamic> json, String key) {
   }
 
   return value;
+}
+
+String? _asNullableString(dynamic value) {
+  final text = value?.toString().trim() ?? '';
+
+  return text.isEmpty ? null : text;
 }
 
 bool _requiredBool(Map<String, dynamic> json, String key) {
