@@ -92,6 +92,13 @@ class _QualityControlScreenState extends ConsumerState<QualityControlScreen> {
                     children: [
                       _SummaryStrip(defects: state.defects),
                       const SizedBox(height: 12),
+                      _QualityFilterBar(
+                        state: state,
+                        onStatusChanged: _changeStatusFilter,
+                        onSeverityChanged: _changeSeverityFilter,
+                        onOverdueChanged: _changeOverdueFilter,
+                      ),
+                      const SizedBox(height: 12),
                       if (state.defects.isEmpty)
                         const AppEmptyState(
                           icon: Icons.fact_check_outlined,
@@ -125,6 +132,24 @@ class _QualityControlScreenState extends ConsumerState<QualityControlScreen> {
                 ),
       ),
     );
+  }
+
+  void _changeStatusFilter(String? status) {
+    final notifier = ref.read(qualityControlProvider.notifier);
+    notifier.setStatusFilter(status);
+    notifier.loadDefects();
+  }
+
+  void _changeSeverityFilter(String? severity) {
+    final notifier = ref.read(qualityControlProvider.notifier);
+    notifier.setSeverityFilter(severity);
+    notifier.loadDefects();
+  }
+
+  void _changeOverdueFilter(bool overdueOnly) {
+    final notifier = ref.read(qualityControlProvider.notifier);
+    notifier.setOverdueOnly(overdueOnly);
+    notifier.loadDefects();
   }
 
   Future<void> _showCreateSheet(BuildContext context) async {
@@ -468,6 +493,73 @@ class _SummaryTile extends StatelessWidget {
   }
 }
 
+class _QualityFilterBar extends StatelessWidget {
+  const _QualityFilterBar({
+    required this.state,
+    required this.onStatusChanged,
+    required this.onSeverityChanged,
+    required this.onOverdueChanged,
+  });
+
+  final QualityControlState state;
+  final ValueChanged<String?> onStatusChanged;
+  final ValueChanged<String?> onSeverityChanged;
+  final ValueChanged<bool> onOverdueChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return ProCard(
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Статус', style: AppTypography.caption(context)),
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children:
+                _qualityStatusFilters
+                    .map(
+                      (option) => ChoiceChip(
+                        label: Text(option.label),
+                        selected: state.statusFilter == option.value,
+                        onSelected: (_) => onStatusChanged(option.value),
+                        visualDensity: VisualDensity.compact,
+                      ),
+                    )
+                    .toList(),
+          ),
+          const SizedBox(height: 12),
+          Text('Критичность', style: AppTypography.caption(context)),
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              ..._qualitySeverityFilters.map(
+                (option) => ChoiceChip(
+                  label: Text(option.label),
+                  selected: state.severityFilter == option.value,
+                  onSelected: (_) => onSeverityChanged(option.value),
+                  visualDensity: VisualDensity.compact,
+                ),
+              ),
+              FilterChip(
+                label: const Text('Просроченные'),
+                selected: state.overdueOnly,
+                onSelected: onOverdueChanged,
+                avatar: const Icon(Icons.event_busy_rounded, size: 16),
+                visualDensity: VisualDensity.compact,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _QualityDefectCard extends StatelessWidget {
   const _QualityDefectCard({
     required this.defect,
@@ -499,7 +591,7 @@ class _QualityDefectCard extends StatelessWidget {
                   ).copyWith(fontWeight: FontWeight.w800),
                 ),
               ),
-              _StatusBadge(status: defect.status),
+              _StatusBadge(status: defect.status, label: defect.statusLabel),
             ],
           ),
           const SizedBox(height: 6),
@@ -530,7 +622,10 @@ class _QualityDefectCard extends StatelessWidget {
           const SizedBox(height: 12),
           Row(
             children: [
-              _SeverityPill(severity: defect.severity),
+              _SeverityPill(
+                severity: defect.severity,
+                label: defect.severityLabel,
+              ),
               const Spacer(),
               if (canStart)
                 TextButton.icon(
@@ -553,38 +648,49 @@ class _QualityDefectCard extends StatelessWidget {
 }
 
 class _StatusBadge extends StatelessWidget {
-  const _StatusBadge({required this.status});
+  const _StatusBadge({required this.status, this.label});
 
   final String status;
+  final String? label;
 
   @override
   Widget build(BuildContext context) {
-    final label = switch (status) {
-      'open' => 'Открыт',
-      'assigned' => 'Назначен',
-      'in_progress' => 'В работе',
-      'ready_for_review' => 'Проверка',
-      'resolved' => 'Закрыт',
-      'rejected' => 'Отклонен',
-      _ => status,
-    };
+    final visibleLabel =
+        label ??
+        switch (status) {
+          'open' => 'Открыт',
+          'assigned' => 'Назначен',
+          'in_progress' => 'В работе',
+          'ready_for_review' => 'Проверка',
+          'resolved' => 'Закрыт',
+          'rejected' => 'Отклонен',
+          'cancelled' => 'Отменен',
+          _ => 'Статус указан',
+        };
 
-    return Chip(label: Text(label), visualDensity: VisualDensity.compact);
+    return Chip(
+      label: Text(visibleLabel),
+      visualDensity: VisualDensity.compact,
+    );
   }
 }
 
 class _SeverityPill extends StatelessWidget {
-  const _SeverityPill({required this.severity});
+  const _SeverityPill({required this.severity, this.label});
 
   final String severity;
+  final String? label;
 
   @override
   Widget build(BuildContext context) {
-    final label = switch (severity) {
-      'minor' => 'Низкая',
-      'critical' => 'Критичная',
-      _ => 'Средняя',
-    };
+    final visibleLabel =
+        label ??
+        switch (severity) {
+          'minor' => 'Низкая',
+          'critical' => 'Критичная',
+          'major' => 'Средняя',
+          _ => 'Критичность указана',
+        };
     final color =
         severity == 'critical'
             ? AppColors.error
@@ -593,7 +699,7 @@ class _SeverityPill extends StatelessWidget {
             : Theme.of(context).colorScheme.primary;
 
     return Text(
-      label,
+      visibleLabel,
       style: AppTypography.caption(
         context,
       ).copyWith(color: color, fontWeight: FontWeight.w800),
@@ -602,3 +708,28 @@ class _SeverityPill extends StatelessWidget {
 }
 
 enum _QualityAction { start, resolve }
+
+class _QualityFilterOption {
+  const _QualityFilterOption(this.value, this.label);
+
+  final String? value;
+  final String label;
+}
+
+const _qualityStatusFilters = [
+  _QualityFilterOption(null, 'Все'),
+  _QualityFilterOption('open', 'Открытые'),
+  _QualityFilterOption('assigned', 'Назначенные'),
+  _QualityFilterOption('in_progress', 'В работе'),
+  _QualityFilterOption('ready_for_review', 'Проверка'),
+  _QualityFilterOption('resolved', 'Закрытые'),
+  _QualityFilterOption('rejected', 'Возвращенные'),
+  _QualityFilterOption('cancelled', 'Отмененные'),
+];
+
+const _qualitySeverityFilters = [
+  _QualityFilterOption(null, 'Все'),
+  _QualityFilterOption('minor', 'Низкая'),
+  _QualityFilterOption('major', 'Средняя'),
+  _QualityFilterOption('critical', 'Критичная'),
+];

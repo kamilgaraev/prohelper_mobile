@@ -22,6 +22,8 @@ class QualityControlRepository {
     int perPage = 50,
     int? projectId,
     String? status,
+    String? severity,
+    bool overdueOnly = false,
   }) async {
     try {
       final response = await _dio.get(
@@ -31,6 +33,8 @@ class QualityControlRepository {
           'per_page': perPage,
           if (projectId != null) 'project_id': projectId,
           if (status != null && status.isNotEmpty) 'status': status,
+          if (severity != null && severity.isNotEmpty) 'severity': severity,
+          if (overdueOnly) 'overdue': 1,
         },
       );
 

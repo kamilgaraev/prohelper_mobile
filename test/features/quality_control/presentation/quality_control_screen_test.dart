@@ -13,6 +13,10 @@ import 'package:prohelpers_mobile/features/quality_control/presentation/quality_
 class _RecordingQualityRepository extends QualityControlRepository {
   _RecordingQualityRepository() : super(Dio());
 
+  int? loadedProjectId;
+  String? loadedStatus;
+  String? loadedSeverity;
+  bool? loadedOverdueOnly;
   Map<String, dynamic>? createPayload;
 
   @override
@@ -21,7 +25,14 @@ class _RecordingQualityRepository extends QualityControlRepository {
     int perPage = 50,
     int? projectId,
     String? status,
+    String? severity,
+    bool overdueOnly = false,
   }) async {
+    loadedProjectId = projectId;
+    loadedStatus = status;
+    loadedSeverity = severity;
+    loadedOverdueOnly = overdueOnly;
+
     return const [];
   }
 
@@ -38,17 +49,6 @@ class _RecordingQualityRepository extends QualityControlRepository {
       availableActions: ['start'],
       inspectionRequired: false,
     );
-  }
-}
-
-class _TestQualityNotifier extends QualityControlNotifier {
-  _TestQualityNotifier(super.repository) {
-    state = const QualityControlState(isLoading: false, projectFilter: 9);
-  }
-
-  @override
-  Future<void> loadDefects() async {
-    state = state.copyWith(isLoading: false, defects: const []);
   }
 }
 
@@ -84,7 +84,7 @@ void main() {
           (ref) => _TestProjectsNotifier(project()),
         ),
         qualityControlProvider.overrideWith(
-          (ref) => _TestQualityNotifier(repository),
+          (ref) => QualityControlNotifier(repository),
         ),
       ],
       child: const MaterialApp(home: QualityControlScreen()),
@@ -122,5 +122,28 @@ void main() {
     expect(repository.createPayload?['title'], 'Скол плитки');
     expect(repository.createPayload?['severity'], 'major');
     expect(repository.createPayload?['inspection_required'], isFalse);
+  });
+
+  testWidgets('applies visible quality filters to defect query', (
+    tester,
+  ) async {
+    final repository = _RecordingQualityRepository();
+
+    await tester.pumpWidget(buildScreen(repository));
+    await pumpUi(tester);
+
+    expect(repository.loadedProjectId, 9);
+
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Проверка'));
+    await pumpUi(tester);
+    expect(repository.loadedStatus, 'ready_for_review');
+
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Критичная'));
+    await pumpUi(tester);
+    expect(repository.loadedSeverity, 'critical');
+
+    await tester.tap(find.widgetWithText(FilterChip, 'Просроченные'));
+    await pumpUi(tester);
+    expect(repository.loadedOverdueOnly, isTrue);
   });
 }

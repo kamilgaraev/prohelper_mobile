@@ -8,6 +8,9 @@ class _FakeQualityControlRepository extends QualityControlRepository {
   _FakeQualityControlRepository() : super(Dio());
 
   int? loadedProjectId;
+  String? loadedStatus;
+  String? loadedSeverity;
+  bool? loadedOverdueOnly;
   int? startedDefectId;
   int? resolvedDefectId;
   Map<String, dynamic>? createdData;
@@ -18,8 +21,13 @@ class _FakeQualityControlRepository extends QualityControlRepository {
     int perPage = 50,
     int? projectId,
     String? status,
+    String? severity,
+    bool overdueOnly = false,
   }) async {
     loadedProjectId = projectId;
+    loadedStatus = status;
+    loadedSeverity = severity;
+    loadedOverdueOnly = overdueOnly;
     return [_defect];
   }
 
@@ -82,5 +90,29 @@ void main() {
     expect(repository.startedDefectId, 7);
     expect(repository.resolvedDefectId, 7);
     expect(notifier.state.defects, hasLength(1));
+  });
+
+  test('передает выбранные фильтры в загрузку дефектов', () async {
+    final repository = _FakeQualityControlRepository();
+    final notifier = QualityControlNotifier(repository)..syncProject(15);
+
+    notifier.setStatusFilter('ready_for_review');
+    notifier.setSeverityFilter('critical');
+    notifier.setOverdueOnly(true);
+    await notifier.loadDefects();
+
+    expect(repository.loadedProjectId, 15);
+    expect(repository.loadedStatus, 'ready_for_review');
+    expect(repository.loadedSeverity, 'critical');
+    expect(repository.loadedOverdueOnly, isTrue);
+
+    notifier.setStatusFilter(null);
+    notifier.setSeverityFilter(null);
+    notifier.setOverdueOnly(false);
+    await notifier.loadDefects();
+
+    expect(repository.loadedStatus, isNull);
+    expect(repository.loadedSeverity, isNull);
+    expect(repository.loadedOverdueOnly, isFalse);
   });
 }
