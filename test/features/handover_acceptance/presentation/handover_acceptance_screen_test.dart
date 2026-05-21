@@ -15,6 +15,8 @@ class _RecordingHandoverRepository extends HandoverAcceptanceRepository {
 
   Map<String, dynamic>? findingPayload;
   String? resolutionComment;
+  String? rejectReason;
+  int? rejectedScopeId;
 
   AcceptanceScopeModel get scope => const AcceptanceScopeModel(
     id: 5,
@@ -23,7 +25,12 @@ class _RecordingHandoverRepository extends HandoverAcceptanceRepository {
     status: 'findings_open',
     workflowSummary: HandoverWorkflowSummary(
       status: 'findings_open',
-      availableActions: ['ready_for_reinspection'],
+      availableActions: [
+        'create_finding',
+        'resolve_findings',
+        'ready_for_reinspection',
+        'reject',
+      ],
       problemFlags: [],
     ),
     sessions: [
@@ -87,6 +94,16 @@ class _RecordingHandoverRepository extends HandoverAcceptanceRepository {
       severity: 'major',
       status: 'resolved',
     );
+  }
+
+  @override
+  Future<AcceptanceScopeModel> rejectScope(
+    int scopeId, {
+    required String reason,
+  }) async {
+    rejectedScopeId = scopeId;
+    rejectReason = reason;
+    return scope;
   }
 }
 
@@ -221,5 +238,33 @@ void main() {
     await pumpUi(tester);
 
     expect(repository.resolutionComment, 'Плитка заменена');
+  });
+
+  testWidgets('requires rejection reason before rejecting scope', (
+    tester,
+  ) async {
+    final repository = _RecordingHandoverRepository();
+    useLargeSurface(tester);
+
+    await tester.pumpWidget(buildScreen(repository));
+    await pumpUi(tester);
+
+    await tester.tap(find.byIcon(Icons.block_outlined));
+    await pumpUi(tester);
+    await tester.ensureVisible(find.byType(FilledButton).last);
+    await tester.pump();
+    await tester.tap(find.byType(FilledButton).last);
+    await pumpUi(tester);
+
+    expect(repository.rejectedScopeId, isNull);
+
+    await tester.enterText(find.byType(TextField).first, 'Нужно переделать');
+    await tester.ensureVisible(find.byType(FilledButton).last);
+    await tester.pump();
+    await tester.tap(find.byType(FilledButton).last);
+    await pumpUi(tester);
+
+    expect(repository.rejectedScopeId, 5);
+    expect(repository.rejectReason, 'Нужно переделать');
   });
 }

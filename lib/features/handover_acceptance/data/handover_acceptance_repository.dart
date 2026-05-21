@@ -28,8 +28,6 @@ class HandoverAcceptanceRepository {
       ).map(AcceptanceScopeModel.fromJson).toList();
     } on DioException catch (error) {
       throw ApiException.fromDio(error);
-    } catch (_) {
-      throw const ApiException('Не удалось загрузить приемку зон.');
     }
   }
 
@@ -47,8 +45,6 @@ class HandoverAcceptanceRepository {
       );
     } on DioException catch (error) {
       throw ApiException.fromDio(error);
-    } catch (_) {
-      throw const ApiException('Не удалось добавить замечание приемки.');
     }
   }
 
@@ -66,8 +62,6 @@ class HandoverAcceptanceRepository {
       );
     } on DioException catch (error) {
       throw ApiException.fromDio(error);
-    } catch (_) {
-      throw const ApiException('Не удалось подтвердить устранение замечания.');
     }
   }
 
@@ -81,10 +75,84 @@ class HandoverAcceptanceRepository {
       );
     } on DioException catch (error) {
       throw ApiException.fromDio(error);
-    } catch (_) {
-      throw const ApiException(
-        'Не удалось отправить зону на повторную проверку.',
+    }
+  }
+
+  Future<AcceptanceScopeModel> startScope(int scopeId) async {
+    try {
+      final response = await _dio.post(
+        '/handover-acceptance/scopes/$scopeId/start',
       );
+      return AcceptanceScopeModel.fromJson(
+        MobileApiResponse.dataMap(response.data),
+      );
+    } on DioException catch (error) {
+      throw ApiException.fromDio(error);
+    }
+  }
+
+  Future<AcceptanceScopeModel> acceptScope(
+    int scopeId, {
+    String? comment,
+  }) async {
+    try {
+      final response = await _dio.post(
+        '/handover-acceptance/scopes/$scopeId/accept',
+        data: {
+          if (comment != null && comment.trim().isNotEmpty)
+            'comment': comment.trim(),
+        },
+      );
+      return AcceptanceScopeModel.fromJson(
+        MobileApiResponse.dataMap(response.data),
+      );
+    } on DioException catch (error) {
+      throw ApiException.fromDio(error);
+    }
+  }
+
+  Future<AcceptanceScopeModel> handoverScope(int scopeId) async {
+    try {
+      final response = await _dio.post(
+        '/handover-acceptance/scopes/$scopeId/handover',
+      );
+      return AcceptanceScopeModel.fromJson(
+        MobileApiResponse.dataMap(response.data),
+      );
+    } on DioException catch (error) {
+      throw ApiException.fromDio(error);
+    }
+  }
+
+  Future<AcceptanceScopeModel> rejectScope(
+    int scopeId, {
+    required String reason,
+  }) async {
+    return _scopeDecision(scopeId, path: 'reject', reason: reason);
+  }
+
+  Future<AcceptanceScopeModel> reopenScope(
+    int scopeId, {
+    required String reason,
+  }) async {
+    return _scopeDecision(scopeId, path: 'reopen', reason: reason);
+  }
+
+  Future<AcceptanceScopeModel> _scopeDecision(
+    int scopeId, {
+    required String path,
+    required String reason,
+  }) async {
+    try {
+      final response = await _dio.post(
+        '/handover-acceptance/scopes/$scopeId/$path',
+        data: {'reason': reason.trim()},
+      );
+      return AcceptanceScopeModel.fromJson(
+        MobileApiResponse.dataMap(response.data),
+      );
+    } on DioException catch (error) {
+      throw ApiException.fromDio(error);
     }
   }
 }

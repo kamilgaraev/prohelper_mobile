@@ -11,6 +11,14 @@ class _FakeHandoverAcceptanceRepository extends HandoverAcceptanceRepository {
   int? createdFindingSessionId;
   int? resolvedFindingId;
   int? readyScopeId;
+  int? startedScopeId;
+  int? acceptedScopeId;
+  int? handedOverScopeId;
+  int? rejectedScopeId;
+  int? reopenedScopeId;
+  String? acceptedComment;
+  String? rejectedReason;
+  String? reopenedReason;
 
   @override
   Future<List<AcceptanceScopeModel>> fetchScopes({int? projectId}) async {
@@ -39,6 +47,48 @@ class _FakeHandoverAcceptanceRepository extends HandoverAcceptanceRepository {
   @override
   Future<AcceptanceScopeModel> readyForReinspection(int scopeId) async {
     readyScopeId = scopeId;
+    return _scope;
+  }
+
+  @override
+  Future<AcceptanceScopeModel> startScope(int scopeId) async {
+    startedScopeId = scopeId;
+    return _scope;
+  }
+
+  @override
+  Future<AcceptanceScopeModel> acceptScope(
+    int scopeId, {
+    String? comment,
+  }) async {
+    acceptedScopeId = scopeId;
+    acceptedComment = comment;
+    return _scope;
+  }
+
+  @override
+  Future<AcceptanceScopeModel> handoverScope(int scopeId) async {
+    handedOverScopeId = scopeId;
+    return _scope;
+  }
+
+  @override
+  Future<AcceptanceScopeModel> rejectScope(
+    int scopeId, {
+    required String reason,
+  }) async {
+    rejectedScopeId = scopeId;
+    rejectedReason = reason;
+    return _scope;
+  }
+
+  @override
+  Future<AcceptanceScopeModel> reopenScope(
+    int scopeId, {
+    required String reason,
+  }) async {
+    reopenedScopeId = scopeId;
+    reopenedReason = reason;
     return _scope;
   }
 }
@@ -87,10 +137,23 @@ void main() {
     await notifier.createFinding(21, {'title': 'Скол плитки'});
     await notifier.resolveFinding(31, resolutionComment: 'Исправлено');
     await notifier.readyForReinspection(10);
+    await notifier.startScope(10);
+    await notifier.acceptScope(10, comment: 'Принято');
+    await notifier.handoverScope(10);
+    await notifier.rejectScope(10, reason: 'Есть замечания');
+    await notifier.reopenScope(10, reason: 'Вернуть на проверку');
 
     expect(repository.createdFindingSessionId, 21);
     expect(repository.resolvedFindingId, 31);
     expect(repository.readyScopeId, 10);
+    expect(repository.startedScopeId, 10);
+    expect(repository.acceptedScopeId, 10);
+    expect(repository.acceptedComment, 'Принято');
+    expect(repository.handedOverScopeId, 10);
+    expect(repository.rejectedScopeId, 10);
+    expect(repository.rejectedReason, 'Есть замечания');
+    expect(repository.reopenedScopeId, 10);
+    expect(repository.reopenedReason, 'Вернуть на проверку');
     expect(notifier.state.scopes, hasLength(1));
   });
 }

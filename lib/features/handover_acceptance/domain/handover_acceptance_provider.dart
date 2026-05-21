@@ -81,6 +81,31 @@ class HandoverAcceptanceNotifier
     await _repository.readyForReinspection(scopeId);
     await loadScopes();
   }
+
+  Future<void> startScope(int scopeId) async {
+    await _repository.startScope(scopeId);
+    await loadScopes();
+  }
+
+  Future<void> acceptScope(int scopeId, {String? comment}) async {
+    await _repository.acceptScope(scopeId, comment: comment);
+    await loadScopes();
+  }
+
+  Future<void> handoverScope(int scopeId) async {
+    await _repository.handoverScope(scopeId);
+    await loadScopes();
+  }
+
+  Future<void> rejectScope(int scopeId, {required String reason}) async {
+    await _repository.rejectScope(scopeId, reason: reason);
+    await loadScopes();
+  }
+
+  Future<void> reopenScope(int scopeId, {required String reason}) async {
+    await _repository.reopenScope(scopeId, reason: reason);
+    await loadScopes();
+  }
 }
 
 final handoverAcceptanceProvider =

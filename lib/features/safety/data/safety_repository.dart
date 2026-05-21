@@ -27,8 +27,6 @@ class SafetyRepository {
       return _list(response.data).map(SafetyWorkPermitModel.fromJson).toList();
     } on DioException catch (error) {
       throw ApiException.fromDio(error);
-    } catch (_) {
-      throw const ApiException('Не удалось загрузить активные наряды-допуски.');
     }
   }
 
@@ -42,8 +40,6 @@ class SafetyRepository {
       return _list(response.data).map(SafetyIncidentModel.fromJson).toList();
     } on DioException catch (error) {
       throw ApiException.fromDio(error);
-    } catch (_) {
-      throw const ApiException('Не удалось загрузить происшествия.');
     }
   }
 
@@ -57,8 +53,6 @@ class SafetyRepository {
       return _list(response.data).map(SafetyViolationModel.fromJson).toList();
     } on DioException catch (error) {
       throw ApiException.fromDio(error);
-    } catch (_) {
-      throw const ApiException('Не удалось загрузить нарушения.');
     }
   }
 
@@ -72,8 +66,6 @@ class SafetyRepository {
       return SafetyIncidentModel.fromJson(_object(response.data));
     } on DioException catch (error) {
       throw ApiException.fromDio(error);
-    } catch (_) {
-      throw const ApiException('Не удалось зарегистрировать происшествие.');
     }
   }
 
@@ -89,8 +81,6 @@ class SafetyRepository {
       return SafetyViolationModel.fromJson(_object(response.data));
     } on DioException catch (error) {
       throw ApiException.fromDio(error);
-    } catch (_) {
-      throw const ApiException('Не удалось зарегистрировать нарушение.');
     }
   }
 
@@ -104,8 +94,6 @@ class SafetyRepository {
       return SafetyViolationModel.fromJson(_object(response.data));
     } on DioException catch (error) {
       throw ApiException.fromDio(error);
-    } catch (_) {
-      throw const ApiException('Не удалось устранить нарушение.');
     }
   }
 

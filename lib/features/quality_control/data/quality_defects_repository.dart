@@ -41,8 +41,6 @@ class QualityDefectsRepository {
       ).map(QualityDefectModel.fromJson).toList();
     } on DioException catch (error) {
       throw ApiException.fromDio(error);
-    } catch (_) {
-      throw const ApiException('Не удалось загрузить дефекты качества.');
     }
   }
 
@@ -54,8 +52,6 @@ class QualityDefectsRepository {
       );
     } on DioException catch (error) {
       throw ApiException.fromDio(error);
-    } catch (_) {
-      throw const ApiException('Не удалось загрузить дефект качества.');
     }
   }
 
@@ -67,8 +63,6 @@ class QualityDefectsRepository {
       );
     } on DioException catch (error) {
       throw ApiException.fromDio(error);
-    } catch (_) {
-      throw const ApiException('Не удалось создать дефект качества.');
     }
   }
 
@@ -86,8 +80,6 @@ class QualityDefectsRepository {
       );
     } on DioException catch (error) {
       throw ApiException.fromDio(error);
-    } catch (_) {
-      throw const ApiException('Не удалось взять дефект в работу.');
     }
   }
 
@@ -105,8 +97,6 @@ class QualityDefectsRepository {
       );
     } on DioException catch (error) {
       throw ApiException.fromDio(error);
-    } catch (_) {
-      throw const ApiException('Не удалось отправить дефект на проверку.');
     }
   }
 }
