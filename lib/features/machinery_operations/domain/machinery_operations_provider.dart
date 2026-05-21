@@ -72,46 +72,102 @@ class MachineryOperationsNotifier
     }
   }
 
-  Future<void> createShiftReport(MachineryAssetModel asset) async {
+  Future<void> createShiftReport(
+    MachineryAssetModel asset, {
+    required DateTime reportDate,
+    double? plannedHours,
+    required double actualHours,
+    required double fuelConsumed,
+    String? workDescription,
+  }) async {
     final projectId = state.projectFilter ?? asset.projectId;
     if (projectId == null) {
-      throw const FormatException('Выберите объект');
+      throw const FormatException('Выберите объект.');
     }
 
     await _repository.createShiftReport(
       assetId: asset.id,
       projectId: projectId,
-      reportDate: DateTime.now().toIso8601String().split('T').first,
-      actualHours: 8,
-      fuelConsumed: 0,
+      reportDate: reportDate.toIso8601String().split('T').first,
+      plannedHours: plannedHours,
+      actualHours: actualHours,
+      fuelConsumed: fuelConsumed,
+      workDescription: workDescription,
     );
     await load();
   }
 
-  Future<void> createDowntime(MachineryAssetModel asset) async {
+  Future<void> createDowntime(
+    MachineryAssetModel asset, {
+    int? shiftReportId,
+    required String reason,
+    required DateTime startedAt,
+    required int durationMinutes,
+    String? comment,
+  }) async {
     final projectId = state.projectFilter ?? asset.projectId;
     if (projectId == null) {
-      throw const FormatException('Выберите объект');
+      throw const FormatException('Выберите объект.');
     }
 
     await _repository.createDowntime(
       assetId: asset.id,
       projectId: projectId,
-      durationMinutes: 30,
+      shiftReportId: shiftReportId,
+      reason: reason,
+      startedAt: startedAt.toIso8601String(),
+      durationMinutes: durationMinutes,
+      comment: comment,
     );
     await load();
   }
 
-  Future<void> createFuelIssue(MachineryAssetModel asset) async {
+  Future<void> createFuelIssue(
+    MachineryAssetModel asset, {
+    required DateTime issuedAt,
+    required String fuelType,
+    required double quantity,
+    required String unit,
+    String? comment,
+  }) async {
     final projectId = state.projectFilter ?? asset.projectId;
     if (projectId == null) {
-      throw const FormatException('Выберите объект');
+      throw const FormatException('Выберите объект.');
     }
 
     await _repository.createFuelIssue(
       assetId: asset.id,
       projectId: projectId,
-      quantity: 50,
+      issuedAt: issuedAt.toIso8601String(),
+      fuelType: fuelType,
+      quantity: quantity,
+      unit: unit,
+      comment: comment,
+    );
+    await load();
+  }
+
+  Future<void> createProductionRecord(
+    MachineryAssetModel asset, {
+    int? shiftReportId,
+    required DateTime recordedAt,
+    required double quantity,
+    required String unit,
+    String? comment,
+  }) async {
+    final projectId = state.projectFilter ?? asset.projectId;
+    if (projectId == null) {
+      throw const FormatException('Выберите объект.');
+    }
+
+    await _repository.createProductionRecord(
+      assetId: asset.id,
+      projectId: projectId,
+      shiftReportId: shiftReportId,
+      recordedAt: recordedAt.toIso8601String(),
+      quantity: quantity,
+      unit: unit,
+      comment: comment,
     );
     await load();
   }

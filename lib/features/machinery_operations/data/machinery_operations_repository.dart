@@ -25,10 +25,7 @@ class MachineryOperationsRepository {
 
       return _list(response.data).map(MachineryAssetModel.fromJson).toList();
     } on DioException catch (error) {
-      throw ApiException.fromDio(
-        error,
-        fallbackMessage: 'Не удалось загрузить технику.',
-      );
+      throw ApiException.fromDio(error);
     } catch (_) {
       throw const ApiException('Не удалось загрузить технику.');
     }
@@ -47,10 +44,7 @@ class MachineryOperationsRepository {
         response.data,
       ).map(MachineryShiftReportModel.fromJson).toList();
     } on DioException catch (error) {
-      throw ApiException.fromDio(
-        error,
-        fallbackMessage: 'Не удалось загрузить сменные рапорты.',
-      );
+      throw ApiException.fromDio(error);
     } catch (_) {
       throw const ApiException('Не удалось загрузить сменные рапорты.');
     }
@@ -60,8 +54,10 @@ class MachineryOperationsRepository {
     required int assetId,
     required int projectId,
     required String reportDate,
+    double? plannedHours,
     required double actualHours,
     required double fuelConsumed,
+    String? workDescription,
   }) async {
     try {
       final response = await _dio.post(
@@ -70,19 +66,17 @@ class MachineryOperationsRepository {
           'asset_id': assetId,
           'project_id': projectId,
           'report_date': reportDate,
-          'planned_hours': actualHours,
+          if (plannedHours != null) 'planned_hours': plannedHours,
           'actual_hours': actualHours,
           'fuel_consumed': fuelConsumed,
-          'work_description': 'Сменный рапорт техники',
+          if (workDescription != null && workDescription.trim().isNotEmpty)
+            'work_description': workDescription.trim(),
         },
       );
 
       return MachineryShiftReportModel.fromJson(_object(response.data));
     } on DioException catch (error) {
-      throw ApiException.fromDio(
-        error,
-        fallbackMessage: 'Не удалось создать сменный рапорт.',
-      );
+      throw ApiException.fromDio(error);
     } catch (_) {
       throw const ApiException('Не удалось создать сменный рапорт.');
     }
@@ -91,7 +85,11 @@ class MachineryOperationsRepository {
   Future<void> createDowntime({
     required int assetId,
     required int projectId,
+    int? shiftReportId,
+    required String reason,
+    required String startedAt,
     required int durationMinutes,
+    String? comment,
   }) async {
     try {
       await _dio.post(
@@ -99,16 +97,16 @@ class MachineryOperationsRepository {
         data: {
           'asset_id': assetId,
           'project_id': projectId,
-          'reason': 'waiting_material',
-          'started_at': DateTime.now().toIso8601String(),
+          if (shiftReportId != null) 'shift_report_id': shiftReportId,
+          'reason': reason.trim(),
+          'started_at': startedAt,
           'duration_minutes': durationMinutes,
+          if (comment != null && comment.trim().isNotEmpty)
+            'comment': comment.trim(),
         },
       );
     } on DioException catch (error) {
-      throw ApiException.fromDio(
-        error,
-        fallbackMessage: 'Не удалось зафиксировать простой.',
-      );
+      throw ApiException.fromDio(error);
     } catch (_) {
       throw const ApiException('Не удалось зафиксировать простой.');
     }
@@ -117,7 +115,11 @@ class MachineryOperationsRepository {
   Future<void> createFuelIssue({
     required int assetId,
     required int projectId,
+    required String issuedAt,
+    required String fuelType,
     required double quantity,
+    required String unit,
+    String? comment,
   }) async {
     try {
       await _dio.post(
@@ -125,18 +127,48 @@ class MachineryOperationsRepository {
         data: {
           'asset_id': assetId,
           'project_id': projectId,
-          'issued_at': DateTime.now().toIso8601String(),
-          'fuel_type': 'diesel',
+          'issued_at': issuedAt,
+          'fuel_type': fuelType.trim(),
           'quantity': quantity,
+          'unit': unit.trim(),
+          if (comment != null && comment.trim().isNotEmpty)
+            'comment': comment.trim(),
         },
       );
     } on DioException catch (error) {
-      throw ApiException.fromDio(
-        error,
-        fallbackMessage: 'Не удалось зафиксировать ГСМ.',
-      );
+      throw ApiException.fromDio(error);
     } catch (_) {
       throw const ApiException('Не удалось зафиксировать ГСМ.');
+    }
+  }
+
+  Future<void> createProductionRecord({
+    required int assetId,
+    required int projectId,
+    int? shiftReportId,
+    required String recordedAt,
+    required double quantity,
+    required String unit,
+    String? comment,
+  }) async {
+    try {
+      await _dio.post(
+        '/machinery-operations/production-records',
+        data: {
+          'asset_id': assetId,
+          'project_id': projectId,
+          if (shiftReportId != null) 'shift_report_id': shiftReportId,
+          'recorded_at': recordedAt,
+          'quantity': quantity,
+          'unit': unit.trim(),
+          if (comment != null && comment.trim().isNotEmpty)
+            'comment': comment.trim(),
+        },
+      );
+    } on DioException catch (error) {
+      throw ApiException.fromDio(error);
+    } catch (_) {
+      throw const ApiException('Не удалось зафиксировать выработку.');
     }
   }
 
