@@ -26,10 +26,7 @@ class ProductionLaborRepository {
 
       return _list(response.data).map(LaborWorkOrderModel.fromJson).toList();
     } on DioException catch (error) {
-      throw ApiException.fromDio(
-        error,
-        fallbackMessage: 'Не удалось загрузить наряды.',
-      );
+      throw ApiException.fromDio(error);
     } catch (_) {
       throw const ApiException('Не удалось загрузить наряды.');
     }
@@ -40,6 +37,7 @@ class ProductionLaborRepository {
     required double quantity,
     required double hours,
     required String workDate,
+    String? comment,
   }) async {
     try {
       final response = await _dio.post(
@@ -49,15 +47,14 @@ class ProductionLaborRepository {
           'work_date': workDate,
           'quantity': quantity,
           'hours': hours,
+          if (comment != null && comment.trim().isNotEmpty)
+            'comment': comment.trim(),
         },
       );
 
       return LaborOutputModel.fromJson(_object(response.data));
     } on DioException catch (error) {
-      throw ApiException.fromDio(
-        error,
-        fallbackMessage: 'Не удалось зафиксировать выработку.',
-      );
+      throw ApiException.fromDio(error);
     } catch (_) {
       throw const ApiException('Не удалось зафиксировать выработку.');
     }
@@ -68,7 +65,9 @@ class ProductionLaborRepository {
     required int workOrderLineId,
     required double hours,
     required String shiftDate,
-    required String workerName,
+    required bool includeInPayroll,
+    int? employeeId,
+    String? workerName,
     String? safetyPermitReference,
   }) async {
     try {
@@ -80,7 +79,10 @@ class ProductionLaborRepository {
           'entries': [
             {
               'work_order_line_id': workOrderLineId,
-              'worker_name': workerName,
+              'include_in_payroll': includeInPayroll,
+              if (employeeId != null) 'employee_id': employeeId,
+              if (workerName != null && workerName.trim().isNotEmpty)
+                'worker_name': workerName.trim(),
               'hours': hours,
               if (safetyPermitReference != null &&
                   safetyPermitReference.trim().isNotEmpty)
@@ -92,10 +94,7 @@ class ProductionLaborRepository {
 
       return LaborTimesheetModel.fromJson(_object(response.data));
     } on DioException catch (error) {
-      throw ApiException.fromDio(
-        error,
-        fallbackMessage: 'Не удалось создать табель.',
-      );
+      throw ApiException.fromDio(error);
     } catch (_) {
       throw const ApiException('Не удалось создать табель.');
     }

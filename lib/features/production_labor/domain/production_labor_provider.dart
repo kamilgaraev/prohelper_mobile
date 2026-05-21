@@ -62,13 +62,18 @@ class ProductionLaborNotifier extends StateNotifier<ProductionLaborState> {
 
   Future<void> recordOutput(
     LaborWorkOrderModel workOrder,
-    LaborWorkOrderLineModel line,
-  ) async {
+    LaborWorkOrderLineModel line, {
+    required DateTime workDate,
+    required double quantity,
+    required double hours,
+    String? comment,
+  }) async {
     await _repository.recordOutput(
       workOrderLineId: line.id,
-      quantity: line.remainingQuantity > 0 ? 1 : line.plannedQuantity,
-      hours: 8,
-      workDate: DateTime.now().toIso8601String().split('T').first,
+      quantity: quantity,
+      hours: hours,
+      workDate: workDate.toIso8601String().split('T').first,
+      comment: comment,
     );
     await load();
   }
@@ -76,14 +81,21 @@ class ProductionLaborNotifier extends StateNotifier<ProductionLaborState> {
   Future<void> createTimesheet(
     LaborWorkOrderModel workOrder,
     LaborWorkOrderLineModel line, {
+    required DateTime shiftDate,
+    required double hours,
+    required bool includeInPayroll,
+    int? employeeId,
+    String? workerName,
     String? safetyPermitReference,
   }) async {
     await _repository.createTimesheet(
       workOrderId: workOrder.id,
       workOrderLineId: line.id,
-      hours: 8,
-      shiftDate: DateTime.now().toIso8601String().split('T').first,
-      workerName: workOrder.assigneeName ?? 'Бригада',
+      hours: hours,
+      shiftDate: shiftDate.toIso8601String().split('T').first,
+      includeInPayroll: includeInPayroll,
+      employeeId: employeeId,
+      workerName: workerName,
       safetyPermitReference: safetyPermitReference,
     );
     await load();
