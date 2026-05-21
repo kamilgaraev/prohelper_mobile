@@ -9,12 +9,24 @@ class _FakeSafetyRepository extends SafetyRepository {
 
   int? loadedProjectId;
   int? resolvedViolationId;
+  int? submittedPermitId;
+  int? approvedPermitId;
+  int? activatedPermitId;
+  int? suspendedPermitId;
+  int? resumedPermitId;
+  int? rejectedPermitId;
+  int? closedPermitId;
+  String? approvalComment;
+  String? suspendReason;
+  String? rejectReason;
+  String? closeComment;
   Map<String, dynamic>? incidentData;
   Map<String, dynamic>? violationData;
 
   @override
-  Future<List<SafetyWorkPermitModel>> fetchActivePermits({
+  Future<List<SafetyWorkPermitModel>> fetchPermits({
     int? projectId,
+    String? status,
   }) async {
     loadedProjectId = projectId;
     return [_permit];
@@ -49,6 +61,64 @@ class _FakeSafetyRepository extends SafetyRepository {
     resolvedViolationId = id;
     return _violation;
   }
+
+  @override
+  Future<SafetyWorkPermitModel> submitPermit(int id) async {
+    submittedPermitId = id;
+    return _permit;
+  }
+
+  @override
+  Future<SafetyWorkPermitModel> approvePermit(
+    int id, {
+    String? approvalComment,
+  }) async {
+    approvedPermitId = id;
+    this.approvalComment = approvalComment;
+    return _permit;
+  }
+
+  @override
+  Future<SafetyWorkPermitModel> activatePermit(int id) async {
+    activatedPermitId = id;
+    return _permit;
+  }
+
+  @override
+  Future<SafetyWorkPermitModel> suspendPermit(
+    int id, {
+    required String reason,
+  }) async {
+    suspendedPermitId = id;
+    suspendReason = reason;
+    return _permit;
+  }
+
+  @override
+  Future<SafetyWorkPermitModel> resumePermit(int id) async {
+    resumedPermitId = id;
+    return _permit;
+  }
+
+  @override
+  Future<SafetyWorkPermitModel> rejectPermit(
+    int id, {
+    required String reason,
+  }) async {
+    rejectedPermitId = id;
+    rejectReason = reason;
+    return _permit;
+  }
+
+  @override
+  Future<SafetyWorkPermitModel> closePermit(
+    int id, {
+    required String closeComment,
+  }) async {
+    closedPermitId = id;
+    this.closeComment = closeComment;
+    return _permit;
+  }
 }
 
 const _permit = SafetyWorkPermitModel(
@@ -60,8 +130,10 @@ const _permit = SafetyWorkPermitModel(
   riskLevel: 'high',
   status: 'active',
   statusLabel: 'Активен',
+  availableActions: ['suspend', 'close'],
   validFrom: '2026-06-01',
   validUntil: '2026-06-02',
+  requiredControls: ['Ограждение', 'Страховка'],
 );
 
 const _incident = SafetyIncidentModel(
@@ -105,7 +177,7 @@ void main() {
       await notifier.load();
 
       expect(repository.loadedProjectId, 15);
-      expect(notifier.state.activePermits.single.id, 1);
+      expect(notifier.state.permits.single.id, 1);
       expect(notifier.state.incidents.single.id, 2);
       expect(notifier.state.violations.single.id, 3);
       expect(notifier.state.error, isNull);
@@ -118,10 +190,28 @@ void main() {
       await notifier.createIncident({'project_id': 15, 'title': 'Инцидент'});
       await notifier.createViolation({'project_id': 15, 'title': 'Нарушение'});
       await notifier.resolveViolation(3, 'Устранено');
+      await notifier.submitPermit(1);
+      await notifier.approvePermit(1, approvalComment: 'Проверено');
+      await notifier.activatePermit(1);
+      await notifier.suspendPermit(1, reason: 'Ветер');
+      await notifier.resumePermit(1);
+      await notifier.rejectPermit(1, reason: 'Нет мер контроля');
+      await notifier.closePermit(1, closeComment: 'Работы завершены');
 
       expect(repository.incidentData?['title'], 'Инцидент');
       expect(repository.violationData?['title'], 'Нарушение');
       expect(repository.resolvedViolationId, 3);
+      expect(repository.submittedPermitId, 1);
+      expect(repository.approvedPermitId, 1);
+      expect(repository.approvalComment, 'Проверено');
+      expect(repository.activatedPermitId, 1);
+      expect(repository.suspendedPermitId, 1);
+      expect(repository.suspendReason, 'Ветер');
+      expect(repository.resumedPermitId, 1);
+      expect(repository.rejectedPermitId, 1);
+      expect(repository.rejectReason, 'Нет мер контроля');
+      expect(repository.closedPermitId, 1);
+      expect(repository.closeComment, 'Работы завершены');
       expect(notifier.state.violations, hasLength(1));
     });
   });

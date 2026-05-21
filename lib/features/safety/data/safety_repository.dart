@@ -15,16 +15,30 @@ class SafetyRepository {
 
   final Dio _dio;
 
-  Future<List<SafetyWorkPermitModel>> fetchActivePermits({
+  Future<List<SafetyWorkPermitModel>> fetchPermits({
     int? projectId,
+    String? status,
   }) async {
     try {
       final response = await _dio.get(
-        '/safety-management/work-permits/active',
-        queryParameters: {if (projectId != null) 'project_id': projectId},
+        '/safety-management/work-permits',
+        queryParameters: {
+          if (projectId != null) 'project_id': projectId,
+          if (status != null) 'status': status,
+        },
       );
 
       return _list(response.data).map(SafetyWorkPermitModel.fromJson).toList();
+    } on DioException catch (error) {
+      throw ApiException.fromDio(error);
+    }
+  }
+
+  Future<SafetyWorkPermitModel> fetchPermit(int id) async {
+    try {
+      final response = await _dio.get('/safety-management/work-permits/$id');
+
+      return SafetyWorkPermitModel.fromJson(_object(response.data));
     } on DioException catch (error) {
       throw ApiException.fromDio(error);
     }
@@ -92,6 +106,72 @@ class SafetyRepository {
       );
 
       return SafetyViolationModel.fromJson(_object(response.data));
+    } on DioException catch (error) {
+      throw ApiException.fromDio(error);
+    }
+  }
+
+  Future<SafetyWorkPermitModel> submitPermit(int id) {
+    return _permitAction(id, 'submit');
+  }
+
+  Future<SafetyWorkPermitModel> approvePermit(
+    int id, {
+    String? approvalComment,
+  }) {
+    final comment = approvalComment?.trim();
+
+    return _permitAction(
+      id,
+      'approve',
+      data: {
+        if (comment != null && comment.isNotEmpty) 'approval_comment': comment,
+      },
+    );
+  }
+
+  Future<SafetyWorkPermitModel> activatePermit(int id) {
+    return _permitAction(id, 'activate');
+  }
+
+  Future<SafetyWorkPermitModel> suspendPermit(
+    int id, {
+    required String reason,
+  }) {
+    return _permitAction(id, 'suspend', data: {'reason': reason.trim()});
+  }
+
+  Future<SafetyWorkPermitModel> resumePermit(int id) {
+    return _permitAction(id, 'resume');
+  }
+
+  Future<SafetyWorkPermitModel> rejectPermit(int id, {required String reason}) {
+    return _permitAction(id, 'reject', data: {'reason': reason.trim()});
+  }
+
+  Future<SafetyWorkPermitModel> closePermit(
+    int id, {
+    required String closeComment,
+  }) {
+    return _permitAction(
+      id,
+      'close',
+      data: {'close_comment': closeComment.trim()},
+    );
+  }
+
+  Future<SafetyWorkPermitModel> _permitAction(
+    int id,
+    String action, {
+    Map<String, dynamic>? data,
+  }) async {
+    try {
+      final response = await _dio.post(
+        '/safety-management/work-permits/$id/$action',
+        data: data,
+      );
+
+      return SafetyWorkPermitModel.fromJson(_object(response.data));
     } on DioException catch (error) {
       throw ApiException.fromDio(error);
     }

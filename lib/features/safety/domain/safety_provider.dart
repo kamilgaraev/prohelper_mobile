@@ -10,7 +10,7 @@ class SafetyState {
   const SafetyState({
     this.isLoading = false,
     this.projectFilter,
-    this.activePermits = const [],
+    this.permits = const [],
     this.incidents = const [],
     this.violations = const [],
     this.error,
@@ -18,7 +18,7 @@ class SafetyState {
 
   final bool isLoading;
   final int? projectFilter;
-  final List<SafetyWorkPermitModel> activePermits;
+  final List<SafetyWorkPermitModel> permits;
   final List<SafetyIncidentModel> incidents;
   final List<SafetyViolationModel> violations;
   final String? error;
@@ -26,7 +26,7 @@ class SafetyState {
   SafetyState copyWith({
     bool? isLoading,
     Object? projectFilter = _projectFilterSentinel,
-    List<SafetyWorkPermitModel>? activePermits,
+    List<SafetyWorkPermitModel>? permits,
     List<SafetyIncidentModel>? incidents,
     List<SafetyViolationModel>? violations,
     Object? error = _errorSentinel,
@@ -37,7 +37,7 @@ class SafetyState {
           identical(projectFilter, _projectFilterSentinel)
               ? this.projectFilter
               : projectFilter as int?,
-      activePermits: activePermits ?? this.activePermits,
+      permits: permits ?? this.permits,
       incidents: incidents ?? this.incidents,
       violations: violations ?? this.violations,
       error: identical(error, _errorSentinel) ? this.error : error as String?,
@@ -57,7 +57,7 @@ class SafetyNotifier extends StateNotifier<SafetyState> {
 
     state = state.copyWith(
       projectFilter: projectId,
-      activePermits: const [],
+      permits: const [],
       incidents: const [],
       violations: const [],
       error: null,
@@ -69,14 +69,14 @@ class SafetyNotifier extends StateNotifier<SafetyState> {
 
     try {
       final result = await Future.wait<Object>([
-        _repository.fetchActivePermits(projectId: state.projectFilter),
+        _repository.fetchPermits(projectId: state.projectFilter),
         _repository.fetchIncidents(projectId: state.projectFilter),
         _repository.fetchViolations(projectId: state.projectFilter),
       ]);
 
       state = state.copyWith(
         isLoading: false,
-        activePermits: result[0] as List<SafetyWorkPermitModel>,
+        permits: result[0] as List<SafetyWorkPermitModel>,
         incidents: result[1] as List<SafetyIncidentModel>,
         violations: result[2] as List<SafetyViolationModel>,
       );
@@ -97,6 +97,41 @@ class SafetyNotifier extends StateNotifier<SafetyState> {
 
   Future<void> resolveViolation(int id, String comment) async {
     await _repository.resolveViolation(id, comment);
+    await load();
+  }
+
+  Future<void> submitPermit(int id) async {
+    await _repository.submitPermit(id);
+    await load();
+  }
+
+  Future<void> approvePermit(int id, {String? approvalComment}) async {
+    await _repository.approvePermit(id, approvalComment: approvalComment);
+    await load();
+  }
+
+  Future<void> activatePermit(int id) async {
+    await _repository.activatePermit(id);
+    await load();
+  }
+
+  Future<void> suspendPermit(int id, {required String reason}) async {
+    await _repository.suspendPermit(id, reason: reason);
+    await load();
+  }
+
+  Future<void> resumePermit(int id) async {
+    await _repository.resumePermit(id);
+    await load();
+  }
+
+  Future<void> rejectPermit(int id, {required String reason}) async {
+    await _repository.rejectPermit(id, reason: reason);
+    await load();
+  }
+
+  Future<void> closePermit(int id, {required String closeComment}) async {
+    await _repository.closePermit(id, closeComment: closeComment);
     await load();
   }
 }

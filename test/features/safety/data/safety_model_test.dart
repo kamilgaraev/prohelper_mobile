@@ -13,8 +13,10 @@ void main() {
         'risk_level': 'critical',
         'status': 'active',
         'status_label': 'Действует',
+        'available_actions': ['suspend', 'close'],
         'valid_from': '2026-06-01T00:00:00Z',
         'valid_until': '2026-06-02T00:00:00Z',
+        'required_controls': ['Ограждение', 'Страховка'],
         'project': {'id': 7, 'name': 'Башня'},
         'problem_flags': [
           {
@@ -27,6 +29,8 @@ void main() {
 
       expect(permit.id, 10);
       expect(permit.projectName, 'Башня');
+      expect(permit.availableActions, ['suspend', 'close']);
+      expect(permit.requiredControls, ['Ограждение', 'Страховка']);
       expect(permit.problemFlags.single.code, 'permit_expired');
     });
 
@@ -82,6 +86,25 @@ void main() {
           'severity': 'major',
           'status_label': 'Открыто',
           'available_actions': ['resolve'],
+        }),
+        throwsFormatException,
+      );
+    });
+
+    test('rejects permit payload without action contract', () {
+      expect(
+        () => SafetyWorkPermitModel.fromJson({
+          'id': 10,
+          'project_id': 7,
+          'permit_number': 'HSE-P-7-001',
+          'title': 'Высотные работы',
+          'permit_type': 'height_work',
+          'risk_level': 'critical',
+          'status': 'active',
+          'status_label': 'Действует',
+          'valid_from': '2026-06-01T00:00:00Z',
+          'valid_until': '2026-06-02T00:00:00Z',
+          'required_controls': ['Ограждение'],
         }),
         throwsFormatException,
       );

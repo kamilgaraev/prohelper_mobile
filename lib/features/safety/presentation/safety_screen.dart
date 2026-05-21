@@ -83,12 +83,12 @@ class _SafetyScreenState extends ConsumerState<SafetyScreen> {
                       'Записи охраны труда ведутся в контексте конкретного проекта.',
                 )
                 : state.isLoading &&
-                    state.activePermits.isEmpty &&
+                    state.permits.isEmpty &&
                     state.incidents.isEmpty &&
                     state.violations.isEmpty
                 ? const AppLoadingState(message: 'Загружаем охрану труда')
                 : state.error != null &&
-                    state.activePermits.isEmpty &&
+                    state.permits.isEmpty &&
                     state.incidents.isEmpty &&
                     state.violations.isEmpty
                 ? AppErrorState(
@@ -108,7 +108,10 @@ class _SafetyScreenState extends ConsumerState<SafetyScreen> {
                       const SizedBox(height: 12),
                       _SummaryStrip(state: state),
                       const SizedBox(height: 12),
-                      _PermitsSection(permits: state.activePermits),
+                      _PermitsSection(
+                        permits: state.permits,
+                        onOpen: (permit) => _showPermitSheet(context, permit),
+                      ),
                       const SizedBox(height: 12),
                       _IncidentsSection(incidents: state.incidents),
                       const SizedBox(height: 12),
@@ -509,6 +512,318 @@ class _SafetyScreenState extends ConsumerState<SafetyScreen> {
     );
   }
 
+  Future<void> _showPermitSheet(
+    BuildContext context,
+    SafetyWorkPermitModel permit,
+  ) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder:
+          (sheetContext) => SafeArea(
+            child: SingleChildScrollView(
+              padding: EdgeInsets.only(
+                left: 16,
+                right: 16,
+                top: 20,
+                bottom: MediaQuery.of(sheetContext).viewInsets.bottom + 20,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Наряд-допуск', style: AppTypography.h2(sheetContext)),
+                  const SizedBox(height: 6),
+                  Text(
+                    permit.title,
+                    style: AppTypography.bodyLarge(sheetContext),
+                  ),
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      _InfoChip(
+                        icon: Icons.badge_outlined,
+                        label: permit.permitNumber,
+                      ),
+                      _InfoChip(
+                        icon: Icons.verified_user_outlined,
+                        label: permit.statusLabel,
+                      ),
+                      _InfoChip(
+                        icon: Icons.shield_outlined,
+                        label: _riskLabel(permit.riskLevel),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  _PermitDetailLine(
+                    label: 'Тип',
+                    value: _permitTypeLabel(permit.permitType),
+                  ),
+                  if (permit.projectName != null)
+                    _PermitDetailLine(
+                      label: 'Проект',
+                      value: permit.projectName!,
+                    ),
+                  if (permit.locationName != null)
+                    _PermitDetailLine(
+                      label: 'Локация',
+                      value: permit.locationName!,
+                    ),
+                  _PermitDetailLine(
+                    label: 'Начало',
+                    value: _formatDate(permit.validFrom),
+                  ),
+                  _PermitDetailLine(
+                    label: 'Окончание',
+                    value: _formatDate(permit.validUntil),
+                  ),
+                  if (permit.requiredControls.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      'Меры контроля',
+                      style: AppTypography.caption(sheetContext),
+                    ),
+                    const SizedBox(height: 6),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children:
+                          permit.requiredControls
+                              .map(
+                                (control) => Chip(
+                                  avatar: const Icon(
+                                    Icons.check_rounded,
+                                    size: 16,
+                                  ),
+                                  label: Text(control),
+                                  visualDensity: VisualDensity.compact,
+                                ),
+                              )
+                              .toList(),
+                    ),
+                  ],
+                  if (permit.approvalComment != null)
+                    _PermitDetailLine(
+                      label: 'Комментарий согласования',
+                      value: permit.approvalComment!,
+                    ),
+                  if (permit.rejectionReason != null)
+                    _PermitDetailLine(
+                      label: 'Причина отклонения',
+                      value: permit.rejectionReason!,
+                    ),
+                  if (permit.suspensionReason != null)
+                    _PermitDetailLine(
+                      label: 'Причина приостановки',
+                      value: permit.suspensionReason!,
+                    ),
+                  if (permit.closeComment != null)
+                    _PermitDetailLine(
+                      label: 'Итог закрытия',
+                      value: permit.closeComment!,
+                    ),
+                  _ProblemFlags(flags: permit.problemFlags),
+                  if (permit.availableActions.isNotEmpty) ...[
+                    const SizedBox(height: 16),
+                    Text('Действия', style: AppTypography.h2(sheetContext)),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children:
+                          permit.availableActions
+                              .map(
+                                (action) => FilledButton.icon(
+                                  onPressed: () {
+                                    Navigator.pop(sheetContext);
+                                    _executePermitAction(
+                                      context,
+                                      permit,
+                                      action,
+                                    );
+                                  },
+                                  icon: Icon(_permitActionIcon(action)),
+                                  label: Text(_permitActionLabel(action)),
+                                ),
+                              )
+                              .toList(),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+    );
+  }
+
+  Future<void> _executePermitAction(
+    BuildContext context,
+    SafetyWorkPermitModel permit,
+    String action,
+  ) async {
+    if (action == 'approve' ||
+        action == 'suspend' ||
+        action == 'reject' ||
+        action == 'close') {
+      await _showPermitActionSheet(context, permit, action);
+      return;
+    }
+
+    await _runPermitMutation(
+      context,
+      () => _performPermitAction(permit, action),
+    );
+  }
+
+  Future<void> _showPermitActionSheet(
+    BuildContext context,
+    SafetyWorkPermitModel permit,
+    String action,
+  ) async {
+    final controller = TextEditingController();
+    final requiredText = action != 'approve';
+    var submitting = false;
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder:
+          (sheetContext) => StatefulBuilder(
+            builder:
+                (context, setSheetState) => SafeArea(
+                  child: SingleChildScrollView(
+                    padding: EdgeInsets.only(
+                      left: 16,
+                      right: 16,
+                      top: 20,
+                      bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _permitActionTitle(action),
+                          style: AppTypography.h2(context),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          permit.title,
+                          style: AppTypography.bodyMedium(context),
+                        ),
+                        const SizedBox(height: 16),
+                        TextField(
+                          controller: controller,
+                          minLines: 3,
+                          maxLines: 5,
+                          decoration: InputDecoration(
+                            labelText: _permitActionInputLabel(action),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        SizedBox(
+                          width: double.infinity,
+                          child: FilledButton.icon(
+                            onPressed:
+                                submitting
+                                    ? null
+                                    : () async {
+                                      final text = controller.text.trim();
+                                      if (requiredText && text.isEmpty) {
+                                        ScaffoldMessenger.of(
+                                          context,
+                                        ).showSnackBar(
+                                          SnackBar(
+                                            content: Text(
+                                              _permitActionEmptyMessage(action),
+                                            ),
+                                          ),
+                                        );
+                                        return;
+                                      }
+
+                                      setSheetState(() => submitting = true);
+                                      final completed =
+                                          await _runPermitMutation(
+                                            context,
+                                            () => _performPermitAction(
+                                              permit,
+                                              action,
+                                              text: text,
+                                            ),
+                                          );
+                                      if (completed && sheetContext.mounted) {
+                                        Navigator.pop(sheetContext);
+                                      }
+                                      if (context.mounted) {
+                                        setSheetState(() => submitting = false);
+                                      }
+                                    },
+                            icon: Icon(_permitActionIcon(action)),
+                            label: Text(
+                              submitting
+                                  ? 'Сохранение...'
+                                  : _permitActionLabel(action),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+          ),
+    );
+  }
+
+  Future<bool> _runPermitMutation(
+    BuildContext context,
+    Future<void> Function() mutation,
+  ) async {
+    try {
+      await mutation();
+      if (context.mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Действие выполнено')));
+      }
+
+      return true;
+    } catch (error) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(error.toString())));
+      }
+
+      return false;
+    }
+  }
+
+  Future<void> _performPermitAction(
+    SafetyWorkPermitModel permit,
+    String action, {
+    String? text,
+  }) {
+    final notifier = ref.read(safetyProvider.notifier);
+
+    return switch (action) {
+      'submit' => notifier.submitPermit(permit.id),
+      'approve' => notifier.approvePermit(
+        permit.id,
+        approvalComment: text == null || text.isEmpty ? null : text,
+      ),
+      'activate' => notifier.activatePermit(permit.id),
+      'suspend' => notifier.suspendPermit(permit.id, reason: text ?? ''),
+      'resume' => notifier.resumePermit(permit.id),
+      'reject' => notifier.rejectPermit(permit.id, reason: text ?? ''),
+      'close' => notifier.closePermit(permit.id, closeComment: text ?? ''),
+      _ => Future<void>.error('Действие недоступно'),
+    };
+  }
+
   Future<void> _showResolveSheet(
     BuildContext context,
     SafetyViolationModel violation,
@@ -622,7 +937,7 @@ class _SummaryStrip extends StatelessWidget {
             .where((violation) => violation.status == 'open')
             .length;
     final riskFlags = [
-      ...state.activePermits.expand((permit) => permit.problemFlags),
+      ...state.permits.expand((permit) => permit.problemFlags),
       ...state.incidents.expand((incident) => incident.problemFlags),
       ...state.violations.expand((violation) => violation.problemFlags),
     ];
@@ -634,7 +949,7 @@ class _SummaryStrip extends StatelessWidget {
             Expanded(
               child: _MetricCard(
                 label: 'Допуски',
-                value: state.activePermits.length.toString(),
+                value: state.permits.length.toString(),
                 icon: Icons.assignment_turned_in_outlined,
               ),
             ),
@@ -736,23 +1051,27 @@ class _RiskBanner extends StatelessWidget {
 }
 
 class _PermitsSection extends StatelessWidget {
-  const _PermitsSection({required this.permits});
+  const _PermitsSection({required this.permits, required this.onOpen});
 
   final List<SafetyWorkPermitModel> permits;
+  final ValueChanged<SafetyWorkPermitModel> onOpen;
 
   @override
   Widget build(BuildContext context) {
     if (permits.isEmpty) {
       return const _EmptySection(
-        title: 'Активные наряды-допуски',
+        title: 'Наряды-допуски',
         icon: Icons.assignment_turned_in_outlined,
-        message: 'Активных нарядов-допусков нет',
+        message: 'Нарядов-допусков нет',
       );
     }
 
     return _Section(
-      title: 'Активные наряды-допуски',
-      children: permits.map((permit) => _PermitCard(permit: permit)).toList(),
+      title: 'Наряды-допуски',
+      children:
+          permits
+              .map((permit) => _PermitCard(permit: permit, onOpen: onOpen))
+              .toList(),
     );
   }
 }
@@ -833,10 +1152,37 @@ class _Section extends StatelessWidget {
   }
 }
 
+class _PermitDetailLine extends StatelessWidget {
+  const _PermitDetailLine({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 112,
+            child: Text(label, style: AppTypography.caption(context)),
+          ),
+          Expanded(
+            child: Text(value, style: AppTypography.bodyMedium(context)),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _PermitCard extends StatelessWidget {
-  const _PermitCard({required this.permit});
+  const _PermitCard({required this.permit, required this.onOpen});
 
   final SafetyWorkPermitModel permit;
+  final ValueChanged<SafetyWorkPermitModel> onOpen;
 
   @override
   Widget build(BuildContext context) {
@@ -878,6 +1224,15 @@ class _PermitCard extends StatelessWidget {
             style: AppTypography.bodyMedium(context),
           ),
           _ProblemFlags(flags: permit.problemFlags),
+          const SizedBox(height: 12),
+          Align(
+            alignment: Alignment.centerRight,
+            child: OutlinedButton.icon(
+              onPressed: () => onOpen(permit),
+              icon: const Icon(Icons.open_in_new_rounded),
+              label: const Text('Подробнее'),
+            ),
+          ),
         ],
       ),
     );
@@ -1206,5 +1561,71 @@ String _riskLabel(String value) {
     'high' => 'Высокий риск',
     'critical' => 'Критичный риск',
     _ => value,
+  };
+}
+
+String _permitTypeLabel(String value) {
+  return switch (value) {
+    'hot_work' => 'Огневые работы',
+    'height_work' => 'Высотные работы',
+    'confined_space' => 'Замкнутое пространство',
+    'electrical' => 'Электромонтажные работы',
+    'lifting' => 'Подъемные работы',
+    _ => 'Другой тип работ',
+  };
+}
+
+String _permitActionLabel(String value) {
+  return switch (value) {
+    'submit' => 'Отправить',
+    'approve' => 'Согласовать',
+    'reject' => 'Отклонить',
+    'activate' => 'Активировать',
+    'suspend' => 'Приостановить',
+    'resume' => 'Возобновить',
+    'close' => 'Закрыть',
+    _ => 'Действие',
+  };
+}
+
+IconData _permitActionIcon(String value) {
+  return switch (value) {
+    'submit' => Icons.send_rounded,
+    'approve' => Icons.verified_rounded,
+    'reject' => Icons.block_rounded,
+    'activate' => Icons.play_arrow_rounded,
+    'suspend' => Icons.pause_rounded,
+    'resume' => Icons.restart_alt_rounded,
+    'close' => Icons.done_all_rounded,
+    _ => Icons.touch_app_rounded,
+  };
+}
+
+String _permitActionTitle(String value) {
+  return switch (value) {
+    'approve' => 'Согласовать наряд-допуск',
+    'reject' => 'Отклонить наряд-допуск',
+    'suspend' => 'Приостановить наряд-допуск',
+    'close' => 'Закрыть наряд-допуск',
+    _ => _permitActionLabel(value),
+  };
+}
+
+String _permitActionInputLabel(String value) {
+  return switch (value) {
+    'approve' => 'Комментарий',
+    'reject' => 'Причина отклонения',
+    'suspend' => 'Причина приостановки',
+    'close' => 'Итог закрытия',
+    _ => 'Комментарий',
+  };
+}
+
+String _permitActionEmptyMessage(String value) {
+  return switch (value) {
+    'reject' => 'Укажите причину отклонения',
+    'suspend' => 'Укажите причину приостановки',
+    'close' => 'Укажите итог закрытия',
+    _ => 'Заполните поле',
   };
 }

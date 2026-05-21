@@ -14,12 +14,15 @@ class _RecordingSafetyRepository extends SafetyRepository {
   _RecordingSafetyRepository() : super(Dio());
 
   Map<String, dynamic>? incidentPayload;
+  int? suspendedPermitId;
+  String? suspendReason;
 
   @override
-  Future<List<SafetyWorkPermitModel>> fetchActivePermits({
+  Future<List<SafetyWorkPermitModel>> fetchPermits({
     int? projectId,
+    String? status,
   }) async {
-    return const [];
+    return _permits;
   }
 
   @override
@@ -48,18 +51,33 @@ class _RecordingSafetyRepository extends SafetyRepository {
       occurredAt: '2026-05-21T09:00:00',
     );
   }
+
+  @override
+  Future<SafetyWorkPermitModel> suspendPermit(
+    int id, {
+    required String reason,
+  }) async {
+    suspendedPermitId = id;
+    suspendReason = reason;
+
+    return _permits.first;
+  }
 }
 
 class _TestSafetyNotifier extends SafetyNotifier {
   _TestSafetyNotifier(super.repository) {
-    state = const SafetyState(isLoading: false, projectFilter: 9);
+    state = const SafetyState(
+      isLoading: false,
+      projectFilter: 9,
+      permits: _permits,
+    );
   }
 
   @override
   Future<void> load() async {
     state = state.copyWith(
       isLoading: false,
-      activePermits: const [],
+      permits: _permits,
       incidents: const [],
       violations: const [],
     );
@@ -82,6 +100,24 @@ class _TestProjectsNotifier extends ProjectsNotifier {
     );
   }
 }
+
+const _permits = [
+  SafetyWorkPermitModel(
+    id: 11,
+    projectId: 9,
+    permitNumber: 'HSE-P-11',
+    title: 'Высотные работы',
+    permitType: 'height_work',
+    riskLevel: 'high',
+    status: 'active',
+    statusLabel: 'Активен',
+    availableActions: ['suspend', 'close'],
+    validFrom: '2026-05-21T09:00:00',
+    validUntil: '2026-05-21T18:00:00',
+    requiredControls: ['Ограждение', 'Страховка'],
+    projectName: 'Башня',
+  ),
+];
 
 void main() {
   Project project() {
@@ -144,5 +180,38 @@ void main() {
     expect(repository.incidentPayload?['incident_type'], 'unsafe_condition');
     expect(repository.incidentPayload?['occurred_at'], isA<String>());
     expect(repository.incidentPayload?.containsKey('metadata'), isFalse);
+  });
+
+  testWidgets('opens permit detail and submits suspension reason', (
+    tester,
+  ) async {
+    final repository = _RecordingSafetyRepository();
+
+    await tester.pumpWidget(buildScreen(repository));
+    await pumpUi(tester);
+
+    await tester.tap(find.text('Подробнее').first);
+    await pumpUi(tester);
+    expect(find.text('Наряд-допуск'), findsOneWidget);
+    expect(find.text('Ограждение'), findsOneWidget);
+
+    final detailSuspendButton =
+        find.text('Приостановить', skipOffstage: false).last;
+    await tester.ensureVisible(detailSuspendButton);
+    await tester.pump();
+    await tester.tap(detailSuspendButton);
+    await pumpUi(tester);
+    final sheetSuspendButton =
+        find.text('Приостановить', skipOffstage: false).last;
+    await tester.tap(sheetSuspendButton);
+    await pumpUi(tester);
+    expect(repository.suspendedPermitId, isNull);
+
+    await tester.enterText(find.byType(TextField).last, 'Сильный ветер');
+    await tester.tap(sheetSuspendButton);
+    await pumpUi(tester);
+
+    expect(repository.suspendedPermitId, 11);
+    expect(repository.suspendReason, 'Сильный ветер');
   });
 }

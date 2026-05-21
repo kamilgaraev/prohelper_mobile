@@ -28,10 +28,16 @@ class SafetyWorkPermitModel {
     required this.riskLevel,
     required this.status,
     required this.statusLabel,
+    required this.availableActions,
     required this.validFrom,
     required this.validUntil,
+    required this.requiredControls,
     this.locationName,
     this.projectName,
+    this.approvalComment,
+    this.rejectionReason,
+    this.suspensionReason,
+    this.closeComment,
     this.problemFlags = const [],
   });
 
@@ -43,10 +49,16 @@ class SafetyWorkPermitModel {
   final String riskLevel;
   final String status;
   final String statusLabel;
+  final List<String> availableActions;
   final String validFrom;
   final String validUntil;
+  final List<String> requiredControls;
   final String? locationName;
   final String? projectName;
+  final String? approvalComment;
+  final String? rejectionReason;
+  final String? suspensionReason;
+  final String? closeComment;
   final List<SafetyProblemFlagModel> problemFlags;
 
   factory SafetyWorkPermitModel.fromJson(Map<String, dynamic> json) {
@@ -59,10 +71,20 @@ class SafetyWorkPermitModel {
       riskLevel: _requiredString(json, 'risk_level'),
       status: _requiredString(json, 'status'),
       statusLabel: _requiredString(json, 'status_label'),
+      availableActions: _requiredStringList(
+        json,
+        'available_actions',
+        allowedValues: _knownPermitActions,
+      ),
       validFrom: _requiredString(json, 'valid_from'),
       validUntil: _requiredString(json, 'valid_until'),
+      requiredControls: _requiredStringList(json, 'required_controls'),
       locationName: _asNullableString(json['location_name']),
       projectName: _nestedName(json['project']),
+      approvalComment: _asNullableString(json['approval_comment']),
+      rejectionReason: _asNullableString(json['rejection_reason']),
+      suspensionReason: _asNullableString(json['suspension_reason']),
+      closeComment: _asNullableString(json['close_comment']),
       problemFlags: _flags(json['problem_flags']),
     );
   }
@@ -171,6 +193,16 @@ class SafetyViolationModel {
   }
 }
 
+const _knownPermitActions = {
+  'submit',
+  'approve',
+  'reject',
+  'activate',
+  'suspend',
+  'resume',
+  'close',
+};
+
 List<SafetyProblemFlagModel> _flags(dynamic value) {
   return (value as List<dynamic>? ?? const [])
       .whereType<Map>()
@@ -214,6 +246,31 @@ String _requiredString(Map<String, dynamic> json, String key) {
   }
 
   return value;
+}
+
+List<String> _requiredStringList(
+  Map<String, dynamic> json,
+  String key, {
+  Set<String>? allowedValues,
+}) {
+  final value = json[key];
+  if (value is! List) {
+    throw FormatException('Missing list field: $key');
+  }
+
+  return value
+      .map((item) {
+        final text = item?.toString().trim() ?? '';
+        if (text.isEmpty) {
+          throw FormatException('Invalid list item field: $key');
+        }
+        if (allowedValues != null && !allowedValues.contains(text)) {
+          throw FormatException('Unknown list item field: $key');
+        }
+
+        return text;
+      })
+      .toList(growable: false);
 }
 
 String? _asNullableString(dynamic value) {
