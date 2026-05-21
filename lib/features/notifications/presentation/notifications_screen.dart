@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
-import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_typography.dart';
-import '../../../core/widgets/app_state_view.dart';
+import '../../../core/widgets/app_action_buttons.dart';
+import '../../../core/widgets/app_empty_state.dart';
+import '../../../core/widgets/app_error_state.dart';
+import '../../../core/widgets/app_loading_state.dart';
 import '../data/notification_model.dart';
 import '../domain/notifications_provider.dart';
 import 'notification_detail_screen.dart';
@@ -54,24 +56,19 @@ class NotificationsScreen extends ConsumerWidget {
             ),
             if (state.isRefreshing && state.items.isEmpty)
               const SliverFillRemaining(
-                child: Center(child: CircularProgressIndicator()),
+                child: AppLoadingState(message: 'Загружаем уведомления'),
               )
             else if (state.error != null && state.items.isEmpty)
               SliverFillRemaining(
-                child: AppStateView(
-                  icon: Icons.error_outline_rounded,
-                  iconColor: AppColors.error,
+                child: AppErrorState(
                   title: 'Не удалось загрузить уведомления',
                   description: state.error,
-                  action: OutlinedButton(
-                    onPressed: () => notifier.load(refresh: true),
-                    child: const Text('Повторить'),
-                  ),
+                  onRetry: () => notifier.load(refresh: true),
                 ),
               )
             else if (state.items.isEmpty)
               const SliverFillRemaining(
-                child: AppStateView(
+                child: AppEmptyState(
                   icon: Icons.notifications_none_rounded,
                   title: 'Уведомлений пока нет',
                   description:
@@ -190,17 +187,11 @@ class _LoadMoreButton extends StatelessWidget {
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
-      child: OutlinedButton.icon(
+      child: AppSecondaryActionButton(
+        label: isLoading ? 'Загружаем...' : 'Показать еще',
         onPressed: isLoading ? null : onPressed,
-        icon:
-            isLoading
-                ? const SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-                : const Icon(Icons.expand_more_rounded),
-        label: Text(isLoading ? 'Загружаем...' : 'Показать еще'),
+        leading: const Icon(Icons.expand_more_rounded),
+        isBusy: isLoading,
       ),
     );
   }

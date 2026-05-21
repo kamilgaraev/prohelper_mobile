@@ -3,7 +3,9 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_typography.dart';
-import '../../../core/widgets/app_state_view.dart';
+import '../../../core/widgets/app_empty_state.dart';
+import '../../../core/widgets/app_error_state.dart';
+import '../../../core/widgets/app_loading_state.dart';
 import '../../../core/widgets/industrial_card.dart';
 import '../data/project_material_delivery_model.dart';
 import '../data/warehouse_repository.dart';
@@ -49,18 +51,14 @@ class _ProjectMaterialDeliveriesScreenState
         future: _future,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
+            return const AppLoadingState(message: 'Загружаем поставки');
           }
 
           if (snapshot.hasError) {
-            return AppStateView(
-              icon: Icons.error_outline_rounded,
+            return AppErrorState(
               title: 'Не удалось загрузить поставки',
               description: snapshot.error.toString(),
-              action: OutlinedButton(
-                onPressed: _refresh,
-                child: const Text('Повторить'),
-              ),
+              onRetry: _refresh,
             );
           }
 
@@ -73,7 +71,7 @@ class _ProjectMaterialDeliveriesScreenState
             onRefresh: _refresh,
             child:
                 isEmpty
-                    ? const AppStateView(
+                    ? const AppEmptyState(
                       icon: Icons.local_shipping_outlined,
                       title: 'Ожидаемых материалов нет',
                       description:

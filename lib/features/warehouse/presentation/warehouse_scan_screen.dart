@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/theme/app_typography.dart';
-import '../../../core/widgets/app_state_view.dart';
+import '../../../core/widgets/app_empty_state.dart';
 import '../../../core/widgets/industrial_card.dart';
 import '../data/warehouse_repository.dart';
 import '../data/warehouse_scan_model.dart';
@@ -57,11 +57,11 @@ class _WarehouseScanScreenState extends ConsumerState<WarehouseScanScreen> {
       appBar: AppBar(title: const Text('Сканирование')),
       body:
           warehouses.isEmpty
-              ? const AppStateView(
+              ? const AppEmptyState(
                 icon: Icons.warehouse_outlined,
                 title: 'Нет активных складов',
                 description:
-                    'Скан-flow станет доступен, когда в организации появится хотя бы один склад.',
+                    'Сканирование станет доступно, когда в организации появится хотя бы один склад.',
               )
               : ListView(
                 padding: const EdgeInsets.all(16),

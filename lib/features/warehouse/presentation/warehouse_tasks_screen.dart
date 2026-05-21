@@ -5,7 +5,9 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_typography.dart';
-import '../../../core/widgets/app_state_view.dart';
+import '../../../core/widgets/app_empty_state.dart';
+import '../../../core/widgets/app_error_state.dart';
+import '../../../core/widgets/app_loading_state.dart';
 import '../../../core/widgets/industrial_card.dart';
 import '../data/warehouse_repository.dart';
 import '../data/warehouse_scan_model.dart';
@@ -89,7 +91,7 @@ class _WarehouseTasksScreenState extends ConsumerState<WarehouseTasksScreen> {
       ),
       body:
           warehouses.isEmpty
-              ? const AppStateView(
+              ? const AppEmptyState(
                 icon: Icons.task_alt_outlined,
                 title: 'Нет активных складов',
                 description:
@@ -151,20 +153,19 @@ class _WarehouseTasksScreenState extends ConsumerState<WarehouseTasksScreen> {
                     if (_isLoading && _tasks.isEmpty)
                       const Padding(
                         padding: EdgeInsets.only(top: 48),
-                        child: Center(child: CircularProgressIndicator()),
-                      )
-                    else if (_error != null && _tasks.isEmpty)
-                      AppStateView(
-                        icon: Icons.error_outline_rounded,
-                        title: 'Не удалось загрузить задачи',
-                        description: _error,
-                        action: OutlinedButton(
-                          onPressed: () => _loadTasks(),
-                          child: const Text('Повторить'),
+                        child: AppLoadingState(
+                          message: 'Загружаем складские задачи',
+                          minHeight: 180,
                         ),
                       )
+                    else if (_error != null && _tasks.isEmpty)
+                      AppErrorState(
+                        title: 'Не удалось загрузить задачи',
+                        description: _error,
+                        onRetry: () => _loadTasks(),
+                      )
                     else if (_tasks.isEmpty)
-                      AppStateView(
+                      AppEmptyState(
                         icon: Icons.inventory_2_outlined,
                         title: 'Задач не найдено',
                         description: _emptyDescription,

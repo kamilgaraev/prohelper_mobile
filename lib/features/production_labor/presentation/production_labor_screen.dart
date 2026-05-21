@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/theme/app_typography.dart';
-import '../../../core/widgets/app_state_view.dart';
+import '../../../core/widgets/app_empty_state.dart';
+import '../../../core/widgets/app_error_state.dart';
+import '../../../core/widgets/app_loading_state.dart';
 import '../../../core/widgets/mesh_background.dart';
 import '../../../core/widgets/pro_card.dart';
 import '../../projects/domain/projects_provider.dart';
@@ -61,24 +63,20 @@ class _ProductionLaborScreenState extends ConsumerState<ProductionLaborScreen> {
         ),
         body:
             state.isLoading && state.workOrders.isEmpty
-                ? const Center(child: CircularProgressIndicator())
+                ? const AppLoadingState(message: 'Загружаем наряды')
                 : state.error != null && state.workOrders.isEmpty
-                ? AppStateView(
-                  icon: Icons.engineering_outlined,
+                ? AppErrorState(
                   title: 'Не удалось загрузить наряды',
                   description: state.error,
-                  action: OutlinedButton(
-                    onPressed:
-                        () => ref.read(productionLaborProvider.notifier).load(),
-                    child: const Text('Повторить'),
-                  ),
+                  onRetry:
+                      () => ref.read(productionLaborProvider.notifier).load(),
                 )
                 : RefreshIndicator(
                   onRefresh:
                       () => ref.read(productionLaborProvider.notifier).load(),
                   child:
                       state.workOrders.isEmpty
-                          ? const AppStateView(
+                          ? const AppEmptyState(
                             icon: Icons.engineering_outlined,
                             title: 'Нарядов пока нет',
                             description:

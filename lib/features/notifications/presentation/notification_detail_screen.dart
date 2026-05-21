@@ -3,7 +3,8 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_typography.dart';
-import '../../../core/widgets/app_state_view.dart';
+import '../../../core/widgets/app_error_state.dart';
+import '../../../core/widgets/app_loading_state.dart';
 import '../../../core/widgets/industrial_card.dart';
 import '../../construction_journal/presentation/construction_journal_screen.dart';
 import '../../construction_journal/presentation/journal_entry_detail_screen.dart';
@@ -84,25 +85,20 @@ class _NotificationDetailScreenState
       ),
       body:
           state.isLoading && notification == null
-              ? const Center(child: CircularProgressIndicator())
+              ? const AppLoadingState(message: 'Загружаем уведомление')
               : state.error != null && notification == null
-              ? AppStateView(
-                icon: Icons.error_outline_rounded,
-                iconColor: AppColors.error,
+              ? AppErrorState(
                 title: 'Не удалось загрузить уведомление',
                 description: state.error,
-                action: OutlinedButton(
-                  onPressed:
-                      () =>
-                          ref
-                              .read(
-                                notificationDetailProvider(
-                                  widget.notificationId,
-                                ).notifier,
-                              )
-                              .load(),
-                  child: const Text('Повторить'),
-                ),
+                onRetry:
+                    () =>
+                        ref
+                            .read(
+                              notificationDetailProvider(
+                                widget.notificationId,
+                              ).notifier,
+                            )
+                            .load(),
               )
               : _NotificationDetailContent(
                 notification: notification!,

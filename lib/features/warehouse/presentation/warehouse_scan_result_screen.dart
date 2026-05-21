@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/theme/app_typography.dart';
-import '../../../core/widgets/app_state_view.dart';
+import '../../../core/widgets/app_action_buttons.dart';
+import '../../../core/widgets/app_empty_state.dart';
 import '../../../core/widgets/industrial_card.dart';
 import '../data/warehouse_repository.dart';
 import '../data/warehouse_scan_model.dart';
@@ -69,14 +70,16 @@ class _WarehouseScanResultScreenState
       ),
       body:
           !_result.resolved || entity == null
-              ? AppStateView(
+              ? AppEmptyState(
                 icon: Icons.qr_code_2_outlined,
                 title: 'Код не распознан',
                 description:
                     'Проверь маркировку или убедись, что для складской сущности создан идентификатор.',
-                action: FilledButton(
+                action: AppPrimaryActionButton(
+                  label: 'Сканировать снова',
                   onPressed: () => Navigator.of(context).pop(),
-                  child: const Text('Сканировать снова'),
+                  leading: const Icon(Icons.qr_code_scanner_rounded),
+                  expanded: false,
                 ),
               )
               : ListView(
@@ -557,14 +560,16 @@ class _TasksCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (tasks.isEmpty) {
-      return AppStateView(
+      return AppEmptyState(
         icon: Icons.task_alt_outlined,
         title: 'Связанных задач пока нет',
         description:
             'После сканирования здесь будут показываться релевантные складские задания.',
-        action: OutlinedButton(
+        action: AppPrimaryActionButton(
+          label: 'Открыть очередь',
           onPressed: onOpenQueue,
-          child: const Text('Открыть очередь'),
+          leading: const Icon(Icons.task_alt_outlined),
+          expanded: false,
         ),
       );
     }

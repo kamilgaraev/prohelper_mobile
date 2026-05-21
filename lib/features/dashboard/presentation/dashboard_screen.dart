@@ -5,7 +5,9 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:prohelpers_mobile/core/theme/app_colors.dart';
 import 'package:prohelpers_mobile/core/theme/app_typography.dart';
 import 'package:prohelpers_mobile/core/widgets/action_hub.dart';
-import 'package:prohelpers_mobile/core/widgets/app_state_view.dart';
+import 'package:prohelpers_mobile/core/widgets/app_empty_state.dart';
+import 'package:prohelpers_mobile/core/widgets/app_error_state.dart';
+import 'package:prohelpers_mobile/core/widgets/app_loading_state.dart';
 import 'package:prohelpers_mobile/core/widgets/industrial_card.dart';
 import 'package:prohelpers_mobile/features/ai_assistant/presentation/ai_assistant_home_screen.dart';
 import 'package:prohelpers_mobile/features/auth/domain/auth_provider.dart';
@@ -44,28 +46,24 @@ class DashboardScreen extends ConsumerWidget {
               _buildAppBar(context),
               if (dashboardState.isLoading && dashboardState.widgets.isEmpty)
                 const SliverFillRemaining(
-                  child: Center(child: CircularProgressIndicator()),
+                  child: AppLoadingState(message: 'Загружаем рабочий стол'),
                 )
               else if (dashboardState.error != null &&
                   dashboardState.widgets.isEmpty)
                 SliverFillRemaining(
-                  child: AppStateView(
-                    icon: Icons.error_outline_rounded,
+                  child: AppErrorState(
                     title: 'Не удалось загрузить дашборд',
                     description: dashboardState.error,
-                    action: OutlinedButton(
-                      onPressed:
-                          () =>
-                              ref
-                                  .read(dashboardControllerProvider.notifier)
-                                  .loadDashboard(),
-                      child: const Text('Повторить'),
-                    ),
+                    onRetry:
+                        () =>
+                            ref
+                                .read(dashboardControllerProvider.notifier)
+                                .loadDashboard(),
                   ),
                 )
               else if (dashboardState.widgets.isEmpty)
                 const SliverFillRemaining(
-                  child: AppStateView(
+                  child: AppEmptyState(
                     icon: Icons.dashboard_customize_outlined,
                     title: 'Пока нет доступных разделов',
                     description:
@@ -120,14 +118,14 @@ class DashboardScreen extends ConsumerWidget {
                   'Текущий объект',
                   style: AppTypography.caption(context).copyWith(
                     fontSize: 10,
-                    letterSpacing: 1.2,
+                    letterSpacing: 0,
                     color: theme.colorScheme.onSurfaceVariant,
                   ),
                 ),
               Text(
                 (selectedProject?.name ?? 'PROHELPER').toUpperCase(),
                 style: AppTypography.h2(context).copyWith(
-                  letterSpacing: 0.5,
+                  letterSpacing: 0,
                   fontWeight: FontWeight.w900,
                   fontSize: 18,
                   color: theme.colorScheme.onSurface,

@@ -20,7 +20,7 @@ class MaterialDetailScreen extends StatelessWidget {
           'ДЕТАЛИ МАТЕРИАЛА',
           style: AppTypography.h2(
             context,
-          ).copyWith(fontSize: 16, letterSpacing: 1.5),
+          ).copyWith(fontSize: 16, letterSpacing: 0),
         ),
       ),
       body: SingleChildScrollView(
@@ -53,7 +53,7 @@ class MaterialDetailScreen extends StatelessWidget {
                       'БЕТОН М400',
                       style: AppTypography.h1(
                         context,
-                      ).copyWith(fontSize: 24, letterSpacing: 1),
+                      ).copyWith(fontSize: 24, letterSpacing: 0),
                     ),
                   ],
                 ),

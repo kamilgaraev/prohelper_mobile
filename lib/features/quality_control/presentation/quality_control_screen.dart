@@ -3,7 +3,9 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_typography.dart';
-import '../../../core/widgets/app_state_view.dart';
+import '../../../core/widgets/app_empty_state.dart';
+import '../../../core/widgets/app_error_state.dart';
+import '../../../core/widgets/app_loading_state.dart';
 import '../../../core/widgets/mesh_background.dart';
 import '../../../core/widgets/pro_card.dart';
 import '../../projects/domain/projects_provider.dart';
@@ -68,20 +70,16 @@ class _QualityControlScreenState extends ConsumerState<QualityControlScreen> {
         ),
         body:
             state.isLoading && state.defects.isEmpty
-                ? const Center(child: CircularProgressIndicator())
+                ? const AppLoadingState(message: 'Загружаем замечания')
                 : state.error != null && state.defects.isEmpty
-                ? AppStateView(
-                  icon: Icons.error_outline_rounded,
+                ? AppErrorState(
                   title: 'Не удалось загрузить замечания',
                   description: state.error,
-                  action: OutlinedButton(
-                    onPressed:
-                        () =>
-                            ref
-                                .read(qualityControlProvider.notifier)
-                                .loadDefects(),
-                    child: const Text('Повторить'),
-                  ),
+                  onRetry:
+                      () =>
+                          ref
+                              .read(qualityControlProvider.notifier)
+                              .loadDefects(),
                 )
                 : RefreshIndicator(
                   onRefresh:
@@ -95,7 +93,7 @@ class _QualityControlScreenState extends ConsumerState<QualityControlScreen> {
                       _SummaryStrip(defects: state.defects),
                       const SizedBox(height: 12),
                       if (state.defects.isEmpty)
-                        const AppStateView(
+                        const AppEmptyState(
                           icon: Icons.fact_check_outlined,
                           title: 'Замечаний по качеству нет',
                           description:

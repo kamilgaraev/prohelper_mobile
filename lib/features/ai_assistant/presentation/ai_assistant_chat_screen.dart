@@ -4,7 +4,8 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/network/api_exception.dart';
 import '../../../core/theme/app_typography.dart';
-import '../../../core/widgets/app_state_view.dart';
+import '../../../core/widgets/app_empty_state.dart';
+import '../../../core/widgets/app_loading_state.dart';
 import '../../../core/widgets/industrial_card.dart';
 import '../data/ai_assistant_models.dart';
 import '../data/ai_assistant_repository.dart';
@@ -248,13 +249,13 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
           Expanded(
             child:
                 _isLoading
-                    ? const Center(child: CircularProgressIndicator())
+                    ? const AppLoadingState(message: 'Загружаем диалог')
                     : _messages.isEmpty
                     ? ListView(
                       padding: const EdgeInsets.all(16),
                       children: [
                         IndustrialCard(
-                          child: AppStateView(
+                          child: AppEmptyState(
                             icon: Icons.smart_toy_outlined,
                             title: 'Ассистент готов',
                             description:

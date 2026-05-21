@@ -4,6 +4,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_typography.dart';
+import '../../../core/widgets/app_action_buttons.dart';
 import '../../../core/widgets/industrial_card.dart';
 import '../domain/auth_provider.dart';
 
@@ -38,10 +39,10 @@ class LoginScreen extends HookConsumerWidget {
                     ),
                   ],
                 ),
-                child: const Icon(
+                child: Icon(
                   Icons.construction_rounded,
                   size: 60,
-                  color: Colors.white,
+                  color: theme.colorScheme.onPrimary,
                 ),
               ),
               const SizedBox(height: 40),
@@ -49,14 +50,14 @@ class LoginScreen extends HookConsumerWidget {
                 'PROHELPER',
                 style: AppTypography.h1(
                   context,
-                ).copyWith(letterSpacing: 4, fontSize: 32),
+                ).copyWith(letterSpacing: 0, fontSize: 32),
               ),
               const SizedBox(height: 8),
               Text(
                 'INDUSTRIAL MANAGEMENT',
                 style: AppTypography.caption(
                   context,
-                ).copyWith(letterSpacing: 2),
+                ).copyWith(letterSpacing: 0),
               ),
               const SizedBox(height: 60),
               IndustrialCard(
@@ -117,7 +118,8 @@ class LoginScreen extends HookConsumerWidget {
                       ),
                     ],
                     const SizedBox(height: 32),
-                    ElevatedButton(
+                    AppPrimaryActionButton(
+                      label: 'Вход',
                       onPressed:
                           authState is AuthLoading
                               ? null
@@ -129,26 +131,7 @@ class LoginScreen extends HookConsumerWidget {
                                       passwordController.text,
                                     );
                               },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: theme.colorScheme.primary,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        elevation: 0,
-                      ),
-                      child:
-                          authState is AuthLoading
-                              ? const SizedBox(
-                                height: 20,
-                                width: 20,
-                                child: CircularProgressIndicator(
-                                  color: Colors.white,
-                                  strokeWidth: 2,
-                                ),
-                              )
-                              : Text('Вход', style: AppTypography.button),
+                      isBusy: authState is AuthLoading,
                     ),
                   ],
                 ),

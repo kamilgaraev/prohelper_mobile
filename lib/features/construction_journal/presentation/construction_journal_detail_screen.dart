@@ -4,7 +4,9 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_typography.dart';
-import '../../../core/widgets/app_state_view.dart';
+import '../../../core/widgets/app_empty_state.dart';
+import '../../../core/widgets/app_error_state.dart';
+import '../../../core/widgets/app_loading_state.dart';
 import '../../../core/widgets/industrial_card.dart';
 import '../data/construction_journal_repository.dart';
 import '../domain/construction_journal_provider.dart';
@@ -41,23 +43,19 @@ class ConstructionJournalDetailScreen extends ConsumerWidget {
           slivers: [
             if (state.isLoading && state.journal == null)
               const SliverFillRemaining(
-                child: Center(child: CircularProgressIndicator()),
+                child: AppLoadingState(message: 'Загружаем журнал'),
               )
             else if (state.error != null && state.journal == null)
               SliverFillRemaining(
-                child: AppStateView(
-                  icon: Icons.error_outline_rounded,
+                child: AppErrorState(
                   title: 'Не удалось загрузить журнал',
                   description: state.error,
-                  action: OutlinedButton(
-                    onPressed: notifier.load,
-                    child: const Text('Повторить'),
-                  ),
+                  onRetry: notifier.load,
                 ),
               )
             else if (state.journal == null)
               const SliverFillRemaining(
-                child: AppStateView(
+                child: AppEmptyState(
                   icon: Icons.menu_book_outlined,
                   title: 'Журнал не найден',
                 ),
@@ -216,7 +214,7 @@ class ConstructionJournalDetailScreen extends ConsumerWidget {
               if (state.entries.isEmpty)
                 const SliverFillRemaining(
                   hasScrollBody: false,
-                  child: AppStateView(
+                  child: AppEmptyState(
                     icon: Icons.event_note_outlined,
                     title: 'Записей пока нет',
                     description:

@@ -16,7 +16,11 @@ import '../../features/site_requests/presentation/screens/site_requests_screen.d
 import '../../features/warehouse/presentation/warehouse_screen.dart';
 import '../../features/workforce/presentation/workforce_attendance_screen.dart';
 import '../providers/module_provider.dart';
+import '../theme/app_colors.dart';
 import '../theme/app_typography.dart';
+import 'app_empty_state.dart';
+import 'app_error_state.dart';
+import 'app_loading_state.dart';
 
 class QuickActionSheet extends ConsumerWidget {
   const QuickActionSheet({super.key});
@@ -60,42 +64,29 @@ class QuickActionSheet extends ConsumerWidget {
           if (modulesState.isLoading && modules.isEmpty)
             const Padding(
               padding: EdgeInsets.symmetric(vertical: 32),
-              child: CircularProgressIndicator(),
+              child: AppLoadingState(
+                message: 'Загружаем доступные действия',
+                compact: true,
+              ),
             )
           else if (modulesState.error != null && modules.isEmpty)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 24),
-              child: Column(
-                children: [
-                  Text(
-                    'Не удалось загрузить модули',
-                    style: AppTypography.bodyLarge(context),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    modulesState.error!,
-                    textAlign: TextAlign.center,
-                    style: AppTypography.bodyMedium(
-                      context,
-                    ).copyWith(color: theme.colorScheme.onSurfaceVariant),
-                  ),
-                  const SizedBox(height: 16),
-                  OutlinedButton(
-                    onPressed:
-                        () => ref.read(modulesProvider.notifier).loadModules(),
-                    child: const Text('Повторить'),
-                  ),
-                ],
+              child: AppErrorState(
+                title: 'Не удалось загрузить модули',
+                description: modulesState.error!,
+                minHeight: 180,
+                onRetry: () => ref.read(modulesProvider.notifier).loadModules(),
               ),
             )
           else if (modules.isEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 24),
-              child: Text(
-                'Для вашей роли пока нет мобильных модулей.',
-                style: AppTypography.bodyMedium(
-                  context,
-                ).copyWith(color: theme.colorScheme.onSurfaceVariant),
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 24),
+              child: AppEmptyState(
+                icon: Icons.grid_view_rounded,
+                title: 'Нет доступных действий',
+                description: 'Для вашей роли пока нет мобильных модулей.',
+                minHeight: 180,
               ),
             )
           else
@@ -246,31 +237,33 @@ class QuickActionSheet extends ConsumerWidget {
   }
 
   Color _colorFor(String? route, ThemeData theme) {
+    final scheme = theme.colorScheme;
+
     return switch (route) {
-      'site_requests' => theme.colorScheme.secondary,
-      'site-requests' => theme.colorScheme.secondary,
-      'warehouse' => theme.colorScheme.primary,
-      'basic-warehouse' => theme.colorScheme.primary,
-      'schedule' => Colors.green,
-      'schedule-management' => Colors.green,
-      'safety' => Colors.red,
-      'safety-management' => Colors.red,
-      'quality_control' => Colors.deepPurple,
-      'quality-control' => Colors.deepPurple,
-      'machinery_operations' => Colors.indigo,
-      'machinery-operations' => Colors.indigo,
-      'production_labor' => Colors.brown,
-      'production-labor' => Colors.brown,
-      'workforce' => Colors.teal,
-      'workforce_management' => Colors.teal,
-      'workforce-management' => Colors.teal,
-      'construction_journal' => Colors.orange,
-      'construction-journal' => Colors.orange,
-      'handover_acceptance' => Colors.blueGrey,
-      'handover-acceptance' => Colors.blueGrey,
-      'ai_assistant' => Colors.teal,
-      'ai-assistant' => Colors.teal,
-      _ => theme.colorScheme.onSurfaceVariant,
+      'site_requests' => scheme.secondary,
+      'site-requests' => scheme.secondary,
+      'warehouse' => scheme.primary,
+      'basic-warehouse' => scheme.primary,
+      'schedule' => AppColors.success,
+      'schedule-management' => AppColors.success,
+      'safety' => scheme.error,
+      'safety-management' => scheme.error,
+      'quality_control' => scheme.tertiary,
+      'quality-control' => scheme.tertiary,
+      'machinery_operations' => scheme.primary,
+      'machinery-operations' => scheme.primary,
+      'production_labor' => AppColors.warning,
+      'production-labor' => AppColors.warning,
+      'workforce' => scheme.secondary,
+      'workforce_management' => scheme.secondary,
+      'workforce-management' => scheme.secondary,
+      'construction_journal' => AppColors.warning,
+      'construction-journal' => AppColors.warning,
+      'handover_acceptance' => scheme.onSurfaceVariant,
+      'handover-acceptance' => scheme.onSurfaceVariant,
+      'ai_assistant' => scheme.secondary,
+      'ai-assistant' => scheme.secondary,
+      _ => scheme.onSurfaceVariant,
     };
   }
 }

@@ -3,7 +3,9 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_typography.dart';
-import '../../../core/widgets/app_state_view.dart';
+import '../../../core/widgets/app_empty_state.dart';
+import '../../../core/widgets/app_error_state.dart';
+import '../../../core/widgets/app_loading_state.dart';
 import '../../../core/widgets/industrial_card.dart';
 import '../data/schedule_model.dart';
 import '../domain/schedule_provider.dart';
@@ -68,24 +70,20 @@ class _ScheduleDetailsScreenState extends ConsumerState<ScheduleDetailsScreen> {
       appBar: AppBar(title: const Text('Детали графика'), centerTitle: false),
       body:
           state.isLoading && state.detail == null
-              ? const Center(child: CircularProgressIndicator())
+              ? const AppLoadingState(message: 'Загружаем график')
               : state.error != null && state.detail == null
-              ? AppStateView(
-                icon: Icons.error_outline_rounded,
+              ? AppErrorState(
                 title: 'Не удалось загрузить график',
                 description: state.error,
-                action: OutlinedButton(
-                  onPressed:
-                      () =>
-                          ref
-                              .read(
-                                scheduleDetailProvider(
-                                  widget.scheduleId,
-                                ).notifier,
-                              )
-                              .load(),
-                  child: const Text('Повторить'),
-                ),
+                onRetry:
+                    () =>
+                        ref
+                            .read(
+                              scheduleDetailProvider(
+                                widget.scheduleId,
+                              ).notifier,
+                            )
+                            .load(),
               )
               : _ScheduleDetailsContent(
                 detail: state.detail!,
@@ -207,7 +205,7 @@ class _ScheduleDetailsContent extends StatelessWidget {
             const SliverToBoxAdapter(
               child: Padding(
                 padding: EdgeInsets.symmetric(horizontal: 16),
-                child: AppStateView(
+                child: AppEmptyState(
                   icon: Icons.checklist_outlined,
                   title: 'Задач пока нет',
                   description:
@@ -219,7 +217,7 @@ class _ScheduleDetailsContent extends StatelessWidget {
             const SliverToBoxAdapter(
               child: Padding(
                 padding: EdgeInsets.symmetric(horizontal: 16),
-                child: AppStateView(
+                child: AppEmptyState(
                   icon: Icons.filter_alt_off_outlined,
                   title: 'По фильтру ничего не найдено',
                   description:

@@ -5,7 +5,9 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_typography.dart';
-import '../../../core/widgets/app_state_view.dart';
+import '../../../core/widgets/app_empty_state.dart';
+import '../../../core/widgets/app_error_state.dart';
+import '../../../core/widgets/app_loading_state.dart';
 import '../../../core/widgets/industrial_card.dart';
 import '../data/warehouse_media_picker.dart';
 import '../data/warehouse_repository.dart';
@@ -92,24 +94,19 @@ class _WarehouseScreenState extends ConsumerState<WarehouseScreen> {
           slivers: [
             if (state.isLoading && data == null)
               const SliverFillRemaining(
-                child: Center(child: CircularProgressIndicator()),
+                child: AppLoadingState(message: 'Загружаем склад'),
               )
             else if (state.error != null && data == null)
               SliverFillRemaining(
-                child: AppStateView(
-                  icon: Icons.error_outline_rounded,
+                child: AppErrorState(
                   title: 'Не удалось загрузить склад',
                   description: state.error,
-                  action: OutlinedButton(
-                    onPressed:
-                        () => ref.read(warehouseProvider.notifier).load(),
-                    child: const Text('Повторить'),
-                  ),
+                  onRetry: () => ref.read(warehouseProvider.notifier).load(),
                 ),
               )
             else if (data == null)
               const SliverFillRemaining(
-                child: AppStateView(
+                child: AppEmptyState(
                   icon: Icons.warehouse_outlined,
                   title: 'Нет данных по складу',
                   description:
@@ -182,7 +179,7 @@ class _WarehouseScreenState extends ConsumerState<WarehouseScreen> {
                 const SliverToBoxAdapter(
                   child: Padding(
                     padding: EdgeInsets.symmetric(horizontal: 16),
-                    child: AppStateView(
+                    child: AppEmptyState(
                       icon: Icons.inventory_2_outlined,
                       title: 'Складов пока нет',
                       description:
@@ -258,7 +255,7 @@ class _WarehouseScreenState extends ConsumerState<WarehouseScreen> {
                 const SliverToBoxAdapter(
                   child: Padding(
                     padding: EdgeInsets.symmetric(horizontal: 16),
-                    child: AppStateView(
+                    child: AppEmptyState(
                       icon: Icons.swap_horiz_rounded,
                       title: 'Движений пока нет',
                       description:
@@ -270,7 +267,7 @@ class _WarehouseScreenState extends ConsumerState<WarehouseScreen> {
                 const SliverToBoxAdapter(
                   child: Padding(
                     padding: EdgeInsets.symmetric(horizontal: 16),
-                    child: AppStateView(
+                    child: AppEmptyState(
                       icon: Icons.filter_alt_off_outlined,
                       title: 'По фильтру ничего не найдено',
                       description:
@@ -1170,18 +1167,17 @@ class _WarehouseBalancesSheetState
                 future: _balancesFuture,
                 builder: (context, snapshot) {
                   if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const Center(child: CircularProgressIndicator());
+                    return const AppLoadingState(
+                      message: 'Загружаем остатки',
+                      compact: true,
+                    );
                   }
 
                   if (snapshot.hasError) {
-                    return AppStateView(
-                      icon: Icons.error_outline_rounded,
+                    return AppErrorState(
                       title: 'Не удалось загрузить остатки',
                       description: snapshot.error.toString(),
-                      action: OutlinedButton(
-                        onPressed: _refreshBalances,
-                        child: const Text('Повторить'),
-                      ),
+                      onRetry: _refreshBalances,
                     );
                   }
 
@@ -1189,7 +1185,7 @@ class _WarehouseBalancesSheetState
                       snapshot.data ?? const <WarehouseBalanceModel>[];
 
                   if (balances.isEmpty) {
-                    return const AppStateView(
+                    return const AppEmptyState(
                       icon: Icons.inventory_2_outlined,
                       title: 'На складе пока нет остатков',
                       description:
@@ -1960,7 +1956,7 @@ class _WarehousePhotoGallerySheetState
             Expanded(
               child:
                   _photos.isEmpty
-                      ? const AppStateView(
+                      ? const AppEmptyState(
                         icon: Icons.image_not_supported_outlined,
                         title: 'Фотографий пока нет',
                         description:

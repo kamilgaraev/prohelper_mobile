@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'core/widgets/app_loading_state.dart';
 import 'core/theme/pro_theme.dart';
 import 'features/auth/domain/auth_provider.dart';
 import 'features/auth/presentation/login_screen.dart';
@@ -28,7 +29,7 @@ class ProHelperApp extends ConsumerWidget {
               ? const DashboardScreen()
               : const ProjectSelectionScreen();
     } else if (authState is AuthInitial) {
-      home = const Scaffold(body: Center(child: CircularProgressIndicator()));
+      home = const Scaffold(body: AppLoadingState(message: 'Проверяем сессию'));
     } else {
       home = const LoginScreen();
     }

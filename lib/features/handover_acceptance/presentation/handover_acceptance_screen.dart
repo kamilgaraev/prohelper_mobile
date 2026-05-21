@@ -3,7 +3,9 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_typography.dart';
-import '../../../core/widgets/app_state_view.dart';
+import '../../../core/widgets/app_empty_state.dart';
+import '../../../core/widgets/app_error_state.dart';
+import '../../../core/widgets/app_loading_state.dart';
 import '../../../core/widgets/mesh_background.dart';
 import '../../../core/widgets/pro_card.dart';
 import '../../projects/domain/projects_provider.dart';
@@ -66,20 +68,16 @@ class _HandoverAcceptanceScreenState
         ),
         body:
             state.isLoading && state.scopes.isEmpty
-                ? const Center(child: CircularProgressIndicator())
+                ? const AppLoadingState(message: 'Загружаем зоны приемки')
                 : state.error != null && state.scopes.isEmpty
-                ? AppStateView(
-                  icon: Icons.error_outline_rounded,
+                ? AppErrorState(
                   title: 'Не удалось загрузить приемку',
                   description: state.error,
-                  action: OutlinedButton(
-                    onPressed:
-                        () =>
-                            ref
-                                .read(handoverAcceptanceProvider.notifier)
-                                .loadScopes(),
-                    child: const Text('Повторить'),
-                  ),
+                  onRetry:
+                      () =>
+                          ref
+                              .read(handoverAcceptanceProvider.notifier)
+                              .loadScopes(),
                 )
                 : RefreshIndicator(
                   onRefresh:
@@ -93,7 +91,7 @@ class _HandoverAcceptanceScreenState
                       _SummaryStrip(scopes: state.scopes),
                       const SizedBox(height: 12),
                       if (state.scopes.isEmpty)
-                        const AppStateView(
+                        const AppEmptyState(
                           icon: Icons.assignment_turned_in_outlined,
                           title: 'Зон приемки нет',
                           description:

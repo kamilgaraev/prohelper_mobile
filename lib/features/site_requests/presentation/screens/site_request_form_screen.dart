@@ -4,7 +4,9 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:prohelpers_mobile/core/theme/app_colors.dart';
 import 'package:prohelpers_mobile/core/theme/app_typography.dart';
-import 'package:prohelpers_mobile/core/widgets/app_state_view.dart';
+import 'package:prohelpers_mobile/core/widgets/app_empty_state.dart';
+import 'package:prohelpers_mobile/core/widgets/app_error_state.dart';
+import 'package:prohelpers_mobile/core/widgets/app_loading_state.dart';
 import 'package:prohelpers_mobile/core/widgets/mesh_background.dart';
 import 'package:prohelpers_mobile/core/widgets/pro_button.dart';
 import 'package:prohelpers_mobile/core/widgets/pro_card.dart';
@@ -237,7 +239,7 @@ class SiteRequestFormScreen extends HookConsumerWidget {
         ),
         body:
             selectedProject == null
-                ? const AppStateView(
+                ? const AppEmptyState(
                   icon: Icons.apartment_outlined,
                   title: 'Объект не выбран',
                   description:
@@ -357,10 +359,11 @@ class SiteRequestFormScreen extends HookConsumerWidget {
                     );
                   },
                   loading:
-                      () => const Center(child: CircularProgressIndicator()),
+                      () => const AppLoadingState(
+                        message: 'Загружаем справочники',
+                      ),
                   error:
-                      (error, _) => AppStateView(
-                        icon: Icons.error_outline_rounded,
+                      (error, _) => AppErrorState(
                         title: 'Не удалось загрузить справочники',
                         description: error.toString(),
                       ),

@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
-import '../theme/app_typography.dart';
 
-class ProButton extends StatefulWidget {
+import 'package:prohelpers_mobile/core/widgets/app_action_buttons.dart';
+
+class ProButton extends StatelessWidget {
   final String text;
   final VoidCallback onPressed;
   final Color? backgroundColor;
@@ -18,83 +19,13 @@ class ProButton extends StatefulWidget {
   });
 
   @override
-  State<ProButton> createState() => _ProButtonState();
-}
-
-class _ProButtonState extends State<ProButton>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  late Animation<double> _scaleAnimation;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 100),
-    );
-    _scaleAnimation = Tween<double>(
-      begin: 1.0,
-      end: 0.95,
-    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final effectiveColor = widget.backgroundColor ?? theme.colorScheme.primary;
-
-    return GestureDetector(
-      onTapDown: (_) => _controller.forward(),
-      onTapUp: (_) => _controller.reverse(),
-      onTapCancel: () => _controller.reverse(),
-      onTap: widget.isLoading ? null : widget.onPressed,
-      child: ScaleTransition(
-        scale: _scaleAnimation,
-        child: Container(
-          height: 56,
-          width: double.infinity,
-          decoration: BoxDecoration(
-            color: effectiveColor,
-            borderRadius: BorderRadius.circular(20),
-            boxShadow: [
-              BoxShadow(
-                color: effectiveColor.withValues(alpha: 0.3),
-                blurRadius: 12,
-                offset: const Offset(0, 6),
-              ),
-            ],
-          ),
-          child: Center(
-            child:
-                widget.isLoading
-                    ? const SizedBox(
-                      height: 24,
-                      width: 24,
-                      child: CircularProgressIndicator(
-                        color: Colors.white,
-                        strokeWidth: 2,
-                      ),
-                    )
-                    : Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        if (widget.icon != null) ...[
-                          widget.icon!,
-                          const SizedBox(width: 8),
-                        ],
-                        Text(widget.text, style: AppTypography.button),
-                      ],
-                    ),
-          ),
-        ),
-      ),
+    return AppPrimaryActionButton(
+      label: text,
+      onPressed: onPressed,
+      leading: icon,
+      isBusy: isLoading,
+      backgroundColor: backgroundColor,
     );
   }
 }

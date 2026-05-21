@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/theme/app_typography.dart';
-import '../../../core/widgets/app_state_view.dart';
+import '../../../core/widgets/app_empty_state.dart';
+import '../../../core/widgets/app_error_state.dart';
+import '../../../core/widgets/app_loading_state.dart';
 import '../../../core/widgets/industrial_card.dart';
 import '../data/ai_assistant_models.dart';
 import '../domain/ai_assistant_provider.dart';
@@ -41,7 +43,7 @@ class AiAssistantHomeScreen extends ConsumerWidget {
                       Text(
                         'PROHELPER AI',
                         style: AppTypography.caption(context).copyWith(
-                          letterSpacing: 1.1,
+                          letterSpacing: 0,
                           fontWeight: FontWeight.w900,
                           color: theme.colorScheme.primary,
                         ),
@@ -67,19 +69,15 @@ class AiAssistantHomeScreen extends ConsumerWidget {
             ),
             if (state.isLoading && state.home == null)
               const SliverFillRemaining(
-                child: Center(child: CircularProgressIndicator()),
+                child: AppLoadingState(message: 'Загружаем AI-ассистента'),
               )
             else if (state.error != null && state.home == null)
               SliverFillRemaining(
-                child: AppStateView(
-                  icon: Icons.smart_toy_outlined,
+                child: AppErrorState(
                   title: 'Не удалось загрузить AI-ассистента',
                   description: state.error,
-                  action: OutlinedButton(
-                    onPressed:
-                        () => ref.read(aiAssistantHomeProvider.notifier).load(),
-                    child: const Text('Повторить'),
-                  ),
+                  onRetry:
+                      () => ref.read(aiAssistantHomeProvider.notifier).load(),
                 ),
               )
             else ...[
@@ -338,7 +336,7 @@ class _EmptyHistoryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return IndustrialCard(
-      child: AppStateView(
+      child: AppEmptyState(
         icon: Icons.history_toggle_off_rounded,
         title: 'История пока пуста',
         description:

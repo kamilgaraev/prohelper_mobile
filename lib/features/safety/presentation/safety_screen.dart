@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/theme/app_typography.dart';
-import '../../../core/widgets/app_state_view.dart';
+import '../../../core/widgets/app_empty_state.dart';
+import '../../../core/widgets/app_error_state.dart';
+import '../../../core/widgets/app_loading_state.dart';
 import '../../../core/widgets/mesh_background.dart';
 import '../../../core/widgets/pro_card.dart';
 import '../../projects/domain/projects_provider.dart';
@@ -74,7 +76,7 @@ class _SafetyScreenState extends ConsumerState<SafetyScreen> {
                 ),
         body:
             selectedProject == null
-                ? const AppStateView(
+                ? const AppEmptyState(
                   icon: Icons.apartment_rounded,
                   title: 'Выберите проект',
                   description:
@@ -84,19 +86,15 @@ class _SafetyScreenState extends ConsumerState<SafetyScreen> {
                     state.activePermits.isEmpty &&
                     state.incidents.isEmpty &&
                     state.violations.isEmpty
-                ? const Center(child: CircularProgressIndicator())
+                ? const AppLoadingState(message: 'Загружаем охрану труда')
                 : state.error != null &&
                     state.activePermits.isEmpty &&
                     state.incidents.isEmpty &&
                     state.violations.isEmpty
-                ? AppStateView(
-                  icon: Icons.health_and_safety_outlined,
+                ? AppErrorState(
                   title: 'Не удалось загрузить охрану труда',
                   description: state.error,
-                  action: OutlinedButton(
-                    onPressed: () => ref.read(safetyProvider.notifier).load(),
-                    child: const Text('Повторить'),
-                  ),
+                  onRetry: () => ref.read(safetyProvider.notifier).load(),
                 )
                 : RefreshIndicator(
                   onRefresh: () => ref.read(safetyProvider.notifier).load(),
@@ -298,9 +296,7 @@ class _SafetyScreenState extends ConsumerState<SafetyScreen> {
                                             context,
                                           ).showSnackBar(
                                             const SnackBar(
-                                              content: Text(
-                                                'Укажите название',
-                                              ),
+                                              content: Text('Укажите название'),
                                             ),
                                           );
                                           return;
@@ -1057,7 +1053,7 @@ class _EmptySection extends StatelessWidget {
       children: [
         Text(title, style: AppTypography.h2(context)),
         const SizedBox(height: 8),
-        AppStateView(icon: icon, title: message),
+        AppEmptyState(icon: icon, title: message, minHeight: 180),
       ],
     );
   }

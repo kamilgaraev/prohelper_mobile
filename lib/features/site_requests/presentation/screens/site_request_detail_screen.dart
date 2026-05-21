@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:prohelpers_mobile/core/theme/app_colors.dart';
 import 'package:prohelpers_mobile/core/theme/app_typography.dart';
-import 'package:prohelpers_mobile/core/widgets/app_state_view.dart';
+import 'package:prohelpers_mobile/core/widgets/app_error_state.dart';
+import 'package:prohelpers_mobile/core/widgets/app_loading_state.dart';
 import 'package:prohelpers_mobile/core/widgets/mesh_background.dart';
 import 'package:prohelpers_mobile/core/widgets/pro_button.dart';
 import 'package:prohelpers_mobile/core/widgets/pro_card.dart';
@@ -38,21 +39,16 @@ class SiteRequestDetailScreen extends ConsumerWidget {
         ),
         body:
             state.isLoading && state.request == null
-                ? const Center(child: CircularProgressIndicator())
+                ? const AppLoadingState(message: 'Загружаем заявку')
                 : state.error != null && state.request == null
-                ? AppStateView(
-                  icon: Icons.error_outline_rounded,
-                  iconColor: AppColors.error,
+                ? AppErrorState(
                   title: 'Не удалось загрузить заявку',
                   description: state.error,
-                  action: OutlinedButton(
-                    onPressed:
-                        () =>
-                            ref
-                                .read(siteRequestDetailProvider(id).notifier)
-                                .loadDetails(),
-                    child: const Text('Повторить'),
-                  ),
+                  onRetry:
+                      () =>
+                          ref
+                              .read(siteRequestDetailProvider(id).notifier)
+                              .loadDetails(),
                 )
                 : _SiteRequestDetailContent(
                   request: state.request!,

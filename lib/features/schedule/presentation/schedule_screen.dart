@@ -3,7 +3,9 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_typography.dart';
-import '../../../core/widgets/app_state_view.dart';
+import '../../../core/widgets/app_empty_state.dart';
+import '../../../core/widgets/app_error_state.dart';
+import '../../../core/widgets/app_loading_state.dart';
 import '../../../core/widgets/industrial_card.dart';
 import '../../projects/domain/projects_provider.dart';
 import '../data/schedule_model.dart';
@@ -119,7 +121,7 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
           slivers: [
             if (selectedProject == null)
               const SliverFillRemaining(
-                child: AppStateView(
+                child: AppEmptyState(
                   icon: Icons.timeline_outlined,
                   title: 'Объект не выбран',
                   description:
@@ -128,26 +130,22 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
               )
             else if (state.isLoading && overview == null)
               const SliverFillRemaining(
-                child: Center(child: CircularProgressIndicator()),
+                child: AppLoadingState(message: 'Загружаем графики работ'),
               )
             else if (state.error != null && overview == null)
               SliverFillRemaining(
-                child: AppStateView(
-                  icon: Icons.error_outline_rounded,
+                child: AppErrorState(
                   title: 'Не удалось загрузить графики работ',
                   description: state.error,
-                  action: OutlinedButton(
-                    onPressed:
-                        () => ref
-                            .read(scheduleProvider.notifier)
-                            .load(projectId: selectedProject.serverId),
-                    child: const Text('Повторить'),
-                  ),
+                  onRetry:
+                      () => ref
+                          .read(scheduleProvider.notifier)
+                          .load(projectId: selectedProject.serverId),
                 ),
               )
             else if (overview == null)
               const SliverFillRemaining(
-                child: AppStateView(
+                child: AppEmptyState(
                   icon: Icons.timeline_outlined,
                   title: 'Графики работ пока недоступны',
                   description: 'Попробуйте обновить экран позже.',
@@ -214,7 +212,7 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
                 const SliverToBoxAdapter(
                   child: Padding(
                     padding: EdgeInsets.symmetric(horizontal: 16),
-                    child: AppStateView(
+                    child: AppEmptyState(
                       icon: Icons.event_note_outlined,
                       title: 'Графиков пока нет',
                       description:
@@ -226,7 +224,7 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
                 const SliverToBoxAdapter(
                   child: Padding(
                     padding: EdgeInsets.symmetric(horizontal: 16),
-                    child: AppStateView(
+                    child: AppEmptyState(
                       icon: Icons.filter_alt_off_outlined,
                       title: 'По фильтру ничего не найдено',
                       description:

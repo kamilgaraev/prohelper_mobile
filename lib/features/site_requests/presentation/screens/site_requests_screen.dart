@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:prohelpers_mobile/core/theme/app_typography.dart';
-import 'package:prohelpers_mobile/core/widgets/app_state_view.dart';
+import 'package:prohelpers_mobile/core/widgets/app_empty_state.dart';
+import 'package:prohelpers_mobile/core/widgets/app_error_state.dart';
+import 'package:prohelpers_mobile/core/widgets/app_loading_state.dart';
 import 'package:prohelpers_mobile/core/widgets/mesh_background.dart';
 import 'package:prohelpers_mobile/core/widgets/pro_card.dart';
 import 'package:prohelpers_mobile/features/projects/domain/projects_provider.dart';
@@ -252,7 +254,7 @@ class _SiteRequestsScreenState extends ConsumerState<SiteRequestsScreen> {
             slivers: [
               if (selectedProject == null)
                 const SliverFillRemaining(
-                  child: AppStateView(
+                  child: AppEmptyState(
                     icon: Icons.apartment_outlined,
                     title: 'Объект не выбран',
                     description:
@@ -261,20 +263,16 @@ class _SiteRequestsScreenState extends ConsumerState<SiteRequestsScreen> {
                 )
               else if (state.error != null && state.requests.isEmpty)
                 SliverFillRemaining(
-                  child: AppStateView(
-                    icon: Icons.error_outline_rounded,
+                  child: AppErrorState(
                     title:
                         _isApprovalsMode
                             ? 'Не удалось загрузить очередь согласования'
                             : 'Не удалось загрузить заявки',
                     description: state.error,
-                    action: OutlinedButton(
-                      onPressed:
-                          () => ref
-                              .read(siteRequestsProvider.notifier)
-                              .loadRequests(refresh: true),
-                      child: const Text('Повторить'),
-                    ),
+                    onRetry:
+                        () => ref
+                            .read(siteRequestsProvider.notifier)
+                            .loadRequests(refresh: true),
                   ),
                 )
               else ...[
@@ -320,7 +318,7 @@ class _SiteRequestsScreenState extends ConsumerState<SiteRequestsScreen> {
                 ),
                 if (state.requests.isEmpty && !state.isLoading)
                   SliverFillRemaining(
-                    child: AppStateView(
+                    child: AppEmptyState(
                       icon:
                           _isApprovalsMode
                               ? Icons.fact_check_outlined
@@ -337,7 +335,7 @@ class _SiteRequestsScreenState extends ConsumerState<SiteRequestsScreen> {
                   )
                 else if (filteredRequests.isEmpty)
                   const SliverFillRemaining(
-                    child: AppStateView(
+                    child: AppEmptyState(
                       icon: Icons.filter_alt_off_outlined,
                       title: 'По фильтру ничего не найдено',
                       description:
@@ -391,7 +389,10 @@ class _SiteRequestsScreenState extends ConsumerState<SiteRequestsScreen> {
                   const SliverToBoxAdapter(
                     child: Padding(
                       padding: EdgeInsets.all(24),
-                      child: Center(child: CircularProgressIndicator()),
+                      child: AppLoadingState(
+                        message: 'Загружаем заявки',
+                        compact: true,
+                      ),
                     ),
                   ),
               ],

@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 class AppTypography {
@@ -6,14 +6,14 @@ class AppTypography {
     fontSize: 28,
     fontWeight: FontWeight.w800,
     color: Theme.of(context).colorScheme.onSurface,
-    letterSpacing: -0.5,
+    letterSpacing: 0,
   );
 
   static TextStyle h2(BuildContext context) => GoogleFonts.outfit(
     fontSize: 20,
     fontWeight: FontWeight.w700,
     color: Theme.of(context).colorScheme.onSurface,
-    letterSpacing: -0.3,
+    letterSpacing: 0,
   );
 
   static TextStyle bodyLarge(BuildContext context) => GoogleFonts.inter(

@@ -96,7 +96,7 @@ class ActionHub extends ConsumerWidget {
                       : theme.colorScheme.onSurface.withValues(alpha: 0.4),
               fontWeight: isActive ? FontWeight.w900 : FontWeight.w500,
               fontSize: 9,
-              letterSpacing: 0.5,
+              letterSpacing: 0,
             ),
           ),
         ],

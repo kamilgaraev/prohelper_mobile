@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/theme/app_typography.dart';
-import '../../../core/widgets/app_state_view.dart';
+import '../../../core/widgets/app_action_buttons.dart';
+import '../../../core/widgets/app_error_state.dart';
 import '../../../core/widgets/mesh_background.dart';
 import '../../../core/widgets/pro_card.dart';
 import '../../warehouse/presentation/warehouse_camera_scanner_screen.dart';
@@ -67,14 +68,11 @@ class _AttendanceScanScreenState extends ConsumerState<AttendanceScanScreen> {
                             style: AppTypography.bodyMedium(context),
                           ),
                           const SizedBox(height: 16),
-                          SizedBox(
-                            width: double.infinity,
-                            child: FilledButton.icon(
-                              onPressed:
-                                  state.isLoading ? null : _openCameraScanner,
-                              icon: const Icon(Icons.qr_code_scanner_rounded),
-                              label: const Text('Сканировать QR'),
-                            ),
+                          AppPrimaryActionButton(
+                            label: 'Сканировать QR',
+                            onPressed:
+                                state.isLoading ? null : _openCameraScanner,
+                            leading: const Icon(Icons.qr_code_scanner_rounded),
                           ),
                           const SizedBox(height: 12),
                           TextField(
@@ -92,33 +90,22 @@ class _AttendanceScanScreenState extends ConsumerState<AttendanceScanScreen> {
                             ),
                           ),
                           const SizedBox(height: 16),
-                          SizedBox(
-                            width: double.infinity,
-                            child: OutlinedButton.icon(
-                              onPressed:
-                                  state.isLoading ? null : _scanEnteredToken,
-                              icon:
-                                  state.isLoading
-                                      ? const SizedBox(
-                                        width: 18,
-                                        height: 18,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                        ),
-                                      )
-                                      : const Icon(Icons.verified_user_rounded),
-                              label: const Text('Подтвердить явку'),
-                            ),
+                          AppSecondaryActionButton(
+                            label: 'Подтвердить явку',
+                            onPressed:
+                                state.isLoading ? null : _scanEnteredToken,
+                            leading: const Icon(Icons.verified_user_rounded),
+                            isBusy: state.isLoading,
                           ),
                         ],
                       ),
                     ),
                     if (state.error != null) ...[
                       const SizedBox(height: 12),
-                      AppStateView(
-                        icon: Icons.info_outline_rounded,
+                      AppErrorState(
                         title: 'Явка не подтверждена',
                         description: _cleanMessage(state.error!),
+                        minHeight: 180,
                       ),
                     ],
                   ],
@@ -144,7 +131,9 @@ class _AttendanceScanScreenState extends ConsumerState<AttendanceScanScreen> {
     final token = _tokenController.text.trim();
     if (token.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Сначала отсканируйте QR-код сотрудника.')),
+        const SnackBar(
+          content: Text('Сначала отсканируйте QR-код сотрудника.'),
+        ),
       );
       return;
     }

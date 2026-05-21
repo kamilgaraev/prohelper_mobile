@@ -4,7 +4,9 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_typography.dart';
-import '../../../core/widgets/app_state_view.dart';
+import '../../../core/widgets/app_empty_state.dart';
+import '../../../core/widgets/app_error_state.dart';
+import '../../../core/widgets/app_loading_state.dart';
 import '../../../core/widgets/industrial_card.dart';
 import '../data/construction_journal_models.dart';
 import '../data/construction_journal_repository.dart';
@@ -29,27 +31,25 @@ class JournalEntryDetailScreen extends ConsumerWidget {
     );
 
     if (state.isLoading && state.entry == null) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      return const Scaffold(
+        body: AppLoadingState(message: 'Загружаем запись журнала'),
+      );
     }
 
     if (state.error != null && state.entry == null) {
       return Scaffold(
         appBar: AppBar(title: const Text('Запись журнала')),
-        body: AppStateView(
-          icon: Icons.error_outline_rounded,
+        body: AppErrorState(
           title: 'Не удалось загрузить запись',
           description: state.error,
-          action: OutlinedButton(
-            onPressed: notifier.load,
-            child: const Text('Повторить'),
-          ),
+          onRetry: notifier.load,
         ),
       );
     }
 
     if (state.entry == null) {
       return const Scaffold(
-        body: AppStateView(
+        body: AppEmptyState(
           icon: Icons.event_note_outlined,
           title: 'Запись не найдена',
         ),

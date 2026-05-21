@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
-import '../../../core/widgets/app_state_view.dart';
+import '../../../core/widgets/app_empty_state.dart';
 import '../../projects/domain/projects_provider.dart';
 import '../data/construction_journal_models.dart';
 import '../data/construction_journal_repository.dart';
@@ -50,7 +50,7 @@ class _JournalFormScreenState extends ConsumerState<JournalFormScreen> {
 
     if (!_isEdit && selectedProject == null) {
       return const Scaffold(
-        body: AppStateView(
+        body: AppEmptyState(
           icon: Icons.apartment_outlined,
           title: 'Объект не выбран',
           description: 'Сначала выберите объект, а затем создавайте журнал.',

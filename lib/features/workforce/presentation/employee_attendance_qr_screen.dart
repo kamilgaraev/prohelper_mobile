@@ -3,7 +3,8 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../../core/theme/app_typography.dart';
-import '../../../core/widgets/app_state_view.dart';
+import '../../../core/widgets/app_error_state.dart';
+import '../../../core/widgets/app_loading_state.dart';
 import '../../../core/widgets/mesh_background.dart';
 import '../../../core/widgets/pro_card.dart';
 import '../domain/workforce_attendance_provider.dart';
@@ -52,16 +53,12 @@ class _EmployeeAttendanceQrScreenState
         ),
         body:
             state.isLoading && qr == null
-                ? const Center(child: CircularProgressIndicator())
+                ? const AppLoadingState(message: 'Готовим QR-код')
                 : state.error != null && qr == null
-                ? AppStateView(
-                  icon: Icons.qr_code_2_rounded,
+                ? AppErrorState(
                   title: 'QR-код недоступен',
                   description: state.error,
-                  action: OutlinedButton(
-                    onPressed: _refresh,
-                    child: const Text('Повторить'),
-                  ),
+                  onRetry: _refresh,
                 )
                 : ListView(
                   padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
@@ -113,7 +110,10 @@ class _EmployeeAttendanceQrScreenState
                     ),
                     if (state.error != null) ...[
                       const SizedBox(height: 12),
-                      Text(state.error!, style: AppTypography.bodyMedium(context)),
+                      Text(
+                        state.error!,
+                        style: AppTypography.bodyMedium(context),
+                      ),
                     ],
                   ],
                 ),

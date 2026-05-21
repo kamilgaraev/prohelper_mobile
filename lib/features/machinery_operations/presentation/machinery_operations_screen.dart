@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/theme/app_typography.dart';
-import '../../../core/widgets/app_state_view.dart';
+import '../../../core/widgets/app_empty_state.dart';
+import '../../../core/widgets/app_error_state.dart';
+import '../../../core/widgets/app_loading_state.dart';
 import '../../../core/widgets/mesh_background.dart';
 import '../../../core/widgets/pro_card.dart';
 import '../../projects/domain/projects_provider.dart';
@@ -64,22 +66,16 @@ class _MachineryOperationsScreenState
             state.isLoading &&
                     state.assets.isEmpty &&
                     state.shiftReports.isEmpty
-                ? const Center(child: CircularProgressIndicator())
+                ? const AppLoadingState(message: 'Загружаем технику')
                 : state.error != null &&
                     state.assets.isEmpty &&
                     state.shiftReports.isEmpty
-                ? AppStateView(
-                  icon: Icons.precision_manufacturing_outlined,
+                ? AppErrorState(
                   title: 'Не удалось загрузить технику',
                   description: state.error,
-                  action: OutlinedButton(
-                    onPressed:
-                        () =>
-                            ref
-                                .read(machineryOperationsProvider.notifier)
-                                .load(),
-                    child: const Text('Повторить'),
-                  ),
+                  onRetry:
+                      () =>
+                          ref.read(machineryOperationsProvider.notifier).load(),
                 )
                 : RefreshIndicator(
                   onRefresh:
@@ -91,7 +87,7 @@ class _MachineryOperationsScreenState
                       _SummaryStrip(state: state),
                       const SizedBox(height: 12),
                       if (state.assets.isEmpty)
-                        const AppStateView(
+                        const AppEmptyState(
                           icon: Icons.precision_manufacturing_outlined,
                           title: 'Техника пока не назначена',
                           description:

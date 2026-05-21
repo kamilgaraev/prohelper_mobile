@@ -3,7 +3,9 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import 'package:prohelpers_mobile/core/theme/app_colors.dart';
 import 'package:prohelpers_mobile/core/theme/app_typography.dart';
-import 'package:prohelpers_mobile/core/widgets/app_state_view.dart';
+import 'package:prohelpers_mobile/core/widgets/app_empty_state.dart';
+import 'package:prohelpers_mobile/core/widgets/app_error_state.dart';
+import 'package:prohelpers_mobile/core/widgets/app_loading_state.dart';
 import 'package:prohelpers_mobile/features/auth/domain/auth_provider.dart';
 import 'package:prohelpers_mobile/features/projects/domain/projects_provider.dart';
 import 'package:prohelpers_mobile/features/projects/presentation/widgets/project_card.dart';
@@ -68,24 +70,17 @@ class ProjectSelectionScreen extends ConsumerWidget {
                   state.error,
                   state.projects.isEmpty,
                 )) {
-                  (true, _, _) => const Center(
-                    child: CircularProgressIndicator(),
+                  (true, _, _) => const AppLoadingState(
+                    message: 'Загружаем объекты',
                   ),
-                  (_, final String error, true) => AppStateView(
-                    icon: Icons.error_outline_rounded,
-                    iconColor: AppColors.error,
+                  (_, final String error, true) => AppErrorState(
                     title: 'Не удалось загрузить объекты',
                     description: error,
-                    action: OutlinedButton(
-                      onPressed:
-                          () =>
-                              ref
-                                  .read(projectsProvider.notifier)
-                                  .loadProjects(),
-                      child: const Text('Повторить'),
-                    ),
+                    onRetry:
+                        () =>
+                            ref.read(projectsProvider.notifier).loadProjects(),
                   ),
-                  (_, _, true) => const AppStateView(
+                  (_, _, true) => const AppEmptyState(
                     icon: Icons.folder_off_outlined,
                     title: 'Нет доступных объектов',
                     description:
