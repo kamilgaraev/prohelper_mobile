@@ -31,4 +31,17 @@ void main() {
     expect(defect.availableActions, ['verify', 'reject']);
     expect(defect.inspectionRequired, isTrue);
   });
+
+  test('rejects defect payload without explicit severity', () {
+    expect(
+      () => QualityDefectModel.fromJson({
+        'id': 7,
+        'defect_number': 'QD-202605-0007',
+        'title': 'Damaged coating',
+        'status': 'open',
+        'inspection_required': true,
+      }),
+      throwsFormatException,
+    );
+  });
 }

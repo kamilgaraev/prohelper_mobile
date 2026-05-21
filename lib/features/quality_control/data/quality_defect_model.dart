@@ -121,18 +121,18 @@ class QualityDefectModel {
     final workflow = _asMap(json['workflow_summary']);
 
     return QualityDefectModel(
-      id: _asInt(json['id']),
-      defectNumber: json['defect_number']?.toString() ?? '',
-      title: json['title']?.toString() ?? '',
+      id: _requiredInt(json, 'id'),
+      defectNumber: _requiredString(json, 'defect_number'),
+      title: _requiredString(json, 'title'),
       description: json['description']?.toString(),
-      severity: json['severity']?.toString() ?? 'major',
+      severity: _requiredString(json, 'severity'),
       severityLabel: json['severity_label']?.toString(),
-      status: json['status']?.toString() ?? '',
+      status: _requiredString(json, 'status'),
       statusLabel: json['status_label']?.toString(),
       availableActions: _actions(json['available_actions']),
       locationName: json['location_name']?.toString(),
       dueDate: json['due_date']?.toString(),
-      inspectionRequired: json['inspection_required'] == true,
+      inspectionRequired: _requiredBool(json, 'inspection_required'),
       project: project.isEmpty ? null : QualityDefectRef.fromJson(project),
       contractor:
           contractor.isEmpty ? null : QualityDefectRef.fromJson(contractor),
@@ -169,6 +169,41 @@ List<String> _actions(dynamic value) {
       })
       .where((item) => item.isNotEmpty)
       .toList();
+}
+
+int _requiredInt(Map<String, dynamic> json, String key) {
+  final value = json[key];
+  if (value is int) {
+    return value;
+  }
+  if (value is num) {
+    return value.toInt();
+  }
+
+  final parsed = int.tryParse(value?.toString() ?? '');
+  if (parsed == null) {
+    throw FormatException('Missing integer field: $key');
+  }
+
+  return parsed;
+}
+
+String _requiredString(Map<String, dynamic> json, String key) {
+  final value = json[key]?.toString();
+  if (value == null || value.isEmpty) {
+    throw FormatException('Missing string field: $key');
+  }
+
+  return value;
+}
+
+bool _requiredBool(Map<String, dynamic> json, String key) {
+  final value = json[key];
+  if (value is bool) {
+    return value;
+  }
+
+  throw FormatException('Missing boolean field: $key');
 }
 
 int _asInt(dynamic value) {

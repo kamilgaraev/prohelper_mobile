@@ -82,4 +82,16 @@ void main() {
     expect(scope.handoverPackage?.requiredDocuments, 2);
     expect(scope.handoverPackage?.approvedRequiredDocuments, 1);
   });
+
+  test('rejects scope payload without workflow summary', () {
+    expect(
+      () => AcceptanceScopeModel.fromJson({
+        'id': 10,
+        'project_id': 9,
+        'title': 'Секция А / этаж 2',
+        'status': 'findings_open',
+      }),
+      throwsFormatException,
+    );
+  });
 }

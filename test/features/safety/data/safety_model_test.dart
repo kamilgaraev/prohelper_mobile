@@ -71,5 +71,20 @@ void main() {
       expect(incident.immediateActions, 'Зона ограждена');
       expect(incident.problemFlags.single.code, 'investigation_required');
     });
+
+    test('rejects violation payload without explicit status', () {
+      expect(
+        () => SafetyViolationModel.fromJson({
+          'id': 12,
+          'project_id': 7,
+          'violation_number': 'HSE-V-7-001',
+          'title': 'Нет каски',
+          'severity': 'major',
+          'status_label': 'Открыто',
+          'available_actions': ['resolve'],
+        }),
+        throwsFormatException,
+      );
+    });
   });
 }

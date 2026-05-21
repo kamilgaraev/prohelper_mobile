@@ -6,8 +6,8 @@ class HandoverReference {
 
   factory HandoverReference.fromJson(Map<String, dynamic> json) {
     return HandoverReference(
-      id: _asInt(json['id']),
-      name: json['name']?.toString() ?? '',
+      id: _requiredInt(json, 'id'),
+      name: _requiredString(json, 'name'),
     );
   }
 }
@@ -27,10 +27,10 @@ class HandoverProblemFlag {
 
   factory HandoverProblemFlag.fromJson(Map<String, dynamic> json) {
     return HandoverProblemFlag(
-      key: json['key']?.toString() ?? json['code']?.toString() ?? '',
-      severity: json['severity']?.toString() ?? '',
-      label: json['label']?.toString() ?? json['message']?.toString() ?? '',
-      count: _asInt(json['count']),
+      key: _requiredAnyString(json, ['key', 'code']),
+      severity: _requiredString(json, 'severity'),
+      label: _requiredAnyString(json, ['label', 'message']),
+      count: _requiredInt(json, 'count'),
     );
   }
 }
@@ -48,7 +48,7 @@ class HandoverWorkflowSummary {
 
   factory HandoverWorkflowSummary.fromJson(Map<String, dynamic> json) {
     return HandoverWorkflowSummary(
-      status: json['status']?.toString() ?? '',
+      status: _requiredString(json, 'status'),
       availableActions: _asStringList(json['available_actions']),
       problemFlags:
           _asMapList(
@@ -67,8 +67,8 @@ class HandoverLocation {
 
   factory HandoverLocation.fromJson(Map<String, dynamic> json) {
     return HandoverLocation(
-      id: _asInt(json['id']),
-      name: json['name']?.toString() ?? '',
+      id: _requiredInt(json, 'id'),
+      name: _requiredString(json, 'name'),
       path: json['path']?.toString(),
     );
   }
@@ -97,13 +97,13 @@ class AcceptanceFindingModel {
 
   factory AcceptanceFindingModel.fromJson(Map<String, dynamic> json) {
     return AcceptanceFindingModel(
-      id: _asInt(json['id']),
-      sessionId: _asInt(json['acceptance_session_id']),
+      id: _requiredInt(json, 'id'),
+      sessionId: _requiredInt(json, 'acceptance_session_id'),
       qualityDefectId: _nullableInt(json['quality_defect_id']),
-      title: json['title']?.toString() ?? '',
+      title: _requiredString(json, 'title'),
       description: json['description']?.toString(),
-      severity: json['severity']?.toString() ?? 'major',
-      status: json['status']?.toString() ?? 'open',
+      severity: _requiredString(json, 'severity'),
+      status: _requiredString(json, 'status'),
     );
   }
 }
@@ -125,10 +125,10 @@ class HandoverPackageDocumentModel {
 
   factory HandoverPackageDocumentModel.fromJson(Map<String, dynamic> json) {
     return HandoverPackageDocumentModel(
-      id: _asInt(json['id']),
-      title: json['title']?.toString() ?? '',
-      required: json['is_required'] == true,
-      status: json['status']?.toString() ?? 'missing',
+      id: _requiredInt(json, 'id'),
+      title: _requiredString(json, 'title'),
+      required: _requiredBool(json, 'is_required'),
+      status: _requiredString(json, 'status'),
     );
   }
 }
@@ -156,9 +156,9 @@ class HandoverPackageModel {
 
   factory HandoverPackageModel.fromJson(Map<String, dynamic> json) {
     return HandoverPackageModel(
-      id: _asInt(json['id']),
-      title: json['title']?.toString() ?? '',
-      status: json['status']?.toString() ?? '',
+      id: _requiredInt(json, 'id'),
+      title: _requiredString(json, 'title'),
+      status: _requiredString(json, 'status'),
       documents:
           _asMapList(
             json['documents'],
@@ -180,8 +180,8 @@ class AcceptanceSessionModel {
 
   factory AcceptanceSessionModel.fromJson(Map<String, dynamic> json) {
     return AcceptanceSessionModel(
-      id: _asInt(json['id']),
-      status: json['status']?.toString() ?? '',
+      id: _requiredInt(json, 'id'),
+      status: _requiredString(json, 'status'),
       findings:
           _asMapList(
             json['findings'],
@@ -222,25 +222,18 @@ class AcceptanceScopeModel {
   String get locationLabel => location?.path ?? location?.name ?? '';
 
   factory AcceptanceScopeModel.fromJson(Map<String, dynamic> json) {
-    final workflow = _asMap(json['workflow_summary']);
+    final workflow = _requiredMap(json, 'workflow_summary');
     final project = _asMap(json['project']);
     final location = _asMap(json['location']);
     final package = _asMap(json['handover_package']);
 
     return AcceptanceScopeModel(
-      id: _asInt(json['id']),
-      projectId: _asInt(json['project_id']),
-      title: json['title']?.toString() ?? '',
+      id: _requiredInt(json, 'id'),
+      projectId: _requiredInt(json, 'project_id'),
+      title: _requiredString(json, 'title'),
       description: json['description']?.toString(),
-      status: json['status']?.toString() ?? '',
-      workflowSummary:
-          workflow.isEmpty
-              ? HandoverWorkflowSummary(
-                status: json['status']?.toString() ?? '',
-                availableActions: const [],
-                problemFlags: const [],
-              )
-              : HandoverWorkflowSummary.fromJson(workflow),
+      status: _requiredString(json, 'status'),
+      workflowSummary: HandoverWorkflowSummary.fromJson(workflow),
       project: project.isEmpty ? null : HandoverReference.fromJson(project),
       location: location.isEmpty ? null : HandoverLocation.fromJson(location),
       sessions:
@@ -255,6 +248,61 @@ class AcceptanceScopeModel {
           package.isEmpty ? null : HandoverPackageModel.fromJson(package),
     );
   }
+}
+
+int _requiredInt(Map<String, dynamic> json, String key) {
+  final value = json[key];
+  if (value is int) {
+    return value;
+  }
+  if (value is num) {
+    return value.toInt();
+  }
+
+  final parsed = int.tryParse(value?.toString() ?? '');
+  if (parsed == null) {
+    throw FormatException('Missing integer field: $key');
+  }
+
+  return parsed;
+}
+
+String _requiredString(Map<String, dynamic> json, String key) {
+  final value = json[key]?.toString();
+  if (value == null || value.isEmpty) {
+    throw FormatException('Missing string field: $key');
+  }
+
+  return value;
+}
+
+String _requiredAnyString(Map<String, dynamic> json, List<String> keys) {
+  for (final key in keys) {
+    final value = json[key]?.toString();
+    if (value != null && value.isNotEmpty) {
+      return value;
+    }
+  }
+
+  throw FormatException('Missing string field: ${keys.join('|')}');
+}
+
+bool _requiredBool(Map<String, dynamic> json, String key) {
+  final value = json[key];
+  if (value is bool) {
+    return value;
+  }
+
+  throw FormatException('Missing boolean field: $key');
+}
+
+Map<String, dynamic> _requiredMap(Map<String, dynamic> json, String key) {
+  final value = _asMap(json[key]);
+  if (value.isEmpty) {
+    throw FormatException('Missing map field: $key');
+  }
+
+  return value;
 }
 
 int _asInt(dynamic value) {

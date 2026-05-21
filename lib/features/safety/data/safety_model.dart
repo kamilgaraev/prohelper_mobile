@@ -11,9 +11,9 @@ class SafetyProblemFlagModel {
 
   factory SafetyProblemFlagModel.fromJson(Map<String, dynamic> json) {
     return SafetyProblemFlagModel(
-      code: _asString(json['code']),
-      severity: _asString(json['severity']),
-      message: _asString(json['message']),
+      code: _requiredString(json, 'code'),
+      severity: _requiredString(json, 'severity'),
+      message: _requiredString(json, 'message'),
     );
   }
 }
@@ -51,16 +51,16 @@ class SafetyWorkPermitModel {
 
   factory SafetyWorkPermitModel.fromJson(Map<String, dynamic> json) {
     return SafetyWorkPermitModel(
-      id: _asInt(json['id']),
-      projectId: _asInt(json['project_id']),
-      permitNumber: _asString(json['permit_number']),
-      title: _asString(json['title']),
-      permitType: _asString(json['permit_type']),
-      riskLevel: _asString(json['risk_level']),
-      status: _asString(json['status']),
-      statusLabel: _asString(json['status_label']),
-      validFrom: _asString(json['valid_from']),
-      validUntil: _asString(json['valid_until']),
+      id: _requiredInt(json, 'id'),
+      projectId: _requiredInt(json, 'project_id'),
+      permitNumber: _requiredString(json, 'permit_number'),
+      title: _requiredString(json, 'title'),
+      permitType: _requiredString(json, 'permit_type'),
+      riskLevel: _requiredString(json, 'risk_level'),
+      status: _requiredString(json, 'status'),
+      statusLabel: _requiredString(json, 'status_label'),
+      validFrom: _requiredString(json, 'valid_from'),
+      validUntil: _requiredString(json, 'valid_until'),
       locationName: _asNullableString(json['location_name']),
       projectName: _nestedName(json['project']),
       problemFlags: _flags(json['problem_flags']),
@@ -101,15 +101,15 @@ class SafetyIncidentModel {
 
   factory SafetyIncidentModel.fromJson(Map<String, dynamic> json) {
     return SafetyIncidentModel(
-      id: _asInt(json['id']),
-      projectId: _asInt(json['project_id']),
-      incidentNumber: _asString(json['incident_number']),
-      title: _asString(json['title']),
-      incidentType: _asString(json['incident_type']),
-      severity: _asString(json['severity']),
-      status: _asString(json['status']),
-      statusLabel: _asString(json['status_label']),
-      occurredAt: _asString(json['occurred_at']),
+      id: _requiredInt(json, 'id'),
+      projectId: _requiredInt(json, 'project_id'),
+      incidentNumber: _requiredString(json, 'incident_number'),
+      title: _requiredString(json, 'title'),
+      incidentType: _requiredString(json, 'incident_type'),
+      severity: _requiredString(json, 'severity'),
+      status: _requiredString(json, 'status'),
+      statusLabel: _requiredString(json, 'status_label'),
+      occurredAt: _requiredString(json, 'occurred_at'),
       locationName: _asNullableString(json['location_name']),
       description: _asNullableString(json['description']),
       immediateActions: _asNullableString(json['immediate_actions']),
@@ -151,13 +151,13 @@ class SafetyViolationModel {
 
   factory SafetyViolationModel.fromJson(Map<String, dynamic> json) {
     return SafetyViolationModel(
-      id: _asInt(json['id']),
-      projectId: _asInt(json['project_id']),
-      violationNumber: _asString(json['violation_number']),
-      title: _asString(json['title']),
-      severity: _asString(json['severity']),
-      status: _asString(json['status']),
-      statusLabel: _asString(json['status_label']),
+      id: _requiredInt(json, 'id'),
+      projectId: _requiredInt(json, 'project_id'),
+      violationNumber: _requiredString(json, 'violation_number'),
+      title: _requiredString(json, 'title'),
+      severity: _requiredString(json, 'severity'),
+      status: _requiredString(json, 'status'),
+      statusLabel: _requiredString(json, 'status_label'),
       availableActions:
           (json['available_actions'] as List<dynamic>? ?? const [])
               .whereType<String>()
@@ -190,7 +190,8 @@ String? _nestedName(dynamic value) {
   return null;
 }
 
-int _asInt(dynamic value) {
+int _requiredInt(Map<String, dynamic> json, String key) {
+  final value = json[key];
   if (value is int) {
     return value;
   }
@@ -198,10 +199,22 @@ int _asInt(dynamic value) {
     return value.toInt();
   }
 
-  return int.tryParse(value?.toString() ?? '') ?? 0;
+  final parsed = int.tryParse(value?.toString() ?? '');
+  if (parsed == null) {
+    throw FormatException('Missing integer field: $key');
+  }
+
+  return parsed;
 }
 
-String _asString(dynamic value) => value?.toString() ?? '';
+String _requiredString(Map<String, dynamic> json, String key) {
+  final value = json[key]?.toString();
+  if (value == null || value.isEmpty) {
+    throw FormatException('Missing string field: $key');
+  }
+
+  return value;
+}
 
 String? _asNullableString(dynamic value) {
   final text = value?.toString().trim() ?? '';
