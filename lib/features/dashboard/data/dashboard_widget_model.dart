@@ -1,138 +1,125 @@
-enum DashboardWidgetType {
-  projectOverview('project_overview'),
-  siteRequests('site_requests'),
-  siteRequestApprovals('site_request_approvals'),
-  warehouse('warehouse'),
-  schedule('schedule'),
-  unknown('unknown');
+enum DashboardWidgetStatus {
+  ok('ok'),
+  active('active'),
+  attention('attention'),
+  critical('critical');
 
-  const DashboardWidgetType(this.value);
+  const DashboardWidgetStatus(this.value);
 
   final String value;
 
-  static DashboardWidgetType fromValue(String? value) {
-    for (final type in DashboardWidgetType.values) {
-      if (type.value == value) {
-        return type;
-      }
+  static DashboardWidgetStatus fromValue(String value) {
+    return switch (value) {
+      'ok' => DashboardWidgetStatus.ok,
+      'active' => DashboardWidgetStatus.active,
+      'attention' => DashboardWidgetStatus.attention,
+      'critical' => DashboardWidgetStatus.critical,
+      _ => throw FormatException('Unknown dashboard status: $value'),
+    };
+  }
+}
+
+class DashboardMetric {
+  const DashboardMetric({required this.label, required this.value});
+
+  final String label;
+  final Object value;
+
+  String get displayValue {
+    final metricValue = value;
+
+    if (metricValue is int) {
+      return metricValue.toString();
     }
 
-    return DashboardWidgetType.unknown;
+    if (metricValue is num) {
+      return metricValue % 1 == 0
+          ? metricValue.toInt().toString()
+          : metricValue.toString();
+    }
+
+    return metricValue.toString();
+  }
+
+  factory DashboardMetric.fromJson(Map<String, dynamic> json) {
+    final label = _requiredString(json, 'label');
+    final value = json['value'];
+
+    if (value == null) {
+      throw const FormatException('Dashboard metric value is required');
+    }
+
+    return DashboardMetric(label: label, value: value);
   }
 }
 
 class DashboardWidgetModel {
   const DashboardWidgetModel({
-    required this.type,
-    required this.order,
+    required this.slug,
     required this.title,
-    required this.description,
-    required this.payload,
-    this.route,
-    this.badge,
+    required this.status,
+    required this.primaryMetric,
+    required this.secondaryMetric,
+    required this.route,
+    required this.updatedAt,
   });
 
-  final DashboardWidgetType type;
-  final int order;
+  final String slug;
   final String title;
-  final String description;
-  final String? route;
-  final String? badge;
-  final Map<String, dynamic> payload;
+  final DashboardWidgetStatus status;
+  final DashboardMetric primaryMetric;
+  final DashboardMetric secondaryMetric;
+  final String route;
+  final DateTime updatedAt;
 
   factory DashboardWidgetModel.fromJson(Map<String, dynamic> json) {
-    final type = DashboardWidgetType.fromValue(json['type'] as String?);
-    final rawPayload = json['payload'];
-    final payload =
-        rawPayload is Map<String, dynamic>
-            ? rawPayload
-            : rawPayload is Map
-            ? rawPayload.map((key, value) => MapEntry(key.toString(), value))
-            : const <String, dynamic>{};
-
     return DashboardWidgetModel(
-      type: type,
-      order: json['order'] as int? ?? 0,
-      title: _resolveDashboardTitle(type, json['title'] as String?),
-      description: _resolveDashboardDescription(
-        type,
-        json['description'] as String?,
-        payload,
+      slug: _requiredString(json, 'slug'),
+      title: _requiredString(json, 'title'),
+      status: DashboardWidgetStatus.fromValue(_requiredString(json, 'status')),
+      primaryMetric: DashboardMetric.fromJson(
+        _requiredMap(json, 'primary_metric'),
       ),
-      route: json['route'] as String?,
-      badge: json['badge']?.toString(),
-      payload: payload,
+      secondaryMetric: DashboardMetric.fromJson(
+        _requiredMap(json, 'secondary_metric'),
+      ),
+      route: _requiredString(json, 'route'),
+      updatedAt: _requiredDateTime(json, 'updated_at'),
     );
   }
 }
 
-String _resolveDashboardTitle(DashboardWidgetType type, String? rawTitle) {
-  if (!_needsDashboardFallback(rawTitle)) {
-    return rawTitle!.trim();
-  }
+Map<String, dynamic> _requiredMap(Map<String, dynamic> source, String key) {
+  final value = source[key];
 
-  return switch (type) {
-    DashboardWidgetType.projectOverview => 'Обзор объекта',
-    DashboardWidgetType.siteRequests => 'Заявки с объекта',
-    DashboardWidgetType.siteRequestApprovals => 'Согласования',
-    DashboardWidgetType.warehouse => 'Склад',
-    DashboardWidgetType.schedule => 'График работ',
-    DashboardWidgetType.unknown => 'Виджет',
-  };
-}
-
-String _resolveDashboardDescription(
-  DashboardWidgetType type,
-  String? rawDescription,
-  Map<String, dynamic> payload,
-) {
-  if (!_needsDashboardFallback(rawDescription)) {
-    return rawDescription!.trim();
-  }
-
-  return switch (type) {
-    DashboardWidgetType.projectOverview => 'Текущий объект и ваша роль на нем.',
-    DashboardWidgetType.siteRequests =>
-      'Активных заявок: ${_intValue(payload['active_count'])}. Просрочено: ${_intValue(payload['overdue_count'])}.',
-    DashboardWidgetType.siteRequestApprovals =>
-      'Ожидают решения: ${_intValue(payload['pending_count'])}. На рассмотрении: ${_intValue(payload['in_review_count'])}.',
-    DashboardWidgetType.warehouse =>
-      'Складов: ${_nestedIntValue(payload, 'summary', 'warehouse_count')}. Низкий остаток: ${_nestedIntValue(payload, 'summary', 'low_stock_count')}.',
-    DashboardWidgetType.schedule =>
-      'Событий на 7 дней: ${_nestedIntValue(payload, 'summary', 'upcoming_count')}. Блокирующих: ${_nestedIntValue(payload, 'summary', 'blocking_count')}.',
-    DashboardWidgetType.unknown => '',
-  };
-}
-
-bool _needsDashboardFallback(String? value) {
-  final normalized = value?.trim() ?? '';
-
-  return normalized.isEmpty ||
-      normalized.startsWith('mobile_dashboard.widgets.');
-}
-
-int _nestedIntValue(
-  Map<String, dynamic> source,
-  String firstKey,
-  String secondKey,
-) {
-  final nested = source[firstKey];
-
-  if (nested is! Map) {
-    return 0;
-  }
-
-  return _intValue(nested[secondKey]);
-}
-
-int _intValue(dynamic value) {
-  if (value is int) {
+  if (value is Map<String, dynamic>) {
     return value;
   }
 
-  if (value is num) {
-    return value.toInt();
+  if (value is Map) {
+    return value.map((key, value) => MapEntry(key.toString(), value));
   }
 
-  return int.tryParse(value?.toString() ?? '') ?? 0;
+  throw FormatException('Dashboard field $key must be an object');
+}
+
+String _requiredString(Map<String, dynamic> source, String key) {
+  final value = source[key]?.toString().trim() ?? '';
+
+  if (value.isEmpty) {
+    throw FormatException('Dashboard field $key is required');
+  }
+
+  return value;
+}
+
+DateTime _requiredDateTime(Map<String, dynamic> source, String key) {
+  final rawValue = _requiredString(source, key);
+  final value = DateTime.tryParse(rawValue);
+
+  if (value == null) {
+    throw FormatException('Dashboard field $key must be a valid date');
+  }
+
+  return value;
 }

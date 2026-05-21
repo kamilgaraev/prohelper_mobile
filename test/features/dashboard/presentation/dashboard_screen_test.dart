@@ -13,11 +13,13 @@ import 'package:prohelpers_mobile/features/dashboard/data/dashboard_repository.d
 import 'package:prohelpers_mobile/features/dashboard/data/dashboard_widget_model.dart';
 import 'package:prohelpers_mobile/features/dashboard/presentation/controllers/dashboard_controller.dart';
 import 'package:prohelpers_mobile/features/dashboard/presentation/dashboard_screen.dart';
+import 'package:prohelpers_mobile/features/notifications/data/notification_model.dart';
+import 'package:prohelpers_mobile/features/notifications/data/notifications_repository.dart';
 import 'package:prohelpers_mobile/features/projects/data/project_model.dart';
 import 'package:prohelpers_mobile/features/projects/data/projects_repository.dart';
 import 'package:prohelpers_mobile/features/projects/domain/projects_provider.dart';
 
-class _FakeSecureStorageService extends SecureStorageService {
+class _TestSecureStorageService extends SecureStorageService {
   @override
   Future<String?> getToken() async => null;
 
@@ -28,13 +30,13 @@ class _FakeSecureStorageService extends SecureStorageService {
   Future<void> clearToken() async {}
 }
 
-class _FakeAuthRepository extends AuthRepository {
-  _FakeAuthRepository() : super(Dio(), _FakeSecureStorageService());
+class _TestAuthRepository extends AuthRepository {
+  _TestAuthRepository() : super(Dio(), _TestSecureStorageService());
 }
 
-class _FakeAuthNotifier extends AuthNotifier {
-  _FakeAuthNotifier(User user)
-    : super(_FakeAuthRepository(), _FakeSecureStorageService()) {
+class _TestAuthNotifier extends AuthNotifier {
+  _TestAuthNotifier(User user)
+    : super(_TestAuthRepository(), _TestSecureStorageService()) {
     state = AuthAuthenticated(user);
   }
 
@@ -42,15 +44,15 @@ class _FakeAuthNotifier extends AuthNotifier {
   Future<void> checkAuth() async {}
 }
 
-class _FakeProjectsRepository extends ProjectsRepository {
-  _FakeProjectsRepository() : super(Dio());
+class _TestProjectsRepository extends ProjectsRepository {
+  _TestProjectsRepository() : super(Dio());
 
   @override
   Future<List<Project>> fetchProjects() async => const [];
 }
 
-class _FakeProjectsNotifier extends ProjectsNotifier {
-  _FakeProjectsNotifier(Project project) : super(_FakeProjectsRepository()) {
+class _TestProjectsNotifier extends ProjectsNotifier {
+  _TestProjectsNotifier(Project project) : super(_TestProjectsRepository()) {
     state = ProjectsState(
       isLoading: false,
       projects: [project],
@@ -60,8 +62,8 @@ class _FakeProjectsNotifier extends ProjectsNotifier {
   }
 }
 
-class _FakeDashboardRepository extends DashboardRepository {
-  _FakeDashboardRepository(this._widgets) : super(Dio());
+class _TestDashboardRepository extends DashboardRepository {
+  _TestDashboardRepository(this._widgets) : super(Dio());
 
   final List<DashboardWidgetModel> _widgets;
 
@@ -69,11 +71,33 @@ class _FakeDashboardRepository extends DashboardRepository {
   Future<List<DashboardWidgetModel>> fetchWidgets() async => _widgets;
 }
 
-class _FakeDashboardController extends DashboardController {
-  _FakeDashboardController(List<DashboardWidgetModel> widgets)
-    : super(_FakeDashboardRepository(widgets), canLoad: false) {
+class _TestDashboardController extends DashboardController {
+  _TestDashboardController(List<DashboardWidgetModel> widgets)
+    : super(_TestDashboardRepository(widgets), canLoad: false) {
     state = DashboardState(isLoading: false, widgets: widgets, error: null);
   }
+}
+
+class _TestNotificationsRepository extends NotificationsRepository {
+  _TestNotificationsRepository() : super(Dio());
+
+  @override
+  Future<NotificationsPageResult> fetchNotifications({
+    int page = 1,
+    int perPage = 20,
+    NotificationFilter filter = NotificationFilter.all,
+  }) async {
+    return NotificationsPageResult(
+      items: const [],
+      currentPage: page,
+      lastPage: page,
+      perPage: perPage,
+      total: 0,
+    );
+  }
+
+  @override
+  Future<int> fetchUnreadCount() async => 0;
 }
 
 void main() {
@@ -101,32 +125,38 @@ void main() {
   }
 
   List<DashboardWidgetModel> buildWidgets() {
-    return const [
+    final updatedAt = DateTime.parse('2026-05-21T10:00:00+03:00');
+
+    return [
       DashboardWidgetModel(
-        type: DashboardWidgetType.projectOverview,
-        order: 1,
+        slug: 'project_overview',
         title: 'Обзор объекта',
-        description: 'Текущий объект и ваша роль на нем.',
-        payload: {},
+        status: DashboardWidgetStatus.active,
+        primaryMetric: const DashboardMetric(label: 'Разделов', value: 12),
+        secondaryMetric: const DashboardMetric(label: 'Ролей', value: 1),
+        route: 'project_selection',
+        updatedAt: updatedAt,
       ),
       DashboardWidgetModel(
-        type: DashboardWidgetType.warehouse,
-        order: 2,
+        slug: 'quality_control',
+        title: 'Контроль качества',
+        status: DashboardWidgetStatus.attention,
+        primaryMetric: const DashboardMetric(label: 'Открыто', value: 4),
+        secondaryMetric: const DashboardMetric(label: 'Просрочено', value: 1),
+        route: 'quality-control',
+        updatedAt: updatedAt,
+      ),
+      DashboardWidgetModel(
+        slug: 'warehouse',
         title: 'Склад',
-        description: 'Складов: 2. Низкий остаток: 1.',
-        payload: {
-          'summary': {'warehouse_count': 2, 'low_stock_count': 1},
-        },
-        badge: '1',
-      ),
-      DashboardWidgetModel(
-        type: DashboardWidgetType.schedule,
-        order: 3,
-        title: 'График работ',
-        description: 'Событий на 7 дней: 4. Блокирующих: 1.',
-        payload: {
-          'summary': {'upcoming_count': 4, 'blocking_count': 1},
-        },
+        status: DashboardWidgetStatus.ok,
+        primaryMetric: const DashboardMetric(label: 'Складов', value: 2),
+        secondaryMetric: const DashboardMetric(
+          label: 'Низкий остаток',
+          value: 0,
+        ),
+        route: 'warehouse',
+        updatedAt: updatedAt,
       ),
     ];
   }
@@ -138,20 +168,28 @@ void main() {
 
     return ProviderScope(
       overrides: [
-        authProvider.overrideWith((ref) => _FakeAuthNotifier(user)),
-        projectsProvider.overrideWith((ref) => _FakeProjectsNotifier(project)),
+        authProvider.overrideWith((ref) => _TestAuthNotifier(user)),
+        projectsProvider.overrideWith((ref) => _TestProjectsNotifier(project)),
         dashboardControllerProvider.overrideWith(
-          (ref) => _FakeDashboardController(widgets),
+          (ref) => _TestDashboardController(widgets),
+        ),
+        notificationsRepositoryProvider.overrideWith(
+          (ref) => _TestNotificationsRepository(),
         ),
         activeModulesProvider.overrideWith((ref) {
-          return {AppModule.basicWarehouse, AppModule.scheduleManagement};
+          return {
+            AppModule.basicWarehouse,
+            AppModule.qualityControl,
+            AppModule.aiAssistant,
+          };
         }),
         permissionServiceProvider.overrideWith((ref) {
           return PermissionService(
             context: UserContext.field,
             activeModules: {
               AppModule.basicWarehouse,
-              AppModule.scheduleManagement,
+              AppModule.qualityControl,
+              AppModule.aiAssistant,
             },
           );
         }),
@@ -160,17 +198,19 @@ void main() {
     );
   }
 
-  testWidgets('показывает объект и основные карточки дашборда', (tester) async {
+  testWidgets('показывает карточки из backend-контракта', (tester) async {
     await tester.pumpWidget(createWidget());
-    await tester.pumpAndSettle();
+    await tester.pump();
 
     expect(find.text('Текущий объект'), findsOneWidget);
     expect(find.text('ДОМ 300М ЦАРЕВО'), findsOneWidget);
-    expect(find.text('ОБЗОР ОБЪЕКТА'), findsOneWidget);
-    expect(find.text('Склад'), findsWidgets);
-    expect(find.text('График работ'), findsWidgets);
-    expect(find.text('Роль на объекте'), findsOneWidget);
-    expect(find.text('Прораб'), findsOneWidget);
-    expect(find.text('Складов: 2. Низкий остаток: 1.'), findsOneWidget);
+    expect(find.text('Обзор объекта'), findsOneWidget);
+    expect(find.text('Контроль качества'), findsOneWidget);
+    expect(find.text('Склад'), findsOneWidget);
+    expect(find.text('Открыто'), findsOneWidget);
+    expect(find.text('Просрочено'), findsOneWidget);
+    expect(find.text('Складов'), findsOneWidget);
+    expect(find.text('Низкий остаток'), findsOneWidget);
+    expect(find.text('Ассистент'), findsNothing);
   });
 }

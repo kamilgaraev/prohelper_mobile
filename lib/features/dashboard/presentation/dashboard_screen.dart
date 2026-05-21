@@ -4,26 +4,30 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import 'package:prohelpers_mobile/core/theme/app_colors.dart';
 import 'package:prohelpers_mobile/core/theme/app_typography.dart';
-import 'package:prohelpers_mobile/core/providers/module_provider.dart';
 import 'package:prohelpers_mobile/core/widgets/action_hub.dart';
 import 'package:prohelpers_mobile/core/widgets/app_state_view.dart';
 import 'package:prohelpers_mobile/core/widgets/industrial_card.dart';
-import 'package:prohelpers_mobile/features/auth/domain/auth_provider.dart';
 import 'package:prohelpers_mobile/features/ai_assistant/presentation/ai_assistant_home_screen.dart';
+import 'package:prohelpers_mobile/features/auth/domain/auth_provider.dart';
 import 'package:prohelpers_mobile/features/auth/presentation/widgets/profile_pill.dart';
 import 'package:prohelpers_mobile/features/auth/presentation/widgets/user_profile_bottom_sheet.dart';
+import 'package:prohelpers_mobile/features/construction_journal/presentation/construction_journal_screen.dart';
 import 'package:prohelpers_mobile/features/dashboard/data/dashboard_widget_model.dart';
 import 'package:prohelpers_mobile/features/dashboard/presentation/controllers/dashboard_controller.dart';
 import 'package:prohelpers_mobile/features/handover_acceptance/presentation/handover_acceptance_screen.dart';
+import 'package:prohelpers_mobile/features/machinery_operations/presentation/machinery_operations_screen.dart';
 import 'package:prohelpers_mobile/features/notifications/domain/notifications_provider.dart';
 import 'package:prohelpers_mobile/features/notifications/presentation/notifications_screen.dart';
+import 'package:prohelpers_mobile/features/production_labor/presentation/production_labor_screen.dart';
 import 'package:prohelpers_mobile/features/projects/domain/projects_provider.dart';
+import 'package:prohelpers_mobile/features/projects/presentation/project_selection_screen.dart';
 import 'package:prohelpers_mobile/features/quality_control/presentation/quality_control_screen.dart';
 import 'package:prohelpers_mobile/features/safety/presentation/safety_screen.dart';
 import 'package:prohelpers_mobile/features/schedule/presentation/schedule_screen.dart';
-import 'package:prohelpers_mobile/features/site_requests/presentation/screens/site_requests_screen.dart';
 import 'package:prohelpers_mobile/features/site_requests/domain/site_requests_scope.dart';
+import 'package:prohelpers_mobile/features/site_requests/presentation/screens/site_requests_screen.dart';
 import 'package:prohelpers_mobile/features/warehouse/presentation/warehouse_screen.dart';
+import 'package:prohelpers_mobile/features/workforce/presentation/workforce_attendance_screen.dart';
 
 class DashboardScreen extends ConsumerWidget {
   const DashboardScreen({super.key});
@@ -31,15 +35,6 @@ class DashboardScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final dashboardState = ref.watch(dashboardControllerProvider);
-    final activeModules = ref.watch(activeModulesProvider);
-    final hasAiAssistant = activeModules.contains(AppModule.aiAssistant);
-    final hasQualityControl = activeModules.contains(AppModule.qualityControl);
-    final hasSafetyManagement = activeModules.contains(
-      AppModule.safetyManagement,
-    );
-    final hasHandoverAcceptance = activeModules.contains(
-      AppModule.handoverAcceptance,
-    );
 
     return Scaffold(
       body: Stack(
@@ -72,9 +67,9 @@ class DashboardScreen extends ConsumerWidget {
                 const SliverFillRemaining(
                   child: AppStateView(
                     icon: Icons.dashboard_customize_outlined,
-                    title: 'Дашборд пока пуст',
+                    title: 'Пока нет доступных разделов',
                     description:
-                        'Для вашей роли пока не подключены мобильные виджеты.',
+                        'Для вашей роли еще не назначены разделы для работы в приложении.',
                   ),
                 )
               else ...[
@@ -85,54 +80,15 @@ class DashboardScreen extends ConsumerWidget {
                   ),
                   sliver: SliverList(
                     delegate: SliverChildBuilderDelegate((context, index) {
-                      final widget = dashboardState.widgets[index];
+                      final dashboardWidget = dashboardState.widgets[index];
+
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 16),
-                        child: _buildWidgetByType(context, ref, widget),
+                        child: _buildDashboardCard(context, dashboardWidget),
                       );
                     }, childCount: dashboardState.widgets.length),
                   ),
                 ),
-                if (hasAiAssistant)
-                  SliverPadding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 8,
-                    ),
-                    sliver: SliverToBoxAdapter(
-                      child: _buildAiAssistantCard(context),
-                    ),
-                  ),
-                if (hasQualityControl)
-                  SliverPadding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 8,
-                    ),
-                    sliver: SliverToBoxAdapter(
-                      child: _buildQualityControlCard(context),
-                    ),
-                  ),
-                if (hasSafetyManagement)
-                  SliverPadding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 8,
-                    ),
-                    sliver: SliverToBoxAdapter(
-                      child: _buildSafetyManagementCard(context),
-                    ),
-                  ),
-                if (hasHandoverAcceptance)
-                  SliverPadding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 8,
-                    ),
-                    sliver: SliverToBoxAdapter(
-                      child: _buildHandoverAcceptanceCard(context),
-                    ),
-                  ),
                 const SliverToBoxAdapter(child: SizedBox(height: 110)),
               ],
             ],
@@ -269,86 +225,78 @@ class DashboardScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildWidgetByType(
+  Widget _buildDashboardCard(
     BuildContext context,
-    WidgetRef ref,
-    DashboardWidgetModel widget,
-  ) {
-    return switch (widget.type) {
-      DashboardWidgetType.projectOverview => _buildProjectOverview(
-        context,
-        ref,
-        widget,
-      ),
-      DashboardWidgetType.siteRequests => _buildSiteRequestsCard(
-        context,
-        widget,
-      ),
-      DashboardWidgetType.siteRequestApprovals => _buildApprovalsCard(
-        context,
-        widget,
-      ),
-      DashboardWidgetType.warehouse => _buildWarehouseCard(context, widget),
-      DashboardWidgetType.schedule => _buildScheduleCard(context, widget),
-      DashboardWidgetType.unknown => const SizedBox.shrink(),
-    };
-  }
-
-  Widget _buildProjectOverview(
-    BuildContext context,
-    WidgetRef ref,
-    DashboardWidgetModel widget,
+    DashboardWidgetModel dashboardWidget,
   ) {
     final theme = Theme.of(context);
-    final projectsState = ref.watch(projectsProvider);
-    final project = projectsState.selectedProject;
+    final color = _colorForStatus(context, dashboardWidget.status);
+    final target = _screenForRoute(dashboardWidget.route);
 
     return IndustrialCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      onTap:
+          target == null
+              ? null
+              : () {
+                Navigator.of(
+                  context,
+                ).push(MaterialPageRoute(builder: (_) => target));
+              },
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Text(
-            widget.title.toUpperCase(),
-            style: AppTypography.caption(
-              context,
-            ).copyWith(fontWeight: FontWeight.w900, letterSpacing: 0.8),
+          Container(
+            width: 52,
+            height: 52,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(_iconForSlug(dashboardWidget.slug), color: color),
           ),
-          const SizedBox(height: 16),
-          if (project == null)
-            Column(
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Объект не выбран',
-                  style: AppTypography.bodyLarge(context),
-                ),
-                if (widget.description.isNotEmpty) ...[
-                  const SizedBox(height: 8),
-                  Text(
-                    widget.description,
-                    style: AppTypography.bodyMedium(
-                      context,
-                    ).copyWith(color: theme.colorScheme.onSurfaceVariant),
+                  dashboardWidget.title,
+                  style: AppTypography.bodyLarge(context).copyWith(
+                    fontWeight: FontWeight.w900,
+                    color: theme.colorScheme.onSurface,
                   ),
-                ],
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _buildMetric(
+                        context,
+                        dashboardWidget.primaryMetric,
+                        color,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _buildMetric(
+                        context,
+                        dashboardWidget.secondaryMetric,
+                        color,
+                      ),
+                    ),
+                  ],
+                ),
               ],
-            )
-          else ...[
-            _buildProjectParam(context, 'Название', project.name),
-            _buildProjectParam(
-              context,
-              'Адрес',
-              project.address?.trim().isNotEmpty == true
-                  ? project.address!
-                  : 'Не указан',
             ),
-            _buildProjectParam(
-              context,
-              'Роль на объекте',
-              project.myRole?.trim().isNotEmpty == true
-                  ? project.myRole!
-                  : 'Не указана',
-              valueColor: theme.colorScheme.primary,
+          ),
+          if (target != null) ...[
+            const SizedBox(width: 10),
+            Icon(
+              Icons.chevron_right_rounded,
+              color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.35),
             ),
           ],
         ],
@@ -356,254 +304,94 @@ class DashboardScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildProjectParam(
+  Widget _buildMetric(
     BuildContext context,
-    String label,
-    String value, {
-    Color? valueColor,
-  }) {
+    DashboardMetric metric,
+    Color color,
+  ) {
     final theme = Theme.of(context);
 
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Row(
+    return Container(
+      constraints: const BoxConstraints(minHeight: 56),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withValues(alpha: 0.18)),
+      ),
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          SizedBox(
-            width: 110,
-            child: Text(
-              label,
-              style: AppTypography.bodyMedium(
-                context,
-              ).copyWith(color: theme.colorScheme.onSurfaceVariant),
-            ),
+          Text(
+            metric.label,
+            style: AppTypography.caption(
+              context,
+            ).copyWith(color: theme.colorScheme.onSurfaceVariant),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
-          Expanded(
-            child: Text(
-              value,
-              style: AppTypography.bodyLarge(
-                context,
-              ).copyWith(color: valueColor),
+          const SizedBox(height: 3),
+          Text(
+            metric.displayValue,
+            style: AppTypography.bodyLarge(context).copyWith(
+              color: theme.colorScheme.onSurface,
+              fontWeight: FontWeight.w900,
             ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
         ],
       ),
     );
   }
 
-  Widget _buildWarehouseCard(
-    BuildContext context,
-    DashboardWidgetModel widget,
-  ) {
-    return _buildModuleActionCard(
-      context: context,
-      title: widget.title,
-      subtitle: widget.description,
-      icon: Icons.warehouse_outlined,
-      color: Theme.of(context).colorScheme.primary,
-      badge: widget.badge,
-      onTap:
-          (_) => Navigator.of(
-            context,
-          ).push(MaterialPageRoute(builder: (_) => const WarehouseScreen())),
-    );
+  IconData _iconForSlug(String slug) {
+    return switch (slug) {
+      'project_overview' => Icons.domain_rounded,
+      'site_requests' => Icons.add_task_rounded,
+      'site_request_approvals' => Icons.fact_check_rounded,
+      'warehouse' => Icons.warehouse_outlined,
+      'schedule' => Icons.timeline_rounded,
+      'ai_assistant' => Icons.smart_toy_outlined,
+      'construction_journal' => Icons.menu_book_rounded,
+      'quality_control' => Icons.verified_outlined,
+      'safety_management' => Icons.health_and_safety_rounded,
+      'machinery_operations' => Icons.precision_manufacturing_rounded,
+      'production_labor' => Icons.assignment_turned_in_rounded,
+      'workforce_management' => Icons.badge_rounded,
+      'handover_acceptance' => Icons.handshake_rounded,
+      _ => Icons.dashboard_customize_outlined,
+    };
   }
 
-  Widget _buildSiteRequestsCard(
-    BuildContext context,
-    DashboardWidgetModel widget,
-  ) {
-    return _buildModuleActionCard(
-      context: context,
-      title: widget.title,
-      subtitle: widget.description,
-      icon: Icons.add_task_rounded,
-      color: AppColors.secondary,
-      badge: widget.badge,
-      onTap:
-          (_) => Navigator.of(
-            context,
-          ).push(MaterialPageRoute(builder: (_) => const SiteRequestsScreen())),
-    );
+  Color _colorForStatus(BuildContext context, DashboardWidgetStatus status) {
+    return switch (status) {
+      DashboardWidgetStatus.ok => AppColors.success,
+      DashboardWidgetStatus.active => Theme.of(context).colorScheme.primary,
+      DashboardWidgetStatus.attention => AppColors.warning,
+      DashboardWidgetStatus.critical => AppColors.error,
+    };
   }
 
-  Widget _buildApprovalsCard(
-    BuildContext context,
-    DashboardWidgetModel widget,
-  ) {
-    return _buildModuleActionCard(
-      context: context,
-      title: widget.title,
-      subtitle: widget.description,
-      icon: Icons.fact_check_rounded,
-      color: Theme.of(context).colorScheme.primary,
-      badge: widget.badge,
-      onTap:
-          (_) => Navigator.of(context).push(
-            MaterialPageRoute(
-              builder:
-                  (_) => const SiteRequestsScreen(
-                    scope: SiteRequestsScope.approvals,
-                  ),
-            ),
-          ),
-    );
-  }
-
-  Widget _buildScheduleCard(BuildContext context, DashboardWidgetModel widget) {
-    return _buildModuleActionCard(
-      context: context,
-      title: widget.title,
-      subtitle: widget.description,
-      icon: Icons.timeline_rounded,
-      color: AppColors.success,
-      badge: widget.badge,
-      onTap:
-          (_) => Navigator.of(
-            context,
-          ).push(MaterialPageRoute(builder: (_) => const ScheduleScreen())),
-    );
-  }
-
-  Widget _buildAiAssistantCard(BuildContext context) {
-    return _buildModuleActionCard(
-      context: context,
-      title: 'AI-ассистент',
-      subtitle:
-          'История диалогов, быстрые управленческие вопросы и единый рабочий контекст по проекту.',
-      icon: Icons.smart_toy_outlined,
-      color: AppColors.secondary,
-      badge: 'AI',
-      onTap:
-          (_) => Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => const AiAssistantHomeScreen()),
-          ),
-    );
-  }
-
-  Widget _buildQualityControlCard(BuildContext context) {
-    return _buildModuleActionCard(
-      context: context,
-      title: 'Контроль качества',
-      subtitle:
-          'Фиксация замечаний, работа ответственных и передача результата на приемку.',
-      icon: Icons.fact_check_rounded,
-      color: AppColors.warning,
-      badge: 'QC',
-      onTap:
-          (_) => Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => const QualityControlScreen()),
-          ),
-    );
-  }
-
-  Widget _buildSafetyManagementCard(BuildContext context) {
-    return _buildModuleActionCard(
-      context: context,
-      title: 'Охрана труда',
-      subtitle:
-          'Активные наряды-допуски, происшествия и нарушения по выбранному объекту.',
-      icon: Icons.health_and_safety_rounded,
-      color: AppColors.error,
-      badge: 'HSE',
-      onTap:
-          (_) => Navigator.of(
-            context,
-          ).push(MaterialPageRoute(builder: (_) => const SafetyScreen())),
-    );
-  }
-
-  Widget _buildHandoverAcceptanceCard(BuildContext context) {
-    return _buildModuleActionCard(
-      context: context,
-      title: 'Приемка зон',
-      subtitle:
-          'Punch-list, документы и повторная проверка готовых зон перед передачей заказчику.',
-      icon: Icons.assignment_turned_in_rounded,
-      color: AppColors.success,
-      badge: 'HA',
-      onTap:
-          (_) => Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => const HandoverAcceptanceScreen()),
-          ),
-    );
-  }
-
-  Widget _buildModuleActionCard({
-    required BuildContext context,
-    required String title,
-    required String subtitle,
-    required IconData icon,
-    required Color color,
-    String? badge,
-    required Function(BuildContext) onTap,
-  }) {
-    final theme = Theme.of(context);
-
-    return IndustrialCard(
-      onTap: () => onTap(context),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Icon(icon, color: color, size: 28),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        title,
-                        style: AppTypography.bodySmall(context).copyWith(
-                          fontWeight: FontWeight.w900,
-                          letterSpacing: 0.5,
-                          color: theme.colorScheme.onSurface,
-                        ),
-                      ),
-                    ),
-                    if (badge != null && badge.isNotEmpty)
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 4,
-                        ),
-                        decoration: BoxDecoration(
-                          color: color.withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(999),
-                        ),
-                        child: Text(
-                          badge,
-                          style: AppTypography.caption(
-                            context,
-                          ).copyWith(color: color, fontWeight: FontWeight.w800),
-                        ),
-                      ),
-                  ],
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  subtitle,
-                  style: AppTypography.caption(
-                    context,
-                  ).copyWith(color: theme.colorScheme.onSurfaceVariant),
-                ),
-              ],
-            ),
-          ),
-          Icon(
-            Icons.chevron_right_rounded,
-            color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.3),
-          ),
-        ],
+  Widget? _screenForRoute(String route) {
+    return switch (route) {
+      'project_selection' => const ProjectSelectionScreen(),
+      'site_requests' => const SiteRequestsScreen(),
+      'site_request_approvals' => const SiteRequestsScreen(
+        scope: SiteRequestsScope.approvals,
       ),
-    );
+      'warehouse' => const WarehouseScreen(),
+      'schedule' => const ScheduleScreen(),
+      'ai_assistant' => const AiAssistantHomeScreen(),
+      'construction_journal' => const ConstructionJournalScreen(),
+      'quality-control' => const QualityControlScreen(),
+      'safety-management' => const SafetyScreen(),
+      'machinery-operations' => const MachineryOperationsScreen(),
+      'production-labor' => const ProductionLaborScreen(),
+      'workforce-management' => const WorkforceAttendanceScreen(),
+      'handover-acceptance' => const HandoverAcceptanceScreen(),
+      _ => null,
+    };
   }
 }

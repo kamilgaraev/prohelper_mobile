@@ -22,19 +22,18 @@ class DashboardRepository {
       final widgets = payload['widgets'];
 
       if (widgets is! List) {
-        return const [];
+        throw const FormatException('Dashboard widgets must be a list');
       }
 
-      return widgets
-          .whereType<Map>()
-          .map(
-            (widget) => DashboardWidgetModel.fromJson(
-              widget.map((key, value) => MapEntry(key.toString(), value)),
-            ),
-          )
-          .where((widget) => widget.type != DashboardWidgetType.unknown)
-          .toList()
-        ..sort((left, right) => left.order.compareTo(right.order));
+      return widgets.map((widget) {
+        if (widget is! Map) {
+          throw const FormatException('Dashboard widget must be an object');
+        }
+
+        return DashboardWidgetModel.fromJson(
+          widget.map((key, value) => MapEntry(key.toString(), value)),
+        );
+      }).toList();
     } on DioException catch (error) {
       throw ApiException.fromDio(
         error,
