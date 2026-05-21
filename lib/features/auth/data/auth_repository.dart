@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:developer';
 
 import 'package:dio/dio.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -70,7 +69,6 @@ class AuthRepository {
   Future<User> getMe() async {
     try {
       final response = await _dio.get('/auth/me');
-      log('GET /auth/me payload: ${jsonEncode(response.data)}');
       return _mapJsonToUser(response.data['data']);
     } on DioException catch (error) {
       throw ApiException.fromDio(
