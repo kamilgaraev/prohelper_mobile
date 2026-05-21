@@ -3,6 +3,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/network/api_exception.dart';
 import '../../../core/network/dio_client.dart';
+import '../../../core/network/mobile_api_response.dart';
 import 'schedule_model.dart';
 
 final scheduleRepositoryProvider = Provider<ScheduleRepository>((ref) {
@@ -20,17 +21,10 @@ class ScheduleRepository {
         '/schedule',
         queryParameters: {'project_id': projectId},
       );
-      final data = response.data;
-      final payload = data is Map<String, dynamic> ? data['data'] : null;
+      final payload = MobileApiResponse.dataMap(response.data);
 
-      if (payload is Map<String, dynamic>) {
+      if (payload.isNotEmpty) {
         return ScheduleOverviewModel.fromJson(payload);
-      }
-
-      if (payload is Map) {
-        return ScheduleOverviewModel.fromJson(
-          payload.map((key, value) => MapEntry(key.toString(), value)),
-        );
       }
 
       throw const ApiException('Сервер вернул пустой ответ по графикам работ.');
@@ -51,17 +45,10 @@ class ScheduleRepository {
   Future<ScheduleDetailsModel> fetchScheduleDetails(int scheduleId) async {
     try {
       final response = await _dio.get('/schedule/$scheduleId');
-      final data = response.data;
-      final payload = data is Map<String, dynamic> ? data['data'] : null;
+      final payload = MobileApiResponse.dataMap(response.data);
 
-      if (payload is Map<String, dynamic>) {
+      if (payload.isNotEmpty) {
         return ScheduleDetailsModel.fromJson(payload);
-      }
-
-      if (payload is Map) {
-        return ScheduleDetailsModel.fromJson(
-          payload.map((key, value) => MapEntry(key.toString(), value)),
-        );
       }
 
       throw const ApiException('Сервер вернул пустой ответ по графику работ.');
@@ -87,17 +74,9 @@ class ScheduleRepository {
         '/schedule/daily-plans',
         queryParameters: {'project_id': projectId},
       );
-      final data = response.data;
-      final payload = data is Map<String, dynamic> ? data['data'] : null;
-
-      return (payload as List<dynamic>? ?? const [])
-          .whereType<Map>()
-          .map(
-            (plan) => DailyWorkPlanModel.fromJson(
-              plan.map((key, value) => MapEntry(key.toString(), value)),
-            ),
-          )
-          .toList();
+      return MobileApiResponse.dataList(
+        response.data,
+      ).map(DailyWorkPlanModel.fromJson).toList();
     } on DioException catch (error) {
       throw ApiException.fromDio(
         error,
@@ -131,17 +110,10 @@ class ScheduleRepository {
           if (failureReason != null) 'failure_reason': failureReason,
         },
       );
-      final data = response.data;
-      final payload = data is Map<String, dynamic> ? data['data'] : null;
+      final payload = MobileApiResponse.dataMap(response.data);
 
-      if (payload is Map<String, dynamic>) {
+      if (payload.isNotEmpty) {
         return DailyWorkPlanAssignmentModel.fromJson(payload);
-      }
-
-      if (payload is Map) {
-        return DailyWorkPlanAssignmentModel.fromJson(
-          payload.map((key, value) => MapEntry(key.toString(), value)),
-        );
       }
 
       throw const ApiException(
@@ -195,17 +167,10 @@ class ScheduleRepository {
         '/schedule/daily-plans/$dailyPlanId/submit',
         data: {if (summaryComment != null) 'summary_comment': summaryComment},
       );
-      final data = response.data;
-      final payload = data is Map<String, dynamic> ? data['data'] : null;
+      final payload = MobileApiResponse.dataMap(response.data);
 
-      if (payload is Map<String, dynamic>) {
+      if (payload.isNotEmpty) {
         return DailyWorkPlanModel.fromJson(payload);
-      }
-
-      if (payload is Map) {
-        return DailyWorkPlanModel.fromJson(
-          payload.map((key, value) => MapEntry(key.toString(), value)),
-        );
       }
 
       throw const ApiException('Сервер вернул пустой ответ по дневному плану.');

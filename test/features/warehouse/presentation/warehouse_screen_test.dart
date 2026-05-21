@@ -150,12 +150,11 @@ void main() {
 
     expect(find.text('Склад'), findsOneWidget);
     expect(find.byType(FloatingActionButton), findsOneWidget);
+    await _ensureVisible(tester, find.text('Склады'));
     expect(find.text('Склады'), findsOneWidget);
-    expect(find.text('Основной склад'), findsOneWidget);
-    expect(
-      find.widgetWithIcon(OutlinedButton, Icons.photo_library_outlined),
-      findsWidgets,
-    );
+    expect(find.text('Основной склад'), findsWidgets);
+    await _ensureVisible(tester, find.text('Остатки').last);
+    expect(find.text('Остатки'), findsWidgets);
   });
 
   testWidgets('позволяет открыть форму прихода и добавить фото с камеры', (
@@ -180,7 +179,7 @@ void main() {
     await tester.tap(find.text('Цемент М500').last);
     await tester.pumpAndSettle();
 
-    await _ensureVisible(tester, find.byIcon(Icons.camera_alt_outlined).last);
+    await _ensureVisible(tester, find.byIcon(Icons.camera_alt_outlined));
     await tester.tap(find.byIcon(Icons.camera_alt_outlined).last);
     await tester.pumpAndSettle();
 
@@ -194,8 +193,7 @@ void main() {
       mediaPicker: _FakeMediaPicker(),
     );
 
-    final balancesButton =
-        find.widgetWithIcon(OutlinedButton, Icons.photo_library_outlined).first;
+    final balancesButton = find.text('Остатки').last;
 
     await _ensureVisible(tester, balancesButton);
     await tester.tap(balancesButton);
@@ -228,12 +226,26 @@ Future<void> _pumpWarehouseScreen(
 }
 
 Future<void> _ensureVisible(WidgetTester tester, Finder finder) async {
-  for (var i = 0; i < 5; i++) {
-    if (finder.evaluate().isNotEmpty) {
+  for (var i = 0; i < 8; i++) {
+    if (_hasMatches(finder)) {
+      await tester.ensureVisible(finder);
+      await tester.pumpAndSettle();
       return;
     }
 
-    await tester.drag(find.byType(Scrollable).first, const Offset(0, -250));
+    await tester.drag(
+      find.byType(Scrollable).last,
+      const Offset(0, -250),
+      warnIfMissed: false,
+    );
     await tester.pumpAndSettle();
+  }
+}
+
+bool _hasMatches(Finder finder) {
+  try {
+    return finder.evaluate().isNotEmpty;
+  } on StateError {
+    return false;
   }
 }

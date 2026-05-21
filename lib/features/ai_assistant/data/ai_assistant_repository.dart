@@ -3,6 +3,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/network/api_exception.dart';
 import '../../../core/network/dio_client.dart';
+import '../../../core/network/mobile_api_response.dart';
 import 'ai_assistant_models.dart';
 
 final aiAssistantRepositoryProvider = Provider<AiAssistantRepository>((ref) {
@@ -125,15 +126,7 @@ class AiAssistantRepository {
   }
 
   dynamic _unwrapData(dynamic response) {
-    if (response is Map<String, dynamic> && response.containsKey('data')) {
-      return response['data'];
-    }
-
-    if (response is Map && response.containsKey('data')) {
-      return response['data'];
-    }
-
-    return response;
+    return MobileApiResponse.payload(response);
   }
 
   Map<String, dynamic> _asMap(dynamic value) {

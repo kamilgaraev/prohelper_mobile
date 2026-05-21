@@ -48,10 +48,9 @@ class QuickActionSheet extends ConsumerWidget {
           ),
           const SizedBox(height: 24),
           Text(
-            'БЫСТРЫЕ ДЕЙСТВИЯ',
+            'Быстрые действия',
             style: AppTypography.caption(context).copyWith(
               fontWeight: FontWeight.w900,
-              letterSpacing: 2,
               color: theme.colorScheme.onSurfaceVariant,
             ),
           ),
@@ -91,7 +90,7 @@ class QuickActionSheet extends ConsumerWidget {
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 24),
               child: Text(
-                'Для вашей учетной записи пока нет мобильных модулей.',
+                'Для вашей роли пока нет мобильных модулей.',
                 style: AppTypography.bodyMedium(
                   context,
                 ).copyWith(color: theme.colorScheme.onSurfaceVariant),

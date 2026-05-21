@@ -6,6 +6,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/network/api_exception.dart';
 import '../../../core/network/dio_client.dart';
+import '../../../core/network/mobile_api_response.dart';
 import 'project_material_delivery_model.dart';
 import 'warehouse_scan_model.dart';
 import 'warehouse_summary_model.dart';
@@ -417,45 +418,11 @@ class WarehouseRepository {
   }
 
   Map<String, dynamic> _extractData(dynamic responseData) {
-    if (responseData is Map<String, dynamic>) {
-      final data = responseData['data'];
-
-      if (data is Map<String, dynamic>) {
-        return data;
-      }
-
-      if (data is Map) {
-        return data.map((key, value) => MapEntry(key.toString(), value));
-      }
-    }
-
-    if (responseData is Map) {
-      return responseData.map((key, value) => MapEntry(key.toString(), value));
-    }
-
-    return const <String, dynamic>{};
+    return MobileApiResponse.dataMap(responseData);
   }
 
   List<Map<String, dynamic>> _extractList(dynamic responseData) {
-    dynamic payload;
-
-    if (responseData is Map<String, dynamic>) {
-      payload = responseData['data'];
-    } else {
-      payload = responseData;
-    }
-
-    if (payload is Map<String, dynamic> && payload['items'] is List) {
-      payload = payload['items'];
-    }
-
-    if (payload is! List) {
-      return const <Map<String, dynamic>>[];
-    }
-
-    return payload.whereType<Map>().map((item) {
-      return item.map((key, value) => MapEntry(key.toString(), value));
-    }).toList();
+    return MobileApiResponse.dataList(responseData);
   }
 
   String _fileNameFromPath(String path) {

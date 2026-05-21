@@ -3,6 +3,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/network/api_exception.dart';
 import '../../../core/network/dio_client.dart';
+import '../../../core/network/mobile_api_response.dart';
 import 'quality_defect_model.dart';
 
 final qualityControlRepositoryProvider = Provider<QualityControlRepository>((
@@ -33,26 +34,9 @@ class QualityControlRepository {
         },
       );
 
-      final payload = response.data['data'];
-      final List<dynamic> list;
-      if (payload is Map && payload['items'] is List) {
-        list = payload['items'] as List;
-      } else if (payload is Map && payload['data'] is List) {
-        list = payload['data'] as List;
-      } else if (payload is List) {
-        list = payload;
-      } else {
-        list = [];
-      }
-
-      return list
-          .whereType<Map>()
-          .map(
-            (item) => QualityDefectModel.fromJson(
-              item.map((key, value) => MapEntry(key.toString(), value)),
-            ),
-          )
-          .toList();
+      return MobileApiResponse.dataList(
+        response.data,
+      ).map(QualityDefectModel.fromJson).toList();
     } on DioException catch (error) {
       throw ApiException.fromDio(
         error,
@@ -66,7 +50,9 @@ class QualityControlRepository {
   Future<QualityDefectModel> createDefect(Map<String, dynamic> data) async {
     try {
       final response = await _dio.post('/quality-control/defects', data: data);
-      return QualityDefectModel.fromJson(response.data['data']);
+      return QualityDefectModel.fromJson(
+        MobileApiResponse.dataMap(response.data),
+      );
     } on DioException catch (error) {
       throw ApiException.fromDio(
         error,
@@ -86,7 +72,9 @@ class QualityControlRepository {
             'comment': comment.trim(),
         },
       );
-      return QualityDefectModel.fromJson(response.data['data']);
+      return QualityDefectModel.fromJson(
+        MobileApiResponse.dataMap(response.data),
+      );
     } on DioException catch (error) {
       throw ApiException.fromDio(
         error,
@@ -114,7 +102,9 @@ class QualityControlRepository {
             ],
         },
       );
-      return QualityDefectModel.fromJson(response.data['data']);
+      return QualityDefectModel.fromJson(
+        MobileApiResponse.dataMap(response.data),
+      );
     } on DioException catch (error) {
       throw ApiException.fromDio(
         error,

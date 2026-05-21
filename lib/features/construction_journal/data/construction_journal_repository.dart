@@ -3,6 +3,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/network/api_exception.dart';
 import '../../../core/network/dio_client.dart';
+import '../../../core/network/mobile_api_response.dart';
 import 'construction_journal_models.dart';
 
 final constructionJournalRepositoryProvider =
@@ -30,7 +31,7 @@ class ConstructionJournalRepository {
         },
       );
 
-      final data = _extractMap(response.data['data']);
+      final data = _extractMap(MobileApiResponse.payload(response.data));
       final items =
           _extractList(
             data['items'],
@@ -79,8 +80,12 @@ class ConstructionJournalRepository {
       final entriesResponse = await _dio.get(
         '/construction-journals/$journalId/entries',
       );
-      final journalData = _extractMap(journalResponse.data['data']);
-      final entriesData = _extractMap(entriesResponse.data['data']);
+      final journalData = _extractMap(
+        MobileApiResponse.payload(journalResponse.data),
+      );
+      final entriesData = _extractMap(
+        MobileApiResponse.payload(entriesResponse.data),
+      );
 
       final availableActions = _extractStringList(
         entriesData['available_actions'],
@@ -121,7 +126,7 @@ class ConstructionJournalRepository {
     try {
       final response = await _dio.get('/journal-entries/$entryId');
       return ConstructionJournalEntryModel.fromJson(
-        _extractMap(response.data['data']),
+        _extractMap(MobileApiResponse.payload(response.data)),
       );
     } on DioException catch (error) {
       throw ApiException.fromDio(
@@ -146,7 +151,7 @@ class ConstructionJournalRepository {
       );
 
       return ConstructionJournalEntryFormOptions.fromJson(
-        _extractMap(response.data['data']),
+        _extractMap(MobileApiResponse.payload(response.data)),
       );
     } on DioException catch (error) {
       throw ApiException.fromDio(
@@ -180,7 +185,7 @@ class ConstructionJournalRepository {
       );
 
       return ConstructionJournalModel.fromJson(
-        _extractMap(response.data['data']),
+        _extractMap(MobileApiResponse.payload(response.data)),
       );
     } on DioException catch (error) {
       throw ApiException.fromDio(
@@ -207,7 +212,7 @@ class ConstructionJournalRepository {
       );
 
       return ConstructionJournalModel.fromJson(
-        _extractMap(response.data['data']),
+        _extractMap(MobileApiResponse.payload(response.data)),
       );
     } on DioException catch (error) {
       throw ApiException.fromDio(
@@ -248,7 +253,7 @@ class ConstructionJournalRepository {
       );
 
       return ConstructionJournalEntryModel.fromJson(
-        _extractMap(response.data['data']),
+        _extractMap(MobileApiResponse.payload(response.data)),
       );
     } on DioException catch (error) {
       throw ApiException.fromDio(
@@ -289,7 +294,7 @@ class ConstructionJournalRepository {
       );
 
       return ConstructionJournalEntryModel.fromJson(
-        _extractMap(response.data['data']),
+        _extractMap(MobileApiResponse.payload(response.data)),
       );
     } on DioException catch (error) {
       throw ApiException.fromDio(
@@ -341,7 +346,7 @@ class ConstructionJournalRepository {
         },
       );
 
-      final data = _extractMap(response.data['data']);
+      final data = _extractMap(MobileApiResponse.payload(response.data));
       return data['url'] as String? ?? '';
     } on DioException catch (error) {
       throw ApiException.fromDio(
@@ -356,7 +361,7 @@ class ConstructionJournalRepository {
       final response = await _dio.post(
         '/journal-entries/$entryId/export/daily-report',
       );
-      final data = _extractMap(response.data['data']);
+      final data = _extractMap(MobileApiResponse.payload(response.data));
       return data['url'] as String? ?? '';
     } on DioException catch (error) {
       throw ApiException.fromDio(
@@ -373,7 +378,7 @@ class ConstructionJournalRepository {
     try {
       final response = await _dio.post(path, data: body);
       return ConstructionJournalEntryModel.fromJson(
-        _extractMap(response.data['data']),
+        _extractMap(MobileApiResponse.payload(response.data)),
       );
     } on DioException catch (error) {
       throw ApiException.fromDio(

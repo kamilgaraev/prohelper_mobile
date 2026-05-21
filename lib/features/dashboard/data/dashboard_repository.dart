@@ -3,6 +3,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import 'package:prohelpers_mobile/core/network/api_exception.dart';
 import 'package:prohelpers_mobile/core/network/dio_client.dart';
+import 'package:prohelpers_mobile/core/network/mobile_api_response.dart';
 import 'package:prohelpers_mobile/features/dashboard/data/dashboard_widget_model.dart';
 
 final dashboardRepositoryProvider = Provider<DashboardRepository>((ref) {
@@ -17,10 +18,8 @@ class DashboardRepository {
   Future<List<DashboardWidgetModel>> fetchWidgets() async {
     try {
       final response = await _dio.get('/dashboard');
-      final data = response.data;
-      final payload = data is Map<String, dynamic> ? data['data'] : null;
-      final widgets =
-          payload is Map<String, dynamic> ? payload['widgets'] : null;
+      final payload = MobileApiResponse.dataMap(response.data);
+      final widgets = payload['widgets'];
 
       if (widgets is! List) {
         return const [];

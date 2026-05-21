@@ -3,6 +3,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/network/api_exception.dart';
 import '../../../core/network/dio_client.dart';
+import '../../../core/network/mobile_api_response.dart';
 import '../domain/site_requests_scope.dart';
 import 'site_request_model.dart';
 
@@ -38,15 +39,7 @@ class SiteRequestsRepository {
         queryParameters: queryParams,
       );
 
-      final List<dynamic> list;
-      if (response.data['data'] != null &&
-          response.data['data']['data'] is List) {
-        list = response.data['data']['data'];
-      } else if (response.data['data'] is List) {
-        list = response.data['data'];
-      } else {
-        list = [];
-      }
+      final list = MobileApiResponse.dataList(response.data);
 
       return list
           .whereType<Map>()
@@ -69,8 +62,9 @@ class SiteRequestsRepository {
   Future<SiteRequestModel> fetchSiteRequestDetails(int id) async {
     try {
       final response = await _dio.get('/site-requests/$id');
-      final data = response.data['data'] as Map<String, dynamic>;
-      return SiteRequestModel.fromJson(data);
+      return SiteRequestModel.fromJson(
+        MobileApiResponse.dataMap(response.data),
+      );
     } on DioException catch (error) {
       throw ApiException.fromDio(
         error,
@@ -84,7 +78,9 @@ class SiteRequestsRepository {
   Future<SiteRequestModel> createSiteRequest(Map<String, dynamic> data) async {
     try {
       final response = await _dio.post('/site-requests', data: data);
-      return _parseSiteRequestResponse(response.data['data']);
+      return _parseSiteRequestResponse(
+        MobileApiResponse.payload(response.data),
+      );
     } on DioException catch (error) {
       throw ApiException.fromDio(
         error,
@@ -105,7 +101,9 @@ class SiteRequestsRepository {
   ) async {
     try {
       final response = await _dio.put('/site-requests/$id', data: data);
-      return SiteRequestModel.fromJson(response.data['data']);
+      return SiteRequestModel.fromJson(
+        MobileApiResponse.dataMap(response.data),
+      );
     } on DioException catch (error) {
       throw ApiException.fromDio(
         error,
@@ -125,7 +123,9 @@ class SiteRequestsRepository {
         '/site-requests/groups/$groupId',
         data: data,
       );
-      return _parseSiteRequestResponse(response.data['data']);
+      return _parseSiteRequestResponse(
+        MobileApiResponse.payload(response.data),
+      );
     } on DioException catch (error) {
       throw ApiException.fromDio(
         error,
@@ -139,7 +139,9 @@ class SiteRequestsRepository {
   Future<SiteRequestModel> submitSiteRequest(int id) async {
     try {
       final response = await _dio.post('/site-requests/$id/submit');
-      return SiteRequestModel.fromJson(response.data['data']);
+      return SiteRequestModel.fromJson(
+        MobileApiResponse.dataMap(response.data),
+      );
     } on DioException catch (error) {
       throw ApiException.fromDio(
         error,
@@ -156,7 +158,9 @@ class SiteRequestsRepository {
         '/site-requests/$id/cancel',
         data: {if (notes != null) 'notes': notes},
       );
-      return SiteRequestModel.fromJson(response.data['data']);
+      return SiteRequestModel.fromJson(
+        MobileApiResponse.dataMap(response.data),
+      );
     } on DioException catch (error) {
       throw ApiException.fromDio(
         error,
@@ -173,7 +177,9 @@ class SiteRequestsRepository {
         '/site-requests/$id/complete',
         data: {if (notes != null) 'notes': notes},
       );
-      return SiteRequestModel.fromJson(response.data['data']);
+      return SiteRequestModel.fromJson(
+        MobileApiResponse.dataMap(response.data),
+      );
     } on DioException catch (error) {
       throw ApiException.fromDio(
         error,
@@ -197,7 +203,9 @@ class SiteRequestsRepository {
           if (notes != null && notes.trim().isNotEmpty) 'notes': notes.trim(),
         },
       );
-      return SiteRequestModel.fromJson(response.data['data']);
+      return SiteRequestModel.fromJson(
+        MobileApiResponse.dataMap(response.data),
+      );
     } on DioException catch (error) {
       throw ApiException.fromDio(
         error,
@@ -211,7 +219,7 @@ class SiteRequestsRepository {
   Future<List<Map<String, dynamic>>> fetchTemplates() async {
     try {
       final response = await _dio.get('/site-requests/templates');
-      return List<Map<String, dynamic>>.from(response.data['data']);
+      return MobileApiResponse.dataList(response.data);
     } on DioException catch (error) {
       throw ApiException.fromDio(
         error,
@@ -231,7 +239,9 @@ class SiteRequestsRepository {
         '/site-requests/from-template/$templateId',
         data: {'project_id': projectId},
       );
-      return SiteRequestModel.fromJson(response.data['data']);
+      return SiteRequestModel.fromJson(
+        MobileApiResponse.dataMap(response.data),
+      );
     } on DioException catch (error) {
       throw ApiException.fromDio(
         error,
@@ -245,7 +255,7 @@ class SiteRequestsRepository {
   Future<Map<String, dynamic>> fetchMeta() async {
     try {
       final response = await _dio.get('/site-requests/meta');
-      return response.data['data'];
+      return MobileApiResponse.dataMap(response.data);
     } on DioException catch (error) {
       throw ApiException.fromDio(
         error,

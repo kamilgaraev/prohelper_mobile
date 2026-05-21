@@ -3,6 +3,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/network/api_exception.dart';
 import '../../../core/network/dio_client.dart';
+import '../../../core/network/mobile_api_response.dart';
 import 'safety_model.dart';
 
 final safetyRepositoryProvider = Provider<SafetyRepository>((ref) {
@@ -127,35 +128,10 @@ class SafetyRepository {
   }
 
   List<Map<String, dynamic>> _list(dynamic responseData) {
-    final payload =
-        responseData is Map<String, dynamic> ? responseData['data'] : null;
-    final list =
-        payload is List
-            ? payload
-            : payload is Map && payload['data'] is List
-            ? payload['data'] as List
-            : payload is Map && payload['items'] is List
-            ? payload['items'] as List
-            : const [];
-
-    return list
-        .whereType<Map>()
-        .map(
-          (item) => item.map((key, value) => MapEntry(key.toString(), value)),
-        )
-        .toList();
+    return MobileApiResponse.dataList(responseData);
   }
 
   Map<String, dynamic> _object(dynamic responseData) {
-    final payload =
-        responseData is Map<String, dynamic>
-            ? responseData['data']
-            : responseData;
-
-    if (payload is Map) {
-      return payload.map((key, value) => MapEntry(key.toString(), value));
-    }
-
-    return const {};
+    return MobileApiResponse.dataMap(responseData);
   }
 }

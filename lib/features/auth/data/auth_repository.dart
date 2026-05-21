@@ -5,6 +5,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/network/api_exception.dart';
 import '../../../core/network/dio_client.dart';
+import '../../../core/network/mobile_api_response.dart';
 import '../../../core/storage/secure_storage_service.dart';
 import 'user_model.dart';
 
@@ -25,8 +26,12 @@ class AuthRepository {
         data: {'email': email, 'password': password},
       );
 
-      final data = response.data['data'];
-      final token = data['token'];
+      final data = MobileApiResponse.dataMap(response.data);
+      final token = data['token'] as String?;
+
+      if (token == null || token.isEmpty) {
+        throw const ApiException('Сервер не вернул токен входа.');
+      }
 
       await _storage.saveToken(token);
 
@@ -48,8 +53,8 @@ class AuthRepository {
         data: {'organization_id': organizationId},
       );
 
-      final data = response.data['data'];
-      final token = data['token'];
+      final data = MobileApiResponse.dataMap(response.data);
+      final token = data['token'] as String?;
 
       if (token != null) {
         await _storage.saveToken(token);
@@ -69,7 +74,7 @@ class AuthRepository {
   Future<User> getMe() async {
     try {
       final response = await _dio.get('/auth/me');
-      return _mapJsonToUser(response.data['data']);
+      return _mapJsonToUser(MobileApiResponse.dataMap(response.data));
     } on DioException catch (error) {
       throw ApiException.fromDio(
         error,

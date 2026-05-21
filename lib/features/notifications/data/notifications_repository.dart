@@ -3,6 +3,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/network/api_exception.dart';
 import '../../../core/network/dio_client.dart';
+import '../../../core/network/mobile_api_response.dart';
 import 'notification_model.dart';
 
 final notificationsRepositoryProvider = Provider<NotificationsRepository>((
@@ -138,15 +139,11 @@ class NotificationsRepository {
     required int page,
     required int perPage,
   }) {
-    final root = notificationAsMap(responseData);
-    final rootData = root['data'];
-    final dataMap = notificationAsMap(rootData);
-    final itemsPayload = dataMap['data'] is List ? dataMap['data'] : rootData;
-    final items = notificationAsList(
-      itemsPayload,
-    ).map(NotificationModel.fromJson).toList(growable: false);
-    final rootMeta = notificationAsMap(root['meta']);
-    final meta = rootMeta.isNotEmpty ? rootMeta : dataMap;
+    final response = MobileApiResponse.list(responseData);
+    final items = response.data
+        .map(NotificationModel.fromJson)
+        .toList(growable: false);
+    final meta = response.meta;
     final currentPage = notificationAsInt(meta['current_page']);
     final lastPage = notificationAsInt(meta['last_page']);
     final resolvedPerPage = notificationAsInt(meta['per_page']);
@@ -162,14 +159,6 @@ class NotificationsRepository {
   }
 
   Map<String, dynamic> _extractData(dynamic responseData) {
-    final root = notificationAsMap(responseData);
-    final data = root['data'];
-    final dataMap = notificationAsMap(data);
-
-    if (dataMap.isNotEmpty) {
-      return dataMap;
-    }
-
-    return root;
+    return MobileApiResponse.dataMap(responseData);
   }
 }

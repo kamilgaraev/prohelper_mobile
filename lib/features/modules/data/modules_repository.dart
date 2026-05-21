@@ -3,6 +3,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/network/api_exception.dart';
 import '../../../core/network/dio_client.dart';
+import '../../../core/network/mobile_api_response.dart';
 import 'mobile_module_model.dart';
 
 final modulesRepositoryProvider = Provider<ModulesRepository>((ref) {
@@ -17,10 +18,8 @@ class ModulesRepository {
   Future<List<MobileModuleModel>> fetchModules() async {
     try {
       final response = await _dio.get('/modules');
-      final data = response.data;
-      final payload = data is Map<String, dynamic> ? data['data'] : null;
-      final modules =
-          payload is Map<String, dynamic> ? payload['modules'] : null;
+      final payload = MobileApiResponse.dataMap(response.data);
+      final modules = payload['modules'];
 
       if (modules is! List) {
         return const [];

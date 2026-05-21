@@ -3,6 +3,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/network/api_exception.dart';
 import '../../../core/network/dio_client.dart';
+import '../../../core/network/mobile_api_response.dart';
 import 'workforce_attendance_model.dart';
 
 final workforceRepositoryProvider = Provider<WorkforceRepository>((ref) {
@@ -28,7 +29,9 @@ class WorkforceRepository {
         },
       );
 
-      return AttendanceQrModel.fromJson(workforceObject(response.data));
+      return AttendanceQrModel.fromJson(
+        MobileApiResponse.dataMap(response.data),
+      );
     } on DioException catch (error) {
       throw ApiException.fromDio(
         error,
@@ -53,7 +56,9 @@ class WorkforceRepository {
         },
       );
 
-      return AttendanceScanResultModel.fromJson(workforceObject(response.data));
+      return AttendanceScanResultModel.fromJson(
+        MobileApiResponse.dataMap(response.data),
+      );
     } on DioException catch (error) {
       throw ApiException.fromDio(
         error,

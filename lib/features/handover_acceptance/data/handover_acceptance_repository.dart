@@ -3,6 +3,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/network/api_exception.dart';
 import '../../../core/network/dio_client.dart';
+import '../../../core/network/mobile_api_response.dart';
 import 'handover_acceptance_model.dart';
 
 final handoverAcceptanceRepositoryProvider =
@@ -22,26 +23,9 @@ class HandoverAcceptanceRepository {
         queryParameters: {if (projectId != null) 'project_id': projectId},
       );
 
-      final payload = response.data['data'];
-      final List<dynamic> list;
-      if (payload is Map && payload['items'] is List) {
-        list = payload['items'] as List;
-      } else if (payload is Map && payload['data'] is List) {
-        list = payload['data'] as List;
-      } else if (payload is List) {
-        list = payload;
-      } else {
-        list = [];
-      }
-
-      return list
-          .whereType<Map>()
-          .map(
-            (item) => AcceptanceScopeModel.fromJson(
-              item.map((key, value) => MapEntry(key.toString(), value)),
-            ),
-          )
-          .toList();
+      return MobileApiResponse.dataList(
+        response.data,
+      ).map(AcceptanceScopeModel.fromJson).toList();
     } on DioException catch (error) {
       throw ApiException.fromDio(
         error,
@@ -61,7 +45,9 @@ class HandoverAcceptanceRepository {
         '/handover-acceptance/sessions/$sessionId/findings',
         data: data,
       );
-      return AcceptanceFindingModel.fromJson(response.data['data']);
+      return AcceptanceFindingModel.fromJson(
+        MobileApiResponse.dataMap(response.data),
+      );
     } on DioException catch (error) {
       throw ApiException.fromDio(
         error,
@@ -81,7 +67,9 @@ class HandoverAcceptanceRepository {
         '/handover-acceptance/findings/$findingId/resolve',
         data: {'resolution_comment': resolutionComment},
       );
-      return AcceptanceFindingModel.fromJson(response.data['data']);
+      return AcceptanceFindingModel.fromJson(
+        MobileApiResponse.dataMap(response.data),
+      );
     } on DioException catch (error) {
       throw ApiException.fromDio(
         error,
@@ -97,7 +85,9 @@ class HandoverAcceptanceRepository {
       final response = await _dio.post(
         '/handover-acceptance/scopes/$scopeId/ready-for-reinspection',
       );
-      return AcceptanceScopeModel.fromJson(response.data['data']);
+      return AcceptanceScopeModel.fromJson(
+        MobileApiResponse.dataMap(response.data),
+      );
     } on DioException catch (error) {
       throw ApiException.fromDio(
         error,
