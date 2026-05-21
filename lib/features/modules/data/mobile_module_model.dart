@@ -51,15 +51,24 @@ String _resolveModuleTitle(String slug, String? rawTitle) {
     'basic-warehouse' => 'Склад',
     'schedule-management' => 'График работ',
     'ai-assistant' => 'AI-ассистент',
-    'workflow-management' => 'Workflow',
+    'workflow-management' => 'Согласования',
     'time-tracking' => 'Учет времени',
-    'budget-estimates' => 'Журнал работ',
+    'construction-journal' => 'Журнал работ',
+    'budget-estimates' => 'Сметы и бюджет',
     'quality-control' => 'Контроль качества',
     'safety-management' => 'Охрана труда',
     'machinery-operations' => 'Техника',
     'production-labor' => 'Наряды',
     'workforce-management' => 'Явка сотрудников',
     'handover-acceptance' => 'Приемка зон',
+    'procurement' => 'Закупки',
+    'contract-management' => 'Договоры',
+    'change-management' => 'Изменения',
+    'executive-documentation' => 'Исполнительная документация',
+    'project-management' => 'Управление проектом',
+    'catalog-management' => 'Справочники',
+    'brigades' => 'Бригады',
+    'video-monitoring' => 'Видеонаблюдение',
     _ => 'Модуль',
   };
 }
@@ -79,8 +88,10 @@ String _resolveModuleDescription(String slug, String? rawDescription) {
     'workflow-management' =>
       'Маршруты согласований и статусы бизнес-процессов.',
     'time-tracking' => 'Отметки, смены и контроль рабочего времени.',
+    'construction-journal' =>
+      'Ежедневные записи, объемы работ, согласование и экспорт КС-6 по объекту.',
     'budget-estimates' =>
-      'Ежедневные записи, статусы согласования и экспорт журнала работ.',
+      'Сводка смет, лимитов бюджета, изменений и назначенных согласований.',
     'quality-control' =>
       'Замечания, дефекты и повторная проверка выполненных работ.',
     'safety-management' =>
@@ -92,6 +103,21 @@ String _resolveModuleDescription(String slug, String? rawDescription) {
       'QR-подтверждение присутствия, табель и контроль сотрудников на объекте.',
     'handover-acceptance' =>
       'Зоны, punch-list и передача готовых помещений заказчику.',
+    'procurement' =>
+      'Заявки, поставки, согласования и связь со складской приемкой.',
+    'contract-management' =>
+      'Договоры, обязательства, статусы и назначенные согласования.',
+    'change-management' =>
+      'Запросы на изменения, влияние на сроки и бюджет, согласования.',
+    'executive-documentation' =>
+      'Пакеты документов, статусы подготовки и полевые вложения.',
+    'project-management' =>
+      'Обзор объекта, этапы, ответственные и риски исполнения.',
+    'catalog-management' =>
+      'Материалы, ресурсы и справочные данные для полевых форм.',
+    'brigades' => 'Составы бригад, назначения и связь с явкой сотрудников.',
+    'video-monitoring' =>
+      'Камеры объекта, статусы подключения и контроль доступности.',
     _ => '',
   };
 }

@@ -4,10 +4,12 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../features/ai_assistant/presentation/ai_assistant_home_screen.dart';
 import '../../features/construction_journal/presentation/construction_journal_screen.dart';
+import '../../features/handover_acceptance/presentation/handover_acceptance_screen.dart';
 import '../../features/machinery_operations/presentation/machinery_operations_screen.dart';
 import '../../features/modules/data/mobile_module_model.dart';
 import '../../features/notifications/presentation/notifications_screen.dart';
 import '../../features/production_labor/presentation/production_labor_screen.dart';
+import '../../features/quality_control/presentation/quality_control_screen.dart';
 import '../../features/safety/presentation/safety_screen.dart';
 import '../../features/schedule/presentation/schedule_screen.dart';
 import '../../features/site_requests/presentation/screens/site_requests_screen.dart';
@@ -146,16 +148,19 @@ class QuickActionSheet extends ConsumerWidget {
 
     switch (module.route ?? module.slug) {
       case 'site_requests':
+      case 'site-requests':
         navigator.push(
           MaterialPageRoute(builder: (_) => const SiteRequestsScreen()),
         );
         return;
       case 'warehouse':
+      case 'basic-warehouse':
         navigator.push(
           MaterialPageRoute(builder: (_) => const WarehouseScreen()),
         );
         return;
       case 'schedule':
+      case 'schedule-management':
         navigator.push(
           MaterialPageRoute(builder: (_) => const ScheduleScreen()),
         );
@@ -163,6 +168,12 @@ class QuickActionSheet extends ConsumerWidget {
       case 'safety':
       case 'safety-management':
         navigator.push(MaterialPageRoute(builder: (_) => const SafetyScreen()));
+        return;
+      case 'quality_control':
+      case 'quality-control':
+        navigator.push(
+          MaterialPageRoute(builder: (_) => const QualityControlScreen()),
+        );
         return;
       case 'machinery_operations':
       case 'machinery-operations':
@@ -183,12 +194,20 @@ class QuickActionSheet extends ConsumerWidget {
           MaterialPageRoute(builder: (_) => const WorkforceAttendanceScreen()),
         );
         return;
+      case 'handover_acceptance':
+      case 'handover-acceptance':
+        navigator.push(
+          MaterialPageRoute(builder: (_) => const HandoverAcceptanceScreen()),
+        );
+        return;
       case 'construction_journal':
+      case 'construction-journal':
         navigator.push(
           MaterialPageRoute(builder: (_) => const ConstructionJournalScreen()),
         );
         return;
       case 'ai_assistant':
+      case 'ai-assistant':
         navigator.push(
           MaterialPageRoute(builder: (_) => const AiAssistantHomeScreen()),
         );
@@ -213,6 +232,9 @@ class QuickActionSheet extends ConsumerWidget {
       'spark' => Icons.smart_toy_outlined,
       'journal' => Icons.menu_book_outlined,
       'hub' => Icons.hub_outlined,
+      'quality' => Icons.fact_check_outlined,
+      'shield-check' => Icons.health_and_safety_outlined,
+      'handover' => Icons.assignment_turned_in_outlined,
       'timer' => Icons.timer_outlined,
       'calculate' => Icons.calculate_outlined,
       'machinery' => Icons.precision_manufacturing_outlined,
@@ -226,10 +248,15 @@ class QuickActionSheet extends ConsumerWidget {
   Color _colorFor(String? route, ThemeData theme) {
     return switch (route) {
       'site_requests' => theme.colorScheme.secondary,
+      'site-requests' => theme.colorScheme.secondary,
       'warehouse' => theme.colorScheme.primary,
+      'basic-warehouse' => theme.colorScheme.primary,
       'schedule' => Colors.green,
+      'schedule-management' => Colors.green,
       'safety' => Colors.red,
       'safety-management' => Colors.red,
+      'quality_control' => Colors.deepPurple,
+      'quality-control' => Colors.deepPurple,
       'machinery_operations' => Colors.indigo,
       'machinery-operations' => Colors.indigo,
       'production_labor' => Colors.brown,
@@ -238,7 +265,11 @@ class QuickActionSheet extends ConsumerWidget {
       'workforce_management' => Colors.teal,
       'workforce-management' => Colors.teal,
       'construction_journal' => Colors.orange,
+      'construction-journal' => Colors.orange,
+      'handover_acceptance' => Colors.blueGrey,
+      'handover-acceptance' => Colors.blueGrey,
       'ai_assistant' => Colors.teal,
+      'ai-assistant' => Colors.teal,
       _ => theme.colorScheme.onSurfaceVariant,
     };
   }
