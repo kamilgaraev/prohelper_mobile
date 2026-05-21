@@ -27,10 +27,7 @@ class HandoverAcceptanceRepository {
         response.data,
       ).map(AcceptanceScopeModel.fromJson).toList();
     } on DioException catch (error) {
-      throw ApiException.fromDio(
-        error,
-        fallbackMessage: 'Не удалось загрузить приемку зон.',
-      );
+      throw ApiException.fromDio(error);
     } catch (_) {
       throw const ApiException('Не удалось загрузить приемку зон.');
     }
@@ -49,10 +46,7 @@ class HandoverAcceptanceRepository {
         MobileApiResponse.dataMap(response.data),
       );
     } on DioException catch (error) {
-      throw ApiException.fromDio(
-        error,
-        fallbackMessage: 'Не удалось добавить замечание приемки.',
-      );
+      throw ApiException.fromDio(error);
     } catch (_) {
       throw const ApiException('Не удалось добавить замечание приемки.');
     }
@@ -71,10 +65,7 @@ class HandoverAcceptanceRepository {
         MobileApiResponse.dataMap(response.data),
       );
     } on DioException catch (error) {
-      throw ApiException.fromDio(
-        error,
-        fallbackMessage: 'Не удалось подтвердить устранение замечания.',
-      );
+      throw ApiException.fromDio(error);
     } catch (_) {
       throw const ApiException('Не удалось подтвердить устранение замечания.');
     }
@@ -89,10 +80,7 @@ class HandoverAcceptanceRepository {
         MobileApiResponse.dataMap(response.data),
       );
     } on DioException catch (error) {
-      throw ApiException.fromDio(
-        error,
-        fallbackMessage: 'Не удалось отправить зону на повторную проверку.',
-      );
+      throw ApiException.fromDio(error);
     } catch (_) {
       throw const ApiException(
         'Не удалось отправить зону на повторную проверку.',

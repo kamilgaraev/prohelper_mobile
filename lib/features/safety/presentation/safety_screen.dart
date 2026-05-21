@@ -137,263 +137,376 @@ class _SafetyScreenState extends ConsumerState<SafetyScreen> {
     final immediateActionsController = TextEditingController();
     final correctiveActionController = TextEditingController();
     var mode = 'incident';
-    var severity = 'major';
+    String? severity;
+    String? incidentType;
+    DateTime? occurredAt;
     DateTime? dueDate;
     var submitting = false;
 
-    try {
-      await showModalBottomSheet<void>(
-        context: context,
-        isScrollControlled: true,
-        builder:
-            (sheetContext) => StatefulBuilder(
-              builder:
-                  (context, setSheetState) => SafeArea(
-                    child: SingleChildScrollView(
-                      padding: EdgeInsets.only(
-                        left: 16,
-                        right: 16,
-                        top: 20,
-                        bottom: MediaQuery.of(context).viewInsets.bottom + 20,
-                      ),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Новая запись охраны труда',
-                            style: AppTypography.h2(context),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            selectedProject.name,
-                            style: AppTypography.caption(context),
-                          ),
-                          const SizedBox(height: 16),
-                          SegmentedButton<String>(
-                            segments: const [
-                              ButtonSegment(
-                                value: 'incident',
-                                label: Text('Происшествие'),
-                                icon: Icon(Icons.report_problem_outlined),
-                              ),
-                              ButtonSegment(
-                                value: 'violation',
-                                label: Text('Нарушение'),
-                                icon: Icon(Icons.gpp_bad_outlined),
-                              ),
-                            ],
-                            selected: {mode},
-                            onSelectionChanged:
-                                (value) =>
-                                    setSheetState(() => mode = value.first),
-                          ),
-                          const SizedBox(height: 12),
-                          TextField(
-                            controller: titleController,
-                            textInputAction: TextInputAction.next,
-                            decoration: const InputDecoration(
-                              labelText: 'Название',
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder:
+          (sheetContext) => StatefulBuilder(
+            builder:
+                (context, setSheetState) => SafeArea(
+                  child: SingleChildScrollView(
+                    padding: EdgeInsets.only(
+                      left: 16,
+                      right: 16,
+                      top: 20,
+                      bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Новая запись охраны труда',
+                          style: AppTypography.h2(context),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          selectedProject.name,
+                          style: AppTypography.caption(context),
+                        ),
+                        const SizedBox(height: 16),
+                        SegmentedButton<String>(
+                          segments: const [
+                            ButtonSegment(
+                              value: 'incident',
+                              label: Text('Происшествие'),
+                              icon: Icon(Icons.report_problem_outlined),
                             ),
-                          ),
-                          TextField(
-                            controller: locationController,
-                            textInputAction: TextInputAction.next,
-                            decoration: const InputDecoration(
-                              labelText: 'Локация',
+                            ButtonSegment(
+                              value: 'violation',
+                              label: Text('Нарушение'),
+                              icon: Icon(Icons.gpp_bad_outlined),
                             ),
+                          ],
+                          selected: {mode},
+                          onSelectionChanged:
+                              (value) =>
+                                  setSheetState(() => mode = value.first),
+                        ),
+                        const SizedBox(height: 12),
+                        TextField(
+                          controller: titleController,
+                          textInputAction: TextInputAction.next,
+                          decoration: const InputDecoration(
+                            labelText: 'Название',
                           ),
+                        ),
+                        TextField(
+                          controller: locationController,
+                          textInputAction: TextInputAction.next,
+                          decoration: const InputDecoration(
+                            labelText: 'Локация',
+                          ),
+                        ),
+                        DropdownButtonFormField<String>(
+                          value: severity,
+                          decoration: const InputDecoration(
+                            labelText: 'Тяжесть',
+                          ),
+                          hint: const Text('Выберите тяжесть'),
+                          items: const [
+                            DropdownMenuItem(
+                              value: 'minor',
+                              child: Text('Низкая'),
+                            ),
+                            DropdownMenuItem(
+                              value: 'major',
+                              child: Text('Серьезная'),
+                            ),
+                            DropdownMenuItem(
+                              value: 'high',
+                              child: Text('Высокая'),
+                            ),
+                            DropdownMenuItem(
+                              value: 'critical',
+                              child: Text('Критичная'),
+                            ),
+                          ],
+                          onChanged:
+                              (value) => setSheetState(() {
+                                if (value != null) {
+                                  severity = value;
+                                }
+                              }),
+                        ),
+                        TextField(
+                          controller: descriptionController,
+                          minLines: 3,
+                          maxLines: 5,
+                          decoration: const InputDecoration(
+                            labelText: 'Описание',
+                          ),
+                        ),
+                        if (mode == 'incident') ...[
                           DropdownButtonFormField<String>(
-                            value: severity,
+                            value: incidentType,
                             decoration: const InputDecoration(
-                              labelText: 'Тяжесть',
+                              labelText: 'Тип происшествия',
                             ),
+                            hint: const Text('Выберите тип'),
                             items: const [
                               DropdownMenuItem(
-                                value: 'minor',
-                                child: Text('Низкая'),
+                                value: 'unsafe_condition',
+                                child: Text('Опасное условие'),
                               ),
                               DropdownMenuItem(
-                                value: 'major',
-                                child: Text('Серьезная'),
+                                value: 'near_miss',
+                                child: Text('Почти происшествие'),
                               ),
                               DropdownMenuItem(
-                                value: 'high',
-                                child: Text('Высокая'),
+                                value: 'injury',
+                                child: Text('Травма'),
                               ),
                               DropdownMenuItem(
-                                value: 'critical',
-                                child: Text('Критичная'),
+                                value: 'property_damage',
+                                child: Text('Ущерб имуществу'),
+                              ),
+                              DropdownMenuItem(
+                                value: 'environmental',
+                                child: Text('Экология'),
+                              ),
+                              DropdownMenuItem(
+                                value: 'other',
+                                child: Text('Другое'),
                               ),
                             ],
                             onChanged:
-                                (value) => setSheetState(
-                                  () => severity = value ?? 'major',
+                                (value) => setSheetState(() {
+                                  if (value != null) {
+                                    incidentType = value;
+                                  }
+                                }),
+                          ),
+                          const SizedBox(height: 8),
+                          OutlinedButton.icon(
+                            onPressed: () async {
+                              final selectedDate = await showDatePicker(
+                                context: context,
+                                firstDate: DateTime.now().subtract(
+                                  const Duration(days: 365),
                                 ),
+                                lastDate: DateTime.now(),
+                                initialDate: occurredAt ?? DateTime.now(),
+                              );
+                              if (selectedDate == null || !context.mounted) {
+                                return;
+                              }
+
+                              final selectedTime = await showTimePicker(
+                                context: context,
+                                initialTime: TimeOfDay.fromDateTime(
+                                  occurredAt ?? DateTime.now(),
+                                ),
+                              );
+                              if (selectedTime == null) {
+                                return;
+                              }
+
+                              setSheetState(
+                                () =>
+                                    occurredAt = DateTime(
+                                      selectedDate.year,
+                                      selectedDate.month,
+                                      selectedDate.day,
+                                      selectedTime.hour,
+                                      selectedTime.minute,
+                                    ),
+                              );
+                            },
+                            icon: const Icon(Icons.schedule_outlined),
+                            label: Text(
+                              occurredAt == null
+                                  ? 'Когда произошло'
+                                  : 'Когда: ${_formatDateTime(occurredAt!)}',
+                            ),
                           ),
                           TextField(
-                            controller: descriptionController,
-                            minLines: 3,
-                            maxLines: 5,
+                            controller: immediateActionsController,
+                            minLines: 2,
+                            maxLines: 4,
                             decoration: const InputDecoration(
-                              labelText: 'Описание',
+                              labelText: 'Немедленные меры',
                             ),
                           ),
-                          if (mode == 'incident') ...[
-                            TextField(
-                              controller: immediateActionsController,
-                              minLines: 2,
-                              maxLines: 4,
-                              decoration: const InputDecoration(
-                                labelText: 'Немедленные меры',
-                              ),
+                        ] else ...[
+                          const SizedBox(height: 8),
+                          OutlinedButton.icon(
+                            onPressed: () async {
+                              final selected = await showDatePicker(
+                                context: context,
+                                firstDate: DateTime.now(),
+                                lastDate: DateTime.now().add(
+                                  const Duration(days: 365),
+                                ),
+                                initialDate: dueDate ?? DateTime.now(),
+                              );
+
+                              if (selected != null) {
+                                setSheetState(() => dueDate = selected);
+                              }
+                            },
+                            icon: const Icon(Icons.event_outlined),
+                            label: Text(
+                              dueDate == null
+                                  ? 'Срок устранения'
+                                  : 'Срок: ${_formatDate(_apiDate(dueDate!))}',
                             ),
-                          ] else ...[
-                            const SizedBox(height: 8),
-                            OutlinedButton.icon(
-                              onPressed: () async {
-                                final selected = await showDatePicker(
-                                  context: context,
-                                  firstDate: DateTime.now(),
-                                  lastDate: DateTime.now().add(
-                                    const Duration(days: 365),
-                                  ),
-                                  initialDate: dueDate ?? DateTime.now(),
-                                );
-
-                                if (selected != null) {
-                                  setSheetState(() => dueDate = selected);
-                                }
-                              },
-                              icon: const Icon(Icons.event_outlined),
-                              label: Text(
-                                dueDate == null
-                                    ? 'Срок устранения'
-                                    : 'Срок: ${_formatDate(_apiDate(dueDate!))}',
-                              ),
-                            ),
-                            TextField(
-                              controller: correctiveActionController,
-                              minLines: 2,
-                              maxLines: 4,
-                              decoration: const InputDecoration(
-                                labelText: 'Что нужно сделать',
-                              ),
-                            ),
-                          ],
-                          const SizedBox(height: 16),
-                          SizedBox(
-                            width: double.infinity,
-                            child: FilledButton(
-                              onPressed:
-                                  submitting
-                                      ? null
-                                      : () async {
-                                        final title =
-                                            titleController.text.trim();
-                                        if (title.isEmpty) {
-                                          ScaffoldMessenger.of(
-                                            context,
-                                          ).showSnackBar(
-                                            const SnackBar(
-                                              content: Text('Укажите название'),
-                                            ),
-                                          );
-                                          return;
-                                        }
-
-                                        setSheetState(() => submitting = true);
-                                        try {
-                                          final data = {
-                                            'project_id':
-                                                selectedProject.serverId,
-                                            'title': title,
-                                            'severity': severity,
-                                            'metadata': const {
-                                              'source': 'mobile_field_report',
-                                            },
-                                            if (locationController.text
-                                                .trim()
-                                                .isNotEmpty)
-                                              'location_name':
-                                                  locationController.text
-                                                      .trim(),
-                                            if (descriptionController.text
-                                                .trim()
-                                                .isNotEmpty)
-                                              'description':
-                                                  descriptionController.text
-                                                      .trim(),
-                                          };
-
-                                          if (mode == 'incident') {
-                                            await ref
-                                                .read(safetyProvider.notifier)
-                                                .createIncident({
-                                                  ...data,
-                                                  'incident_type':
-                                                      'unsafe_condition',
-                                                  'occurred_at':
-                                                      DateTime.now()
-                                                          .toIso8601String(),
-                                                  if (immediateActionsController
-                                                      .text
-                                                      .trim()
-                                                      .isNotEmpty)
-                                                    'immediate_actions':
-                                                        immediateActionsController
-                                                            .text
-                                                            .trim(),
-                                                });
-                                          } else {
-                                            await ref
-                                                .read(safetyProvider.notifier)
-                                                .createViolation({
-                                                  ...data,
-                                                  if (dueDate != null)
-                                                    'due_date': _apiDate(
-                                                      dueDate!,
-                                                    ),
-                                                  if (correctiveActionController
-                                                      .text
-                                                      .trim()
-                                                      .isNotEmpty)
-                                                    'corrective_action':
-                                                        correctiveActionController
-                                                            .text
-                                                            .trim(),
-                                                });
-                                          }
-
-                                          if (sheetContext.mounted) {
-                                            Navigator.pop(sheetContext);
-                                          }
-                                        } finally {
-                                          if (context.mounted) {
-                                            setSheetState(
-                                              () => submitting = false,
-                                            );
-                                          }
-                                        }
-                                      },
-                              child: Text(
-                                submitting ? 'Сохранение...' : 'Сохранить',
-                              ),
+                          ),
+                          TextField(
+                            controller: correctiveActionController,
+                            minLines: 2,
+                            maxLines: 4,
+                            decoration: const InputDecoration(
+                              labelText: 'Что нужно сделать',
                             ),
                           ),
                         ],
-                      ),
+                        const SizedBox(height: 16),
+                        SizedBox(
+                          width: double.infinity,
+                          child: FilledButton(
+                            onPressed:
+                                submitting
+                                    ? null
+                                    : () async {
+                                      final title = titleController.text.trim();
+                                      if (title.isEmpty) {
+                                        ScaffoldMessenger.of(
+                                          context,
+                                        ).showSnackBar(
+                                          const SnackBar(
+                                            content: Text('Укажите название'),
+                                          ),
+                                        );
+                                        return;
+                                      }
+                                      if (severity == null) {
+                                        ScaffoldMessenger.of(
+                                          context,
+                                        ).showSnackBar(
+                                          const SnackBar(
+                                            content: Text('Выберите тяжесть'),
+                                          ),
+                                        );
+                                        return;
+                                      }
+                                      if (mode == 'incident' &&
+                                          incidentType == null) {
+                                        ScaffoldMessenger.of(
+                                          context,
+                                        ).showSnackBar(
+                                          const SnackBar(
+                                            content: Text(
+                                              'Выберите тип происшествия',
+                                            ),
+                                          ),
+                                        );
+                                        return;
+                                      }
+                                      if (mode == 'incident' &&
+                                          occurredAt == null) {
+                                        ScaffoldMessenger.of(
+                                          context,
+                                        ).showSnackBar(
+                                          const SnackBar(
+                                            content: Text(
+                                              'Укажите время происшествия',
+                                            ),
+                                          ),
+                                        );
+                                        return;
+                                      }
+                                      final selectedSeverity = severity!;
+                                      final selectedIncidentType = incidentType;
+                                      final selectedOccurredAt = occurredAt;
+
+                                      setSheetState(() => submitting = true);
+                                      try {
+                                        final data = {
+                                          'project_id':
+                                              selectedProject.serverId,
+                                          'title': title,
+                                          'severity': selectedSeverity,
+                                          if (locationController.text
+                                              .trim()
+                                              .isNotEmpty)
+                                            'location_name':
+                                                locationController.text.trim(),
+                                          if (descriptionController.text
+                                              .trim()
+                                              .isNotEmpty)
+                                            'description':
+                                                descriptionController.text
+                                                    .trim(),
+                                        };
+
+                                        if (mode == 'incident') {
+                                          await ref
+                                              .read(safetyProvider.notifier)
+                                              .createIncident({
+                                                ...data,
+                                                'incident_type':
+                                                    selectedIncidentType!,
+                                                'occurred_at':
+                                                    selectedOccurredAt!
+                                                        .toIso8601String(),
+                                                if (immediateActionsController
+                                                    .text
+                                                    .trim()
+                                                    .isNotEmpty)
+                                                  'immediate_actions':
+                                                      immediateActionsController
+                                                          .text
+                                                          .trim(),
+                                              });
+                                        } else {
+                                          await ref
+                                              .read(safetyProvider.notifier)
+                                              .createViolation({
+                                                ...data,
+                                                if (dueDate != null)
+                                                  'due_date': _apiDate(
+                                                    dueDate!,
+                                                  ),
+                                                if (correctiveActionController
+                                                    .text
+                                                    .trim()
+                                                    .isNotEmpty)
+                                                  'corrective_action':
+                                                      correctiveActionController
+                                                          .text
+                                                          .trim(),
+                                              });
+                                        }
+
+                                        if (sheetContext.mounted) {
+                                          Navigator.pop(sheetContext);
+                                        }
+                                      } finally {
+                                        if (context.mounted) {
+                                          setSheetState(
+                                            () => submitting = false,
+                                          );
+                                        }
+                                      }
+                                    },
+                            child: Text(
+                              submitting ? 'Сохранение...' : 'Сохранить',
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-            ),
-      );
-    } finally {
-      titleController.dispose();
-      descriptionController.dispose();
-      locationController.dispose();
-      immediateActionsController.dispose();
-      correctiveActionController.dispose();
-    }
+                ),
+          ),
+    );
   }
 
   Future<void> _showResolveSheet(
@@ -403,99 +516,95 @@ class _SafetyScreenState extends ConsumerState<SafetyScreen> {
     final commentController = TextEditingController();
     var submitting = false;
 
-    try {
-      await showModalBottomSheet<void>(
-        context: context,
-        isScrollControlled: true,
-        builder:
-            (sheetContext) => StatefulBuilder(
-              builder:
-                  (context, setSheetState) => SafeArea(
-                    child: SingleChildScrollView(
-                      padding: EdgeInsets.only(
-                        left: 16,
-                        right: 16,
-                        top: 20,
-                        bottom: MediaQuery.of(context).viewInsets.bottom + 20,
-                      ),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Устранить нарушение',
-                            style: AppTypography.h2(context),
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder:
+          (sheetContext) => StatefulBuilder(
+            builder:
+                (context, setSheetState) => SafeArea(
+                  child: SingleChildScrollView(
+                    padding: EdgeInsets.only(
+                      left: 16,
+                      right: 16,
+                      top: 20,
+                      bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Устранить нарушение',
+                          style: AppTypography.h2(context),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          violation.title,
+                          style: AppTypography.bodyMedium(context),
+                        ),
+                        const SizedBox(height: 16),
+                        TextField(
+                          controller: commentController,
+                          minLines: 3,
+                          maxLines: 5,
+                          decoration: const InputDecoration(
+                            labelText: 'Что сделано',
                           ),
-                          const SizedBox(height: 8),
-                          Text(
-                            violation.title,
-                            style: AppTypography.bodyMedium(context),
-                          ),
-                          const SizedBox(height: 16),
-                          TextField(
-                            controller: commentController,
-                            minLines: 3,
-                            maxLines: 5,
-                            decoration: const InputDecoration(
-                              labelText: 'Что сделано',
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          SizedBox(
-                            width: double.infinity,
-                            child: FilledButton(
-                              onPressed:
-                                  submitting
-                                      ? null
-                                      : () async {
-                                        final comment =
-                                            commentController.text.trim();
-                                        if (comment.isEmpty) {
-                                          ScaffoldMessenger.of(
-                                            context,
-                                          ).showSnackBar(
-                                            const SnackBar(
-                                              content: Text(
-                                                'Укажите результат устранения',
-                                              ),
+                        ),
+                        const SizedBox(height: 16),
+                        SizedBox(
+                          width: double.infinity,
+                          child: FilledButton(
+                            onPressed:
+                                submitting
+                                    ? null
+                                    : () async {
+                                      final comment =
+                                          commentController.text.trim();
+                                      if (comment.isEmpty) {
+                                        ScaffoldMessenger.of(
+                                          context,
+                                        ).showSnackBar(
+                                          const SnackBar(
+                                            content: Text(
+                                              'Укажите результат устранения',
                                             ),
-                                          );
-                                          return;
-                                        }
+                                          ),
+                                        );
+                                        return;
+                                      }
 
-                                        setSheetState(() => submitting = true);
-                                        try {
-                                          await ref
-                                              .read(safetyProvider.notifier)
-                                              .resolveViolation(
-                                                violation.id,
-                                                comment,
-                                              );
-                                          if (sheetContext.mounted) {
-                                            Navigator.pop(sheetContext);
-                                          }
-                                        } finally {
-                                          if (context.mounted) {
-                                            setSheetState(
-                                              () => submitting = false,
+                                      setSheetState(() => submitting = true);
+                                      try {
+                                        await ref
+                                            .read(safetyProvider.notifier)
+                                            .resolveViolation(
+                                              violation.id,
+                                              comment,
                                             );
-                                          }
+                                        if (sheetContext.mounted) {
+                                          Navigator.pop(sheetContext);
                                         }
-                                      },
-                              child: Text(
-                                submitting ? 'Сохранение...' : 'Сохранить',
-                              ),
+                                      } finally {
+                                        if (context.mounted) {
+                                          setSheetState(
+                                            () => submitting = false,
+                                          );
+                                        }
+                                      }
+                                    },
+                            child: Text(
+                              submitting ? 'Сохранение...' : 'Сохранить',
                             ),
                           ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
                   ),
-            ),
-      );
-    } finally {
-      commentController.dispose();
-    }
+                ),
+          ),
+    );
   }
 }
 
@@ -1070,6 +1179,14 @@ String _formatDate(String value) {
 
 String _apiDate(DateTime value) {
   return '${value.year.toString().padLeft(4, '0')}-${value.month.toString().padLeft(2, '0')}-${value.day.toString().padLeft(2, '0')}';
+}
+
+String _formatDateTime(DateTime value) {
+  final date = _formatDate(_apiDate(value));
+  final time =
+      '${value.hour.toString().padLeft(2, '0')}:${value.minute.toString().padLeft(2, '0')}';
+
+  return '$date $time';
 }
 
 String _severityLabel(String value) {

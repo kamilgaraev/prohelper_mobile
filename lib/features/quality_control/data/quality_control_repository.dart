@@ -38,10 +38,7 @@ class QualityControlRepository {
         response.data,
       ).map(QualityDefectModel.fromJson).toList();
     } on DioException catch (error) {
-      throw ApiException.fromDio(
-        error,
-        fallbackMessage: 'Не удалось загрузить замечания по качеству.',
-      );
+      throw ApiException.fromDio(error);
     } catch (_) {
       throw const ApiException('Не удалось загрузить замечания по качеству.');
     }
@@ -54,10 +51,7 @@ class QualityControlRepository {
         MobileApiResponse.dataMap(response.data),
       );
     } on DioException catch (error) {
-      throw ApiException.fromDio(
-        error,
-        fallbackMessage: 'Не удалось создать замечание по качеству.',
-      );
+      throw ApiException.fromDio(error);
     } catch (_) {
       throw const ApiException('Не удалось создать замечание по качеству.');
     }
@@ -76,10 +70,7 @@ class QualityControlRepository {
         MobileApiResponse.dataMap(response.data),
       );
     } on DioException catch (error) {
-      throw ApiException.fromDio(
-        error,
-        fallbackMessage: 'Не удалось взять замечание в работу.',
-      );
+      throw ApiException.fromDio(error);
     } catch (_) {
       throw const ApiException('Не удалось взять замечание в работу.');
     }
@@ -106,10 +97,7 @@ class QualityControlRepository {
         MobileApiResponse.dataMap(response.data),
       );
     } on DioException catch (error) {
-      throw ApiException.fromDio(
-        error,
-        fallbackMessage: 'Не удалось отправить замечание на проверку.',
-      );
+      throw ApiException.fromDio(error);
     } catch (_) {
       throw const ApiException('Не удалось отправить замечание на проверку.');
     }

@@ -132,7 +132,9 @@ class _HandoverAcceptanceScreenState
 
     final titleController = TextEditingController();
     final descriptionController = TextEditingController();
-    var createQualityDefect = true;
+    String? severity;
+    bool? createQualityDefect;
+    bool? qualityDefectInspectionRequired;
     var submitting = false;
 
     await showModalBottomSheet<void>(
@@ -168,14 +170,76 @@ class _HandoverAcceptanceScreenState
                         ),
                         maxLines: 3,
                       ),
-                      SwitchListTile(
-                        value: createQualityDefect,
+                      DropdownButtonFormField<String>(
+                        value: severity,
+                        decoration: const InputDecoration(
+                          labelText: 'Критичность',
+                        ),
+                        hint: const Text('Выберите критичность'),
+                        items: const [
+                          DropdownMenuItem(
+                            value: 'minor',
+                            child: Text('Низкая'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'major',
+                            child: Text('Средняя'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'critical',
+                            child: Text('Критичная'),
+                          ),
+                        ],
                         onChanged:
-                            (value) => setSheetState(
-                              () => createQualityDefect = value,
-                            ),
-                        title: const Text('Создать дефект качества'),
+                            (value) => setSheetState(() {
+                              if (value != null) {
+                                severity = value;
+                              }
+                            }),
                       ),
+                      DropdownButtonFormField<bool>(
+                        value: createQualityDefect,
+                        decoration: const InputDecoration(
+                          labelText: 'Дефект качества',
+                        ),
+                        hint: const Text('Выберите действие'),
+                        items: const [
+                          DropdownMenuItem(value: true, child: Text('Создать')),
+                          DropdownMenuItem(
+                            value: false,
+                            child: Text('Не создавать'),
+                          ),
+                        ],
+                        onChanged:
+                            (value) => setSheetState(() {
+                              createQualityDefect = value;
+                              if (value != true) {
+                                qualityDefectInspectionRequired = null;
+                              }
+                            }),
+                      ),
+                      if (createQualityDefect == true)
+                        DropdownButtonFormField<bool>(
+                          value: qualityDefectInspectionRequired,
+                          decoration: const InputDecoration(
+                            labelText: 'Проверка дефекта',
+                          ),
+                          hint: const Text('Выберите решение'),
+                          items: const [
+                            DropdownMenuItem(
+                              value: true,
+                              child: Text('Требуется'),
+                            ),
+                            DropdownMenuItem(
+                              value: false,
+                              child: Text('Не требуется'),
+                            ),
+                          ],
+                          onChanged:
+                              (value) => setSheetState(() {
+                                qualityDefectInspectionRequired = value;
+                              }),
+                        ),
                       const SizedBox(height: 12),
                       SizedBox(
                         width: double.infinity,
@@ -186,8 +250,58 @@ class _HandoverAcceptanceScreenState
                                   : () async {
                                     final title = titleController.text.trim();
                                     if (title.isEmpty) {
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
+                                        const SnackBar(
+                                          content: Text('Укажите замечание'),
+                                        ),
+                                      );
                                       return;
                                     }
+                                    if (severity == null) {
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
+                                        const SnackBar(
+                                          content: Text('Выберите критичность'),
+                                        ),
+                                      );
+                                      return;
+                                    }
+                                    if (createQualityDefect == null) {
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
+                                        const SnackBar(
+                                          content: Text(
+                                            'Укажите действие с дефектом качества',
+                                          ),
+                                        ),
+                                      );
+                                      return;
+                                    }
+                                    if (createQualityDefect == true &&
+                                        qualityDefectInspectionRequired ==
+                                            null) {
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
+                                        const SnackBar(
+                                          content: Text(
+                                            'Укажите, нужна ли проверка дефекта качества',
+                                          ),
+                                        ),
+                                      );
+                                      return;
+                                    }
+                                    final selectedSeverity = severity!;
+                                    final shouldCreateQualityDefect =
+                                        createQualityDefect!;
+                                    final shouldInspectQualityDefect =
+                                        shouldCreateQualityDefect
+                                            ? qualityDefectInspectionRequired!
+                                            : null;
                                     setSheetState(() => submitting = true);
                                     await ref
                                         .read(
@@ -201,9 +315,12 @@ class _HandoverAcceptanceScreenState
                                             'description':
                                                 descriptionController.text
                                                     .trim(),
-                                          'severity': 'major',
+                                          'severity': selectedSeverity,
                                           'create_quality_defect':
-                                              createQualityDefect,
+                                              shouldCreateQualityDefect,
+                                          if (shouldCreateQualityDefect)
+                                            'quality_defect_inspection_required':
+                                                shouldInspectQualityDefect,
                                         });
                                     if (context.mounted) {
                                       Navigator.of(sheetContext).pop();
@@ -235,9 +352,97 @@ class _HandoverAcceptanceScreenState
       return;
     }
 
-    await ref
-        .read(handoverAcceptanceProvider.notifier)
-        .resolveFinding(finding.id, resolutionComment: 'Устранено с объекта');
+    final openFinding = finding;
+    final commentController = TextEditingController();
+    var submitting = false;
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder:
+          (sheetContext) => StatefulBuilder(
+            builder:
+                (context, setSheetState) => Padding(
+                  padding: EdgeInsets.only(
+                    left: 16,
+                    right: 16,
+                    top: 20,
+                    bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Подтвердить устранение',
+                        style: AppTypography.h2(context),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        openFinding.title,
+                        style: AppTypography.bodyMedium(context),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: commentController,
+                        minLines: 3,
+                        maxLines: 5,
+                        decoration: const InputDecoration(
+                          labelText: 'Комментарий об устранении',
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      SizedBox(
+                        width: double.infinity,
+                        child: FilledButton(
+                          onPressed:
+                              submitting
+                                  ? null
+                                  : () async {
+                                    final comment =
+                                        commentController.text.trim();
+                                    if (comment.isEmpty) {
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
+                                        const SnackBar(
+                                          content: Text(
+                                            'Укажите результат устранения',
+                                          ),
+                                        ),
+                                      );
+                                      return;
+                                    }
+
+                                    setSheetState(() => submitting = true);
+                                    try {
+                                      await ref
+                                          .read(
+                                            handoverAcceptanceProvider.notifier,
+                                          )
+                                          .resolveFinding(
+                                            openFinding.id,
+                                            resolutionComment: comment,
+                                          );
+                                      if (sheetContext.mounted) {
+                                        Navigator.pop(sheetContext);
+                                      }
+                                    } finally {
+                                      if (context.mounted) {
+                                        setSheetState(() => submitting = false);
+                                      }
+                                    }
+                                  },
+                          child: Text(
+                            submitting ? 'Сохранение...' : 'Сохранить',
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+          ),
+    );
   }
 }
 

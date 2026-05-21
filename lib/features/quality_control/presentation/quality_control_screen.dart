@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/theme/app_colors.dart';
@@ -136,7 +136,8 @@ class _QualityControlScreenState extends ConsumerState<QualityControlScreen> {
     final titleController = TextEditingController();
     final descriptionController = TextEditingController();
     final locationController = TextEditingController();
-    var severity = 'major';
+    String? severity;
+    bool? inspectionRequired;
     var submitting = false;
 
     await showModalBottomSheet<void>(
@@ -173,6 +174,7 @@ class _QualityControlScreenState extends ConsumerState<QualityControlScreen> {
                         decoration: const InputDecoration(
                           labelText: 'Критичность',
                         ),
+                        hint: const Text('Выберите критичность'),
                         items: const [
                           DropdownMenuItem(
                             value: 'minor',
@@ -188,9 +190,11 @@ class _QualityControlScreenState extends ConsumerState<QualityControlScreen> {
                           ),
                         ],
                         onChanged:
-                            (value) => setSheetState(
-                              () => severity = value ?? 'major',
-                            ),
+                            (value) => setSheetState(() {
+                              if (value != null) {
+                                severity = value;
+                              }
+                            }),
                       ),
                       TextField(
                         controller: descriptionController,
@@ -199,6 +203,27 @@ class _QualityControlScreenState extends ConsumerState<QualityControlScreen> {
                         decoration: const InputDecoration(
                           labelText: 'Описание',
                         ),
+                      ),
+                      DropdownButtonFormField<bool>(
+                        value: inspectionRequired,
+                        decoration: const InputDecoration(
+                          labelText: 'Проверка результата',
+                        ),
+                        hint: const Text('Выберите решение'),
+                        items: const [
+                          DropdownMenuItem(
+                            value: true,
+                            child: Text('Требуется'),
+                          ),
+                          DropdownMenuItem(
+                            value: false,
+                            child: Text('Не требуется'),
+                          ),
+                        ],
+                        onChanged:
+                            (value) => setSheetState(() {
+                              inspectionRequired = value;
+                            }),
                       ),
                       const SizedBox(height: 16),
                       FilledButton(
@@ -216,6 +241,27 @@ class _QualityControlScreenState extends ConsumerState<QualityControlScreen> {
                                     );
                                     return;
                                   }
+                                  if (severity == null) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text('Выберите критичность'),
+                                      ),
+                                    );
+                                    return;
+                                  }
+                                  if (inspectionRequired == null) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text(
+                                          'Укажите, нужна ли проверка результата',
+                                        ),
+                                      ),
+                                    );
+                                    return;
+                                  }
+                                  final selectedSeverity = severity!;
+                                  final selectedInspectionRequired =
+                                      inspectionRequired!;
 
                                   setSheetState(() => submitting = true);
                                   try {
@@ -225,7 +271,7 @@ class _QualityControlScreenState extends ConsumerState<QualityControlScreen> {
                                           'project_id':
                                               selectedProject.serverId,
                                           'title': titleController.text.trim(),
-                                          'severity': severity,
+                                          'severity': selectedSeverity,
                                           if (descriptionController.text
                                               .trim()
                                               .isNotEmpty)
@@ -237,7 +283,8 @@ class _QualityControlScreenState extends ConsumerState<QualityControlScreen> {
                                               .isNotEmpty)
                                             'location_name':
                                                 locationController.text.trim(),
-                                          'inspection_required': true,
+                                          'inspection_required':
+                                              selectedInspectionRequired,
                                         });
 
                                     if (sheetContext.mounted) {
