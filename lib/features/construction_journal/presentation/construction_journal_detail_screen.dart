@@ -8,6 +8,7 @@ import '../../../core/widgets/app_empty_state.dart';
 import '../../../core/widgets/app_error_state.dart';
 import '../../../core/widgets/app_loading_state.dart';
 import '../../../core/widgets/industrial_card.dart';
+import '../data/construction_journal_models.dart';
 import '../data/construction_journal_repository.dart';
 import '../domain/construction_journal_provider.dart';
 import 'journal_entry_detail_screen.dart';
@@ -111,7 +112,9 @@ class ConstructionJournalDetailScreen extends ConsumerWidget {
                           spacing: 8,
                           runSpacing: 8,
                           children: [
-                            if (state.availableActions.contains('create_entry'))
+                            if (state.availableActions.hasAction(
+                              ConstructionJournalActionKeys.createEntry,
+                            ))
                               ElevatedButton.icon(
                                 onPressed: () async {
                                   final created = await Navigator.of(
@@ -132,7 +135,9 @@ class ConstructionJournalDetailScreen extends ConsumerWidget {
                                 icon: const Icon(Icons.add_rounded),
                                 label: const Text('Новая запись'),
                               ),
-                            if (state.availableActions.contains('update'))
+                            if (state.availableActions.hasAction(
+                              ConstructionJournalActionKeys.update,
+                            ))
                               OutlinedButton.icon(
                                 onPressed: () async {
                                   final updated = await Navigator.of(
@@ -153,19 +158,16 @@ class ConstructionJournalDetailScreen extends ConsumerWidget {
                                 icon: const Icon(Icons.edit_outlined),
                                 label: const Text('Редактировать'),
                               ),
-                            if (state.availableActions.contains('export'))
+                            if (state.availableActions.hasAction(
+                              ConstructionJournalActionKeys.export,
+                            ))
                               OutlinedButton.icon(
                                 onPressed: () async {
-                                  final url = await ref
-                                      .read(
-                                        constructionJournalRepositoryProvider,
-                                      )
-                                      .exportJournal(journalId);
-                                  if (!context.mounted) {
-                                    return;
-                                  }
-
-                                  await _showExportDialog(context, url);
+                                  await _showExportRangeDialog(
+                                    context,
+                                    ref,
+                                    state.journal!,
+                                  );
                                 },
                                 icon: const Icon(Icons.download_rounded),
                                 label: const Text('Экспорт КС-6'),
@@ -266,7 +268,7 @@ class ConstructionJournalDetailScreen extends ConsumerWidget {
                                     ),
                                   ),
                                   _Badge(
-                                    label: _entryStatusLabel(entry.status),
+                                    label: entry.statusLabel,
                                     color: _entryStatusColor(entry.status),
                                   ),
                                 ],
@@ -360,16 +362,8 @@ Color _entryStatusColor(String status) {
     'approved' => AppColors.success,
     'submitted' => AppColors.warning,
     'rejected' => AppColors.error,
-    _ => AppColors.secondary,
-  };
-}
-
-String _entryStatusLabel(String status) {
-  return switch (status) {
-    'approved' => 'Утверждена',
-    'submitted' => 'На проверке',
-    'rejected' => 'Отклонена',
-    _ => 'Черновик',
+    'draft' => AppColors.secondary,
+    _ => throw StateError('Unknown construction journal entry status: $status'),
   };
 }
 
@@ -412,4 +406,157 @@ Future<void> _showExportDialog(BuildContext context, String url) async {
       );
     },
   );
+}
+
+Future<void> _showExportRangeDialog(
+  BuildContext context,
+  WidgetRef ref,
+  ConstructionJournalModel journal,
+) async {
+  var dateFrom = _parseIsoDate(journal.startDate);
+  var dateTo = _parseIsoDate(journal.endDate ?? journal.startDate);
+  var isExporting = false;
+
+  await showDialog<void>(
+    context: context,
+    builder: (dialogContext) {
+      return StatefulBuilder(
+        builder: (sheetContext, setDialogState) {
+          Future<void> pickDate(bool isStart) async {
+            final picked = await showDatePicker(
+              context: sheetContext,
+              initialDate: isStart ? dateFrom : dateTo,
+              firstDate: DateTime(2020),
+              lastDate: DateTime(2100),
+            );
+
+            if (picked == null) {
+              return;
+            }
+
+            setDialogState(() {
+              if (isStart) {
+                dateFrom = picked;
+                if (dateTo.isBefore(dateFrom)) {
+                  dateTo = picked;
+                }
+              } else {
+                dateTo = picked;
+              }
+            });
+          }
+
+          return AlertDialog(
+            title: const Text('Экспорт КС-6'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Начало периода'),
+                  subtitle: Text(_formatDateValue(dateFrom)),
+                  trailing: const Icon(Icons.calendar_today_outlined),
+                  onTap: isExporting ? null : () => pickDate(true),
+                ),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Окончание периода'),
+                  subtitle: Text(_formatDateValue(dateTo)),
+                  trailing: const Icon(Icons.calendar_today_outlined),
+                  onTap: isExporting ? null : () => pickDate(false),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed:
+                    isExporting
+                        ? null
+                        : () => Navigator.of(dialogContext).pop(),
+                child: const Text('Отмена'),
+              ),
+              ElevatedButton.icon(
+                onPressed:
+                    isExporting
+                        ? null
+                        : () async {
+                          if (dateTo.isBefore(dateFrom)) {
+                            ScaffoldMessenger.of(dialogContext).showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                  'Дата окончания не может быть раньше даты начала.',
+                                ),
+                              ),
+                            );
+                            return;
+                          }
+
+                          setDialogState(() {
+                            isExporting = true;
+                          });
+
+                          var dialogClosed = false;
+                          try {
+                            final url = await ref
+                                .read(constructionJournalRepositoryProvider)
+                                .exportJournal(
+                                  journalId: journal.id,
+                                  dateFrom: _toIsoDate(dateFrom),
+                                  dateTo: _toIsoDate(dateTo),
+                                );
+
+                            if (!dialogContext.mounted) {
+                              return;
+                            }
+
+                            Navigator.of(dialogContext).pop();
+                            dialogClosed = true;
+                            if (context.mounted) {
+                              await _showExportDialog(context, url);
+                            }
+                          } finally {
+                            if (!dialogClosed && dialogContext.mounted) {
+                              setDialogState(() {
+                                isExporting = false;
+                              });
+                            }
+                          }
+                        },
+                icon:
+                    isExporting
+                        ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                        : const Icon(Icons.download_rounded),
+                label: const Text('Сформировать'),
+              ),
+            ],
+          );
+        },
+      );
+    },
+  );
+}
+
+DateTime _parseIsoDate(String value) {
+  final date = DateTime.tryParse(value);
+  if (date == null) {
+    throw StateError('Invalid construction journal date: $value');
+  }
+
+  return date;
+}
+
+String _formatDateValue(DateTime date) {
+  final day = date.day.toString().padLeft(2, '0');
+  final month = date.month.toString().padLeft(2, '0');
+  return '$day.$month.${date.year}';
+}
+
+String _toIsoDate(DateTime date) {
+  final month = date.month.toString().padLeft(2, '0');
+  final day = date.day.toString().padLeft(2, '0');
+  return '${date.year}-$month-$day';
 }

@@ -95,7 +95,10 @@ class JournalEntryDetailScreen extends ConsumerWidget {
                           ],
                         ),
                       ),
-                      _StatusBadge(status: entry.status),
+                      _StatusBadge(
+                        status: entry.status,
+                        label: entry.statusLabel,
+                      ),
                     ],
                   ),
                   const SizedBox(height: 16),
@@ -147,7 +150,7 @@ class JournalEntryDetailScreen extends ConsumerWidget {
               spacing: 8,
               runSpacing: 8,
               children: [
-                if (entry.availableActions.contains('update'))
+                if (entry.hasAction(ConstructionJournalActionKeys.update))
                   OutlinedButton.icon(
                     onPressed: () async {
                       final updated = await Navigator.of(context).push<bool>(
@@ -167,7 +170,7 @@ class JournalEntryDetailScreen extends ConsumerWidget {
                     icon: const Icon(Icons.edit_outlined),
                     label: const Text('Редактировать'),
                   ),
-                if (entry.availableActions.contains('submit'))
+                if (entry.hasAction(ConstructionJournalActionKeys.submit))
                   ElevatedButton.icon(
                     onPressed: () async {
                       await ref
@@ -178,7 +181,7 @@ class JournalEntryDetailScreen extends ConsumerWidget {
                     icon: const Icon(Icons.send_outlined),
                     label: const Text('Отправить'),
                   ),
-                if (entry.availableActions.contains('approve'))
+                if (entry.hasAction(ConstructionJournalActionKeys.approve))
                   ElevatedButton.icon(
                     onPressed: () async {
                       await ref
@@ -189,7 +192,7 @@ class JournalEntryDetailScreen extends ConsumerWidget {
                     icon: const Icon(Icons.check_circle_outline_rounded),
                     label: const Text('Утвердить'),
                   ),
-                if (entry.availableActions.contains('reject'))
+                if (entry.hasAction(ConstructionJournalActionKeys.reject))
                   OutlinedButton.icon(
                     onPressed:
                         () =>
@@ -197,7 +200,7 @@ class JournalEntryDetailScreen extends ConsumerWidget {
                     icon: const Icon(Icons.close_rounded),
                     label: const Text('Отклонить'),
                   ),
-                if (entry.availableActions.contains('delete'))
+                if (entry.hasAction(ConstructionJournalActionKeys.delete))
                   OutlinedButton.icon(
                     onPressed: () async {
                       await ref
@@ -210,15 +213,15 @@ class JournalEntryDetailScreen extends ConsumerWidget {
                     icon: const Icon(Icons.delete_outline_rounded),
                     label: const Text('Удалить'),
                   ),
-                if (entry.availableActions.contains('export_daily_report'))
+                if (entry.hasAction(
+                  ConstructionJournalActionKeys.exportDailyReport,
+                ))
                   OutlinedButton.icon(
                     onPressed: () async {
                       final url = await ref
                           .read(constructionJournalRepositoryProvider)
                           .exportDailyReport(entryId);
-                      if (url.isNotEmpty) {
-                        await Clipboard.setData(ClipboardData(text: url));
-                      }
+                      await Clipboard.setData(ClipboardData(text: url));
                       if (context.mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
@@ -302,15 +305,14 @@ class _WorkVolumesReadOnlyCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      volume.title ?? volume.notes ?? 'Работа',
+                      volume.title!,
                       style: AppTypography.bodyMedium(
                         context,
                       ).copyWith(fontWeight: FontWeight.w700),
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      '${volume.quantity} ${volume.measurementUnitName ?? ''}'
-                          .trim(),
+                      '${volume.quantity} ${volume.measurementUnitName}',
                       style: AppTypography.caption(context),
                     ),
                     if ((volume.notes ?? '').trim().isNotEmpty) ...[
@@ -363,9 +365,10 @@ class _Section extends StatelessWidget {
 }
 
 class _StatusBadge extends StatelessWidget {
-  const _StatusBadge({required this.status});
+  const _StatusBadge({required this.status, required this.label});
 
   final String status;
+  final String label;
 
   @override
   Widget build(BuildContext context) {
@@ -373,13 +376,9 @@ class _StatusBadge extends StatelessWidget {
       'approved' => AppColors.success,
       'submitted' => AppColors.warning,
       'rejected' => AppColors.error,
-      _ => Theme.of(context).colorScheme.primary,
-    };
-    final label = switch (status) {
-      'approved' => 'Утверждена',
-      'submitted' => 'На проверке',
-      'rejected' => 'Отклонена',
-      _ => 'Черновик',
+      'draft' => Theme.of(context).colorScheme.primary,
+      _ =>
+        throw StateError('Unknown construction journal entry status: $status'),
     };
 
     return Container(

@@ -8,6 +8,7 @@ import '../../../core/widgets/app_error_state.dart';
 import '../../../core/widgets/app_loading_state.dart';
 import '../../../core/widgets/industrial_card.dart';
 import '../../projects/domain/projects_provider.dart';
+import '../data/construction_journal_models.dart';
 import '../domain/construction_journal_provider.dart';
 import 'construction_journal_detail_screen.dart';
 import 'journal_form_screen.dart';
@@ -40,7 +41,10 @@ class _ConstructionJournalScreenState
     return Scaffold(
       appBar: AppBar(title: const Text('Журнал работ')),
       floatingActionButton:
-          state.availableActions.contains('create') && selectedProject != null
+          state.availableActions.hasAction(
+                    ConstructionJournalActionKeys.create,
+                  ) &&
+                  selectedProject != null
               ? FloatingActionButton.extended(
                 onPressed: () async {
                   final created = await Navigator.of(context).push<bool>(
@@ -170,7 +174,10 @@ class _ConstructionJournalScreenState
                                       ],
                                     ),
                                   ),
-                                  _StatusBadge(status: journal.status),
+                                  _StatusBadge(
+                                    status: journal.status,
+                                    label: journal.statusLabel,
+                                  ),
                                 ],
                               ),
                               const SizedBox(height: 12),
@@ -350,9 +357,10 @@ class _SummaryCard extends StatelessWidget {
 }
 
 class _StatusBadge extends StatelessWidget {
-  const _StatusBadge({required this.status});
+  const _StatusBadge({required this.status, required this.label});
 
   final String status;
+  final String label;
 
   @override
   Widget build(BuildContext context) {
@@ -360,14 +368,7 @@ class _StatusBadge extends StatelessWidget {
       'active' => AppColors.success,
       'archived' => AppColors.warning,
       'closed' => AppColors.error,
-      _ => Theme.of(context).colorScheme.primary,
-    };
-
-    final label = switch (status) {
-      'active' => 'Активный',
-      'archived' => 'Архив',
-      'closed' => 'Закрыт',
-      _ => status,
+      _ => throw StateError('Unknown construction journal status: $status'),
     };
 
     return Container(

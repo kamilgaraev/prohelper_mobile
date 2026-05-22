@@ -18,7 +18,7 @@ class JournalFormScreen extends ConsumerStatefulWidget {
 class _JournalFormScreenState extends ConsumerState<JournalFormScreen> {
   late final TextEditingController _nameController;
   late final TextEditingController _numberController;
-  late DateTime _startDate;
+  DateTime? _startDate;
   bool _isSaving = false;
 
   bool get _isEdit => widget.initialJournal != null;
@@ -33,8 +33,9 @@ class _JournalFormScreenState extends ConsumerState<JournalFormScreen> {
       text: widget.initialJournal?.journalNumber ?? '',
     );
     _startDate =
-        DateTime.tryParse(widget.initialJournal?.startDate ?? '') ??
-        DateTime.now();
+        widget.initialJournal == null
+            ? null
+            : DateTime.tryParse(widget.initialJournal!.startDate);
   }
 
   @override
@@ -84,12 +85,14 @@ class _JournalFormScreenState extends ConsumerState<JournalFormScreen> {
           ListTile(
             contentPadding: EdgeInsets.zero,
             title: const Text('Дата начала'),
-            subtitle: Text(_formatDate(_startDate)),
+            subtitle: Text(
+              _startDate == null ? 'Выберите дату' : _formatDate(_startDate!),
+            ),
             trailing: const Icon(Icons.calendar_today_outlined),
             onTap: () async {
               final picked = await showDatePicker(
                 context: context,
-                initialDate: _startDate,
+                initialDate: _startDate ?? DateTime.now(),
                 firstDate: DateTime(2020),
                 lastDate: DateTime(2100),
               );
@@ -120,6 +123,20 @@ class _JournalFormScreenState extends ConsumerState<JournalFormScreen> {
       return;
     }
 
+    if (_startDate == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Выберите дату начала журнала.')),
+      );
+      return;
+    }
+
+    if (!_isEdit && projectId == null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Сначала выберите объект.')));
+      return;
+    }
+
     setState(() {
       _isSaving = true;
     });
@@ -131,14 +148,14 @@ class _JournalFormScreenState extends ConsumerState<JournalFormScreen> {
           journalId: widget.initialJournal!.id,
           name: _nameController.text.trim(),
           journalNumber: _numberController.text.trim(),
-          startDate: _startDate.toIso8601String().split('T').first,
+          startDate: _startDate!.toIso8601String().split('T').first,
         );
       } else {
         await repository.createJournal(
-          projectId: projectId ?? 0,
+          projectId: projectId!,
           name: _nameController.text.trim(),
           journalNumber: _numberController.text.trim(),
-          startDate: _startDate.toIso8601String().split('T').first,
+          startDate: _startDate!.toIso8601String().split('T').first,
         );
       }
 

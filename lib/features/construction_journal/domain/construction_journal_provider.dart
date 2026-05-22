@@ -1,5 +1,6 @@
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
+import '../../../core/network/api_exception.dart';
 import '../data/construction_journal_models.dart';
 import '../data/construction_journal_repository.dart';
 
@@ -12,22 +13,25 @@ class ConstructionJournalState {
     this.summary = const ConstructionJournalSummary(),
     this.availableActions = const [],
     this.project,
+    this.permissionDenied = false,
     this.error,
   });
 
   final bool isLoading;
   final List<ConstructionJournalModel> items;
   final ConstructionJournalSummary summary;
-  final List<String> availableActions;
+  final List<ConstructionJournalActionModel> availableActions;
   final ConstructionJournalProjectRef? project;
+  final bool permissionDenied;
   final String? error;
 
   ConstructionJournalState copyWith({
     bool? isLoading,
     List<ConstructionJournalModel>? items,
     ConstructionJournalSummary? summary,
-    List<String>? availableActions,
+    List<ConstructionJournalActionModel>? availableActions,
     Object? project = _sentinel,
+    bool? permissionDenied,
     Object? error = _sentinel,
   }) {
     return ConstructionJournalState(
@@ -39,6 +43,7 @@ class ConstructionJournalState {
           identical(project, _sentinel)
               ? this.project
               : project as ConstructionJournalProjectRef?,
+      permissionDenied: permissionDenied ?? this.permissionDenied,
       error: identical(error, _sentinel) ? this.error : error as String?,
     );
   }
@@ -56,13 +61,18 @@ class ConstructionJournalNotifier
       state = state.copyWith(
         isLoading: false,
         items: const [],
+        permissionDenied: false,
         error: 'Сначала выберите объект.',
         project: null,
       );
       return;
     }
 
-    state = state.copyWith(isLoading: true, error: null);
+    state = state.copyWith(
+      isLoading: true,
+      permissionDenied: false,
+      error: null,
+    );
 
     try {
       final payload = await _repository.fetchJournals(projectId: projectId);
@@ -74,7 +84,11 @@ class ConstructionJournalNotifier
         project: payload.project,
       );
     } catch (error) {
-      state = state.copyWith(isLoading: false, error: error.toString());
+      state = state.copyWith(
+        isLoading: false,
+        permissionDenied: _isPermissionDenied(error),
+        error: _errorMessage(error),
+      );
     }
   }
 }
@@ -96,6 +110,7 @@ class ConstructionJournalDetailState {
     this.entriesSummary = const ConstructionJournalSummary(),
     this.entriesMeta,
     this.availableActions = const [],
+    this.permissionDenied = false,
     this.error,
   });
 
@@ -104,7 +119,8 @@ class ConstructionJournalDetailState {
   final List<ConstructionJournalEntryModel> entries;
   final ConstructionJournalSummary entriesSummary;
   final JournalPaginationMeta? entriesMeta;
-  final List<String> availableActions;
+  final List<ConstructionJournalActionModel> availableActions;
+  final bool permissionDenied;
   final String? error;
 
   ConstructionJournalDetailState copyWith({
@@ -113,7 +129,8 @@ class ConstructionJournalDetailState {
     List<ConstructionJournalEntryModel>? entries,
     ConstructionJournalSummary? entriesSummary,
     Object? entriesMeta = _sentinel,
-    List<String>? availableActions,
+    List<ConstructionJournalActionModel>? availableActions,
+    bool? permissionDenied,
     Object? error = _sentinel,
   }) {
     return ConstructionJournalDetailState(
@@ -129,6 +146,7 @@ class ConstructionJournalDetailState {
               ? this.entriesMeta
               : entriesMeta as JournalPaginationMeta?,
       availableActions: availableActions ?? this.availableActions,
+      permissionDenied: permissionDenied ?? this.permissionDenied,
       error: identical(error, _sentinel) ? this.error : error as String?,
     );
   }
@@ -154,7 +172,11 @@ class ConstructionJournalDetailNotifier
   final int _journalId;
 
   Future<void> load() async {
-    state = state.copyWith(isLoading: true, error: null);
+    state = state.copyWith(
+      isLoading: true,
+      permissionDenied: false,
+      error: null,
+    );
 
     try {
       final payload = await _repository.fetchJournalDetail(_journalId);
@@ -167,7 +189,11 @@ class ConstructionJournalDetailNotifier
         availableActions: payload.availableActions,
       );
     } catch (error) {
-      state = state.copyWith(isLoading: false, error: error.toString());
+      state = state.copyWith(
+        isLoading: false,
+        permissionDenied: _isPermissionDenied(error),
+        error: _errorMessage(error),
+      );
     }
   }
 }
@@ -176,16 +202,19 @@ class ConstructionJournalEntryDetailState {
   const ConstructionJournalEntryDetailState({
     this.isLoading = false,
     this.entry,
+    this.permissionDenied = false,
     this.error,
   });
 
   final bool isLoading;
   final ConstructionJournalEntryModel? entry;
+  final bool permissionDenied;
   final String? error;
 
   ConstructionJournalEntryDetailState copyWith({
     bool? isLoading,
     Object? entry = _sentinel,
+    bool? permissionDenied,
     Object? error = _sentinel,
   }) {
     return ConstructionJournalEntryDetailState(
@@ -194,6 +223,7 @@ class ConstructionJournalEntryDetailState {
           identical(entry, _sentinel)
               ? this.entry
               : entry as ConstructionJournalEntryModel?,
+      permissionDenied: permissionDenied ?? this.permissionDenied,
       error: identical(error, _sentinel) ? this.error : error as String?,
     );
   }
@@ -219,13 +249,37 @@ class ConstructionJournalEntryDetailNotifier
   final int _entryId;
 
   Future<void> load() async {
-    state = state.copyWith(isLoading: true, error: null);
+    state = state.copyWith(
+      isLoading: true,
+      permissionDenied: false,
+      error: null,
+    );
 
     try {
       final entry = await _repository.fetchEntryDetail(_entryId);
       state = state.copyWith(isLoading: false, entry: entry);
     } catch (error) {
-      state = state.copyWith(isLoading: false, error: error.toString());
+      state = state.copyWith(
+        isLoading: false,
+        permissionDenied: _isPermissionDenied(error),
+        error: _errorMessage(error),
+      );
     }
   }
+}
+
+bool _isPermissionDenied(Object error) {
+  return error is ApiException && error.statusCode == 403;
+}
+
+String _errorMessage(Object error) {
+  if (error is ApiException) {
+    return error.message;
+  }
+
+  if (error is FormatException) {
+    return 'Данные журнала работ пришли неполными. Обновите экран и повторите попытку.';
+  }
+
+  return 'Не удалось обработать данные журнала работ.';
 }

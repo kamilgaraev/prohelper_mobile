@@ -1,3 +1,40 @@
+abstract final class ConstructionJournalActionKeys {
+  static const view = 'view';
+  static const create = 'create';
+  static const update = 'update';
+  static const delete = 'delete';
+  static const export = 'export';
+  static const createEntry = 'create_entry';
+  static const submit = 'submit';
+  static const approve = 'approve';
+  static const reject = 'reject';
+  static const exportDailyReport = 'export_daily_report';
+}
+
+class ConstructionJournalActionModel {
+  const ConstructionJournalActionModel({
+    required this.action,
+    required this.label,
+  });
+
+  final String action;
+  final String label;
+
+  factory ConstructionJournalActionModel.fromJson(Map<String, dynamic> json) {
+    return ConstructionJournalActionModel(
+      action: _requiredKnownString(json, 'action', _journalActions),
+      label: _requiredCleanLabel(json, 'label'),
+    );
+  }
+}
+
+extension ConstructionJournalActionListX
+    on Iterable<ConstructionJournalActionModel> {
+  bool hasAction(String action) {
+    return any((item) => item.action == action);
+  }
+}
+
 class JournalPaginationMeta {
   const JournalPaginationMeta({
     required this.currentPage,
@@ -13,10 +50,10 @@ class JournalPaginationMeta {
 
   factory JournalPaginationMeta.fromJson(Map<String, dynamic> json) {
     return JournalPaginationMeta(
-      currentPage: (json['current_page'] as num?)?.toInt() ?? 1,
-      perPage: (json['per_page'] as num?)?.toInt() ?? 0,
-      lastPage: (json['last_page'] as num?)?.toInt() ?? 1,
-      total: (json['total'] as num?)?.toInt() ?? 0,
+      currentPage: _requiredInt(json, 'current_page'),
+      perPage: _requiredInt(json, 'per_page'),
+      lastPage: _requiredInt(json, 'last_page'),
+      total: _requiredInt(json, 'total'),
     );
   }
 }
@@ -42,16 +79,25 @@ class ConstructionJournalSummary {
   final int submittedEntries;
   final int rejectedEntries;
 
-  factory ConstructionJournalSummary.fromJson(Map<String, dynamic> json) {
+  factory ConstructionJournalSummary.fromJournalListJson(
+    Map<String, dynamic> json,
+  ) {
     return ConstructionJournalSummary(
-      totalJournals: (json['total_journals'] as num?)?.toInt() ?? 0,
-      activeJournals: (json['active_journals'] as num?)?.toInt() ?? 0,
-      archivedJournals: (json['archived_journals'] as num?)?.toInt() ?? 0,
-      closedJournals: (json['closed_journals'] as num?)?.toInt() ?? 0,
-      totalEntries: (json['total_entries'] as num?)?.toInt() ?? 0,
-      approvedEntries: (json['approved_entries'] as num?)?.toInt() ?? 0,
-      submittedEntries: (json['submitted_entries'] as num?)?.toInt() ?? 0,
-      rejectedEntries: (json['rejected_entries'] as num?)?.toInt() ?? 0,
+      totalJournals: _requiredInt(json, 'total_journals'),
+      activeJournals: _requiredInt(json, 'active_journals'),
+      archivedJournals: _requiredInt(json, 'archived_journals'),
+      closedJournals: _requiredInt(json, 'closed_journals'),
+    );
+  }
+
+  factory ConstructionJournalSummary.fromEntriesJson(
+    Map<String, dynamic> json,
+  ) {
+    return ConstructionJournalSummary(
+      totalEntries: _requiredInt(json, 'total_entries'),
+      approvedEntries: _requiredInt(json, 'approved_entries'),
+      submittedEntries: _requiredInt(json, 'submitted_entries'),
+      rejectedEntries: _requiredInt(json, 'rejected_entries'),
     );
   }
 }
@@ -64,8 +110,8 @@ class ConstructionJournalProjectRef {
 
   factory ConstructionJournalProjectRef.fromJson(Map<String, dynamic> json) {
     return ConstructionJournalProjectRef(
-      id: (json['id'] as num?)?.toInt() ?? 0,
-      name: json['name'] as String? ?? '',
+      id: _requiredInt(json, 'id'),
+      name: _requiredString(json, 'name'),
     );
   }
 }
@@ -87,10 +133,10 @@ class ConstructionJournalScheduleTaskRef {
     Map<String, dynamic> json,
   ) {
     return ConstructionJournalScheduleTaskRef(
-      id: (json['id'] as num?)?.toInt() ?? 0,
-      name: json['name'] as String? ?? '',
-      quantity: _parseNullableDouble(json['quantity']),
-      measurementUnit: json['measurement_unit'] as String?,
+      id: _requiredInt(json, 'id'),
+      name: _requiredString(json, 'name'),
+      quantity: _asNullableDouble(json['quantity']),
+      measurementUnit: _asNullableString(json['measurement_unit']),
     );
   }
 }
@@ -106,16 +152,18 @@ class ConstructionJournalMeasurementUnitRef {
   final String name;
   final String? shortName;
 
-  String get displayName =>
-      (shortName ?? '').trim().isNotEmpty ? shortName!.trim() : name;
+  String get displayName {
+    final short = shortName?.trim();
+    return short == null || short.isEmpty ? name : short;
+  }
 
   factory ConstructionJournalMeasurementUnitRef.fromJson(
     Map<String, dynamic> json,
   ) {
     return ConstructionJournalMeasurementUnitRef(
-      id: (json['id'] as num?)?.toInt() ?? 0,
-      name: json['name'] as String? ?? '',
-      shortName: json['short_name'] as String?,
+      id: _requiredInt(json, 'id'),
+      name: _requiredString(json, 'name'),
+      shortName: _asNullableString(json['short_name']),
     );
   }
 }
@@ -136,14 +184,17 @@ class ConstructionJournalWorkTypeOption {
   factory ConstructionJournalWorkTypeOption.fromJson(
     Map<String, dynamic> json,
   ) {
-    final measurementUnitPayload = _asMap(json['measurementUnit']);
+    final measurementUnitPayload = _optionalMap(
+      json['measurementUnit'],
+      'measurementUnit',
+    );
 
     return ConstructionJournalWorkTypeOption(
-      id: (json['id'] as num?)?.toInt() ?? 0,
-      name: json['name'] as String? ?? '',
-      measurementUnitId: (json['measurement_unit_id'] as num?)?.toInt(),
+      id: _requiredInt(json, 'id'),
+      name: _requiredString(json, 'name'),
+      measurementUnitId: _asNullableInt(json['measurement_unit_id']),
       measurementUnit:
-          measurementUnitPayload.isEmpty
+          measurementUnitPayload == null
               ? null
               : ConstructionJournalMeasurementUnitRef.fromJson(
                 measurementUnitPayload,
@@ -157,20 +208,24 @@ class ConstructionJournalEstimateItemOption {
     required this.id,
     required this.estimateId,
     required this.name,
+    required this.itemType,
+    required this.quantity,
+    required this.quantityTotal,
+    required this.contractLinks,
     this.positionNumber,
-    this.quantity = 0,
     this.workTypeId,
     this.measurementUnitId,
     this.workType,
     this.measurementUnit,
-    this.contractLinks = const [],
   });
 
   final int id;
   final int estimateId;
   final String name;
+  final String itemType;
   final String? positionNumber;
   final double quantity;
+  final double quantityTotal;
   final int? workTypeId;
   final int? measurementUnitId;
   final ConstructionJournalWorkTypeOption? workType;
@@ -178,45 +233,40 @@ class ConstructionJournalEstimateItemOption {
   final List<Map<String, dynamic>> contractLinks;
 
   String get displayName {
-    final position = (positionNumber ?? '').trim();
-    return position.isEmpty ? name : '$position - $name';
+    final position = positionNumber?.trim();
+    return position == null || position.isEmpty ? name : '$position - $name';
   }
 
   factory ConstructionJournalEstimateItemOption.fromJson(
     Map<String, dynamic> json,
   ) {
-    final workTypePayload = _asMap(json['workType']);
-    final measurementUnitPayload = _asMap(json['measurementUnit']);
+    final workTypePayload = _optionalMap(json['workType'], 'workType');
+    final measurementUnitPayload = _optionalMap(
+      json['measurementUnit'],
+      'measurementUnit',
+    );
 
     return ConstructionJournalEstimateItemOption(
-      id: (json['id'] as num?)?.toInt() ?? 0,
-      estimateId: (json['estimate_id'] as num?)?.toInt() ?? 0,
-      name: json['name'] as String? ?? '',
-      positionNumber: json['position_number'] as String?,
-      quantity:
-          _parseNullableDouble(json['quantity']) ??
-          _parseNullableDouble(json['quantity_total']) ??
-          0,
-      workTypeId: (json['work_type_id'] as num?)?.toInt(),
-      measurementUnitId: (json['measurement_unit_id'] as num?)?.toInt(),
+      id: _requiredInt(json, 'id'),
+      estimateId: _requiredInt(json, 'estimate_id'),
+      name: _requiredString(json, 'name'),
+      itemType: _requiredKnownString(json, 'item_type', _estimateItemTypes),
+      positionNumber: _asNullableString(json['position_number']),
+      quantity: _requiredDouble(json, 'quantity'),
+      quantityTotal: _requiredDouble(json, 'quantity_total'),
+      workTypeId: _asNullableInt(json['work_type_id']),
+      measurementUnitId: _asNullableInt(json['measurement_unit_id']),
       workType:
-          workTypePayload.isEmpty
+          workTypePayload == null
               ? null
               : ConstructionJournalWorkTypeOption.fromJson(workTypePayload),
       measurementUnit:
-          measurementUnitPayload.isEmpty
+          measurementUnitPayload == null
               ? null
               : ConstructionJournalMeasurementUnitRef.fromJson(
                 measurementUnitPayload,
               ),
-      contractLinks:
-          (json['contract_links'] as List<dynamic>? ?? const [])
-              .whereType<Map>()
-              .map(
-                (item) =>
-                    item.map((key, value) => MapEntry(key.toString(), value)),
-              )
-              .toList(),
+      contractLinks: _requiredRawMapList(json, 'contract_links'),
     );
   }
 }
@@ -225,8 +275,8 @@ class ConstructionJournalEstimateOption {
   const ConstructionJournalEstimateOption({
     required this.id,
     required this.name,
+    required this.items,
     this.number,
-    this.items = const [],
   });
 
   final int id;
@@ -235,27 +285,24 @@ class ConstructionJournalEstimateOption {
   final List<ConstructionJournalEstimateItemOption> items;
 
   String get displayName {
-    final label = (name.trim().isNotEmpty ? name : 'Смета #$id').trim();
-    final estimateNumber = (number ?? '').trim();
-    return estimateNumber.isEmpty ? label : '$estimateNumber - $label';
+    final estimateNumber = number?.trim();
+    return estimateNumber == null || estimateNumber.isEmpty
+        ? name
+        : '$estimateNumber - $name';
   }
 
   factory ConstructionJournalEstimateOption.fromJson(
     Map<String, dynamic> json,
   ) {
     return ConstructionJournalEstimateOption(
-      id: (json['id'] as num?)?.toInt() ?? 0,
-      name: json['name'] as String? ?? '',
-      number: json['number'] as String?,
+      id: _requiredInt(json, 'id'),
+      name: _requiredString(json, 'name'),
+      number: _asNullableString(json['number']),
       items:
-          (json['items'] as List<dynamic>? ?? const [])
-              .whereType<Map>()
-              .map(
-                (item) => ConstructionJournalEstimateItemOption.fromJson(
-                  item.map((key, value) => MapEntry(key.toString(), value)),
-                ),
-              )
-              .toList(),
+          _requiredList(
+            json,
+            'items',
+          ).map(ConstructionJournalEstimateItemOption.fromJson).toList(),
     );
   }
 }
@@ -264,7 +311,7 @@ class ConstructionJournalEntryFormOptions {
   const ConstructionJournalEntryFormOptions({
     required this.estimates,
     required this.workTypes,
-    this.projectMaterials = const [],
+    required this.projectMaterials,
   });
 
   final List<ConstructionJournalEstimateOption> estimates;
@@ -276,33 +323,20 @@ class ConstructionJournalEntryFormOptions {
   ) {
     return ConstructionJournalEntryFormOptions(
       estimates:
-          (json['estimates'] as List<dynamic>? ?? const [])
-              .whereType<Map>()
-              .map(
-                (estimate) => ConstructionJournalEstimateOption.fromJson(
-                  estimate.map((key, value) => MapEntry(key.toString(), value)),
-                ),
-              )
-              .toList(),
+          _requiredList(
+            json,
+            'estimates',
+          ).map(ConstructionJournalEstimateOption.fromJson).toList(),
       workTypes:
-          (json['work_types'] as List<dynamic>? ?? const [])
-              .whereType<Map>()
-              .map(
-                (workType) => ConstructionJournalWorkTypeOption.fromJson(
-                  workType.map((key, value) => MapEntry(key.toString(), value)),
-                ),
-              )
-              .toList(),
+          _requiredList(
+            json,
+            'work_types',
+          ).map(ConstructionJournalWorkTypeOption.fromJson).toList(),
       projectMaterials:
-          (json['project_materials'] as List<dynamic>? ?? const [])
-              .whereType<Map>()
-              .map(
-                (material) => ConstructionJournalProjectMaterialOption.fromJson(
-                  material.map((key, value) => MapEntry(key.toString(), value)),
-                ),
-              )
-              .where((material) => material.materialId > 0)
-              .toList(),
+          _requiredList(
+            json,
+            'project_materials',
+          ).map(ConstructionJournalProjectMaterialOption.fromJson).toList(),
     );
   }
 }
@@ -329,24 +363,18 @@ class ConstructionJournalProjectMaterialOption {
   factory ConstructionJournalProjectMaterialOption.fromJson(
     Map<String, dynamic> json,
   ) {
-    final measurementUnit = _asMap(json['measurement_unit']);
+    final measurementUnit = _requiredMap(json, 'measurement_unit');
+    final shortName = _asNullableString(measurementUnit['short_name']);
+    final unitName = _requiredString(measurementUnit, 'name');
 
     return ConstructionJournalProjectMaterialOption(
-      deliveryId:
-          (json['delivery_id'] as num?)?.toInt() ??
-          (json['project_material_delivery_id'] as num?)?.toInt() ??
-          0,
-      materialId: (json['material_id'] as num?)?.toInt() ?? 0,
-      materialName:
-          json['material_name'] as String? ?? json['name'] as String? ?? '',
-      availableQuantity: _parseNullableDouble(json['available_quantity']) ?? 0,
-      measurementUnit:
-          measurementUnit['short_name'] as String? ??
-          measurementUnit['name'] as String? ??
-          json['measurement_unit'] as String? ??
-          '',
-      status: json['status'] as String?,
-      acceptedAt: json['accepted_at'] as String?,
+      deliveryId: _requiredInt(json, 'delivery_id'),
+      materialId: _requiredInt(json, 'material_id'),
+      materialName: _requiredString(json, 'name'),
+      availableQuantity: _requiredDouble(json, 'available_quantity'),
+      measurementUnit: shortName ?? unitName,
+      status: _asNullableString(json['status']),
+      acceptedAt: _asNullableString(json['accepted_at']),
     );
   }
 }
@@ -386,7 +414,7 @@ class ConstructionJournalWorkVolumeModel {
     this.id,
     this.estimateItemId,
     this.workTypeId,
-    this.quantity = 0,
+    required this.quantity,
     this.measurementUnitId,
     this.notes,
     this.title,
@@ -416,20 +444,15 @@ class ConstructionJournalWorkVolumeModel {
   factory ConstructionJournalWorkVolumeModel.fromJson(
     Map<String, dynamic> json,
   ) {
-    final estimateItem = _asMap(json['estimateItem']);
-    final workType = _asMap(json['workType']);
-    final measurementUnit = _asMap(json['measurementUnit']);
-
     return ConstructionJournalWorkVolumeModel(
-      id: (json['id'] as num?)?.toInt(),
-      estimateItemId: (json['estimate_item_id'] as num?)?.toInt(),
-      workTypeId: (json['work_type_id'] as num?)?.toInt(),
-      quantity: _parseNullableDouble(json['quantity']) ?? 0,
-      measurementUnitId: (json['measurement_unit_id'] as num?)?.toInt(),
-      notes: json['notes'] as String?,
-      title: (estimateItem['name'] ?? workType['name']) as String?,
-      measurementUnitName:
-          (measurementUnit['short_name'] ?? measurementUnit['name']) as String?,
+      id: _asNullableInt(json['id']),
+      estimateItemId: _asNullableInt(json['estimate_item_id']),
+      workTypeId: _asNullableInt(json['work_type_id']),
+      quantity: _requiredDouble(json, 'quantity'),
+      measurementUnitId: _asNullableInt(json['measurement_unit_id']),
+      notes: _asNullableString(json['notes']),
+      title: _requiredString(json, 'title'),
+      measurementUnitName: _requiredString(json, 'measurement_unit_name'),
     );
   }
 }
@@ -451,11 +474,11 @@ class ConstructionJournalBlockerModel {
 
   factory ConstructionJournalBlockerModel.fromJson(Map<String, dynamic> json) {
     return ConstructionJournalBlockerModel(
-      code: json['code'] as String? ?? '',
-      message: json['message'] as String? ?? '',
-      target: json['target'] as String? ?? '',
-      canOverride: json['can_override'] == true,
-      journalWorkVolumeId: (json['journal_work_volume_id'] as num?)?.toInt(),
+      code: _requiredString(json, 'code'),
+      message: _requiredCleanLabel(json, 'message'),
+      target: _requiredString(json, 'target'),
+      canOverride: _requiredBool(json, 'can_override'),
+      journalWorkVolumeId: _asNullableInt(json['journal_work_volume_id']),
     );
   }
 }
@@ -468,15 +491,16 @@ class ConstructionJournalModel {
     required this.journalNumber,
     required this.startDate,
     required this.status,
+    required this.statusLabel,
+    required this.totalEntries,
+    required this.approvedEntries,
+    required this.submittedEntries,
+    required this.rejectedEntries,
+    required this.availableActions,
     this.endDate,
     this.project,
     this.contractNumber,
     this.createdByName,
-    this.totalEntries = 0,
-    this.approvedEntries = 0,
-    this.submittedEntries = 0,
-    this.rejectedEntries = 0,
-    this.availableActions = const [],
   });
 
   final int id;
@@ -486,6 +510,7 @@ class ConstructionJournalModel {
   final String startDate;
   final String? endDate;
   final String status;
+  final String statusLabel;
   final ConstructionJournalProjectRef? project;
   final String? contractNumber;
   final String? createdByName;
@@ -493,40 +518,47 @@ class ConstructionJournalModel {
   final int approvedEntries;
   final int submittedEntries;
   final int rejectedEntries;
-  final List<String> availableActions;
+  final List<ConstructionJournalActionModel> availableActions;
+
+  bool hasAction(String action) {
+    return availableActions.hasAction(action);
+  }
 
   factory ConstructionJournalModel.fromJson(Map<String, dynamic> json) {
-    final projectPayload = json['project'];
-    final contractPayload = json['contract'];
-    final createdByPayload = json['createdBy'];
+    final projectPayload = _optionalMap(json['project'], 'project');
+    final contractPayload = _optionalMap(json['contract'], 'contract');
+    final createdByPayload = _optionalMap(json['createdBy'], 'createdBy');
 
     return ConstructionJournalModel(
-      id: (json['id'] as num?)?.toInt() ?? 0,
-      projectId: (json['project_id'] as num?)?.toInt() ?? 0,
-      name: json['name'] as String? ?? '',
-      journalNumber: json['journal_number'] as String? ?? '',
-      startDate: json['start_date'] as String? ?? '',
-      endDate: json['end_date'] as String?,
-      status: json['status'] as String? ?? '',
+      id: _requiredInt(json, 'id'),
+      projectId: _requiredInt(json, 'project_id'),
+      name: _requiredString(json, 'name'),
+      journalNumber: _requiredText(json, 'journal_number', allowEmpty: true),
+      startDate: _requiredString(json, 'start_date'),
+      endDate: _asNullableString(json['end_date']),
+      status: _requiredKnownString(json, 'status', _journalStatuses),
+      statusLabel: _requiredCleanLabel(json, 'status_label'),
       project:
-          projectPayload is Map<String, dynamic>
-              ? ConstructionJournalProjectRef.fromJson(projectPayload)
-              : projectPayload is Map
-              ? ConstructionJournalProjectRef.fromJson(
-                projectPayload.map(
-                  (key, value) => MapEntry(key.toString(), value),
-                ),
-              )
-              : null,
+          projectPayload == null
+              ? null
+              : ConstructionJournalProjectRef.fromJson(projectPayload),
       contractNumber:
-          contractPayload is Map ? contractPayload['number'] as String? : null,
+          contractPayload == null
+              ? null
+              : _asNullableString(contractPayload['number']),
       createdByName:
-          createdByPayload is Map ? createdByPayload['name'] as String? : null,
-      totalEntries: (json['total_entries'] as num?)?.toInt() ?? 0,
-      approvedEntries: (json['approved_entries'] as num?)?.toInt() ?? 0,
-      submittedEntries: (json['submitted_entries'] as num?)?.toInt() ?? 0,
-      rejectedEntries: (json['rejected_entries'] as num?)?.toInt() ?? 0,
-      availableActions: _parseActions(json['available_actions']),
+          createdByPayload == null
+              ? null
+              : _asNullableString(createdByPayload['name']),
+      totalEntries: _requiredInt(json, 'total_entries'),
+      approvedEntries: _requiredInt(json, 'approved_entries'),
+      submittedEntries: _requiredInt(json, 'submitted_entries'),
+      rejectedEntries: _requiredInt(json, 'rejected_entries'),
+      availableActions:
+          _requiredList(
+            json,
+            'available_actions',
+          ).map(ConstructionJournalActionModel.fromJson).toList(),
     );
   }
 }
@@ -539,6 +571,11 @@ class ConstructionJournalEntryModel {
     required this.entryNumber,
     required this.workDescription,
     required this.status,
+    required this.statusLabel,
+    required this.workflowState,
+    required this.workVolumes,
+    required this.blockers,
+    required this.availableActions,
     this.rejectionReason,
     this.createdByName,
     this.approvedByName,
@@ -548,10 +585,6 @@ class ConstructionJournalEntryModel {
     this.safetyNotes,
     this.visitorsNotes,
     this.qualityNotes,
-    this.workflowState,
-    this.workVolumes = const [],
-    this.blockers = const [],
-    this.availableActions = const [],
   });
 
   final int id;
@@ -560,6 +593,8 @@ class ConstructionJournalEntryModel {
   final int entryNumber;
   final String workDescription;
   final String status;
+  final String statusLabel;
+  final String workflowState;
   final String? rejectionReason;
   final String? createdByName;
   final String? approvedByName;
@@ -569,63 +604,70 @@ class ConstructionJournalEntryModel {
   final String? safetyNotes;
   final String? visitorsNotes;
   final String? qualityNotes;
-  final String? workflowState;
   final List<ConstructionJournalWorkVolumeModel> workVolumes;
   final List<ConstructionJournalBlockerModel> blockers;
-  final List<String> availableActions;
+  final List<ConstructionJournalActionModel> availableActions;
+
+  bool hasAction(String action) {
+    return availableActions.hasAction(action);
+  }
 
   factory ConstructionJournalEntryModel.fromJson(Map<String, dynamic> json) {
-    final createdByPayload = json['createdBy'];
-    final approvedByPayload = json['approvedBy'];
-    final scheduleTaskPayload = _asMap(json['scheduleTask']);
+    final createdByPayload = _optionalMap(json['createdBy'], 'createdBy');
+    final approvedByPayload = _optionalMap(json['approvedBy'], 'approvedBy');
+    final scheduleTaskPayload = _optionalMap(
+      json['scheduleTask'],
+      'scheduleTask',
+    );
 
     return ConstructionJournalEntryModel(
-      id: (json['id'] as num?)?.toInt() ?? 0,
-      journalId: (json['journal_id'] as num?)?.toInt() ?? 0,
-      entryDate: json['entry_date'] as String? ?? '',
-      entryNumber: (json['entry_number'] as num?)?.toInt() ?? 0,
-      workDescription: json['work_description'] as String? ?? '',
-      status: json['status'] as String? ?? '',
-      rejectionReason: json['rejection_reason'] as String?,
+      id: _requiredInt(json, 'id'),
+      journalId: _requiredInt(json, 'journal_id'),
+      entryDate: _requiredString(json, 'entry_date'),
+      entryNumber: _requiredInt(json, 'entry_number'),
+      workDescription: _requiredString(json, 'work_description'),
+      status: _requiredKnownString(json, 'status', _entryStatuses),
+      statusLabel: _requiredCleanLabel(json, 'status_label'),
+      rejectionReason: _asNullableString(json['rejection_reason']),
       createdByName:
-          createdByPayload is Map ? createdByPayload['name'] as String? : null,
+          createdByPayload == null
+              ? null
+              : _asNullableString(createdByPayload['name']),
       approvedByName:
-          approvedByPayload is Map
-              ? approvedByPayload['name'] as String?
-              : null,
+          approvedByPayload == null
+              ? null
+              : _asNullableString(approvedByPayload['name']),
       scheduleTask:
-          scheduleTaskPayload.isEmpty
+          scheduleTaskPayload == null
               ? null
               : ConstructionJournalScheduleTaskRef.fromJson(
                 scheduleTaskPayload,
               ),
-      estimateId: (json['estimate_id'] as num?)?.toInt(),
-      problemsDescription: json['problems_description'] as String?,
-      safetyNotes: json['safety_notes'] as String?,
-      visitorsNotes: json['visitors_notes'] as String?,
-      qualityNotes: json['quality_notes'] as String?,
-      workflowState: json['workflow_state'] as String?,
+      estimateId: _asNullableInt(json['estimate_id']),
+      problemsDescription: _asNullableString(json['problems_description']),
+      safetyNotes: _asNullableString(json['safety_notes']),
+      visitorsNotes: _asNullableString(json['visitors_notes']),
+      qualityNotes: _asNullableString(json['quality_notes']),
+      workflowState: _requiredKnownString(
+        json,
+        'workflow_state',
+        _workflowStates,
+      ),
       workVolumes:
-          ((json['workVolumes'] as List<dynamic>?) ??
-                  (json['work_volumes'] as List<dynamic>?) ??
-                  const [])
-              .whereType<Map>()
-              .map(
-                (volume) => ConstructionJournalWorkVolumeModel.fromJson(
-                  volume.map((key, value) => MapEntry(key.toString(), value)),
-                ),
-              )
-              .toList(),
+          _requiredList(
+            json,
+            'workVolumes',
+          ).map(ConstructionJournalWorkVolumeModel.fromJson).toList(),
       blockers:
-          (json['blockers'] as List<dynamic>? ?? const [])
-              .whereType<Map>()
-              .map(
-                (blocker) => ConstructionJournalBlockerModel.fromJson(
-                  blocker.map((key, value) => MapEntry(key.toString(), value)),
-                ),
-              )
-              .toList(),
-      availableActions: _parseActions(json['available_actions']),
+          _requiredList(
+            json,
+            'blockers',
+          ).map(ConstructionJournalBlockerModel.fromJson).toList(),
+      availableActions:
+          _requiredList(
+            json,
+            'available_actions',
+          ).map(ConstructionJournalActionModel.fromJson).toList(),
     );
   }
 }
@@ -636,14 +678,14 @@ class ConstructionJournalListPayload {
     required this.meta,
     required this.summary,
     required this.availableActions,
-    this.project,
+    required this.project,
   });
 
   final List<ConstructionJournalModel> items;
   final JournalPaginationMeta meta;
   final ConstructionJournalSummary summary;
-  final List<String> availableActions;
-  final ConstructionJournalProjectRef? project;
+  final List<ConstructionJournalActionModel> availableActions;
+  final ConstructionJournalProjectRef project;
 }
 
 class ConstructionJournalDetailPayload {
@@ -659,32 +701,101 @@ class ConstructionJournalDetailPayload {
   final List<ConstructionJournalEntryModel> entries;
   final JournalPaginationMeta entriesMeta;
   final ConstructionJournalSummary entriesSummary;
-  final List<String> availableActions;
+  final List<ConstructionJournalActionModel> availableActions;
 }
 
-List<String> _parseActions(dynamic payload) {
-  if (payload is! List) {
-    return const [];
+Map<String, dynamic> _requiredMap(Map<String, dynamic> json, String key) {
+  final value = json[key];
+  if (value is Map<String, dynamic>) {
+    return value;
   }
 
-  return payload.whereType<String>().toList();
+  if (value is Map) {
+    return value.map((key, value) => MapEntry(key.toString(), value));
+  }
+
+  throw FormatException('Construction journal field "$key" must be an object.');
 }
 
-Map<String, dynamic> _asMap(dynamic payload) {
-  if (payload is Map<String, dynamic>) {
-    return payload;
-  }
-
-  if (payload is Map) {
-    return payload.map((key, value) => MapEntry(key.toString(), value));
-  }
-
-  return const {};
-}
-
-double? _parseNullableDouble(dynamic value) {
+Map<String, dynamic>? _optionalMap(dynamic value, String key) {
   if (value == null) {
     return null;
+  }
+
+  if (value is Map<String, dynamic>) {
+    return value;
+  }
+
+  if (value is Map) {
+    return value.map((key, value) => MapEntry(key.toString(), value));
+  }
+
+  throw FormatException('Construction journal field "$key" must be an object.');
+}
+
+List<Map<String, dynamic>> _requiredList(
+  Map<String, dynamic> json,
+  String key,
+) {
+  final value = json[key];
+  if (value is! List) {
+    throw FormatException('Construction journal field "$key" must be a list.');
+  }
+
+  return value.map((item) {
+    if (item is Map<String, dynamic>) {
+      return item;
+    }
+
+    if (item is Map) {
+      return item.map((key, value) => MapEntry(key.toString(), value));
+    }
+
+    throw FormatException(
+      'Construction journal field "$key" must contain objects.',
+    );
+  }).toList();
+}
+
+List<Map<String, dynamic>> _requiredRawMapList(
+  Map<String, dynamic> json,
+  String key,
+) {
+  return _requiredList(json, key).map(Map<String, dynamic>.from).toList();
+}
+
+int? _asNullableInt(dynamic value) {
+  if (value == null) {
+    return null;
+  }
+
+  if (value is int) {
+    return value;
+  }
+
+  if (value is num) {
+    return value.toInt();
+  }
+
+  return int.tryParse(value.toString());
+}
+
+int _requiredInt(Map<String, dynamic> json, String key) {
+  final value = _asNullableInt(json[key]);
+  if (value == null) {
+    throw FormatException('Construction journal field "$key" is required.');
+  }
+
+  return value;
+}
+
+double? _asNullableDouble(dynamic value) {
+  if (value == null) {
+    return null;
+  }
+
+  if (value is double) {
+    return value;
   }
 
   if (value is num) {
@@ -693,3 +804,119 @@ double? _parseNullableDouble(dynamic value) {
 
   return double.tryParse(value.toString().replaceAll(',', '.'));
 }
+
+double _requiredDouble(Map<String, dynamic> json, String key) {
+  final value = _asNullableDouble(json[key]);
+  if (value == null) {
+    throw FormatException('Construction journal field "$key" is required.');
+  }
+
+  return value;
+}
+
+bool? _asNullableBool(dynamic value) {
+  if (value == null) {
+    return null;
+  }
+
+  if (value is bool) {
+    return value;
+  }
+
+  if (value is num) {
+    return value != 0;
+  }
+
+  final normalized = value.toString().toLowerCase().trim();
+  if (normalized == 'true' || normalized == '1') {
+    return true;
+  }
+  if (normalized == 'false' || normalized == '0') {
+    return false;
+  }
+
+  return null;
+}
+
+bool _requiredBool(Map<String, dynamic> json, String key) {
+  final value = _asNullableBool(json[key]);
+  if (value == null) {
+    throw FormatException('Construction journal field "$key" is required.');
+  }
+
+  return value;
+}
+
+String? _asNullableString(dynamic value) {
+  final normalized = value?.toString().trim() ?? '';
+  return normalized.isEmpty ? null : normalized;
+}
+
+String _requiredText(
+  Map<String, dynamic> json,
+  String key, {
+  bool allowEmpty = false,
+}) {
+  if (!json.containsKey(key) || json[key] == null) {
+    throw FormatException('Construction journal field "$key" is required.');
+  }
+
+  final value = json[key].toString().trim();
+  if (!allowEmpty && value.isEmpty) {
+    throw FormatException('Construction journal field "$key" is required.');
+  }
+
+  return value;
+}
+
+String _requiredString(Map<String, dynamic> json, String key) {
+  return _requiredText(json, key);
+}
+
+String _requiredKnownString(
+  Map<String, dynamic> json,
+  String key,
+  Set<String> allowedValues,
+) {
+  final value = _requiredString(json, key);
+  if (!allowedValues.contains(value)) {
+    throw FormatException(
+      'Construction journal field "$key" has unknown value.',
+    );
+  }
+
+  return value;
+}
+
+String _requiredCleanLabel(Map<String, dynamic> json, String key) {
+  final value = _requiredString(json, key);
+  if (value.startsWith('construction_journal.') ||
+      value.startsWith('mobile_construction_journal.')) {
+    throw FormatException(
+      'Construction journal field "$key" must be readable.',
+    );
+  }
+
+  return value;
+}
+
+const _journalStatuses = {'active', 'archived', 'closed'};
+
+const _entryStatuses = {'draft', 'submitted', 'approved', 'rejected'};
+
+const _workflowStates = {'ready', 'blocked'};
+
+const _estimateItemTypes = {'work'};
+
+const _journalActions = {
+  ConstructionJournalActionKeys.view,
+  ConstructionJournalActionKeys.create,
+  ConstructionJournalActionKeys.update,
+  ConstructionJournalActionKeys.delete,
+  ConstructionJournalActionKeys.export,
+  ConstructionJournalActionKeys.createEntry,
+  ConstructionJournalActionKeys.submit,
+  ConstructionJournalActionKeys.approve,
+  ConstructionJournalActionKeys.reject,
+  ConstructionJournalActionKeys.exportDailyReport,
+};

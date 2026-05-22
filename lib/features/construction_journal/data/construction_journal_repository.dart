@@ -32,29 +32,23 @@ class ConstructionJournalRepository {
       );
 
       final data = _extractMap(MobileApiResponse.payload(response.data));
-      final items =
-          _extractList(
-            data['items'],
-          ).map(ConstructionJournalModel.fromJson).toList();
-      final projectData = data['project'];
 
       return ConstructionJournalListPayload(
-        items: items,
+        items:
+            _extractList(
+              data['items'],
+            ).map(ConstructionJournalModel.fromJson).toList(),
         meta: JournalPaginationMeta.fromJson(_extractMap(data['meta'])),
-        summary: ConstructionJournalSummary.fromJson(
+        summary: ConstructionJournalSummary.fromJournalListJson(
           _extractMap(data['summary']),
         ),
-        availableActions: _extractStringList(data['available_actions']),
-        project:
-            projectData is Map<String, dynamic>
-                ? ConstructionJournalProjectRef.fromJson(projectData)
-                : projectData is Map
-                ? ConstructionJournalProjectRef.fromJson(
-                  projectData.map(
-                    (key, value) => MapEntry(key.toString(), value),
-                  ),
-                )
-                : null,
+        availableActions:
+            _extractList(
+              data['available_actions'],
+            ).map(ConstructionJournalActionModel.fromJson).toList(),
+        project: ConstructionJournalProjectRef.fromJson(
+          _extractMap(data['project']),
+        ),
       );
     } on DioException catch (error) {
       throw ApiException.fromDio(
@@ -62,10 +56,7 @@ class ConstructionJournalRepository {
         fallbackMessage: 'Не удалось загрузить журналы работ.',
       );
     } catch (error) {
-      if (error is ApiException) {
-        rethrow;
-      }
-
+      _rethrowKnown(error);
       throw const ApiException('Не удалось загрузить журналы работ.');
     }
   }
@@ -87,10 +78,6 @@ class ConstructionJournalRepository {
         MobileApiResponse.payload(entriesResponse.data),
       );
 
-      final availableActions = _extractStringList(
-        entriesData['available_actions'],
-      );
-
       return ConstructionJournalDetailPayload(
         journal: ConstructionJournalModel.fromJson(journalData),
         entries:
@@ -100,13 +87,13 @@ class ConstructionJournalRepository {
         entriesMeta: JournalPaginationMeta.fromJson(
           _extractMap(entriesData['meta']),
         ),
-        entriesSummary: ConstructionJournalSummary.fromJson(
+        entriesSummary: ConstructionJournalSummary.fromEntriesJson(
           _extractMap(entriesData['summary']),
         ),
         availableActions:
-            availableActions.isNotEmpty
-                ? availableActions
-                : _extractStringList(journalData['available_actions']),
+            _extractList(
+              entriesData['available_actions'],
+            ).map(ConstructionJournalActionModel.fromJson).toList(),
       );
     } on DioException catch (error) {
       throw ApiException.fromDio(
@@ -114,10 +101,7 @@ class ConstructionJournalRepository {
         fallbackMessage: 'Не удалось загрузить детали журнала.',
       );
     } catch (error) {
-      if (error is ApiException) {
-        rethrow;
-      }
-
+      _rethrowKnown(error);
       throw const ApiException('Не удалось загрузить детали журнала.');
     }
   }
@@ -134,10 +118,7 @@ class ConstructionJournalRepository {
         fallbackMessage: 'Не удалось загрузить запись журнала.',
       );
     } catch (error) {
-      if (error is ApiException) {
-        rethrow;
-      }
-
+      _rethrowKnown(error);
       throw const ApiException('Не удалось загрузить запись журнала.');
     }
   }
@@ -159,10 +140,7 @@ class ConstructionJournalRepository {
         fallbackMessage: 'Не удалось загрузить данные для формы записи.',
       );
     } catch (error) {
-      if (error is ApiException) {
-        rethrow;
-      }
-
+      _rethrowKnown(error);
       throw const ApiException('Не удалось загрузить данные для формы записи.');
     }
   }
@@ -181,6 +159,7 @@ class ConstructionJournalRepository {
           'name': name,
           'journal_number': journalNumber,
           'start_date': startDate,
+          'status': 'active',
         },
       );
 
@@ -243,6 +222,7 @@ class ConstructionJournalRepository {
           if (estimateId != null) 'estimate_id': estimateId,
           'entry_date': entryDate,
           'work_description': workDescription,
+          'status': 'draft',
           'problems_description': problemsDescription,
           'safety_notes': safetyNotes,
           'visitors_notes': visitorsNotes,
@@ -330,24 +310,19 @@ class ConstructionJournalRepository {
     return _entryAction('/journal-entries/$entryId/reject', {'reason': reason});
   }
 
-  Future<String> exportJournal(int journalId) async {
+  Future<String> exportJournal({
+    required int journalId,
+    required String dateFrom,
+    required String dateTo,
+  }) async {
     try {
       final response = await _dio.post(
         '/construction-journals/$journalId/export/ks6',
-        data: {
-          'format': 'pdf',
-          'date_from':
-              DateTime.now()
-                  .subtract(const Duration(days: 30))
-                  .toIso8601String()
-                  .split('T')
-                  .first,
-          'date_to': DateTime.now().toIso8601String().split('T').first,
-        },
+        data: {'format': 'pdf', 'date_from': dateFrom, 'date_to': dateTo},
       );
 
       final data = _extractMap(MobileApiResponse.payload(response.data));
-      return data['url'] as String? ?? '';
+      return _requiredString(data, 'url');
     } on DioException catch (error) {
       throw ApiException.fromDio(
         error,
@@ -362,7 +337,7 @@ class ConstructionJournalRepository {
         '/journal-entries/$entryId/export/daily-report',
       );
       final data = _extractMap(MobileApiResponse.payload(response.data));
-      return data['url'] as String? ?? '';
+      return _requiredString(data, 'url');
     } on DioException catch (error) {
       throw ApiException.fromDio(
         error,
@@ -397,27 +372,47 @@ class ConstructionJournalRepository {
       return payload.map((key, value) => MapEntry(key.toString(), value));
     }
 
-    return const <String, dynamic>{};
+    throw const FormatException(
+      'Construction journal response must be an object.',
+    );
   }
 
   List<Map<String, dynamic>> _extractList(dynamic payload) {
     if (payload is! List) {
-      return const [];
+      throw const FormatException(
+        'Construction journal response must be a list.',
+      );
     }
 
-    return payload
-        .whereType<Map>()
-        .map(
-          (item) => item.map((key, value) => MapEntry(key.toString(), value)),
-        )
-        .toList();
+    return payload.map((item) {
+      if (item is Map<String, dynamic>) {
+        return item;
+      }
+
+      if (item is Map) {
+        return item.map((key, value) => MapEntry(key.toString(), value));
+      }
+
+      throw const FormatException(
+        'Construction journal response list must contain objects.',
+      );
+    }).toList();
   }
 
-  List<String> _extractStringList(dynamic payload) {
-    if (payload is! List) {
-      return const [];
+  String _requiredString(Map<String, dynamic> payload, String key) {
+    final value = payload[key]?.toString().trim() ?? '';
+    if (value.isEmpty) {
+      throw FormatException(
+        'Construction journal response field "$key" is required.',
+      );
     }
 
-    return payload.whereType<String>().toList();
+    return value;
+  }
+
+  void _rethrowKnown(Object error) {
+    if (error is ApiException || error is FormatException) {
+      throw error;
+    }
   }
 }

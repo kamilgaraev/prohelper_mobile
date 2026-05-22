@@ -29,7 +29,7 @@ class _JournalEntryFormScreenState
   late final TextEditingController _qualityController;
   final List<_WorkVolumeInput> _workVolumes = [];
   final List<_MaterialUsageInput> _materials = [];
-  late DateTime _entryDate;
+  DateTime? _entryDate;
   ConstructionJournalEntryFormOptions? _options;
   int? _selectedEstimateId;
   int? _selectedEstimateItemId;
@@ -71,8 +71,9 @@ class _JournalEntryFormScreenState
       text: widget.initialEntry?.qualityNotes ?? '',
     );
     _entryDate =
-        DateTime.tryParse(widget.initialEntry?.entryDate ?? '') ??
-        DateTime.now();
+        widget.initialEntry == null
+            ? null
+            : DateTime.tryParse(widget.initialEntry!.entryDate);
     _selectedEstimateId = widget.initialEntry?.estimateId;
     _workVolumes.addAll(
       (widget.initialEntry?.workVolumes ?? const []).map(
@@ -113,7 +114,9 @@ class _JournalEntryFormScreenState
           ListTile(
             contentPadding: EdgeInsets.zero,
             title: const Text('Дата записи'),
-            subtitle: Text(_formatDate(_entryDate)),
+            subtitle: Text(
+              _entryDate == null ? 'Выберите дату' : _formatDate(_entryDate!),
+            ),
             trailing: const Icon(Icons.calendar_today_outlined),
             onTap: _pickDate,
           ),
@@ -368,7 +371,7 @@ class _JournalEntryFormScreenState
   Future<void> _pickDate() async {
     final picked = await showDatePicker(
       context: context,
-      initialDate: _entryDate,
+      initialDate: _entryDate ?? DateTime.now(),
       firstDate: DateTime(2020),
       lastDate: DateTime(2100),
     );
@@ -458,8 +461,25 @@ class _JournalEntryFormScreenState
       return;
     }
 
+    if (_entryDate == null) {
+      _showMessage('Выберите дату записи.');
+      return;
+    }
+
     final workVolumes = _normalizedWorkVolumes();
     final materials = _normalizedMaterials();
+    if (workVolumes.length != _workVolumes.length) {
+      _showMessage(
+        'Заполните вид работ, количество и единицу измерения для каждой строки.',
+      );
+      return;
+    }
+
+    if (materials.length != _materials.length) {
+      _showMessage('Укажите количество для каждого выбранного материала.');
+      return;
+    }
+
     if (!isDraft && workVolumes.isEmpty) {
       _showMessage('Добавьте хотя бы один объем выполненных работ.');
       return;
@@ -475,7 +495,7 @@ class _JournalEntryFormScreenState
           _isEdit
               ? await repository.updateEntry(
                 entryId: widget.initialEntry!.id,
-                entryDate: _entryDate.toIso8601String().split('T').first,
+                entryDate: _entryDate!.toIso8601String().split('T').first,
                 workDescription: _descriptionController.text.trim(),
                 estimateId: _selectedEstimateId,
                 problemsDescription: _problemsController.text.trim(),
@@ -487,7 +507,7 @@ class _JournalEntryFormScreenState
               )
               : await repository.createEntry(
                 journalId: widget.journalId,
-                entryDate: _entryDate.toIso8601String().split('T').first,
+                entryDate: _entryDate!.toIso8601String().split('T').first,
                 workDescription: _descriptionController.text.trim(),
                 estimateId: _selectedEstimateId,
                 problemsDescription: _problemsController.text.trim(),
@@ -526,6 +546,15 @@ class _JournalEntryFormScreenState
           );
 
           if (quantity == null || quantity <= 0) {
+            return null;
+          }
+
+          if (volume.estimateItemId == null && volume.workTypeId == null) {
+            return null;
+          }
+
+          if (volume.measurementUnitId == null ||
+              (volume.measurementUnitName ?? '').trim().isEmpty) {
             return null;
           }
 
@@ -738,7 +767,7 @@ class _WorkVolumeInput {
       measurementUnitId: item.measurementUnitId ?? workType?.measurementUnitId,
       measurementUnitName: measurementUnit?.displayName,
       sourceLabel: item.displayName,
-      quantity: item.quantity == 0 ? '' : item.quantity.toString(),
+      quantity: '',
       notes: 'Позиция сметы: ${item.positionNumber ?? item.name}',
     );
   }
@@ -858,10 +887,7 @@ class _MaterialUsageInput {
       projectMaterialDeliveryId: material.deliveryId,
       materialName: material.materialName,
       measurementUnit: material.measurementUnit,
-      quantity:
-          material.availableQuantity == 0
-              ? ''
-              : _formatMaterialQuantity(material.availableQuantity),
+      quantity: '',
       notes: 'Материал принят на объект по поставке #${material.deliveryId}',
     );
   }
