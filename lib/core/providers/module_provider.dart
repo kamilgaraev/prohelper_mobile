@@ -11,6 +11,7 @@ enum AppModule {
   constructionJournal,
   aiAssistant,
   budgetEstimates,
+  procurement,
   timeTracking,
   workflowManagement,
   qualityControl,
@@ -30,6 +31,7 @@ extension AppModuleX on AppModule {
       AppModule.constructionJournal => 'construction-journal',
       AppModule.aiAssistant => 'ai-assistant',
       AppModule.budgetEstimates => 'budget-estimates',
+      AppModule.procurement => 'procurement',
       AppModule.timeTracking => 'time-tracking',
       AppModule.workflowManagement => 'workflow-management',
       AppModule.qualityControl => 'quality-control',
@@ -129,7 +131,11 @@ final supportedMobileModulesProvider = Provider<List<MobileModuleModel>>((ref) {
       ref
           .watch(modulesProvider)
           .modules
-          .where((module) => module.supportedOnMobile)
+          .where(
+            (module) =>
+                module.supportedOnMobile &&
+                AppModuleX.fromSlug(module.slug) != null,
+          )
           .toList()
         ..sort((left, right) => left.order.compareTo(right.order));
 

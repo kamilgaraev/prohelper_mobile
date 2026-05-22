@@ -22,6 +22,7 @@ import 'package:prohelpers_mobile/features/machinery_operations/presentation/mac
 import 'package:prohelpers_mobile/features/notifications/domain/notifications_provider.dart';
 import 'package:prohelpers_mobile/features/notifications/presentation/notifications_screen.dart';
 import 'package:prohelpers_mobile/features/production_labor/presentation/production_labor_screen.dart';
+import 'package:prohelpers_mobile/features/procurement/presentation/procurement_screen.dart';
 import 'package:prohelpers_mobile/features/projects/domain/projects_provider.dart';
 import 'package:prohelpers_mobile/features/projects/presentation/project_selection_screen.dart';
 import 'package:prohelpers_mobile/features/quality_control/presentation/quality_control_screen.dart';
@@ -368,6 +369,7 @@ class DashboardScreen extends ConsumerWidget {
       'time-tracking' => Icons.timer_outlined,
       'budget_estimates' => Icons.calculate_outlined,
       'budget-estimates' => Icons.calculate_outlined,
+      'procurement' => Icons.inventory_2_outlined,
       _ => Icons.dashboard_customize_outlined,
     };
   }
@@ -398,6 +400,7 @@ class DashboardScreen extends ConsumerWidget {
       'time_tracking' => const TimeTrackingScreen(),
       'budget-estimates' => const BudgetEstimatesScreen(),
       'budget_estimates' => const BudgetEstimatesScreen(),
+      'procurement' => const ProcurementScreen(),
       'quality-control' => const QualityControlScreen(),
       'safety-management' => const SafetyScreen(),
       'machinery-operations' => const MachineryOperationsScreen(),

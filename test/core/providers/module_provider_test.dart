@@ -10,6 +10,7 @@ void main() {
       'construction-journal': AppModule.constructionJournal,
       'ai-assistant': AppModule.aiAssistant,
       'budget-estimates': AppModule.budgetEstimates,
+      'procurement': AppModule.procurement,
       'time-tracking': AppModule.timeTracking,
       'workflow-management': AppModule.workflowManagement,
       'quality-control': AppModule.qualityControl,
@@ -27,7 +28,6 @@ void main() {
   });
 
   test('ignores unknown backend module slugs', () {
-    expect(AppModuleX.fromSlug('procurement'), isNull);
     expect(AppModuleX.fromSlug('unknown-module'), isNull);
   });
 }

@@ -10,6 +10,7 @@ import '../../features/machinery_operations/presentation/machinery_operations_sc
 import '../../features/modules/data/mobile_module_model.dart';
 import '../../features/notifications/presentation/notifications_screen.dart';
 import '../../features/production_labor/presentation/production_labor_screen.dart';
+import '../../features/procurement/presentation/procurement_screen.dart';
 import '../../features/quality_control/presentation/quality_control_screen.dart';
 import '../../features/safety/presentation/safety_screen.dart';
 import '../../features/schedule/presentation/schedule_screen.dart';
@@ -224,12 +225,15 @@ class QuickActionSheet extends ConsumerWidget {
           MaterialPageRoute(builder: (_) => const BudgetEstimatesScreen()),
         );
         return;
+      case 'procurement':
+        navigator.push(
+          MaterialPageRoute(builder: (_) => const ProcurementScreen()),
+        );
+        return;
       default:
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text(
-              'Этот модуль пока недоступен в мобильном приложении.',
-            ),
+            content: Text('Раздел не открыт для мобильной работы.'),
           ),
         );
         return;
@@ -249,6 +253,8 @@ class QuickActionSheet extends ConsumerWidget {
       'handover' => Icons.assignment_turned_in_outlined,
       'timer' => Icons.timer_outlined,
       'calculate' => Icons.calculate_outlined,
+      'procurement' => Icons.inventory_2_outlined,
+      'inventory' => Icons.inventory_2_outlined,
       'machinery' => Icons.precision_manufacturing_outlined,
       'engineer' => Icons.engineering_outlined,
       'people' => Icons.groups_rounded,
@@ -290,6 +296,7 @@ class QuickActionSheet extends ConsumerWidget {
       'time-tracking' => AppColors.success,
       'budget_estimates' => scheme.tertiary,
       'budget-estimates' => scheme.tertiary,
+      'procurement' => scheme.secondary,
       _ => scheme.onSurfaceVariant,
     };
   }
