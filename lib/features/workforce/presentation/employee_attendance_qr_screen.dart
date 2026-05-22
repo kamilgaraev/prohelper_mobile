@@ -3,6 +3,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../../core/theme/app_typography.dart';
+import '../../../core/widgets/app_action_buttons.dart';
 import '../../../core/widgets/app_error_state.dart';
 import '../../../core/widgets/app_loading_state.dart';
 import '../../../core/widgets/mesh_background.dart';
@@ -22,13 +23,18 @@ class EmployeeAttendanceQrScreen extends ConsumerStatefulWidget {
 
 class _EmployeeAttendanceQrScreenState
     extends ConsumerState<EmployeeAttendanceQrScreen> {
+  DateTime? _workDate;
+
   @override
   void initState() {
     super.initState();
+    _workDate = widget.workDate;
 
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _refresh();
-    });
+    if (_workDate != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _refresh();
+      });
+    }
   }
 
   @override
@@ -46,7 +52,7 @@ class _EmployeeAttendanceQrScreenState
           actions: [
             IconButton(
               tooltip: 'Обновить',
-              onPressed: state.isLoading ? null : _refresh,
+              onPressed: state.isLoading || _workDate == null ? null : _refresh,
               icon: const Icon(Icons.refresh_rounded),
             ),
           ],
@@ -56,9 +62,12 @@ class _EmployeeAttendanceQrScreenState
                 ? const AppLoadingState(message: 'Готовим QR-код')
                 : state.error != null && qr == null
                 ? AppErrorState(
-                  title: 'QR-код недоступен',
-                  description: state.error,
-                  onRetry: _refresh,
+                  title:
+                      state.permissionDenied
+                          ? 'Нет доступа к QR для явки'
+                          : 'QR-код недоступен',
+                  description: state.error!,
+                  onRetry: _workDate == null ? null : _refresh,
                 )
                 : ListView(
                   padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
@@ -71,8 +80,23 @@ class _EmployeeAttendanceQrScreenState
                             'Показать QR для подтверждения явки',
                             style: AppTypography.h2(context),
                           ),
-                          const SizedBox(height: 8),
+                          const SizedBox(height: 12),
+                          _DateSelector(
+                            selectedDate: _workDate,
+                            onSelect: _selectDate,
+                          ),
+                          const SizedBox(height: 16),
+                          AppPrimaryActionButton(
+                            label: 'Получить QR',
+                            onPressed:
+                                state.isLoading || _workDate == null
+                                    ? null
+                                    : _refresh,
+                            leading: const Icon(Icons.qr_code_2_rounded),
+                            isBusy: state.isLoading,
+                          ),
                           if (qr != null) ...[
+                            const SizedBox(height: 20),
                             Text(qr.employeeLabel),
                             if ((qr.projectLabel ?? '').isNotEmpty)
                               Text(qr.projectLabel!),
@@ -108,7 +132,7 @@ class _EmployeeAttendanceQrScreenState
                         ],
                       ),
                     ),
-                    if (state.error != null) ...[
+                    if (state.error != null && qr != null) ...[
                       const SizedBox(height: 12),
                       Text(
                         state.error!,
@@ -121,11 +145,62 @@ class _EmployeeAttendanceQrScreenState
     );
   }
 
+  Future<void> _selectDate() async {
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _workDate ?? DateTime(now.year, now.month, now.day),
+      firstDate: DateTime(now.year - 1),
+      lastDate: DateTime(now.year + 1),
+    );
+
+    if (!mounted || picked == null) {
+      return;
+    }
+
+    setState(() {
+      _workDate = DateTime(picked.year, picked.month, picked.day);
+    });
+  }
+
   void _refresh() {
+    final workDate = _workDate;
+
+    if (workDate == null) {
+      return;
+    }
+
     ref
         .read(workforceAttendanceProvider.notifier)
-        .issueQr(projectId: widget.projectId, workDate: widget.workDate);
+        .issueQr(projectId: widget.projectId, workDate: workDate);
   }
+}
+
+class _DateSelector extends StatelessWidget {
+  const _DateSelector({required this.selectedDate, required this.onSelect});
+
+  final DateTime? selectedDate;
+  final VoidCallback onSelect;
+
+  @override
+  Widget build(BuildContext context) {
+    return OutlinedButton.icon(
+      onPressed: onSelect,
+      icon: const Icon(Icons.calendar_today_rounded),
+      label: Text(
+        selectedDate == null
+            ? 'Выберите дату явки'
+            : 'Дата явки: ${_formatDate(selectedDate!)}',
+      ),
+    );
+  }
+}
+
+String _formatDate(DateTime value) {
+  final day = value.day.toString().padLeft(2, '0');
+  final month = value.month.toString().padLeft(2, '0');
+
+  return '$day.$month.${value.year}';
 }
 
 String _formatTime(DateTime value) {

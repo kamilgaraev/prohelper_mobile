@@ -19,10 +19,15 @@ class _FakeWorkforceRepository extends WorkforceRepository {
     scannedTokens.add(qrToken);
 
     return AttendanceScanResultModel(
+      scanEventId: 91,
+      employeeId: 41,
       employeeLabel: 'Иванов Иван',
+      projectId: 7,
       projectLabel: 'Объект Литейная',
       workDate: DateTime(2026, 5, 16),
-      statusLabel: 'Явка подтверждена',
+      status: 'at_work',
+      statusLabel: 'Явка подтверждена.',
+      source: 'qr_scan',
       sourceLabel: 'QR-подтверждение',
       confirmedAt: DateTime(2026, 5, 16, 9, 1),
     );
@@ -47,7 +52,7 @@ void main() {
     await tester.pump();
 
     expect(repository.scannedTokens, contains('signed-token-value'));
-    expect(find.text('Явка подтверждена'), findsOneWidget);
+    expect(find.text('Явка подтверждена.'), findsOneWidget);
     expect(find.text('Иванов Иван'), findsOneWidget);
     expect(find.text('Объект Литейная'), findsOneWidget);
   });

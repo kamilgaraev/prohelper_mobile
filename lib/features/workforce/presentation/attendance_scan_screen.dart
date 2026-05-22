@@ -103,8 +103,13 @@ class _AttendanceScanScreenState extends ConsumerState<AttendanceScanScreen> {
                     if (state.error != null) ...[
                       const SizedBox(height: 12),
                       AppErrorState(
-                        title: 'Явка не подтверждена',
-                        description: _cleanMessage(state.error!),
+                        title:
+                            state.duplicateScan
+                                ? 'QR уже использован'
+                                : state.permissionDenied
+                                ? 'Нет доступа к подтверждению'
+                                : 'Явка не подтверждена',
+                        description: state.error!,
                         minHeight: 180,
                       ),
                     ],
@@ -190,8 +195,7 @@ class _ScanResult extends StatelessWidget {
                 label: 'Время',
                 value: _formatTime(result.confirmedAt),
               ),
-              if ((result.sourceLabel ?? '').isNotEmpty)
-                _ResultLine(label: 'Источник', value: result.sourceLabel!),
+              _ResultLine(label: 'Источник', value: result.sourceLabel),
               const SizedBox(height: 16),
               SizedBox(
                 width: double.infinity,
@@ -252,8 +256,4 @@ String _formatTime(DateTime value) {
   final minute = value.minute.toString().padLeft(2, '0');
 
   return '$hour:$minute';
-}
-
-String _cleanMessage(String message) {
-  return message.replaceFirst('ApiException: ', '');
 }

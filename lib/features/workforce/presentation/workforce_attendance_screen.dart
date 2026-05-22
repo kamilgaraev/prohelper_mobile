@@ -3,8 +3,10 @@ import 'package:flutter/material.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../core/widgets/mesh_background.dart';
 import '../../../core/widgets/pro_card.dart';
+import 'attendance_history_screen.dart';
 import 'attendance_scan_screen.dart';
 import 'employee_attendance_qr_screen.dart';
+import 'self_attendance_screen.dart';
 
 class WorkforceAttendanceScreen extends StatelessWidget {
   const WorkforceAttendanceScreen({super.key});
@@ -23,10 +25,23 @@ class WorkforceAttendanceScreen extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
           children: [
             _ActionCard(
+              icon: Icons.how_to_reg_rounded,
+              title: 'Отметить мою явку',
+              subtitle:
+                  'Выберите дату и сохраните присутствие от своего имени.',
+              onTap:
+                  () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const SelfAttendanceScreen(),
+                    ),
+                  ),
+            ),
+            const SizedBox(height: 12),
+            _ActionCard(
               icon: Icons.qr_code_2_rounded,
               title: 'Мой QR для явки',
               subtitle:
-                  'Показать код ответственному сотруднику для подтверждения присутствия.',
+                  'Выберите дату и покажите код ответственному сотруднику для подтверждения.',
               onTap:
                   () => Navigator.of(context).push(
                     MaterialPageRoute(
@@ -37,13 +52,26 @@ class WorkforceAttendanceScreen extends StatelessWidget {
             const SizedBox(height: 12),
             _ActionCard(
               icon: Icons.qr_code_scanner_rounded,
-              title: 'Подтвердить явку',
+              title: 'Подтвердить явку по QR',
               subtitle:
-                  'Отсканировать QR сотрудника и зафиксировать присутствие в табеле.',
+                  'Отсканируйте QR сотрудника и зафиксируйте подтверждение в табеле.',
               onTap:
                   () => Navigator.of(context).push(
                     MaterialPageRoute(
                       builder: (_) => const AttendanceScanScreen(),
+                    ),
+                  ),
+            ),
+            const SizedBox(height: 12),
+            _ActionCard(
+              icon: Icons.history_rounded,
+              title: 'История явки',
+              subtitle:
+                  'Выберите период и проверьте сохраненные записи по явке.',
+              onTap:
+                  () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const AttendanceHistoryScreen(),
                     ),
                   ),
             ),
