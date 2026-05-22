@@ -14,6 +14,7 @@ import '../../features/safety/presentation/safety_screen.dart';
 import '../../features/schedule/presentation/schedule_screen.dart';
 import '../../features/site_requests/presentation/screens/site_requests_screen.dart';
 import '../../features/warehouse/presentation/warehouse_screen.dart';
+import '../../features/workflow_management/presentation/workflow_management_screen.dart';
 import '../../features/workforce/presentation/workforce_attendance_screen.dart';
 import '../providers/module_provider.dart';
 import '../theme/app_colors.dart';
@@ -203,6 +204,12 @@ class QuickActionSheet extends ConsumerWidget {
           MaterialPageRoute(builder: (_) => const AiAssistantHomeScreen()),
         );
         return;
+      case 'workflow_management':
+      case 'workflow-management':
+        navigator.push(
+          MaterialPageRoute(builder: (_) => const WorkflowManagementScreen()),
+        );
+        return;
       default:
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -263,6 +270,8 @@ class QuickActionSheet extends ConsumerWidget {
       'handover-acceptance' => scheme.onSurfaceVariant,
       'ai_assistant' => scheme.secondary,
       'ai-assistant' => scheme.secondary,
+      'workflow_management' => scheme.primary,
+      'workflow-management' => scheme.primary,
       _ => scheme.onSurfaceVariant,
     };
   }
