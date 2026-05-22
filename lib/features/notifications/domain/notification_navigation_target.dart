@@ -1,3 +1,4 @@
+import '../../../core/providers/module_provider.dart';
 import '../data/notification_model.dart';
 
 enum NotificationTargetType {
@@ -11,6 +12,7 @@ enum NotificationTargetType {
 class NotificationNavigationTarget {
   const NotificationNavigationTarget({
     required this.type,
+    this.module,
     this.siteRequestId,
     this.journalId,
     this.journalEntryId,
@@ -20,6 +22,7 @@ class NotificationNavigationTarget {
   });
 
   final NotificationTargetType type;
+  final AppModule? module;
   final int? siteRequestId;
   final int? journalId;
   final int? journalEntryId;
@@ -47,11 +50,13 @@ class NotificationNavigationTarget {
             ? const <String, dynamic>{}
             : notification.actions.first.params;
     final merged = <String, dynamic>{...data, ...actionParams};
-    final targetType = _resolveType(notification, merged);
+    final module = _resolveModule(notification, merged);
+    final targetType = _resolveType(module);
 
     return switch (targetType) {
       NotificationTargetType.siteRequest => NotificationNavigationTarget(
         type: targetType,
+        module: module,
         siteRequestId: _firstInt(merged, const [
           'site_request_id',
           'request_id',
@@ -62,6 +67,7 @@ class NotificationNavigationTarget {
       NotificationTargetType.constructionJournalEntry =>
         NotificationNavigationTarget(
           type: targetType,
+          module: module,
           journalId: _firstInt(merged, const [
             'journal_id',
             'construction_journal_id',
@@ -75,6 +81,7 @@ class NotificationNavigationTarget {
         ),
       NotificationTargetType.schedule => NotificationNavigationTarget(
         type: targetType,
+        module: module,
         scheduleId: _firstInt(merged, const [
           'schedule_id',
           'work_schedule_id',
@@ -84,6 +91,7 @@ class NotificationNavigationTarget {
       ),
       NotificationTargetType.warehouseTask => NotificationNavigationTarget(
         type: targetType,
+        module: module,
         warehouseId: _firstInt(merged, const ['warehouse_id']),
         warehouseTaskId: _firstInt(merged, const [
           'warehouse_task_id',
@@ -99,51 +107,96 @@ class NotificationNavigationTarget {
   }
 }
 
-NotificationTargetType _resolveType(
+NotificationTargetType _resolveType(AppModule? module) {
+  return switch (module) {
+    AppModule.siteRequests => NotificationTargetType.siteRequest,
+    AppModule.constructionJournal =>
+      NotificationTargetType.constructionJournalEntry,
+    AppModule.scheduleManagement => NotificationTargetType.schedule,
+    AppModule.basicWarehouse => NotificationTargetType.warehouseTask,
+    _ => NotificationTargetType.unknown,
+  };
+}
+
+AppModule? _resolveModule(
   NotificationModel notification,
   Map<String, dynamic> data,
 ) {
-  final rawValues =
-      <String>[
-        notification.type,
-        notification.notificationType ?? '',
-        notification.category,
-        notificationAsNullableString(data['target_type']) ?? '',
-        notificationAsNullableString(data['entity_type']) ?? '',
-        notificationAsNullableString(data['related_type']) ?? '',
-        notificationAsNullableString(data['module']) ?? '',
-        notificationAsNullableString(data['route']) ?? '',
-      ].join(' ').toLowerCase();
+  final candidates = <String>[
+    notificationAsNullableString(data['module']) ?? '',
+    notificationAsNullableString(data['module_slug']) ?? '',
+    notificationAsNullableString(data['target_module']) ?? '',
+    notificationAsNullableString(data['route']) ?? '',
+    notification.type,
+    notification.notificationType ?? '',
+    notification.category,
+    notificationAsNullableString(data['target_type']) ?? '',
+    notificationAsNullableString(data['entity_type']) ?? '',
+    notificationAsNullableString(data['related_type']) ?? '',
+  ];
 
-  if (rawValues.contains('site_request') ||
-      rawValues.contains('site-requests') ||
-      data.containsKey('site_request_id') ||
-      data.containsKey('request_id')) {
-    return NotificationTargetType.siteRequest;
+  for (final candidate in candidates) {
+    final module = _moduleFromText(candidate);
+    if (module != null) {
+      return module;
+    }
   }
 
-  if (rawValues.contains('construction_journal_entry') ||
-      rawValues.contains('journal_entry') ||
-      rawValues.contains('journal-entry') ||
-      data.containsKey('journal_entry_id') ||
+  return _moduleFromKeys(data);
+}
+
+AppModule? _moduleFromText(String raw) {
+  final normalized = raw.trim().toLowerCase().replaceAll('_', '-');
+  if (normalized.isEmpty) {
+    return null;
+  }
+
+  final direct = AppModuleX.fromSlug(normalized);
+  if (direct != null) {
+    return direct;
+  }
+
+  for (final module in AppModule.values) {
+    if (normalized.contains(module.backendSlug)) {
+      return module;
+    }
+  }
+
+  return switch (normalized) {
+    String value
+        when value.contains('site-request') || value.contains('request') =>
+      AppModule.siteRequests,
+    String value
+        when value.contains('journal-entry') ||
+            value.contains('construction-journal') =>
+      AppModule.constructionJournal,
+    String value when value.contains('schedule') =>
+      AppModule.scheduleManagement,
+    String value when value.contains('warehouse') => AppModule.basicWarehouse,
+    _ => null,
+  };
+}
+
+AppModule? _moduleFromKeys(Map<String, dynamic> data) {
+  if (data.containsKey('site_request_id') || data.containsKey('request_id')) {
+    return AppModule.siteRequests;
+  }
+
+  if (data.containsKey('journal_entry_id') ||
       data.containsKey('construction_journal_entry_id')) {
-    return NotificationTargetType.constructionJournalEntry;
+    return AppModule.constructionJournal;
   }
 
-  if (rawValues.contains('schedule') ||
-      rawValues.contains('work_schedule') ||
-      data.containsKey('schedule_id')) {
-    return NotificationTargetType.schedule;
+  if (data.containsKey('schedule_id')) {
+    return AppModule.scheduleManagement;
   }
 
-  if (rawValues.contains('warehouse_task') ||
-      rawValues.contains('warehouse-task') ||
-      rawValues.contains('warehouse') ||
-      data.containsKey('warehouse_task_id')) {
-    return NotificationTargetType.warehouseTask;
+  if (data.containsKey('warehouse_task_id') ||
+      data.containsKey('warehouse_id')) {
+    return AppModule.basicWarehouse;
   }
 
-  return NotificationTargetType.unknown;
+  return null;
 }
 
 int? _firstInt(Map<String, dynamic> data, List<String> keys) {

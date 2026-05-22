@@ -70,19 +70,6 @@ class NotificationsRepository {
       final response = await _dio.post('/notifications/$id/mark-read');
       return NotificationModel.fromJson(_extractData(response.data));
     } on DioException catch (error) {
-      if (error.response?.statusCode == 404 ||
-          error.response?.statusCode == 405) {
-        try {
-          final response = await _dio.patch('/notifications/$id/read');
-          return NotificationModel.fromJson(_extractData(response.data));
-        } on DioException catch (fallbackError) {
-          throw ApiException.fromDio(
-            fallbackError,
-            fallbackMessage: 'Не удалось отметить уведомление прочитанным.',
-          );
-        }
-      }
-
       throw ApiException.fromDio(
         error,
         fallbackMessage: 'Не удалось отметить уведомление прочитанным.',

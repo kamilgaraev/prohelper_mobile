@@ -4,6 +4,14 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import '../storage/secure_storage_service.dart';
 import '../../features/auth/domain/auth_session_provider.dart';
 
+final authRefreshClientFactoryProvider = Provider<Dio Function(BaseOptions)>(
+  (ref) => (options) => Dio(options),
+);
+
+final authRetryClientFactoryProvider = Provider<Dio Function()>(
+  (ref) => () => Dio(),
+);
+
 class AuthInterceptor extends Interceptor {
   static Future<String?>? _refreshFuture;
   final Ref _ref;
@@ -59,7 +67,8 @@ class AuthInterceptor extends Interceptor {
     requestOptions.extra = {...requestOptions.extra, 'auth_retry': true};
 
     try {
-      final response = await Dio().fetch<dynamic>(requestOptions);
+      final retryClient = _ref.read(authRetryClientFactoryProvider)();
+      final response = await retryClient.fetch<dynamic>(requestOptions);
       handler.resolve(response);
     } on DioException catch (retryError) {
       await _invalidateSession();
@@ -84,7 +93,7 @@ class AuthInterceptor extends Interceptor {
         return completer.future;
       }
 
-      final refreshClient = Dio(
+      final refreshClient = _ref.read(authRefreshClientFactoryProvider)(
         BaseOptions(
           baseUrl: requestOptions.baseUrl,
           connectTimeout: requestOptions.connectTimeout,

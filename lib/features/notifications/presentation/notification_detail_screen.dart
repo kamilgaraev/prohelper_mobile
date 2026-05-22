@@ -13,7 +13,6 @@ import '../../schedule/presentation/schedule_screen.dart';
 import '../../site_requests/presentation/screens/site_request_detail_screen.dart';
 import '../../site_requests/presentation/screens/site_requests_screen.dart';
 import '../../warehouse/data/warehouse_repository.dart';
-import '../../warehouse/presentation/warehouse_screen.dart';
 import '../../warehouse/presentation/warehouse_tasks_screen.dart';
 import '../data/notification_model.dart';
 import '../domain/notification_navigation_target.dart';
@@ -213,8 +212,9 @@ class _NotificationDetailScreenState
         return;
       }
 
-      await navigator.push(
-        MaterialPageRoute(builder: (_) => const WarehouseScreen()),
+      _showMessage(
+        context,
+        'Связанный складской раздел сейчас недоступен. Обновите уведомление и повторите попытку.',
       );
     }
   }

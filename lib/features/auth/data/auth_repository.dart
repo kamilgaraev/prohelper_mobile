@@ -27,11 +27,7 @@ class AuthRepository {
       );
 
       final data = MobileApiResponse.dataMap(response.data);
-      final token = data['token'] as String?;
-
-      if (token == null || token.isEmpty) {
-        throw const ApiException('Сервер не вернул токен входа.');
-      }
+      final token = _requiredString(data, 'token');
 
       await _storage.saveToken(token);
 
@@ -120,9 +116,9 @@ class AuthRepository {
     }
 
     return User()
-      ..serverId = json['id'] ?? 0
-      ..email = json['email'] ?? ''
-      ..name = json['name'] ?? 'User'
+      ..serverId = _requiredInt(json, 'id')
+      ..email = _requiredString(json, 'email')
+      ..name = _requiredString(json, 'name')
       ..avatarUrl = json['avatar_url'] ?? json['avatar_path']
       ..roles = roles
       ..currentOrganizationId = currentOrgId
@@ -135,5 +131,30 @@ class AuthRepository {
 
   Future<void> logout() async {
     await _storage.clearToken();
+  }
+
+  String _requiredString(Map<String, dynamic> json, String key) {
+    final value = json[key]?.toString().trim() ?? '';
+    if (value.isEmpty) {
+      throw FormatException('Auth response field "$key" is required.');
+    }
+
+    return value;
+  }
+
+  int _requiredInt(Map<String, dynamic> json, String key) {
+    final raw = json[key];
+    final value =
+        raw is int
+            ? raw
+            : raw is num
+            ? raw.toInt()
+            : int.tryParse(raw?.toString() ?? '');
+
+    if (value == null || value <= 0) {
+      throw FormatException('Auth response field "$key" is required.');
+    }
+
+    return value;
   }
 }
