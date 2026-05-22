@@ -1,5 +1,6 @@
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
+import '../../../core/network/api_exception.dart';
 import '../data/schedule_model.dart';
 import '../data/schedule_repository.dart';
 
@@ -9,18 +10,21 @@ class ScheduleState {
   const ScheduleState({
     this.isLoading = false,
     this.overview,
+    this.permissionDenied = false,
     this.error,
     this.projectId,
   });
 
   final bool isLoading;
   final ScheduleOverviewModel? overview;
+  final bool permissionDenied;
   final String? error;
   final int? projectId;
 
   ScheduleState copyWith({
     bool? isLoading,
     Object? overview = _scheduleSentinel,
+    bool? permissionDenied,
     Object? error = _scheduleSentinel,
     Object? projectId = _scheduleSentinel,
   }) {
@@ -30,6 +34,7 @@ class ScheduleState {
           identical(overview, _scheduleSentinel)
               ? this.overview
               : overview as ScheduleOverviewModel?,
+      permissionDenied: permissionDenied ?? this.permissionDenied,
       error:
           identical(error, _scheduleSentinel) ? this.error : error as String?,
       projectId:
@@ -57,12 +62,17 @@ class ScheduleNotifier extends StateNotifier<ScheduleState> {
     }
 
     state = state.copyWith(isLoading: true, error: null, projectId: projectId);
+    state = state.copyWith(permissionDenied: false);
 
     try {
       final overview = await _repository.fetchSchedules(projectId: projectId);
       state = state.copyWith(isLoading: false, overview: overview);
     } catch (error) {
-      state = state.copyWith(isLoading: false, error: error.toString());
+      state = state.copyWith(
+        isLoading: false,
+        permissionDenied: _isPermissionDenied(error),
+        error: _errorMessage(error),
+      );
     }
   }
 }
@@ -76,15 +86,22 @@ final scheduleProvider = StateNotifierProvider<ScheduleNotifier, ScheduleState>(
 const _scheduleDetailSentinel = Object();
 
 class ScheduleDetailState {
-  const ScheduleDetailState({this.isLoading = false, this.detail, this.error});
+  const ScheduleDetailState({
+    this.isLoading = false,
+    this.detail,
+    this.permissionDenied = false,
+    this.error,
+  });
 
   final bool isLoading;
   final ScheduleDetailsModel? detail;
+  final bool permissionDenied;
   final String? error;
 
   ScheduleDetailState copyWith({
     bool? isLoading,
     Object? detail = _scheduleDetailSentinel,
+    bool? permissionDenied,
     Object? error = _scheduleDetailSentinel,
   }) {
     return ScheduleDetailState(
@@ -93,6 +110,7 @@ class ScheduleDetailState {
           identical(detail, _scheduleDetailSentinel)
               ? this.detail
               : detail as ScheduleDetailsModel?,
+      permissionDenied: permissionDenied ?? this.permissionDenied,
       error:
           identical(error, _scheduleDetailSentinel)
               ? this.error
@@ -122,13 +140,21 @@ class ScheduleDetailNotifier extends StateNotifier<ScheduleDetailState> {
   final int _scheduleId;
 
   Future<void> load() async {
-    state = state.copyWith(isLoading: true, error: null);
+    state = state.copyWith(
+      isLoading: true,
+      permissionDenied: false,
+      error: null,
+    );
 
     try {
       final detail = await _repository.fetchScheduleDetails(_scheduleId);
       state = state.copyWith(isLoading: false, detail: detail);
     } catch (error) {
-      state = state.copyWith(isLoading: false, error: error.toString());
+      state = state.copyWith(
+        isLoading: false,
+        permissionDenied: _isPermissionDenied(error),
+        error: _errorMessage(error),
+      );
     }
   }
 }
@@ -139,24 +165,28 @@ class DailyWorkPlansState {
   const DailyWorkPlansState({
     this.isLoading = false,
     this.plans = const [],
+    this.permissionDenied = false,
     this.error,
     this.projectId,
   });
 
   final bool isLoading;
   final List<DailyWorkPlanModel> plans;
+  final bool permissionDenied;
   final String? error;
   final int? projectId;
 
   DailyWorkPlansState copyWith({
     bool? isLoading,
     List<DailyWorkPlanModel>? plans,
+    bool? permissionDenied,
     Object? error = _dailyPlansSentinel,
     Object? projectId = _dailyPlansSentinel,
   }) {
     return DailyWorkPlansState(
       isLoading: isLoading ?? this.isLoading,
       plans: plans ?? this.plans,
+      permissionDenied: permissionDenied ?? this.permissionDenied,
       error:
           identical(error, _dailyPlansSentinel) ? this.error : error as String?,
       projectId:
@@ -183,23 +213,32 @@ class DailyWorkPlansNotifier extends StateNotifier<DailyWorkPlansState> {
       return;
     }
 
-    state = state.copyWith(isLoading: true, error: null, projectId: projectId);
+    state = state.copyWith(
+      isLoading: true,
+      permissionDenied: false,
+      error: null,
+      projectId: projectId,
+    );
 
     try {
       final plans = await _repository.fetchDailyWorkPlans(projectId: projectId);
       state = state.copyWith(isLoading: false, plans: plans);
     } catch (error) {
-      state = state.copyWith(isLoading: false, error: error.toString());
+      state = state.copyWith(
+        isLoading: false,
+        permissionDenied: _isPermissionDenied(error),
+        error: _errorMessage(error),
+      );
     }
   }
 
-  Future<void> recordFact(DailyWorkPlanAssignmentModel assignment) async {
+  Future<void> recordFact(
+    DailyWorkPlanAssignmentModel assignment,
+    DailyWorkFactInput input,
+  ) async {
     final updatedAssignment = await _repository.recordDailyWorkFact(
       assignmentId: assignment.id,
-      status: 'done',
-      completedQuantity: assignment.plannedQuantity ?? 0,
-      actualWorkHours: assignment.plannedWorkHours ?? 0,
-      factComment: 'Факт выполнен по дневному заданию',
+      input: input,
     );
 
     state = state.copyWith(
@@ -233,10 +272,11 @@ class DailyWorkPlansNotifier extends StateNotifier<DailyWorkPlansState> {
 
   Future<void> createLinkedConstraintAction(
     DailyWorkConstraintModel constraint,
+    String? comment,
   ) async {
     await _repository.createLinkedConstraintAction(
       constraintId: constraint.id,
-      comment: constraint.title,
+      comment: comment?.trim().isEmpty == true ? null : comment,
     );
 
     if (state.projectId != null) {
@@ -244,10 +284,11 @@ class DailyWorkPlansNotifier extends StateNotifier<DailyWorkPlansState> {
     }
   }
 
-  Future<void> submit(DailyWorkPlanModel plan) async {
+  Future<void> submit(DailyWorkPlanModel plan, {String? summaryComment}) async {
     final updatedPlan = await _repository.submitDailyWorkPlan(
       dailyPlanId: plan.id,
-      summaryComment: 'Дневной план выполнен и передан на приемку',
+      summaryComment:
+          summaryComment?.trim().isEmpty == true ? null : summaryComment,
     );
 
     state = state.copyWith(
@@ -257,4 +298,20 @@ class DailyWorkPlansNotifier extends StateNotifier<DailyWorkPlansState> {
               .toList(),
     );
   }
+}
+
+bool _isPermissionDenied(Object error) {
+  return error is ApiException && error.statusCode == 403;
+}
+
+String _errorMessage(Object error) {
+  if (error is ApiException) {
+    return error.message;
+  }
+
+  if (error is FormatException) {
+    return 'Данные графика пришли неполными. Обновите экран и повторите попытку.';
+  }
+
+  return 'Не удалось обработать данные графика работ.';
 }

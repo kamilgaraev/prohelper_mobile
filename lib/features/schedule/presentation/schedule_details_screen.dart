@@ -264,14 +264,8 @@ class _ScheduleDetailHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final schedule = detail.schedule;
-    final statusColor = _parseColor(
-      schedule.statusColor,
-      Theme.of(context).colorScheme.primary,
-    );
-    final progressColor = _parseColor(
-      schedule.progressColor,
-      Theme.of(context).colorScheme.secondary,
-    );
+    final statusColor = _parseColor(schedule.statusColor);
+    final progressColor = _parseColor(schedule.progressColor);
 
     return IndustrialCard(
       child: Column(
@@ -283,9 +277,9 @@ class _ScheduleDetailHeader extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    if ((detail.project?.name ?? '').isNotEmpty)
+                    if (detail.project.name.isNotEmpty)
                       Text(
-                        detail.project!.name,
+                        detail.project.name,
                         style: AppTypography.bodyMedium(context).copyWith(
                           color: Theme.of(context).colorScheme.onSurfaceVariant,
                         ),
@@ -693,10 +687,7 @@ class _TaskCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final statusColor = _parseColor(
-      task.statusColor,
-      theme.colorScheme.primary,
-    );
+    final statusColor = _parseColor(task.statusColor);
     final leftPadding = (task.level * 14).clamp(0, 42).toDouble();
     final isOverdue = _isOverdueTask(task);
     final borderColor =
@@ -1100,14 +1091,14 @@ String _formatQuantity(double value) {
   return value.toStringAsFixed(value.truncateToDouble() == value ? 0 : 2);
 }
 
-Color _parseColor(String? value, Color fallback) {
-  if (value == null || value.isEmpty) {
-    return fallback;
-  }
-
+Color _parseColor(String value) {
   final normalized = value.replaceFirst('#', '');
   final hex = normalized.length == 6 ? 'FF$normalized' : normalized;
   final parsed = int.tryParse(hex, radix: 16);
 
-  return parsed == null ? fallback : Color(parsed);
+  if (parsed == null) {
+    throw ArgumentError.value(value, 'value', 'Invalid schedule color');
+  }
+
+  return Color(parsed);
 }

@@ -93,22 +93,12 @@ class ScheduleRepository {
 
   Future<DailyWorkPlanAssignmentModel> recordDailyWorkFact({
     required int assignmentId,
-    required String status,
-    required double completedQuantity,
-    required double actualWorkHours,
-    String? factComment,
-    String? failureReason,
+    required DailyWorkFactInput input,
   }) async {
     try {
       final response = await _dio.patch(
         '/schedule/daily-plan-assignments/$assignmentId/fact',
-        data: {
-          'status': status,
-          'completed_quantity': completedQuantity,
-          'actual_work_hours': actualWorkHours,
-          if (factComment != null) 'fact_comment': factComment,
-          if (failureReason != null) 'failure_reason': failureReason,
-        },
+        data: input.toJson(),
       );
       final payload = MobileApiResponse.dataMap(response.data);
 

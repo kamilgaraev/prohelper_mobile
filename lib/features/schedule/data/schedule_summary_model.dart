@@ -5,26 +5,13 @@ class ScheduleSummaryModel {
   final List<ScheduleEventModel> events;
 
   factory ScheduleSummaryModel.fromJson(Map<String, dynamic> json) {
-    final summaryJson = json['summary'];
-    final eventsJson = json['events'];
-
     return ScheduleSummaryModel(
-      summary: ScheduleSummaryData.fromJson(
-        summaryJson is Map<String, dynamic>
-            ? summaryJson
-            : summaryJson is Map
-            ? summaryJson.map((key, value) => MapEntry(key.toString(), value))
-            : const {},
-      ),
+      summary: ScheduleSummaryData.fromJson(_requiredMap(json, 'summary')),
       events:
-          (eventsJson as List<dynamic>? ?? const [])
-              .whereType<Map>()
-              .map(
-                (event) => ScheduleEventModel.fromJson(
-                  event.map((key, value) => MapEntry(key.toString(), value)),
-                ),
-              )
-              .toList(),
+          _requiredList(
+            json,
+            'events',
+          ).map(ScheduleEventModel.fromJson).toList(),
     );
   }
 }
@@ -48,12 +35,12 @@ class ScheduleSummaryData {
 
   factory ScheduleSummaryData.fromJson(Map<String, dynamic> json) {
     return ScheduleSummaryData(
-      todayCount: json['today_count'] as int? ?? 0,
-      upcomingCount: json['upcoming_count'] as int? ?? 0,
-      blockingCount: json['blocking_count'] as int? ?? 0,
-      inProgressCount: json['in_progress_count'] as int? ?? 0,
-      projectId: json['project_id'] as int?,
-      projectName: json['project_name'] as String?,
+      todayCount: _requiredInt(json, 'today_count'),
+      upcomingCount: _requiredInt(json, 'upcoming_count'),
+      blockingCount: _requiredInt(json, 'blocking_count'),
+      inProgressCount: _requiredInt(json, 'in_progress_count'),
+      projectId: _asNullableInt(json['project_id']),
+      projectName: _asNullableString(json['project_name']),
     );
   }
 }
@@ -70,10 +57,10 @@ class ScheduleEventModel {
     required this.priorityLabel,
     required this.isBlocking,
     required this.isAllDay,
+    required this.eventDate,
     this.description,
     this.projectId,
     this.projectName,
-    this.eventDate,
     this.eventTime,
     this.location,
   });
@@ -91,31 +78,195 @@ class ScheduleEventModel {
   final String? description;
   final int? projectId;
   final String? projectName;
-  final DateTime? eventDate;
+  final DateTime eventDate;
   final String? eventTime;
   final String? location;
 
   factory ScheduleEventModel.fromJson(Map<String, dynamic> json) {
     return ScheduleEventModel(
-      id: json['id'] as int? ?? 0,
-      title: json['title'] as String? ?? '',
-      eventType: json['event_type'] as String? ?? '',
-      eventTypeLabel: json['event_type_label'] as String? ?? '',
-      status: json['status'] as String? ?? '',
-      statusLabel: json['status_label'] as String? ?? '',
-      priority: json['priority'] as String? ?? '',
-      priorityLabel: json['priority_label'] as String? ?? '',
-      isBlocking: json['is_blocking'] as bool? ?? false,
-      isAllDay: json['is_all_day'] as bool? ?? false,
-      description: json['description'] as String?,
-      projectId: json['project_id'] as int?,
-      projectName: json['project_name'] as String?,
-      eventDate:
-          json['event_date'] != null
-              ? DateTime.tryParse(json['event_date'].toString())
-              : null,
-      eventTime: json['event_time'] as String?,
-      location: json['location'] as String?,
+      id: _requiredInt(json, 'id'),
+      title: _requiredString(json, 'title'),
+      eventType: _requiredKnownString(json, 'event_type', _eventTypes),
+      eventTypeLabel: _requiredCleanLabel(json, 'event_type_label'),
+      status: _requiredKnownString(json, 'status', _eventStatuses),
+      statusLabel: _requiredCleanLabel(json, 'status_label'),
+      priority: _requiredKnownString(json, 'priority', _eventPriorities),
+      priorityLabel: _requiredCleanLabel(json, 'priority_label'),
+      isBlocking: _requiredBool(json, 'is_blocking'),
+      isAllDay: _requiredBool(json, 'is_all_day'),
+      description: _asNullableString(json['description']),
+      projectId: _asNullableInt(json['project_id']),
+      projectName: _asNullableString(json['project_name']),
+      eventDate: _requiredDate(json, 'event_date'),
+      eventTime: _asNullableString(json['event_time']),
+      location: _asNullableString(json['location']),
     );
   }
 }
+
+Map<String, dynamic> _requiredMap(Map<String, dynamic> json, String key) {
+  final value = json[key];
+  if (value is Map<String, dynamic>) {
+    return value;
+  }
+
+  if (value is Map) {
+    return value.map((key, value) => MapEntry(key.toString(), value));
+  }
+
+  throw FormatException('Schedule summary field "$key" must be an object.');
+}
+
+List<Map<String, dynamic>> _requiredList(
+  Map<String, dynamic> json,
+  String key,
+) {
+  final value = json[key];
+  if (value is! List) {
+    throw FormatException('Schedule summary field "$key" must be a list.');
+  }
+
+  return value.map((item) {
+    if (item is Map<String, dynamic>) {
+      return item;
+    }
+
+    if (item is Map) {
+      return item.map((key, value) => MapEntry(key.toString(), value));
+    }
+
+    throw FormatException(
+      'Schedule summary field "$key" must contain objects.',
+    );
+  }).toList();
+}
+
+int? _asNullableInt(dynamic value) {
+  if (value == null) {
+    return null;
+  }
+
+  if (value is int) {
+    return value;
+  }
+
+  if (value is num) {
+    return value.toInt();
+  }
+
+  return int.tryParse(value.toString());
+}
+
+int _requiredInt(Map<String, dynamic> json, String key) {
+  final value = _asNullableInt(json[key]);
+  if (value == null) {
+    throw FormatException('Schedule summary field "$key" is required.');
+  }
+
+  return value;
+}
+
+String? _asNullableString(dynamic value) {
+  final normalized = value?.toString().trim() ?? '';
+  return normalized.isEmpty ? null : normalized;
+}
+
+String _requiredString(Map<String, dynamic> json, String key) {
+  final value = _asNullableString(json[key]);
+  if (value == null) {
+    throw FormatException('Schedule summary field "$key" is required.');
+  }
+
+  return value;
+}
+
+String _requiredKnownString(
+  Map<String, dynamic> json,
+  String key,
+  Set<String> allowedValues,
+) {
+  final value = _requiredString(json, key);
+  if (!allowedValues.contains(value)) {
+    throw FormatException('Schedule summary field "$key" has unknown value.');
+  }
+
+  return value;
+}
+
+bool? _asNullableBool(dynamic value) {
+  if (value == null) {
+    return null;
+  }
+
+  if (value is bool) {
+    return value;
+  }
+
+  if (value is num) {
+    return value != 0;
+  }
+
+  final normalized = value.toString().toLowerCase().trim();
+  if (normalized == 'true' || normalized == '1') {
+    return true;
+  }
+  if (normalized == 'false' || normalized == '0') {
+    return false;
+  }
+
+  return null;
+}
+
+bool _requiredBool(Map<String, dynamic> json, String key) {
+  final value = _asNullableBool(json[key]);
+  if (value == null) {
+    throw FormatException('Schedule summary field "$key" is required.');
+  }
+
+  return value;
+}
+
+DateTime _requiredDate(Map<String, dynamic> json, String key) {
+  final value = _requiredString(json, key);
+  final parsed = DateTime.tryParse(value);
+  if (parsed == null) {
+    throw FormatException('Schedule summary field "$key" must be a date.');
+  }
+
+  return parsed;
+}
+
+String? _cleanLabel(dynamic value) {
+  final text = _asNullableString(value);
+  if (text == null) {
+    return null;
+  }
+
+  if (text.startsWith('mobile_schedule.')) {
+    return null;
+  }
+
+  return text;
+}
+
+String _requiredCleanLabel(Map<String, dynamic> json, String key) {
+  final label = _cleanLabel(json[key]);
+  if (label == null) {
+    throw FormatException('Schedule summary field "$key" must be readable.');
+  }
+
+  return label;
+}
+
+const _eventTypes = {
+  'inspection',
+  'delivery',
+  'meeting',
+  'maintenance',
+  'weather',
+  'other',
+};
+
+const _eventStatuses = {'scheduled', 'in_progress', 'completed', 'cancelled'};
+
+const _eventPriorities = {'low', 'normal', 'high', 'critical'};

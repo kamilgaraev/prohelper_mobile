@@ -156,7 +156,7 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
                 padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
                 sliver: SliverToBoxAdapter(
                   child: _ScheduleHeader(
-                    projectName: overview.project?.name ?? selectedProject.name,
+                    projectName: overview.project.name,
                     isRefreshing: state.isLoading,
                   ),
                 ),
@@ -583,14 +583,8 @@ class _ScheduleCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final statusColor = _parseColor(
-      schedule.statusColor,
-      theme.colorScheme.primary,
-    );
-    final progressColor = _parseColor(
-      schedule.progressColor,
-      theme.colorScheme.secondary,
-    );
+    final statusColor = _parseColor(schedule.statusColor);
+    final progressColor = _parseColor(schedule.progressColor);
     final healthLabel = _healthStatusLabel(schedule.healthStatus);
     final healthColor = _healthStatusColor(context, schedule.healthStatus);
     final hasAttention = _hasAttention(schedule);
@@ -840,8 +834,8 @@ bool _isActiveSchedule(ScheduleItemModel schedule) {
       schedule.overallProgressPercent > 0;
 }
 
-bool _isHealthProblem(String value) {
-  final normalized = value.trim().toLowerCase();
+bool _isHealthProblem(String? value) {
+  final normalized = value?.trim().toLowerCase() ?? '';
   return normalized == 'at_risk' ||
       normalized == 'warning' ||
       normalized == 'critical' ||
@@ -849,26 +843,26 @@ bool _isHealthProblem(String value) {
       normalized == 'overdue';
 }
 
-String? _healthStatusLabel(String value) {
-  final normalized = value.trim().toLowerCase();
+String? _healthStatusLabel(String? value) {
+  final normalized = value?.trim().toLowerCase() ?? '';
 
   return switch (normalized) {
     '' => null,
     'healthy' || 'on_track' => 'По плану',
     'at_risk' || 'warning' => 'Есть риск',
     'critical' || 'delayed' || 'overdue' => 'Требует внимания',
-    _ => value,
+    _ => throw ArgumentError.value(value, 'value', 'Unknown health status'),
   };
 }
 
-Color _healthStatusColor(BuildContext context, String value) {
-  final normalized = value.trim().toLowerCase();
+Color _healthStatusColor(BuildContext context, String? value) {
+  final normalized = value?.trim().toLowerCase() ?? '';
 
   return switch (normalized) {
     'healthy' || 'on_track' => AppColors.success,
     'at_risk' || 'warning' => AppColors.warning,
     'critical' || 'delayed' || 'overdue' => AppColors.error,
-    _ => Theme.of(context).colorScheme.onSurfaceVariant,
+    _ => throw ArgumentError.value(value, 'value', 'Unknown health status'),
   };
 }
 
@@ -894,14 +888,14 @@ String _formatDate(String? value) {
   return '$day.$month.${date.year}';
 }
 
-Color _parseColor(String? value, Color fallback) {
-  if (value == null || value.isEmpty) {
-    return fallback;
-  }
-
+Color _parseColor(String value) {
   final normalized = value.replaceFirst('#', '');
   final hex = normalized.length == 6 ? 'FF$normalized' : normalized;
   final parsed = int.tryParse(hex, radix: 16);
 
-  return parsed == null ? fallback : Color(parsed);
+  if (parsed == null) {
+    throw ArgumentError.value(value, 'value', 'Invalid schedule color');
+  }
+
+  return Color(parsed);
 }
