@@ -147,8 +147,9 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
               const SliverFillRemaining(
                 child: AppEmptyState(
                   icon: Icons.timeline_outlined,
-                  title: 'Графики работ пока недоступны',
-                  description: 'Попробуйте обновить экран позже.',
+                  title: 'Графики работ не найдены',
+                  description:
+                      'Обновите данные или проверьте выбранный объект.',
                 ),
               )
             else ...[

@@ -176,7 +176,7 @@ class _NotificationDetailScreenState
       case NotificationTargetType.unknown:
         _showMessage(
           context,
-          'Связанный раздел пока недоступен в мобильном приложении.',
+          'Не удалось открыть связанный раздел из уведомления.',
         );
         return;
     }
