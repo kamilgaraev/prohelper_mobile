@@ -6,11 +6,15 @@ import '../data/safety_repository.dart';
 
 const _errorSentinel = Object();
 const _projectFilterSentinel = Object();
+const _statusFilterSentinel = Object();
 
 class SafetyState {
   const SafetyState({
     this.isLoading = false,
     this.projectFilter,
+    this.permitStatusFilter,
+    this.incidentStatusFilter,
+    this.violationStatusFilter,
     this.permits = const [],
     this.incidents = const [],
     this.violations = const [],
@@ -20,6 +24,9 @@ class SafetyState {
 
   final bool isLoading;
   final int? projectFilter;
+  final String? permitStatusFilter;
+  final String? incidentStatusFilter;
+  final String? violationStatusFilter;
   final List<SafetyWorkPermitModel> permits;
   final List<SafetyIncidentModel> incidents;
   final List<SafetyViolationModel> violations;
@@ -29,6 +36,9 @@ class SafetyState {
   SafetyState copyWith({
     bool? isLoading,
     Object? projectFilter = _projectFilterSentinel,
+    Object? permitStatusFilter = _statusFilterSentinel,
+    Object? incidentStatusFilter = _statusFilterSentinel,
+    Object? violationStatusFilter = _statusFilterSentinel,
     List<SafetyWorkPermitModel>? permits,
     List<SafetyIncidentModel>? incidents,
     List<SafetyViolationModel>? violations,
@@ -41,6 +51,18 @@ class SafetyState {
           identical(projectFilter, _projectFilterSentinel)
               ? this.projectFilter
               : projectFilter as int?,
+      permitStatusFilter:
+          identical(permitStatusFilter, _statusFilterSentinel)
+              ? this.permitStatusFilter
+              : permitStatusFilter as String?,
+      incidentStatusFilter:
+          identical(incidentStatusFilter, _statusFilterSentinel)
+              ? this.incidentStatusFilter
+              : incidentStatusFilter as String?,
+      violationStatusFilter:
+          identical(violationStatusFilter, _statusFilterSentinel)
+              ? this.violationStatusFilter
+              : violationStatusFilter as String?,
       permits: permits ?? this.permits,
       incidents: incidents ?? this.incidents,
       violations: violations ?? this.violations,
@@ -70,6 +92,33 @@ class SafetyNotifier extends StateNotifier<SafetyState> {
     );
   }
 
+  Future<void> setPermitStatusFilter(String? status) async {
+    if (state.permitStatusFilter == status) {
+      return;
+    }
+
+    state = state.copyWith(permitStatusFilter: status, permits: const []);
+    await load();
+  }
+
+  Future<void> setIncidentStatusFilter(String? status) async {
+    if (state.incidentStatusFilter == status) {
+      return;
+    }
+
+    state = state.copyWith(incidentStatusFilter: status, incidents: const []);
+    await load();
+  }
+
+  Future<void> setViolationStatusFilter(String? status) async {
+    if (state.violationStatusFilter == status) {
+      return;
+    }
+
+    state = state.copyWith(violationStatusFilter: status, violations: const []);
+    await load();
+  }
+
   Future<void> load() async {
     state = state.copyWith(
       isLoading: true,
@@ -79,9 +128,18 @@ class SafetyNotifier extends StateNotifier<SafetyState> {
 
     try {
       final result = await Future.wait<Object>([
-        _repository.fetchPermits(projectId: state.projectFilter),
-        _repository.fetchIncidents(projectId: state.projectFilter),
-        _repository.fetchViolations(projectId: state.projectFilter),
+        _repository.fetchPermits(
+          projectId: state.projectFilter,
+          status: state.permitStatusFilter,
+        ),
+        _repository.fetchIncidents(
+          projectId: state.projectFilter,
+          status: state.incidentStatusFilter,
+        ),
+        _repository.fetchViolations(
+          projectId: state.projectFilter,
+          status: state.violationStatusFilter,
+        ),
       ]);
 
       state = state.copyWith(

@@ -11,6 +11,9 @@ class _FakeSafetyRepository extends SafetyRepository {
   final bool permissionDenied;
 
   int? loadedProjectId;
+  String? loadedPermitStatus;
+  String? loadedIncidentStatus;
+  String? loadedViolationStatus;
   int? resolvedViolationId;
   int? submittedPermitId;
   int? approvedPermitId;
@@ -39,16 +42,25 @@ class _FakeSafetyRepository extends SafetyRepository {
     }
 
     loadedProjectId = projectId;
+    loadedPermitStatus = status;
     return [_permit];
   }
 
   @override
-  Future<List<SafetyIncidentModel>> fetchIncidents({int? projectId}) async {
+  Future<List<SafetyIncidentModel>> fetchIncidents({
+    int? projectId,
+    String? status,
+  }) async {
+    loadedIncidentStatus = status;
     return [_incident];
   }
 
   @override
-  Future<List<SafetyViolationModel>> fetchViolations({int? projectId}) async {
+  Future<List<SafetyViolationModel>> fetchViolations({
+    int? projectId,
+    String? status,
+  }) async {
+    loadedViolationStatus = status;
     return [_violation];
   }
 
@@ -191,6 +203,23 @@ void main() {
       expect(notifier.state.incidents.single.id, 2);
       expect(notifier.state.violations.single.id, 3);
       expect(notifier.state.error, isNull);
+    });
+
+    test('передает фильтры статусов в репозиторий', () async {
+      final repository = _FakeSafetyRepository();
+      final notifier = SafetyNotifier(repository)..syncProject(15);
+
+      await notifier.setPermitStatusFilter('active');
+      await notifier.setIncidentStatusFilter('reported');
+      await notifier.setViolationStatusFilter('open');
+
+      expect(repository.loadedProjectId, 15);
+      expect(repository.loadedPermitStatus, 'active');
+      expect(repository.loadedIncidentStatus, 'reported');
+      expect(repository.loadedViolationStatus, 'open');
+      expect(notifier.state.permitStatusFilter, 'active');
+      expect(notifier.state.incidentStatusFilter, 'reported');
+      expect(notifier.state.violationStatusFilter, 'open');
     });
 
     test('после write actions обновляет состояние', () async {

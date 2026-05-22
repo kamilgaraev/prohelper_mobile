@@ -15,6 +15,9 @@ class _RecordingSafetyRepository extends SafetyRepository {
 
   Map<String, dynamic>? incidentPayload;
   int? suspendedPermitId;
+  String? permitStatus;
+  String? incidentStatus;
+  String? violationStatus;
   String? suspendReason;
 
   @override
@@ -22,16 +25,25 @@ class _RecordingSafetyRepository extends SafetyRepository {
     int? projectId,
     String? status,
   }) async {
+    permitStatus = status;
     return _permits;
   }
 
   @override
-  Future<List<SafetyIncidentModel>> fetchIncidents({int? projectId}) async {
+  Future<List<SafetyIncidentModel>> fetchIncidents({
+    int? projectId,
+    String? status,
+  }) async {
+    incidentStatus = status;
     return const [];
   }
 
   @override
-  Future<List<SafetyViolationModel>> fetchViolations({int? projectId}) async {
+  Future<List<SafetyViolationModel>> fetchViolations({
+    int? projectId,
+    String? status,
+  }) async {
+    violationStatus = status;
     return const [];
   }
 
@@ -65,7 +77,7 @@ class _RecordingSafetyRepository extends SafetyRepository {
 }
 
 class _TestSafetyNotifier extends SafetyNotifier {
-  _TestSafetyNotifier(super.repository) {
+  _TestSafetyNotifier(this.repository) : super(repository) {
     state = const SafetyState(
       isLoading: false,
       projectFilter: 9,
@@ -73,8 +85,13 @@ class _TestSafetyNotifier extends SafetyNotifier {
     );
   }
 
+  final _RecordingSafetyRepository repository;
+
   @override
   Future<void> load() async {
+    repository.permitStatus = state.permitStatusFilter;
+    repository.incidentStatus = state.incidentStatusFilter;
+    repository.violationStatus = state.violationStatusFilter;
     state = state.copyWith(
       isLoading: false,
       permits: _permits,
@@ -144,10 +161,18 @@ void main() {
     await tester.pump(const Duration(milliseconds: 400));
   }
 
+  void useLargeSurface(WidgetTester tester) {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(1000, 1200);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+  }
+
   testWidgets('submits incident type and visible occurrence time', (
     tester,
   ) async {
     final repository = _RecordingSafetyRepository();
+    useLargeSurface(tester);
 
     await tester.pumpWidget(buildScreen(repository));
     await pumpUi(tester);
@@ -186,6 +211,7 @@ void main() {
     tester,
   ) async {
     final repository = _RecordingSafetyRepository();
+    useLargeSurface(tester);
 
     await tester.pumpWidget(buildScreen(repository));
     await pumpUi(tester);
@@ -213,5 +239,24 @@ void main() {
 
     expect(repository.suspendedPermitId, 11);
     expect(repository.suspendReason, 'Сильный ветер');
+  });
+
+  testWidgets('applies visible safety status filters', (tester) async {
+    final repository = _RecordingSafetyRepository();
+    useLargeSurface(tester);
+
+    await tester.pumpWidget(buildScreen(repository));
+    await pumpUi(tester);
+
+    await tester.tap(find.text('Активные').first);
+    await pumpUi(tester);
+    await tester.tap(find.text('Зарегистрированы').first);
+    await pumpUi(tester);
+    await tester.tap(find.text('Открытые').last);
+    await pumpUi(tester);
+
+    expect(repository.permitStatus, 'active');
+    expect(repository.incidentStatus, 'reported');
+    expect(repository.violationStatus, 'open');
   });
 }

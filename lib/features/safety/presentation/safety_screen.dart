@@ -111,6 +111,22 @@ class _SafetyScreenState extends ConsumerState<SafetyScreen> {
                       const SizedBox(height: 12),
                       _SummaryStrip(state: state),
                       const SizedBox(height: 12),
+                      _SafetyFilterBar(
+                        state: state,
+                        onPermitStatusChanged:
+                            (status) => ref
+                                .read(safetyProvider.notifier)
+                                .setPermitStatusFilter(status),
+                        onIncidentStatusChanged:
+                            (status) => ref
+                                .read(safetyProvider.notifier)
+                                .setIncidentStatusFilter(status),
+                        onViolationStatusChanged:
+                            (status) => ref
+                                .read(safetyProvider.notifier)
+                                .setViolationStatusFilter(status),
+                      ),
+                      const SizedBox(height: 12),
                       _PermitsSection(
                         permits: state.permits,
                         onOpen: (permit) => _showPermitSheet(context, permit),
@@ -1014,6 +1030,92 @@ class _ProjectContextCard extends StatelessWidget {
   }
 }
 
+class _SafetyFilterBar extends StatelessWidget {
+  const _SafetyFilterBar({
+    required this.state,
+    required this.onPermitStatusChanged,
+    required this.onIncidentStatusChanged,
+    required this.onViolationStatusChanged,
+  });
+
+  final SafetyState state;
+  final ValueChanged<String?> onPermitStatusChanged;
+  final ValueChanged<String?> onIncidentStatusChanged;
+  final ValueChanged<String?> onViolationStatusChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return ProCard(
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _FilterGroup(
+            title: 'Наряды-допуски',
+            options: _permitStatusFilters,
+            selectedValue: state.permitStatusFilter,
+            onChanged: onPermitStatusChanged,
+          ),
+          const SizedBox(height: 12),
+          _FilterGroup(
+            title: 'Происшествия',
+            options: _incidentStatusFilters,
+            selectedValue: state.incidentStatusFilter,
+            onChanged: onIncidentStatusChanged,
+          ),
+          const SizedBox(height: 12),
+          _FilterGroup(
+            title: 'Нарушения',
+            options: _violationStatusFilters,
+            selectedValue: state.violationStatusFilter,
+            onChanged: onViolationStatusChanged,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FilterGroup extends StatelessWidget {
+  const _FilterGroup({
+    required this.title,
+    required this.options,
+    required this.selectedValue,
+    required this.onChanged,
+  });
+
+  final String title;
+  final List<_SafetyFilterOption> options;
+  final String? selectedValue;
+  final ValueChanged<String?> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(title, style: AppTypography.caption(context)),
+        const SizedBox(height: 6),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children:
+              options
+                  .map(
+                    (option) => ChoiceChip(
+                      label: Text(option.label),
+                      selected: selectedValue == option.value,
+                      onSelected: (_) => onChanged(option.value),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                  )
+                  .toList(),
+        ),
+      ],
+    );
+  }
+}
+
 class _RiskBanner extends StatelessWidget {
   const _RiskBanner({required this.flags});
 
@@ -1525,6 +1627,41 @@ class _EmptySection extends StatelessWidget {
     );
   }
 }
+
+class _SafetyFilterOption {
+  const _SafetyFilterOption(this.value, this.label);
+
+  final String? value;
+  final String label;
+}
+
+const _permitStatusFilters = [
+  _SafetyFilterOption(null, 'Все'),
+  _SafetyFilterOption('draft', 'Черновики'),
+  _SafetyFilterOption('pending_approval', 'На согласовании'),
+  _SafetyFilterOption('approved', 'Согласованные'),
+  _SafetyFilterOption('active', 'Активные'),
+  _SafetyFilterOption('suspended', 'Приостановленные'),
+  _SafetyFilterOption('rejected', 'Отклоненные'),
+  _SafetyFilterOption('closed', 'Закрытые'),
+];
+
+const _incidentStatusFilters = [
+  _SafetyFilterOption(null, 'Все'),
+  _SafetyFilterOption('reported', 'Зарегистрированы'),
+  _SafetyFilterOption('triage', 'Разбор'),
+  _SafetyFilterOption('investigation', 'Расследование'),
+  _SafetyFilterOption('corrective_actions', 'Корректировка'),
+  _SafetyFilterOption('closed', 'Закрытые'),
+  _SafetyFilterOption('cancelled', 'Отмененные'),
+];
+
+const _violationStatusFilters = [
+  _SafetyFilterOption(null, 'Все'),
+  _SafetyFilterOption('open', 'Открытые'),
+  _SafetyFilterOption('resolved', 'Устраненные'),
+  _SafetyFilterOption('closed', 'Закрытые'),
+];
 
 String _formatDate(String value) {
   final parsed = DateTime.tryParse(value);

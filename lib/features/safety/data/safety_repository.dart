@@ -44,11 +44,17 @@ class SafetyRepository {
     }
   }
 
-  Future<List<SafetyIncidentModel>> fetchIncidents({int? projectId}) async {
+  Future<List<SafetyIncidentModel>> fetchIncidents({
+    int? projectId,
+    String? status,
+  }) async {
     try {
       final response = await _dio.get(
         '/safety-management/incidents',
-        queryParameters: {if (projectId != null) 'project_id': projectId},
+        queryParameters: {
+          if (projectId != null) 'project_id': projectId,
+          if (status != null && status.isNotEmpty) 'status': status,
+        },
       );
 
       return _list(response.data).map(SafetyIncidentModel.fromJson).toList();
@@ -57,11 +63,17 @@ class SafetyRepository {
     }
   }
 
-  Future<List<SafetyViolationModel>> fetchViolations({int? projectId}) async {
+  Future<List<SafetyViolationModel>> fetchViolations({
+    int? projectId,
+    String? status,
+  }) async {
     try {
       final response = await _dio.get(
         '/safety-management/violations',
-        queryParameters: {if (projectId != null) 'project_id': projectId},
+        queryParameters: {
+          if (projectId != null) 'project_id': projectId,
+          if (status != null && status.isNotEmpty) 'status': status,
+        },
       );
 
       return _list(response.data).map(SafetyViolationModel.fromJson).toList();
