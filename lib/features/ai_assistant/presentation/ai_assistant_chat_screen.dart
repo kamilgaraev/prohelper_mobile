@@ -32,8 +32,12 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
   List<AiMessageModel> _messages = const [];
   bool _isLoading = true;
   bool _isSending = false;
+  bool _isPreviewLoading = false;
+  bool _isExecutingAction = false;
   String? _error;
+  String? _actionError;
   int? _conversationId;
+  AiActionPreviewModel? _activePreview;
 
   @override
   void initState() {
@@ -71,6 +75,8 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
     setState(() {
       _isLoading = true;
       _error = null;
+      _actionError = null;
+      _activePreview = null;
     });
 
     try {
@@ -110,6 +116,8 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
       _messages = [..._messages, optimistic];
       _isSending = true;
       _error = null;
+      _actionError = null;
+      _activePreview = null;
       if (forcedValue == null) {
         _controller.clear();
       }
@@ -137,6 +145,98 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
     }
 
     _scrollToBottom();
+  }
+
+  Future<void> _previewAction(AiAssistantActionModel action) async {
+    if (_isPreviewLoading || _isExecutingAction || !action.allowed) {
+      return;
+    }
+
+    setState(() {
+      _isPreviewLoading = true;
+      _actionError = null;
+      _activePreview = null;
+    });
+
+    try {
+      final preview = await ref
+          .read(aiAssistantRepositoryProvider)
+          .previewAction(action: action, conversationId: _conversationId);
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _activePreview = preview;
+        _isPreviewLoading = false;
+      });
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _actionError = _resolveError(error);
+        _isPreviewLoading = false;
+      });
+    }
+
+    _scrollToBottom();
+  }
+
+  Future<void> _executeActivePreview() async {
+    final preview = _activePreview;
+    if (preview == null || _isExecutingAction || !preview.executable) {
+      return;
+    }
+
+    setState(() {
+      _isExecutingAction = true;
+      _actionError = null;
+    });
+
+    try {
+      final result = await ref
+          .read(aiAssistantRepositoryProvider)
+          .executeAction(preview: preview, conversationId: _conversationId);
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _activePreview = null;
+        _isExecutingAction = false;
+        if (_conversationId == null && result.message != null) {
+          _messages = [..._messages, result.message!];
+        }
+      });
+
+      if (_conversationId != null) {
+        await _loadConversation(_conversationId!);
+      } else if (result.messageText != null) {
+        _showSnackBar(result.messageText!);
+      }
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _actionError = _resolveError(error);
+        _isExecutingAction = false;
+      });
+    }
+
+    _scrollToBottom();
+  }
+
+  void _rejectActionPreview() {
+    setState(() {
+      _activePreview = null;
+      _actionError = null;
+    });
   }
 
   String _resolveError(Object error) {
@@ -305,6 +405,10 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
                                 : message.artifacts
                                     .where((artifact) => artifact.isReport)
                                     .toList(growable: false);
+                        final actions =
+                            isUser
+                                ? const <AiAssistantActionModel>[]
+                                : message.actions;
 
                         return Align(
                           alignment:
@@ -359,6 +463,25 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
                                       ),
                                     ),
                                   ),
+                                if (actions.isNotEmpty)
+                                  ...actions.map(
+                                    (action) => Padding(
+                                      padding: EdgeInsets.only(
+                                        top:
+                                            message.content.trim().isEmpty &&
+                                                    reportArtifacts.isEmpty
+                                                ? 0
+                                                : 12,
+                                      ),
+                                      child: _AssistantActionCard(
+                                        action: action,
+                                        isBusy:
+                                            _isPreviewLoading ||
+                                            _isExecutingAction,
+                                        onPreview: () => _previewAction(action),
+                                      ),
+                                    ),
+                                  ),
                               ],
                             ),
                           ),
@@ -366,6 +489,21 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
                       },
                     ),
           ),
+          if (_actionError != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+              child: _ActionErrorPanel(message: _actionError!),
+            ),
+          if (_activePreview != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+              child: _ActionPreviewPanel(
+                preview: _activePreview!,
+                isExecuting: _isExecutingAction,
+                onExecute: _executeActivePreview,
+                onCancel: _rejectActionPreview,
+              ),
+            ),
           SafeArea(
             top: false,
             child: Padding(
@@ -393,6 +531,266 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _AssistantActionCard extends StatelessWidget {
+  const _AssistantActionCard({
+    required this.action,
+    required this.isBusy,
+    required this.onPreview,
+  });
+
+  final AiAssistantActionModel action;
+  final bool isBusy;
+  final VoidCallback onPreview;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final available = action.isExecutableCandidate;
+
+    return Material(
+      color: theme.colorScheme.surface,
+      borderRadius: BorderRadius.circular(16),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(
+                  available
+                      ? Icons.task_alt_rounded
+                      : Icons.lock_outline_rounded,
+                  color:
+                      available
+                          ? theme.colorScheme.primary
+                          : theme.colorScheme.onSurfaceVariant,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        action.label,
+                        style: AppTypography.bodyMedium(
+                          context,
+                        ).copyWith(fontWeight: FontWeight.w700),
+                      ),
+                      if (!available) ...[
+                        const SizedBox(height: 6),
+                        Text(
+                          action.reasonIfDisabled ??
+                              'Действие недоступно по текущим правам.',
+                          style: AppTypography.bodySmall(
+                            context,
+                          ).copyWith(color: theme.colorScheme.onSurfaceVariant),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                if (action.requiresConfirmation)
+                  Chip(
+                    label: const Text('Требует подтверждения'),
+                    visualDensity: VisualDensity.compact,
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                const Spacer(),
+                if (available)
+                  FilledButton.icon(
+                    onPressed: isBusy ? null : onPreview,
+                    icon:
+                        isBusy
+                            ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                            : const Icon(Icons.visibility_rounded),
+                    label: const Text('Подготовить'),
+                  )
+                else
+                  OutlinedButton.icon(
+                    onPressed: null,
+                    icon: const Icon(Icons.lock_outline_rounded),
+                    label: const Text('Недоступно'),
+                  ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ActionPreviewPanel extends StatelessWidget {
+  const _ActionPreviewPanel({
+    required this.preview,
+    required this.isExecuting,
+    required this.onExecute,
+    required this.onCancel,
+  });
+
+  final AiActionPreviewModel preview;
+  final bool isExecuting;
+  final VoidCallback onExecute;
+  final VoidCallback onCancel;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return IndustrialCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(Icons.fact_check_outlined, color: theme.colorScheme.primary),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      preview.title,
+                      style: AppTypography.bodyLarge(
+                        context,
+                      ).copyWith(fontWeight: FontWeight.w800),
+                    ),
+                    if (preview.description.trim().isNotEmpty) ...[
+                      const SizedBox(height: 6),
+                      Text(
+                        preview.description,
+                        style: AppTypography.bodySmall(
+                          context,
+                        ).copyWith(color: theme.colorScheme.onSurfaceVariant),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ),
+          if (preview.summaryItems.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children:
+                  preview.summaryItems
+                      .map(
+                        (item) => Chip(
+                          label: Text('${item.label}: ${item.value}'),
+                          visualDensity: VisualDensity.compact,
+                        ),
+                      )
+                      .toList(),
+            ),
+          ],
+          if (preview.warnings.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            ...preview.warnings.map(
+              (warning) => Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(
+                      Icons.info_outline_rounded,
+                      size: 18,
+                      color: theme.colorScheme.error,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        warning,
+                        style: AppTypography.bodySmall(
+                          context,
+                        ).copyWith(color: theme.colorScheme.onSurfaceVariant),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              TextButton(
+                onPressed: isExecuting ? null : onCancel,
+                child: const Text('Отменить'),
+              ),
+              const Spacer(),
+              FilledButton.icon(
+                onPressed:
+                    preview.executable && !isExecuting ? onExecute : null,
+                icon:
+                    isExecuting
+                        ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                        : const Icon(Icons.play_arrow_rounded),
+                label: const Text('Выполнить'),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ActionErrorPanel extends StatelessWidget {
+  const _ActionErrorPanel({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Material(
+      color: theme.colorScheme.errorContainer,
+      borderRadius: BorderRadius.circular(16),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Row(
+          children: [
+            Icon(
+              Icons.error_outline_rounded,
+              color: theme.colorScheme.onErrorContainer,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                message,
+                style: AppTypography.bodyMedium(
+                  context,
+                ).copyWith(color: theme.colorScheme.onErrorContainer),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

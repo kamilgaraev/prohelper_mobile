@@ -50,4 +50,35 @@ void main() {
     expect(message.content, 'Обычный ответ');
     expect(message.artifacts, isEmpty);
   });
+
+  test('parses assistant actions from structured metadata', () {
+    final message = AiMessageModel.fromJson({
+      'id': 14,
+      'role': 'assistant',
+      'content': 'Можно создать задачу',
+      'created_at': '2026-05-22T10:00:00Z',
+      'metadata': {
+        'structured_payload': {
+          'next_actions': [
+            {
+              'id': 'schedule-1',
+              'type': 'act',
+              'label': 'Создать задачу графика',
+              'allowed': true,
+              'requires_confirmation': true,
+              'action_class': 'confirm',
+              'tool_name': 'create_schedule_task',
+              'arguments': {'project_id': 77},
+              'required_permissions': ['schedule_tasks.create'],
+            },
+          ],
+        },
+      },
+    });
+
+    expect(message.actions, hasLength(1));
+    expect(message.actions.single.label, 'Создать задачу графика');
+    expect(message.actions.single.isExecutableCandidate, isTrue);
+    expect(message.actions.single.arguments['project_id'], 77);
+  });
 }

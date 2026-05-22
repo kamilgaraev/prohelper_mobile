@@ -73,6 +73,8 @@ class AiMessageModel {
   bool get isUser => role == 'user';
   List<AiAssistantArtifact> get artifacts =>
       structuredPayload?.artifacts ?? const <AiAssistantArtifact>[];
+  List<AiAssistantActionModel> get actions =>
+      structuredPayload?.actions ?? const <AiAssistantActionModel>[];
 
   factory AiMessageModel.fromJson(Map<String, dynamic> json) {
     final metadata = _nullableMap(json['metadata']);
@@ -92,11 +94,13 @@ class AiAssistantStructuredPayload {
   const AiAssistantStructuredPayload({
     this.answer,
     this.artifacts = const <AiAssistantArtifact>[],
+    this.actions = const <AiAssistantActionModel>[],
     this.raw = const <String, dynamic>{},
   });
 
   final String? answer;
   final List<AiAssistantArtifact> artifacts;
+  final List<AiAssistantActionModel> actions;
   final Map<String, dynamic> raw;
 
   factory AiAssistantStructuredPayload.fromMetadata(
@@ -114,11 +118,222 @@ class AiAssistantStructuredPayload {
         .where((artifact) => artifact != null)
         .cast<AiAssistantArtifact>()
         .toList(growable: false);
+    final actions = [
+          ..._asList(payload['next_actions']),
+          ..._asList(payload['proposed_actions']),
+        ]
+        .map(AiAssistantActionModel.fromJson)
+        .where((action) => action != null)
+        .cast<AiAssistantActionModel>()
+        .toList(growable: false);
 
     return AiAssistantStructuredPayload(
       answer: _stringValue(payload['answer']),
       artifacts: artifacts,
+      actions: actions,
       raw: payload,
+    );
+  }
+}
+
+class AiAssistantActionModel {
+  const AiAssistantActionModel({
+    this.id,
+    required this.type,
+    required this.label,
+    required this.allowed,
+    this.reasonIfDisabled,
+    required this.requiresConfirmation,
+    required this.actionClass,
+    this.toolName,
+    this.arguments = const <String, dynamic>{},
+    this.requiredPermissions = const <String>[],
+    this.target,
+    this.raw = const <String, dynamic>{},
+  });
+
+  final String? id;
+  final String type;
+  final String label;
+  final bool allowed;
+  final String? reasonIfDisabled;
+  final bool requiresConfirmation;
+  final String actionClass;
+  final String? toolName;
+  final Map<String, dynamic> arguments;
+  final List<String> requiredPermissions;
+  final Map<String, dynamic>? target;
+  final Map<String, dynamic> raw;
+
+  bool get isExecutableCandidate =>
+      allowed && (type == 'navigate' || (toolName?.isNotEmpty ?? false));
+
+  Map<String, dynamic> toJson() {
+    return {
+      if (id != null) 'id': id,
+      'type': type,
+      'label': label,
+      'allowed': allowed,
+      if (reasonIfDisabled != null) 'reason_if_disabled': reasonIfDisabled,
+      'requires_confirmation': requiresConfirmation,
+      'action_class': actionClass,
+      if (toolName != null) 'tool_name': toolName,
+      if (arguments.isNotEmpty) 'arguments': arguments,
+      if (requiredPermissions.isNotEmpty)
+        'required_permissions': requiredPermissions,
+      if (target != null) 'target': target,
+    };
+  }
+
+  static AiAssistantActionModel? fromJson(dynamic value) {
+    final json = _nullableMap(value);
+    if (json == null) {
+      return null;
+    }
+
+    final label = _stringValue(json['label']);
+    final type = _stringValue(json['type']);
+
+    if (label == null || type == null) {
+      return null;
+    }
+
+    return AiAssistantActionModel(
+      id: _stringValue(json['id']),
+      type: type,
+      label: label,
+      allowed: _boolValue(json['allowed']),
+      reasonIfDisabled: _stringValue(json['reason_if_disabled']),
+      requiresConfirmation: _boolValue(json['requires_confirmation']),
+      actionClass: _stringValue(json['action_class']) ?? 'safe',
+      toolName: _stringValue(json['tool_name']),
+      arguments: _nullableMap(json['arguments']) ?? const <String, dynamic>{},
+      requiredPermissions: _asList(json['required_permissions'])
+          .map((item) => item.toString().trim())
+          .where((item) => item.isNotEmpty)
+          .toList(growable: false),
+      target: _nullableMap(json['target']),
+      raw: json,
+    );
+  }
+}
+
+class AiActionSummaryItem {
+  const AiActionSummaryItem({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  static AiActionSummaryItem? fromJson(dynamic value) {
+    final json = _nullableMap(value);
+    if (json == null) {
+      return null;
+    }
+
+    final label = _stringValue(json['label']);
+    final itemValue = _stringValue(json['value']);
+
+    if (label == null || itemValue == null) {
+      return null;
+    }
+
+    return AiActionSummaryItem(label: label, value: itemValue);
+  }
+}
+
+class AiActionPreviewModel {
+  const AiActionPreviewModel({
+    required this.title,
+    required this.description,
+    required this.requiresConfirmation,
+    required this.actionClass,
+    required this.action,
+    required this.warnings,
+    required this.summaryItems,
+    this.navigationTarget,
+    required this.executable,
+    required this.previewToken,
+    this.raw = const <String, dynamic>{},
+  });
+
+  final String title;
+  final String description;
+  final bool requiresConfirmation;
+  final String actionClass;
+  final AiAssistantActionModel action;
+  final List<String> warnings;
+  final List<AiActionSummaryItem> summaryItems;
+  final Map<String, dynamic>? navigationTarget;
+  final bool executable;
+  final String previewToken;
+  final Map<String, dynamic> raw;
+
+  factory AiActionPreviewModel.fromJson(Map<String, dynamic> json) {
+    final action = AiAssistantActionModel.fromJson(json['action']);
+    final token = _stringValue(json['preview_token']);
+
+    if (action == null || token == null) {
+      throw const FormatException(
+        'Некорректный предварительный просмотр действия.',
+      );
+    }
+
+    return AiActionPreviewModel(
+      title: _stringValue(json['title']) ?? action.label,
+      description: _stringValue(json['description']) ?? '',
+      requiresConfirmation: _boolValue(json['requires_confirmation']),
+      actionClass: _stringValue(json['action_class']) ?? action.actionClass,
+      action: action,
+      warnings: _asList(json['warnings'])
+          .map((item) => item.toString().trim())
+          .where((item) => item.isNotEmpty)
+          .toList(growable: false),
+      summaryItems: _asList(json['summary_items'])
+          .map(AiActionSummaryItem.fromJson)
+          .where((item) => item != null)
+          .cast<AiActionSummaryItem>()
+          .toList(growable: false),
+      navigationTarget: _nullableMap(json['navigation_target']),
+      executable: _boolValue(json['executable']),
+      previewToken: token,
+      raw: json,
+    );
+  }
+}
+
+class AiActionExecutionModel {
+  const AiActionExecutionModel({
+    this.messageText,
+    this.message,
+    this.navigationTarget,
+    this.action,
+    this.result,
+    this.raw = const <String, dynamic>{},
+  });
+
+  final String? messageText;
+  final AiMessageModel? message;
+  final Map<String, dynamic>? navigationTarget;
+  final AiAssistantActionModel? action;
+  final Object? result;
+  final Map<String, dynamic> raw;
+
+  factory AiActionExecutionModel.fromJson(Map<String, dynamic> json) {
+    final messagePayload = _nullableMap(json['message']);
+
+    return AiActionExecutionModel(
+      messageText:
+          json['message'] is String
+              ? _stringValue(json['message'])
+              : _stringValue(messagePayload?['content']),
+      message:
+          messagePayload == null
+              ? null
+              : AiMessageModel.fromJson(messagePayload),
+      navigationTarget: _nullableMap(json['navigation_target']),
+      action: AiAssistantActionModel.fromJson(json['action']),
+      result: json['result'],
+      raw: json,
     );
   }
 }
@@ -325,4 +540,17 @@ int? _nullableInt(dynamic value) {
   }
 
   return int.tryParse(value?.toString() ?? '');
+}
+
+bool _boolValue(dynamic value) {
+  if (value is bool) {
+    return value;
+  }
+
+  if (value is num) {
+    return value != 0;
+  }
+
+  final raw = value?.toString().trim().toLowerCase();
+  return raw == 'true' || raw == '1' || raw == 'yes';
 }

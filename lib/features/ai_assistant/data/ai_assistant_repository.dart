@@ -112,6 +112,76 @@ class AiAssistantRepository {
     }
   }
 
+  Future<AiActionPreviewModel> previewAction({
+    required AiAssistantActionModel action,
+    int? conversationId,
+  }) async {
+    try {
+      final response = await _dio.post(
+        '/ai-assistant/actions/preview',
+        data: {
+          if (conversationId != null) 'conversation_id': conversationId,
+          'action': action.toJson(),
+        },
+      );
+
+      return AiActionPreviewModel.fromJson(_asMap(_unwrapData(response.data)));
+    } on DioException catch (error) {
+      throw ApiException.fromDio(
+        error,
+        fallbackMessage: 'Не удалось подготовить действие ассистента.',
+      );
+    } catch (error) {
+      if (error is ApiException) {
+        rethrow;
+      }
+
+      throw const ApiException('Не удалось подготовить действие ассистента.');
+    }
+  }
+
+  Future<AiActionExecutionModel> executeAction({
+    required AiActionPreviewModel preview,
+    int? conversationId,
+  }) async {
+    if (preview.previewToken.trim().isEmpty) {
+      throw const ApiException(
+        'Сначала подтвердите предварительный просмотр действия.',
+      );
+    }
+
+    if (!preview.executable) {
+      throw const ApiException('Действие недоступно текущему пользователю.');
+    }
+
+    try {
+      final response = await _dio.post(
+        '/ai-assistant/actions/execute',
+        data: {
+          if (conversationId != null) 'conversation_id': conversationId,
+          'confirmed': true,
+          'preview_token': preview.previewToken,
+          'action': preview.action.toJson(),
+        },
+      );
+
+      return AiActionExecutionModel.fromJson(
+        _asMap(_unwrapData(response.data)),
+      );
+    } on DioException catch (error) {
+      throw ApiException.fromDio(
+        error,
+        fallbackMessage: 'Не удалось выполнить действие ассистента.',
+      );
+    } catch (error) {
+      if (error is ApiException) {
+        rethrow;
+      }
+
+      throw const ApiException('Не удалось выполнить действие ассистента.');
+    }
+  }
+
   Future<void> deleteConversation(int id) async {
     try {
       await _dio.delete('/ai-assistant/conversations/$id');
