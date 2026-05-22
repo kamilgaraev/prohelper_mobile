@@ -69,7 +69,7 @@ class _WarehouseTaskExecutionScreenState
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(warehouseTaskActionLabel(widget.targetStatus)),
+        title: Text(warehouseTaskActionLabel(widget.task, widget.targetStatus)),
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
@@ -234,7 +234,10 @@ class _WarehouseTaskExecutionScreenState
                     label: Text(
                       _isSubmitting
                           ? 'Сохраняем...'
-                          : warehouseTaskActionLabel(widget.targetStatus),
+                          : warehouseTaskActionLabel(
+                            widget.task,
+                            widget.targetStatus,
+                          ),
                     ),
                   ),
                 ),
@@ -468,12 +471,6 @@ class _WarehouseTaskExecutionScreenState
   }
 
   String _initialQuantityValue() {
-    if (widget.task.completedQuantity != null) {
-      return warehouseFormatNumber(widget.task.completedQuantity!);
-    }
-    if (widget.task.plannedQuantity != null) {
-      return warehouseFormatNumber(widget.task.plannedQuantity!);
-    }
     return '';
   }
 
@@ -695,19 +692,13 @@ class _Hero extends StatelessWidget {
                 label: task.taskNumber,
                 color: Theme.of(context).colorScheme.primary,
               ),
-              _Badge(
-                label: warehouseTaskTypeLabel(task.taskType),
-                color: AppColors.secondary,
-              ),
-              _Badge(
-                label: warehouseStatusLabel(task.status),
-                color: Colors.blueGrey,
-              ),
+              _Badge(label: task.taskTypeLabel, color: AppColors.secondary),
+              _Badge(label: task.statusLabel, color: Colors.blueGrey),
             ],
           ),
           const SizedBox(height: 12),
           Text(
-            'Следующее действие: ${warehouseTaskActionLabel(targetStatus)}',
+            'Следующее действие: ${warehouseTaskActionLabel(task, targetStatus)}',
             style: AppTypography.bodyLarge(
               context,
             ).copyWith(fontWeight: FontWeight.w700),

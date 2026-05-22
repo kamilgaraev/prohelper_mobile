@@ -48,15 +48,11 @@ class _WarehouseReceiptSheetState extends ConsumerState<WarehouseReceiptSheet> {
   void initState() {
     super.initState();
     _materialController = TextEditingController();
-    _quantityController = TextEditingController(text: '1');
+    _quantityController = TextEditingController();
     _priceController = TextEditingController();
     _documentController = TextEditingController();
     _reasonController = TextEditingController();
-    _selectedWarehouseId =
-        widget.initialWarehouseId ??
-        (widget.summary.warehouses.isNotEmpty
-            ? widget.summary.warehouses.first.id
-            : null);
+    _selectedWarehouseId = widget.initialWarehouseId;
     _selectedMaterial = widget.initialMaterial;
 
     if (widget.initialMaterial != null) {

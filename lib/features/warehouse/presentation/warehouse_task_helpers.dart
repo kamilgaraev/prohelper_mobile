@@ -7,7 +7,8 @@ String warehouseActionLabel(String action) {
     'placement' => 'Размещение',
     'cycle_count' => 'Инвентаризация',
     'inspection' => 'Проверка',
-    _ => action,
+    _ =>
+      throw ArgumentError.value(action, 'action', 'Unknown warehouse action'),
   };
 }
 
@@ -20,7 +21,12 @@ String warehouseEntityTypeLabel(String entityType) {
     'zone' => 'Зона',
     'inventory_act' => 'Инвентаризация',
     'movement' => 'Движение',
-    _ => entityType,
+    _ =>
+      throw ArgumentError.value(
+        entityType,
+        'entityType',
+        'Unknown warehouse entity type',
+      ),
   };
 }
 
@@ -35,7 +41,7 @@ String warehouseTaskTypeLabel(String type) {
     'return' => 'Возврат',
     'relabel' => 'Перемаркировка',
     'inspection' => 'Проверка',
-    _ => type,
+    _ => throw ArgumentError.value(type, 'type', 'Unknown warehouse task type'),
   };
 }
 
@@ -52,7 +58,8 @@ String warehouseStatusLabel(String status) {
     'in_transit' => 'В пути',
     'archived' => 'Архив',
     'active' => 'Активно',
-    _ => status,
+    _ =>
+      throw ArgumentError.value(status, 'status', 'Unknown warehouse status'),
   };
 }
 
@@ -62,41 +69,41 @@ String warehousePriorityLabel(String priority) {
     'high' => 'Высокий',
     'normal' => 'Нормальный',
     'low' => 'Низкий',
-    _ => priority,
+    _ =>
+      throw ArgumentError.value(
+        priority,
+        'priority',
+        'Unknown warehouse priority',
+      ),
   };
 }
 
-String warehouseTaskActionLabel(String status) {
-  return switch (status) {
-    'queued' => 'Вернуть в очередь',
-    'in_progress' => 'Взять в работу',
-    'blocked' => 'Заблокировать',
-    'completed' => 'Завершить',
-    'cancelled' => 'Отменить',
-    _ => 'Обновить',
-  };
+String warehouseTaskActionLabel(WarehouseTaskModel task, String status) {
+  for (final transition in task.availableTransitions) {
+    if (transition.status == status) {
+      return transition.name;
+    }
+  }
+
+  if (task.status == status) {
+    return task.statusLabel;
+  }
+
+  throw ArgumentError.value(status, 'status', 'Unknown warehouse task action');
 }
 
-List<String> warehouseAllowedTaskActions(WarehouseTaskModel task) {
-  return switch (task.status) {
-    'draft' => const ['queued', 'cancelled'],
-    'queued' => const ['in_progress', 'blocked', 'cancelled'],
-    'in_progress' => const ['completed', 'blocked', 'queued'],
-    'blocked' => const ['in_progress', 'queued', 'cancelled'],
-    'cancelled' => const ['queued'],
-    _ => const <String>[],
-  };
+List<WarehouseTaskTransitionModel> warehouseAllowedTaskActions(
+  WarehouseTaskModel task,
+) {
+  return task.availableTransitions;
 }
 
-String? warehousePrimaryTaskAction(WarehouseTaskModel task) {
-  return switch (task.status) {
-    'draft' => 'queued',
-    'queued' => 'in_progress',
-    'in_progress' => 'completed',
-    'blocked' => 'in_progress',
-    'cancelled' => 'queued',
-    _ => null,
-  };
+WarehouseTaskTransitionModel? warehousePrimaryTaskAction(
+  WarehouseTaskModel task,
+) {
+  return task.availableTransitions.isEmpty
+      ? null
+      : task.availableTransitions.first;
 }
 
 String warehouseFormatNumber(double value) {

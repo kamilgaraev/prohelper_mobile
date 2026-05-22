@@ -86,9 +86,9 @@ class WarehouseTransferResultModel {
     final movementIn = _asMap(json['movement_in']);
 
     return WarehouseTransferResultModel(
-      movementOutId: _asInt(movementOut['id']),
-      movementInId: _asInt(movementIn['id']),
-      averagePrice: _asDouble(json['avg_price']),
+      movementOutId: _requiredInt(movementOut, 'id'),
+      movementInId: _requiredInt(movementIn, 'id'),
+      averagePrice: _requiredDouble(json, 'avg_price'),
     );
   }
 }
@@ -124,7 +124,7 @@ class WarehouseScanResultModel {
 
   factory WarehouseScanResultModel.fromJson(Map<String, dynamic> json) {
     return WarehouseScanResultModel(
-      resolved: _asBool(json['resolved']),
+      resolved: _requiredBool(json, 'resolved'),
       resolvedBy: _asNullableString(json['resolved_by']),
       warehouse:
           _asMap(json['warehouse']).isEmpty
@@ -139,7 +139,8 @@ class WarehouseScanResultModel {
               ? null
               : WarehouseIdentifierModel.fromJson(_asMap(json['identifier'])),
       entityType: _asNullableString(json['entity_type']),
-      entityId: json['entity_id'] == null ? null : _asInt(json['entity_id']),
+      entityId:
+          json['entity_id'] == null ? null : _requiredInt(json, 'entity_id'),
       entitySummary:
           _asMap(json['entity_summary']).isEmpty
               ? null
@@ -151,17 +152,16 @@ class WarehouseScanResultModel {
               ? null
               : WarehouseScannedEntityModel.fromJson(
                 _asMap(json['entity']),
-                _asNullableString(json['entity_type']) ?? '',
+                _requiredKnownString(json, 'entity_type', _entityTypes),
               ),
       relatedTasks:
-          _asList(
-            json['related_tasks'],
+          _requiredList(
+            json,
+            'related_tasks',
           ).map(WarehouseTaskModel.fromJson).toList(),
-      availableActions:
-          (json['available_actions'] as List<dynamic>? ?? const [])
-              .map((value) => value.toString())
-              .where((value) => value.trim().isNotEmpty)
-              .toList(),
+      availableActions: _requiredScalarList(json, 'available_actions')
+          .map((value) => _requiredKnownValue(value, _warehouseActions))
+          .toList(growable: false),
       recommendedAction: _asNullableString(json['recommended_action']),
     );
   }
@@ -184,10 +184,10 @@ class WarehouseScanEventModel {
 
   factory WarehouseScanEventModel.fromJson(Map<String, dynamic> json) {
     return WarehouseScanEventModel(
-      id: _asInt(json['id']),
-      code: _asString(json['code']),
-      source: _asString(json['source']),
-      result: _asString(json['result']),
+      id: _requiredInt(json, 'id'),
+      code: _requiredString(json, 'code'),
+      source: _requiredString(json, 'source'),
+      result: _requiredString(json, 'result'),
       scannedAt:
           json['scanned_at'] != null
               ? DateTime.tryParse(json['scanned_at'].toString())
@@ -219,12 +219,12 @@ class WarehouseIdentifierModel {
 
   factory WarehouseIdentifierModel.fromJson(Map<String, dynamic> json) {
     return WarehouseIdentifierModel(
-      id: _asInt(json['id']),
-      code: _asString(json['code']),
-      identifierType: _asString(json['identifier_type']),
-      entityType: _asString(json['entity_type']),
-      entityId: _asInt(json['entity_id']),
-      isPrimary: _asBool(json['is_primary']),
+      id: _requiredInt(json, 'id'),
+      code: _requiredString(json, 'code'),
+      identifierType: _requiredString(json, 'identifier_type'),
+      entityType: _requiredKnownString(json, 'entity_type', _entityTypes),
+      entityId: _requiredInt(json, 'entity_id'),
+      isPrimary: _requiredBool(json, 'is_primary'),
       label: _asNullableString(json['label']),
       status: _asNullableString(json['status']),
     );
@@ -266,8 +266,12 @@ class WarehouseEntityRefModel {
     ]);
 
     return WarehouseEntityRefModel(
-      id: _asInt(json['id']),
-      name: name ?? 'Объект склада',
+      id: _requiredInt(json, 'id'),
+      name:
+          name ??
+          (throw const FormatException(
+            'Warehouse entity reference must include a readable name.',
+          )),
       code: code,
       subtitle: subtitle,
     );
@@ -280,8 +284,8 @@ class WarehouseScannedEntityModel {
   final String type;
   final Map<String, dynamic> raw;
 
-  int get id => _asInt(raw['id']);
-  String get name => _asString(raw['name']);
+  int get id => _requiredInt(raw, 'id');
+  String get name => _requiredString(raw, 'name');
   String? get code => _asNullableString(raw['code']);
   String? get status => _asNullableString(raw['status']);
   String? get fullAddress =>
@@ -358,9 +362,13 @@ class WarehouseTaskModel {
     required this.taskNumber,
     required this.title,
     required this.taskType,
+    required this.taskTypeLabel,
     required this.status,
+    required this.statusLabel,
     required this.priority,
+    required this.priorityLabel,
     required this.metadata,
+    required this.availableTransitions,
     this.zoneId,
     this.cellId,
     this.logisticUnitId,
@@ -404,9 +412,13 @@ class WarehouseTaskModel {
   final String taskNumber;
   final String title;
   final String taskType;
+  final String taskTypeLabel;
   final String status;
+  final String statusLabel;
   final String priority;
+  final String priorityLabel;
   final Map<String, dynamic> metadata;
+  final List<WarehouseTaskTransitionModel> availableTransitions;
   final double? plannedQuantity;
   final double? completedQuantity;
   final double? progressPercent;
@@ -430,33 +442,45 @@ class WarehouseTaskModel {
 
   factory WarehouseTaskModel.fromJson(Map<String, dynamic> json) {
     return WarehouseTaskModel(
-      id: _asInt(json['id']),
-      warehouseId: _asInt(json['warehouse_id']),
-      zoneId: json['zone_id'] == null ? null : _asInt(json['zone_id']),
-      cellId: json['cell_id'] == null ? null : _asInt(json['cell_id']),
+      id: _requiredInt(json, 'id'),
+      warehouseId: _requiredInt(json, 'warehouse_id'),
+      zoneId: json['zone_id'] == null ? null : _requiredInt(json, 'zone_id'),
+      cellId: json['cell_id'] == null ? null : _requiredInt(json, 'cell_id'),
       logisticUnitId:
           json['logistic_unit_id'] == null
               ? null
-              : _asInt(json['logistic_unit_id']),
+              : _requiredInt(json, 'logistic_unit_id'),
       materialId:
-          json['material_id'] == null ? null : _asInt(json['material_id']),
-      projectId: json['project_id'] == null ? null : _asInt(json['project_id']),
+          json['material_id'] == null
+              ? null
+              : _requiredInt(json, 'material_id'),
+      projectId:
+          json['project_id'] == null ? null : _requiredInt(json, 'project_id'),
       inventoryActId:
           json['inventory_act_id'] == null
               ? null
-              : _asInt(json['inventory_act_id']),
+              : _requiredInt(json, 'inventory_act_id'),
       movementId:
-          json['movement_id'] == null ? null : _asInt(json['movement_id']),
+          json['movement_id'] == null
+              ? null
+              : _requiredInt(json, 'movement_id'),
       assignedToId:
           json['assigned_to_id'] == null
               ? null
-              : _asInt(json['assigned_to_id']),
-      taskNumber: _asString(json['task_number']),
-      title: _asString(json['title']),
-      taskType: _asString(json['task_type']),
-      status: _asString(json['status']),
-      priority: _asString(json['priority']),
+              : _requiredInt(json, 'assigned_to_id'),
+      taskNumber: _requiredString(json, 'task_number'),
+      title: _requiredString(json, 'title'),
+      taskType: _requiredKnownString(json, 'task_type', _taskTypes),
+      taskTypeLabel: _requiredCleanLabel(json, 'task_type_label'),
+      status: _requiredKnownString(json, 'status', _taskStatuses),
+      statusLabel: _requiredCleanLabel(json, 'status_label'),
+      priority: _requiredKnownString(json, 'priority', _taskPriorities),
+      priorityLabel: _requiredCleanLabel(json, 'priority_label'),
       metadata: _asMap(json['metadata']),
+      availableTransitions: _requiredList(
+        json,
+        'available_transitions',
+      ).map(WarehouseTaskTransitionModel.fromJson).toList(growable: false),
       plannedQuantity: _asNullableDouble(json['planned_quantity']),
       completedQuantity: _asNullableDouble(json['completed_quantity']),
       progressPercent: _asNullableDouble(json['progress_percent']),
@@ -514,6 +538,23 @@ class WarehouseTaskModel {
   }
 }
 
+class WarehouseTaskTransitionModel {
+  const WarehouseTaskTransitionModel({
+    required this.status,
+    required this.name,
+  });
+
+  final String status;
+  final String name;
+
+  factory WarehouseTaskTransitionModel.fromJson(Map<String, dynamic> json) {
+    return WarehouseTaskTransitionModel(
+      status: _requiredKnownString(json, 'status', _taskStatuses),
+      name: _requiredCleanLabel(json, 'name'),
+    );
+  }
+}
+
 DateTime? _parseDateTime(dynamic value) {
   if (value == null) {
     return null;
@@ -545,15 +586,28 @@ Map<String, dynamic> _asMap(dynamic value) {
   return const <String, dynamic>{};
 }
 
-List<Map<String, dynamic>> _asList(dynamic value) {
+List<Map<String, dynamic>> _requiredList(
+  Map<String, dynamic> json,
+  String key,
+) {
+  final value = json[key];
   if (value is! List) {
-    return const <Map<String, dynamic>>[];
+    throw FormatException('Warehouse scan field "$key" must be a list.');
   }
 
-  return value.whereType<Map>().map(_asMap).toList();
+  return value.whereType<Map>().map(_asMap).toList(growable: false);
 }
 
-int _asInt(dynamic value) {
+List<dynamic> _requiredScalarList(Map<String, dynamic> json, String key) {
+  final value = json[key];
+  if (value is! List) {
+    throw FormatException('Warehouse scan field "$key" must be a list.');
+  }
+
+  return value;
+}
+
+int? _asNullableInt(dynamic value) {
   if (value is int) {
     return value;
   }
@@ -562,24 +616,25 @@ int _asInt(dynamic value) {
     return value.toInt();
   }
 
-  return int.tryParse(value?.toString() ?? '') ?? 0;
+  return int.tryParse(value?.toString() ?? '');
 }
 
-double _asDouble(dynamic value) {
-  if (value is double) {
-    return value;
+int _requiredInt(Map<String, dynamic> json, String key) {
+  final value = _asNullableInt(json[key]);
+  if (value == null) {
+    throw FormatException('Warehouse scan field "$key" is required.');
   }
 
-  if (value is num) {
-    return value.toDouble();
-  }
-
-  return double.tryParse(value?.toString() ?? '') ?? 0;
+  return value;
 }
 
 double? _asNullableDouble(dynamic value) {
   if (value == null) {
     return null;
+  }
+
+  if (value is double) {
+    return value;
   }
 
   if (value is num) {
@@ -589,8 +644,43 @@ double? _asNullableDouble(dynamic value) {
   return double.tryParse(value.toString());
 }
 
-String _asString(dynamic value) {
-  return value?.toString() ?? '';
+double _requiredDouble(Map<String, dynamic> json, String key) {
+  final value = _asNullableDouble(json[key]);
+  if (value == null) {
+    throw FormatException('Warehouse scan field "$key" is required.');
+  }
+
+  return value;
+}
+
+String _requiredString(Map<String, dynamic> json, String key) {
+  final value = json[key]?.toString().trim();
+  if (value == null || value.isEmpty) {
+    throw FormatException('Warehouse scan field "$key" is required.');
+  }
+
+  return value;
+}
+
+String _requiredKnownString(
+  Map<String, dynamic> json,
+  String key,
+  Set<String> allowedValues,
+) {
+  final value = _requiredString(json, key);
+  return _requiredKnownValue(value, allowedValues);
+}
+
+String _requiredKnownValue(dynamic value, Set<String> allowedValues) {
+  final normalized = value?.toString().trim();
+  if (normalized == null || normalized.isEmpty) {
+    throw const FormatException('Warehouse scan list value is required.');
+  }
+  if (!allowedValues.contains(normalized)) {
+    throw const FormatException('Warehouse scan field has unknown value.');
+  }
+
+  return normalized;
 }
 
 String? _asNullableString(dynamic value) {
@@ -598,7 +688,11 @@ String? _asNullableString(dynamic value) {
   return normalized.isEmpty ? null : normalized;
 }
 
-bool _asBool(dynamic value) {
+bool? _asNullableBool(dynamic value) {
+  if (value == null) {
+    return null;
+  }
+
   if (value is bool) {
     return value;
   }
@@ -608,5 +702,84 @@ bool _asBool(dynamic value) {
   }
 
   final normalized = value?.toString().toLowerCase().trim();
-  return normalized == 'true' || normalized == '1';
+  if (normalized == 'true' || normalized == '1') {
+    return true;
+  }
+  if (normalized == 'false' || normalized == '0') {
+    return false;
+  }
+
+  return null;
 }
+
+bool _requiredBool(Map<String, dynamic> json, String key) {
+  final value = _asNullableBool(json[key]);
+  if (value == null) {
+    throw FormatException('Warehouse scan field "$key" is required.');
+  }
+
+  return value;
+}
+
+String? _cleanLabel(dynamic value) {
+  final text = value?.toString().trim();
+  if (text == null || text.isEmpty) {
+    return null;
+  }
+
+  if (text.startsWith('basic_warehouse.') || text.startsWith('mobile_')) {
+    return null;
+  }
+
+  return text;
+}
+
+String _requiredCleanLabel(Map<String, dynamic> json, String key) {
+  final label = _cleanLabel(json[key]);
+  if (label == null) {
+    throw FormatException('Warehouse scan field "$key" must be readable.');
+  }
+
+  return label;
+}
+
+const _entityTypes = {
+  'asset',
+  'cell',
+  'logistic_unit',
+  'warehouse',
+  'zone',
+  'inventory_act',
+  'movement',
+};
+
+const _warehouseActions = {
+  'receipt',
+  'transfer',
+  'placement',
+  'cycle_count',
+  'inspection',
+};
+
+const _taskTypes = {
+  'receipt',
+  'placement',
+  'transfer',
+  'picking',
+  'cycle_count',
+  'issue',
+  'return',
+  'relabel',
+  'inspection',
+};
+
+const _taskStatuses = {
+  'draft',
+  'queued',
+  'in_progress',
+  'blocked',
+  'completed',
+  'cancelled',
+};
+
+const _taskPriorities = {'critical', 'high', 'normal', 'low'};

@@ -54,29 +54,7 @@ class _FakeWarehouseRepository extends WarehouseRepository {
   }
 
   @override
-  Future<WarehouseMovementModel> createReceipt(
-    WarehouseReceiptPayload payload,
-  ) async {
-    return WarehouseMovementModel(
-      id: 99,
-      movementType: 'receipt',
-      movementTypeLabel: 'Приход',
-      quantity: payload.quantity,
-      price: payload.price,
-      photoGallery:
-          payload.photos
-              .asMap()
-              .entries
-              .map(
-                (entry) => WarehousePhotoModel(
-                  id: entry.key + 1,
-                  url: 'https://example.com/${entry.key + 1}.jpg',
-                ),
-              )
-              .toList(),
-      materialName: 'Цемент М500',
-    );
-  }
+  Future<void> createReceipt(WarehouseReceiptPayload payload) async {}
 }
 
 class _FakeWarehouseNotifier extends WarehouseNotifier {
@@ -170,6 +148,13 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Оприходование'), findsOneWidget);
+    final quantityField = tester.widget<TextField>(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField && widget.decoration?.labelText == 'Количество',
+      ),
+    );
+    expect(quantityField.controller?.text, isEmpty);
 
     await tester.enterText(find.byType(TextField).first, 'Цем');
     await tester.pump(const Duration(milliseconds: 400));

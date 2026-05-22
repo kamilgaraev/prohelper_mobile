@@ -35,12 +35,6 @@ class WarehouseRepository {
         error,
         fallbackMessage: 'Не удалось загрузить данные по складу.',
       );
-    } catch (error) {
-      if (error is ApiException) {
-        rethrow;
-      }
-
-      throw const ApiException('Не удалось загрузить данные по складу.');
     }
   }
 
@@ -167,9 +161,7 @@ class WarehouseRepository {
     }
   }
 
-  Future<WarehouseMovementModel> createReceipt(
-    WarehouseReceiptPayload payload,
-  ) async {
+  Future<void> createReceipt(WarehouseReceiptPayload payload) async {
     try {
       final formData = FormData.fromMap({
         'warehouse_id': payload.warehouseId.toString(),
@@ -198,16 +190,7 @@ class WarehouseRepository {
       );
       final data = _extractData(response.data);
 
-      return WarehouseMovementModel.fromJson({
-        'id': data['movement_id'],
-        'movement_type': 'receipt',
-        'movement_type_label': 'Приход',
-        'quantity': payload.quantity,
-        'price': payload.price,
-        'document_number': payload.documentNumber,
-        'reason': payload.reason,
-        'photo_gallery': data['photo_gallery'] ?? const [],
-      });
+      _requirePositiveInt(data, 'movement_id');
     } on DioException catch (error) {
       throw ApiException.fromDio(
         error,
@@ -430,5 +413,19 @@ class WarehouseRepository {
     final segments = normalized.split(Platform.pathSeparator);
 
     return segments.isEmpty ? 'photo.jpg' : segments.last;
+  }
+
+  void _requirePositiveInt(Map<String, dynamic> data, String key) {
+    final raw = data[key];
+    final value =
+        raw is int
+            ? raw
+            : raw is num
+            ? raw.toInt()
+            : int.tryParse(raw?.toString() ?? '');
+
+    if (value == null || value <= 0) {
+      throw FormatException('Warehouse receipt field "$key" is required.');
+    }
   }
 }

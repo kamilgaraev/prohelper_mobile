@@ -62,7 +62,14 @@ class _ProjectMaterialDeliveriesScreenState
             );
           }
 
-          final data = snapshot.data ?? _ProjectMaterialsData.empty();
+          final data = snapshot.data;
+          if (data == null) {
+            return AppErrorState(
+              title: 'Не удалось загрузить поставки',
+              description: 'Сервер вернул неполные данные по поставкам.',
+              onRetry: _refresh,
+            );
+          }
           final deliveries = data.deliveries;
           final stockItems = data.stock.items;
           final isEmpty = deliveries.isEmpty && stockItems.isEmpty;
@@ -121,12 +128,7 @@ class _ProjectMaterialDeliveriesScreenState
   }
 
   Future<void> _showReceiveSheet(ProjectMaterialDeliveryModel delivery) async {
-    final quantityController = TextEditingController(
-      text:
-          delivery.remainingToAccept > 0
-              ? _formatQuantity(delivery.remainingToAccept)
-              : '',
-    );
+    final quantityController = TextEditingController();
     final notesController = TextEditingController();
 
     final received = await showModalBottomSheet<bool>(
@@ -148,7 +150,7 @@ class _ProjectMaterialDeliveriesScreenState
                 Text('Принять материал', style: AppTypography.h2(context)),
                 const SizedBox(height: 8),
                 Text(
-                  delivery.materialName ?? 'Материал',
+                  delivery.materialName!,
                   style: AppTypography.bodyLarge(context),
                 ),
                 const SizedBox(height: 16),
@@ -246,22 +248,6 @@ class _ProjectMaterialsData {
 
   final List<ProjectMaterialDeliveryModel> deliveries;
   final ProjectMaterialStockModel stock;
-
-  factory _ProjectMaterialsData.empty() {
-    return _ProjectMaterialsData(
-      deliveries: const <ProjectMaterialDeliveryModel>[],
-      stock: ProjectMaterialStockModel(
-        items: const <ProjectMaterialStockItemModel>[],
-        summary: ProjectMaterialStockSummaryModel(
-          materialsCount: 0,
-          deliveriesCount: 0,
-          acceptedQuantity: 0,
-          usedQuantity: 0,
-          availableQuantity: 0,
-        ),
-      ),
-    );
-  }
 }
 
 class _StockSummaryCard extends StatelessWidget {
@@ -332,6 +318,8 @@ class _StockCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final latestUsage = stock.usages.isEmpty ? null : stock.usages.first;
+    final latestUsageNumber =
+        latestUsage?.entryNumber ?? latestUsage?.journalEntryId;
 
     return IndustrialCard(
       child: Column(
@@ -358,14 +346,14 @@ class _StockCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      stock.materialName ?? 'Материал',
+                      stock.materialName!,
                       style: AppTypography.bodyLarge(
                         context,
                       ).copyWith(fontWeight: FontWeight.w800),
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      stock.projectName ?? 'Объект не указан',
+                      stock.projectName!,
                       style: AppTypography.bodyMedium(
                         context,
                       ).copyWith(color: theme.colorScheme.onSurfaceVariant),
@@ -395,10 +383,10 @@ class _StockCard extends StatelessWidget {
               ),
             ],
           ),
-          if (latestUsage != null) ...[
+          if (latestUsageNumber != null) ...[
             const SizedBox(height: 12),
             Text(
-              'Последнее списание: запись №${latestUsage.entryNumber ?? latestUsage.journalEntryId ?? '-'}',
+              'Последнее списание: запись №$latestUsageNumber',
               style: AppTypography.caption(
                 context,
               ).copyWith(color: theme.colorScheme.onSurfaceVariant),
@@ -459,14 +447,14 @@ class _DeliveryCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      delivery.materialName ?? 'Материал',
+                      delivery.materialName!,
                       style: AppTypography.bodyLarge(
                         context,
                       ).copyWith(fontWeight: FontWeight.w800),
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      delivery.projectName ?? 'Объект не указан',
+                      delivery.projectName!,
                       style: AppTypography.bodyMedium(
                         context,
                       ).copyWith(color: theme.colorScheme.onSurfaceVariant),
@@ -474,10 +462,7 @@ class _DeliveryCard extends StatelessWidget {
                   ],
                 ),
               ),
-              _StatusBadge(
-                label: delivery.statusLabel ?? _statusLabel(delivery.status),
-                color: statusColor,
-              ),
+              _StatusBadge(label: delivery.statusLabel!, color: statusColor),
             ],
           ),
           const SizedBox(height: 14),
@@ -597,23 +582,12 @@ Color _statusColor(String status) {
     'in_transit' || 'partially_delivered' || 'preparing' => AppColors.warning,
     'problem' || 'cancelled' => AppColors.error,
     'reserved' || 'processing' || 'requested' => AppColors.primary,
-    _ => AppColors.textSecondary,
-  };
-}
-
-String _statusLabel(String status) {
-  return switch (status.trim().toLowerCase()) {
-    'requested' => 'Запрошено',
-    'processing' => 'В обработке',
-    'reserved' => 'Зарезервировано',
-    'preparing' => 'Готовится',
-    'in_transit' => 'В доставке',
-    'partially_delivered' => 'Частично принято',
-    'delivered' => 'Доставлено',
-    'accepted' => 'Принято',
-    'problem' => 'Проблема',
-    'cancelled' => 'Отменено',
-    _ => status,
+    _ =>
+      throw ArgumentError.value(
+        status,
+        'status',
+        'Unknown project material delivery status',
+      ),
   };
 }
 

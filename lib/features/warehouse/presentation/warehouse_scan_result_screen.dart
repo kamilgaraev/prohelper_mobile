@@ -179,7 +179,7 @@ class _WarehouseScanResultScreenState
       final primaryAction = warehousePrimaryTaskAction(primaryTask);
 
       if (matchedTasks.length == 1 && primaryAction != null) {
-        await _handleTaskAction(primaryTask, primaryAction);
+        await _handleTaskAction(primaryTask, primaryAction.status);
       } else {
         await _openTaskQueue(initialTaskType: _taskTypeForAction(action));
       }
@@ -228,7 +228,7 @@ class _WarehouseScanResultScreenState
         return;
       }
       _showMessage(
-        'Статус задачи обновлен: ${warehouseStatusLabel(targetStatus)}.',
+        'Статус задачи обновлен: ${warehouseTaskActionLabel(task, targetStatus).toLowerCase()}.',
       );
     } catch (error) {
       _showMessage(error.toString());
@@ -314,7 +314,7 @@ class _WarehouseScanResultScreenState
         task == null ? null : warehousePrimaryTaskAction(task);
 
     if (task != null && primaryAction != null) {
-      await _handleTaskAction(task, primaryAction);
+      await _handleTaskAction(task, primaryAction.status);
       return;
     }
 
@@ -470,7 +470,7 @@ class _NextStepCard extends StatelessWidget {
                 : 'Рекомендуемое действие: ${warehouseActionLabel(recommendedAction!)}');
     final subtitle =
         recommendedTask != null
-            ? '${warehouseTaskTypeLabel(recommendedTask!.taskType)} / ${warehouseStatusLabel(recommendedTask!.status)}'
+            ? '${recommendedTask!.taskTypeLabel} / ${recommendedTask!.statusLabel}'
             : 'Можно открыть очередь задач или перейти к рекомендованному действию.';
 
     return IndustrialCard(
@@ -604,7 +604,7 @@ class _TasksCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    '${task.taskNumber} / ${warehouseTaskTypeLabel(task.taskType)} / ${warehouseStatusLabel(task.status)}',
+                    '${task.taskNumber} / ${task.taskTypeLabel} / ${task.statusLabel}',
                     style: AppTypography.bodyMedium(context),
                   ),
                   const SizedBox(height: 12),
@@ -612,10 +612,10 @@ class _TasksCard extends StatelessWidget {
                     spacing: 8,
                     runSpacing: 8,
                     children:
-                        warehouseAllowedTaskActions(task).map((status) {
+                        warehouseAllowedTaskActions(task).map((transition) {
                           return OutlinedButton(
-                            onPressed: () => onTap(task, status),
-                            child: Text(warehouseTaskActionLabel(status)),
+                            onPressed: () => onTap(task, transition.status),
+                            child: Text(transition.name),
                           );
                         }).toList(),
                   ),
@@ -636,13 +636,16 @@ String _taskTypeForAction(String action) {
     'placement' => 'placement',
     'cycle_count' => 'cycle_count',
     'inspection' => 'inspection',
-    _ => action,
+    _ =>
+      throw ArgumentError.value(action, 'action', 'Unknown warehouse action'),
   };
 }
 
 bool _isTaskDrivenAction(String action) {
   return switch (action) {
     'placement' || 'cycle_count' || 'inspection' || 'transfer' => true,
-    _ => false,
+    'receipt' => false,
+    _ =>
+      throw ArgumentError.value(action, 'action', 'Unknown warehouse action'),
   };
 }

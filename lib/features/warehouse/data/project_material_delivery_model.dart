@@ -25,8 +25,8 @@ class ProjectMaterialDeliveryEventModel {
     final user = json['user'];
 
     return ProjectMaterialDeliveryEventModel(
-      id: _asInt(json['id']),
-      eventType: json['event_type']?.toString() ?? '',
+      id: _requiredInt(json, 'id'),
+      eventType: _requiredString(json, 'event_type'),
       fromStatus: json['from_status']?.toString(),
       toStatus: json['to_status']?.toString(),
       quantity: _asDouble(json['quantity']),
@@ -106,6 +106,8 @@ class ProjectMaterialDeliveryModel {
   factory ProjectMaterialDeliveryModel.fromJson(Map<String, dynamic> json) {
     final project = json['project'];
     final material = json['material'];
+    final projectJson = _requiredMapValue(project, 'project');
+    final materialJson = _requiredMapValue(material, 'material');
     final measurementUnit =
         material is Map ? material['measurement_unit'] : null;
     final warehouse = json['warehouse'];
@@ -113,29 +115,33 @@ class ProjectMaterialDeliveryModel {
     final rawEvents = json['events'];
 
     return ProjectMaterialDeliveryModel(
-      id: _asInt(json['id']),
+      id: _requiredInt(json, 'id'),
       sourceType: json['source_type']?.toString(),
-      status: json['status']?.toString() ?? '',
-      statusLabel: json['status_label']?.toString(),
+      status: _requiredKnownString(
+        json,
+        'status',
+        _projectMaterialDeliveryStatuses,
+      ),
+      statusLabel: _requiredCleanLabel(json, 'status_label'),
       statusColor: json['status_color']?.toString(),
-      projectId: project is Map ? _asNullableInt(project['id']) : null,
-      projectName: project is Map ? project['name']?.toString() : null,
-      materialId: material is Map ? _asNullableInt(material['id']) : null,
-      materialName: material is Map ? material['name']?.toString() : null,
+      projectId: _requiredInt(projectJson, 'id'),
+      projectName: _requiredString(projectJson, 'name'),
+      materialId: _requiredInt(materialJson, 'id'),
+      materialName: _requiredString(materialJson, 'name'),
       materialUnit:
           measurementUnit is Map
               ? measurementUnit['short_name']?.toString()
               : null,
       warehouseId: warehouse is Map ? _asNullableInt(warehouse['id']) : null,
       warehouseName: warehouse is Map ? warehouse['name']?.toString() : null,
-      requestedQuantity: _asDouble(json['requested_quantity']) ?? 0,
-      reservedQuantity: _asDouble(json['reserved_quantity']) ?? 0,
-      shippedQuantity: _asDouble(json['shipped_quantity']) ?? 0,
-      acceptedQuantity: _asDouble(json['accepted_quantity']) ?? 0,
-      usedQuantity: _asDouble(json['used_quantity']) ?? 0,
-      availableQuantity: _asDouble(json['available_quantity']) ?? 0,
-      remainingToShip: _asDouble(json['remaining_to_ship']) ?? 0,
-      remainingToAccept: _asDouble(json['remaining_to_accept']) ?? 0,
+      requestedQuantity: _requiredDouble(json, 'requested_quantity'),
+      reservedQuantity: _requiredDouble(json, 'reserved_quantity'),
+      shippedQuantity: _requiredDouble(json, 'shipped_quantity'),
+      acceptedQuantity: _requiredDouble(json, 'accepted_quantity'),
+      usedQuantity: _requiredDouble(json, 'used_quantity'),
+      availableQuantity: _requiredDouble(json, 'available_quantity'),
+      remainingToShip: _requiredDouble(json, 'remaining_to_ship'),
+      remainingToAccept: _requiredDouble(json, 'remaining_to_accept'),
       plannedDeliveryDate: json['planned_delivery_date']?.toString(),
       shippedAt: _parseDate(json['shipped_at']),
       deliveredAt: _parseDate(json['delivered_at']),
@@ -152,7 +158,7 @@ class ProjectMaterialDeliveryModel {
           linkedEntities is Map
               ? _asNullableInt(linkedEntities['purchase_order_id'])
               : null,
-      canReceive: json['can_receive'] == true,
+      canReceive: _requiredBool(json, 'can_receive'),
       events:
           rawEvents is List
               ? rawEvents
@@ -197,13 +203,17 @@ class ProjectMaterialStockDeliveryModel {
     final warehouse = json['warehouse'];
 
     return ProjectMaterialStockDeliveryModel(
-      id: _asInt(json['id']),
+      id: _requiredInt(json, 'id'),
       sourceType: json['source_type']?.toString(),
-      status: json['status']?.toString(),
-      statusLabel: json['status_label']?.toString(),
-      acceptedQuantity: _asDouble(json['accepted_quantity']) ?? 0,
-      usedQuantity: _asDouble(json['used_quantity']) ?? 0,
-      availableQuantity: _asDouble(json['available_quantity']) ?? 0,
+      status: _requiredKnownString(
+        json,
+        'status',
+        _projectMaterialDeliveryStatuses,
+      ),
+      statusLabel: _requiredCleanLabel(json, 'status_label'),
+      acceptedQuantity: _requiredDouble(json, 'accepted_quantity'),
+      usedQuantity: _requiredDouble(json, 'used_quantity'),
+      availableQuantity: _requiredDouble(json, 'available_quantity'),
       acceptedAt: _parseDate(json['accepted_at']),
       warehouseName: warehouse is Map ? warehouse['name']?.toString() : null,
     );
@@ -231,12 +241,12 @@ class ProjectMaterialStockUsageModel {
 
   factory ProjectMaterialStockUsageModel.fromJson(Map<String, dynamic> json) {
     return ProjectMaterialStockUsageModel(
-      deliveryId: _asInt(json['delivery_id']),
+      deliveryId: _requiredInt(json, 'delivery_id'),
       journalEntryId: _asNullableInt(json['journal_entry_id']),
       entryNumber: _asNullableInt(json['entry_number']),
       entryDate: _parseDate(json['entry_date']),
       workDescription: json['work_description']?.toString(),
-      quantity: _asDouble(json['quantity']) ?? 0,
+      quantity: _requiredDouble(json, 'quantity'),
       measurementUnit: json['measurement_unit']?.toString(),
     );
   }
@@ -270,24 +280,26 @@ class ProjectMaterialStockItemModel {
   factory ProjectMaterialStockItemModel.fromJson(Map<String, dynamic> json) {
     final project = json['project'];
     final material = json['material'];
+    final projectJson = _requiredMapValue(project, 'project');
+    final materialJson = _requiredMapValue(material, 'material');
     final measurementUnit =
         material is Map ? material['measurement_unit'] : null;
     final rawDeliveries = json['deliveries'];
     final rawUsages = json['journal_usages'];
 
     return ProjectMaterialStockItemModel(
-      projectId: project is Map ? _asNullableInt(project['id']) : null,
-      projectName: project is Map ? project['name']?.toString() : null,
-      materialId: material is Map ? _asNullableInt(material['id']) : null,
-      materialName: material is Map ? material['name']?.toString() : null,
+      projectId: _requiredInt(projectJson, 'id'),
+      projectName: _requiredString(projectJson, 'name'),
+      materialId: _requiredInt(materialJson, 'id'),
+      materialName: _requiredString(materialJson, 'name'),
       materialUnit:
           measurementUnit is Map
               ? measurementUnit['short_name']?.toString() ??
                   measurementUnit['name']?.toString()
               : null,
-      acceptedQuantity: _asDouble(json['accepted_quantity']) ?? 0,
-      usedQuantity: _asDouble(json['used_quantity']) ?? 0,
-      availableQuantity: _asDouble(json['available_quantity']) ?? 0,
+      acceptedQuantity: _requiredDouble(json, 'accepted_quantity'),
+      usedQuantity: _requiredDouble(json, 'used_quantity'),
+      availableQuantity: _requiredDouble(json, 'available_quantity'),
       deliveries:
           rawDeliveries is List
               ? rawDeliveries
@@ -331,11 +343,11 @@ class ProjectMaterialStockSummaryModel {
 
   factory ProjectMaterialStockSummaryModel.fromJson(Map<String, dynamic> json) {
     return ProjectMaterialStockSummaryModel(
-      materialsCount: _asInt(json['materials_count']),
-      deliveriesCount: _asInt(json['deliveries_count']),
-      acceptedQuantity: _asDouble(json['accepted_quantity']) ?? 0,
-      usedQuantity: _asDouble(json['used_quantity']) ?? 0,
-      availableQuantity: _asDouble(json['available_quantity']) ?? 0,
+      materialsCount: _requiredInt(json, 'materials_count'),
+      deliveriesCount: _requiredInt(json, 'deliveries_count'),
+      acceptedQuantity: _requiredDouble(json, 'accepted_quantity'),
+      usedQuantity: _requiredDouble(json, 'used_quantity'),
+      availableQuantity: _requiredDouble(json, 'available_quantity'),
     );
   }
 }
@@ -347,26 +359,14 @@ class ProjectMaterialStockModel {
   final ProjectMaterialStockSummaryModel summary;
 
   factory ProjectMaterialStockModel.fromJson(Map<String, dynamic> json) {
-    final rawItems = json['items'];
-    final rawSummary = json['summary'];
+    final rawItems = _requiredList(json, 'items');
+    final rawSummary = _requiredMap(json, 'summary');
 
     return ProjectMaterialStockModel(
-      items:
-          rawItems is List
-              ? rawItems
-                  .whereType<Map>()
-                  .map(
-                    (item) => ProjectMaterialStockItemModel.fromJson(
-                      item.map((key, value) => MapEntry(key.toString(), value)),
-                    ),
-                  )
-                  .toList(growable: false)
-              : const <ProjectMaterialStockItemModel>[],
-      summary: ProjectMaterialStockSummaryModel.fromJson(
-        rawSummary is Map
-            ? rawSummary.map((key, value) => MapEntry(key.toString(), value))
-            : const <String, dynamic>{},
-      ),
+      items: rawItems
+          .map(ProjectMaterialStockItemModel.fromJson)
+          .toList(growable: false),
+      summary: ProjectMaterialStockSummaryModel.fromJson(rawSummary),
     );
   }
 }
@@ -374,8 +374,6 @@ class ProjectMaterialStockModel {
 DateTime? _parseDate(dynamic value) {
   return value == null ? null : DateTime.tryParse(value.toString());
 }
-
-int _asInt(dynamic value) => _asNullableInt(value) ?? 0;
 
 int? _asNullableInt(dynamic value) {
   if (value is int) {
@@ -389,6 +387,17 @@ int? _asNullableInt(dynamic value) {
   return int.tryParse(value?.toString() ?? '');
 }
 
+int _requiredInt(Map<String, dynamic> json, String key) {
+  final value = _asNullableInt(json[key]);
+  if (value == null) {
+    throw FormatException(
+      'Project material delivery field "$key" is required.',
+    );
+  }
+
+  return value;
+}
+
 double? _asDouble(dynamic value) {
   if (value is double) {
     return value;
@@ -400,3 +409,119 @@ double? _asDouble(dynamic value) {
 
   return double.tryParse(value?.toString() ?? '');
 }
+
+double _requiredDouble(Map<String, dynamic> json, String key) {
+  final value = _asDouble(json[key]);
+  if (value == null) {
+    throw FormatException(
+      'Project material delivery field "$key" is required.',
+    );
+  }
+
+  return value;
+}
+
+String _requiredString(Map<String, dynamic> json, String key) {
+  final value = json[key]?.toString().trim();
+  if (value == null || value.isEmpty) {
+    throw FormatException(
+      'Project material delivery field "$key" is required.',
+    );
+  }
+
+  return value;
+}
+
+String _requiredKnownString(
+  Map<String, dynamic> json,
+  String key,
+  Set<String> allowedValues,
+) {
+  final value = _requiredString(json, key);
+  if (!allowedValues.contains(value)) {
+    throw FormatException(
+      'Project material delivery field "$key" has unknown value.',
+    );
+  }
+
+  return value;
+}
+
+bool _requiredBool(Map<String, dynamic> json, String key) {
+  final value = json[key];
+  if (value is bool) {
+    return value;
+  }
+
+  throw FormatException('Project material delivery field "$key" is required.');
+}
+
+Map<String, dynamic> _requiredMapValue(dynamic value, String key) {
+  if (value is Map<String, dynamic>) {
+    return value;
+  }
+
+  if (value is Map) {
+    return value.map((key, value) => MapEntry(key.toString(), value));
+  }
+
+  throw FormatException('Project material delivery field "$key" is required.');
+}
+
+Map<String, dynamic> _requiredMap(Map<String, dynamic> json, String key) {
+  return _requiredMapValue(json[key], key);
+}
+
+List<Map<String, dynamic>> _requiredList(
+  Map<String, dynamic> json,
+  String key,
+) {
+  final value = json[key];
+  if (value is! List) {
+    throw FormatException(
+      'Project material delivery field "$key" must be a list.',
+    );
+  }
+
+  return value
+      .whereType<Map>()
+      .map((item) => item.map((key, value) => MapEntry(key.toString(), value)))
+      .toList(growable: false);
+}
+
+String? _cleanLabel(dynamic value) {
+  final text = value?.toString().trim();
+  if (text == null || text.isEmpty) {
+    return null;
+  }
+
+  if (text.startsWith('basic_warehouse.') || text.startsWith('mobile_')) {
+    return null;
+  }
+
+  return text;
+}
+
+String _requiredCleanLabel(Map<String, dynamic> json, String key) {
+  final label = _cleanLabel(json[key]);
+  if (label == null) {
+    throw FormatException(
+      'Project material delivery field "$key" must be readable.',
+    );
+  }
+
+  return label;
+}
+
+const _projectMaterialDeliveryStatuses = {
+  'requested',
+  'processing',
+  'reserved',
+  'preparing',
+  'in_transit',
+  'partially_delivered',
+  'delivered',
+  'accepted',
+  'problem',
+  'cancelled',
+};

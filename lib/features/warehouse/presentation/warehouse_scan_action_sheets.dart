@@ -29,12 +29,7 @@ class _WarehouseTaskStatusSheetState extends State<WarehouseTaskStatusSheet> {
   @override
   void initState() {
     super.initState();
-    _quantityController = TextEditingController(
-      text:
-          widget.task.plannedQuantity != null
-              ? widget.task.plannedQuantity!.toString()
-              : '',
-    );
+    _quantityController = TextEditingController();
     _notesController = TextEditingController(text: widget.task.notes ?? '');
   }
 
@@ -58,7 +53,7 @@ class _WarehouseTaskStatusSheetState extends State<WarehouseTaskStatusSheet> {
         shrinkWrap: true,
         children: [
           Text(
-            warehouseTaskActionLabel(widget.targetStatus),
+            warehouseTaskActionLabel(widget.task, widget.targetStatus),
             style: AppTypography.h2(context),
           ),
           const SizedBox(height: 12),
@@ -87,15 +82,26 @@ class _WarehouseTaskStatusSheetState extends State<WarehouseTaskStatusSheet> {
           const SizedBox(height: 16),
           FilledButton(
             onPressed: () {
+              final completedQuantity =
+                  needsQuantity
+                      ? double.tryParse(
+                        _quantityController.text.replaceAll(',', '.'),
+                      )
+                      : null;
+
+              if (needsQuantity && completedQuantity == null) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Укажите фактическое количество.'),
+                  ),
+                );
+                return;
+              }
+
               Navigator.of(context).pop(
                 WarehouseTaskStatusPayload(
                   status: widget.targetStatus,
-                  completedQuantity:
-                      needsQuantity
-                          ? double.tryParse(
-                            _quantityController.text.replaceAll(',', '.'),
-                          )
-                          : null,
+                  completedQuantity: completedQuantity,
                   notes: _notesController.text.trim(),
                 ),
               );
@@ -136,7 +142,7 @@ class _WarehouseTransferSheetState
   @override
   void initState() {
     super.initState();
-    _quantityController = TextEditingController(text: '1');
+    _quantityController = TextEditingController();
     _documentController = TextEditingController();
     _reasonController = TextEditingController();
   }
@@ -279,15 +285,4 @@ class _WarehouseTransferSheetState
       SnackBar(content: Text(message.replaceFirst('ApiException: ', ''))),
     );
   }
-}
-
-String taskStatusActionLabel(String status) {
-  return switch (status) {
-    'queued' => 'Вернуть в очередь',
-    'in_progress' => 'Взять в работу',
-    'blocked' => 'Заблокировать',
-    'completed' => 'Завершить',
-    'cancelled' => 'Отменить',
-    _ => 'Обновить',
-  };
 }

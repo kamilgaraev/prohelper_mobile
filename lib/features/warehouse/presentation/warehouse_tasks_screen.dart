@@ -305,7 +305,7 @@ class _WarehouseTasksScreenState extends ConsumerState<WarehouseTasksScreen> {
         return;
       }
       _showMessage(
-        'Статус задачи "${task.title}" обновлен: ${warehouseStatusLabel(targetStatus)}.',
+        'Статус задачи "${task.title}" обновлен: ${warehouseTaskActionLabel(task, targetStatus).toLowerCase()}.',
       );
     } catch (error) {
       _showMessage(error.toString());
@@ -601,7 +601,7 @@ class _TaskCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      '${task.taskNumber} / ${warehouseTaskTypeLabel(task.taskType)}',
+                      '${task.taskNumber} / ${task.taskTypeLabel}',
                       style: AppTypography.bodyMedium(context),
                     ),
                   ],
@@ -609,7 +609,7 @@ class _TaskCard extends StatelessWidget {
               ),
               const SizedBox(width: 12),
               _TaskBadge(
-                label: warehouseStatusLabel(task.status),
+                label: task.statusLabel,
                 color: _statusColor(task.status),
               ),
             ],
@@ -620,7 +620,7 @@ class _TaskCard extends StatelessWidget {
             runSpacing: 8,
             children: [
               _TaskBadge(
-                label: warehousePriorityLabel(task.priority),
+                label: task.priorityLabel,
                 color: _priorityColor(task.priority),
               ),
               if (task.dueAt != null)
@@ -676,15 +676,17 @@ class _TaskCard extends StatelessWidget {
               ),
               if (primaryAction != null)
                 FilledButton.tonal(
-                  onPressed: () => onAction(primaryAction),
-                  child: Text(warehouseTaskActionLabel(primaryAction)),
+                  onPressed: () => onAction(primaryAction.status),
+                  child: Text(primaryAction.name),
                 ),
               ...warehouseAllowedTaskActions(task)
-                  .where((status) => status != primaryAction)
+                  .where(
+                    (transition) => transition.status != primaryAction?.status,
+                  )
                   .map(
-                    (status) => OutlinedButton(
-                      onPressed: () => onAction(status),
-                      child: Text(warehouseTaskActionLabel(status)),
+                    (transition) => OutlinedButton(
+                      onPressed: () => onAction(transition.status),
+                      child: Text(transition.name),
                     ),
                   ),
             ],
@@ -771,15 +773,12 @@ class _TaskDetailsSheet extends StatelessWidget {
           Text(task.title, style: AppTypography.h2(context)),
           const SizedBox(height: 8),
           Text(
-            '${task.taskNumber} / ${warehouseTaskTypeLabel(task.taskType)}',
+            '${task.taskNumber} / ${task.taskTypeLabel}',
             style: AppTypography.bodyMedium(context),
           ),
           const SizedBox(height: 16),
-          _DetailRow(label: 'Статус', value: warehouseStatusLabel(task.status)),
-          _DetailRow(
-            label: 'Приоритет',
-            value: warehousePriorityLabel(task.priority),
-          ),
+          _DetailRow(label: 'Статус', value: task.statusLabel),
+          _DetailRow(label: 'Приоритет', value: task.priorityLabel),
           if (task.dueAt != null)
             _DetailRow(
               label: 'Срок',
@@ -812,9 +811,10 @@ class _TaskDetailsSheet extends StatelessWidget {
             children:
                 warehouseAllowedTaskActions(task)
                     .map(
-                      (status) => FilledButton.tonal(
-                        onPressed: () => Navigator.of(context).pop(status),
-                        child: Text(warehouseTaskActionLabel(status)),
+                      (transition) => FilledButton.tonal(
+                        onPressed:
+                            () => Navigator.of(context).pop(transition.status),
+                        child: Text(transition.name),
                       ),
                     )
                     .toList(),
@@ -854,7 +854,7 @@ Color _statusColor(String status) {
     'blocked' => AppColors.warning,
     'completed' => AppColors.success,
     'cancelled' => Colors.grey,
-    _ => Colors.blueGrey,
+    _ => throw ArgumentError.value(status, 'status', 'Unknown task status'),
   };
 }
 
@@ -864,7 +864,8 @@ Color _priorityColor(String priority) {
     'high' => AppColors.warning,
     'normal' => AppColors.secondary,
     'low' => Colors.blueGrey,
-    _ => Colors.blueGrey,
+    _ =>
+      throw ArgumentError.value(priority, 'priority', 'Unknown task priority'),
   };
 }
 

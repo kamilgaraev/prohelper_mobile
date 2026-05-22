@@ -10,9 +10,9 @@ class WarehouseSummaryModel {
   final List<WarehouseMovementModel> recentMovements;
 
   factory WarehouseSummaryModel.fromJson(Map<String, dynamic> json) {
-    final summaryJson = _asMap(json['summary']);
-    final warehousesJson = _asList(json['warehouses']);
-    final movementsJson = _asList(json['recent_movements']);
+    final summaryJson = _requiredMap(json, 'summary');
+    final warehousesJson = _requiredList(json, 'warehouses');
+    final movementsJson = _requiredList(json, 'recent_movements');
 
     return WarehouseSummaryModel(
       summary: WarehouseSummaryData.fromJson(summaryJson),
@@ -42,12 +42,12 @@ class WarehouseSummaryData {
 
   factory WarehouseSummaryData.fromJson(Map<String, dynamic> json) {
     return WarehouseSummaryData(
-      warehouseCount: _asInt(json['warehouse_count']),
-      uniqueItemsCount: _asInt(json['unique_items_count']),
-      lowStockCount: _asInt(json['low_stock_count']),
-      reservedItemsCount: _asInt(json['reserved_items_count']),
-      recentMovementsCount: _asInt(json['recent_movements_count']),
-      totalValue: _asDouble(json['total_value']),
+      warehouseCount: _requiredInt(json, 'warehouse_count'),
+      uniqueItemsCount: _requiredInt(json, 'unique_items_count'),
+      lowStockCount: _requiredInt(json, 'low_stock_count'),
+      reservedItemsCount: _requiredInt(json, 'reserved_items_count'),
+      recentMovementsCount: _requiredInt(json, 'recent_movements_count'),
+      totalValue: _requiredDouble(json, 'total_value'),
     );
   }
 }
@@ -73,11 +73,11 @@ class WarehouseCardModel {
 
   factory WarehouseCardModel.fromJson(Map<String, dynamic> json) {
     return WarehouseCardModel(
-      id: _asInt(json['id']),
-      name: _asString(json['name']),
-      isMain: _asBool(json['is_main']),
-      uniqueItemsCount: _asInt(json['unique_items_count']),
-      totalValue: _asDouble(json['total_value']),
+      id: _requiredInt(json, 'id'),
+      name: _requiredString(json, 'name'),
+      isMain: _requiredBool(json, 'is_main'),
+      uniqueItemsCount: _requiredInt(json, 'unique_items_count'),
+      totalValue: _requiredDouble(json, 'total_value'),
       address: _asNullableString(json['address']),
       warehouseType: _asNullableString(json['warehouse_type']),
     );
@@ -134,19 +134,20 @@ class WarehouseMovementModel {
   }
 
   factory WarehouseMovementModel.fromJson(Map<String, dynamic> json) {
-    final movementType = _asString(json['movement_type']);
+    final movementType = _requiredKnownString(
+      json,
+      'movement_type',
+      _movementTypes,
+    );
 
     return WarehouseMovementModel(
-      id: _asInt(json['id']),
+      id: _requiredInt(json, 'id'),
       movementType: movementType,
-      movementTypeLabel: _resolveMovementTypeLabel(
-        movementType,
-        _asNullableString(json['movement_type_label']),
-      ),
-      quantity: _asDouble(json['quantity']),
-      price: _asDouble(json['price']),
-      warehouseName: _asNullableString(json['warehouse_name']),
-      materialName: _asNullableString(json['material_name']),
+      movementTypeLabel: _requiredCleanLabel(json, 'movement_type_label'),
+      quantity: _requiredDouble(json, 'quantity'),
+      price: _requiredDouble(json, 'price'),
+      warehouseName: _requiredString(json, 'warehouse_name'),
+      materialName: _requiredString(json, 'material_name'),
       measurementUnit: _asNullableString(json['measurement_unit']),
       projectName: _asNullableString(json['project_name']),
       documentNumber: _asNullableString(json['document_number']),
@@ -156,7 +157,7 @@ class WarehouseMovementModel {
               ? DateTime.tryParse(json['movement_date'].toString())
               : null,
       photoGallery:
-          _asList(
+          _optionalList(
             json['photo_gallery'],
           ).map(WarehousePhotoModel.fromJson).toList(),
     );
@@ -182,8 +183,8 @@ class WarehousePhotoModel {
 
   factory WarehousePhotoModel.fromJson(Map<String, dynamic> json) {
     return WarehousePhotoModel(
-      id: _asInt(json['id']),
-      url: _asString(json['url']),
+      id: _requiredInt(json, 'id'),
+      url: _requiredString(json, 'url'),
       name: _asNullableString(json['name']),
       originalName: _asNullableString(json['original_name']),
       mimeType: _asNullableString(json['mime_type']),
@@ -270,22 +271,22 @@ class WarehouseBalanceModel {
 
   factory WarehouseBalanceModel.fromJson(Map<String, dynamic> json) {
     return WarehouseBalanceModel(
-      warehouseId: _asInt(json['warehouse_id']),
-      warehouseName: _asString(json['warehouse_name']),
-      materialId: _asInt(json['material_id']),
-      materialName: _asString(json['material_name']),
-      availableQuantity: _asDouble(json['available_quantity']),
-      reservedQuantity: _asDouble(json['reserved_quantity']),
-      totalQuantity: _asDouble(json['total_quantity']),
-      averagePrice: _asDouble(json['average_price']),
-      totalValue: _asDouble(json['total_value']),
-      isLowStock: _asBool(json['is_low_stock']),
+      warehouseId: _requiredInt(json, 'warehouse_id'),
+      warehouseName: _requiredString(json, 'warehouse_name'),
+      materialId: _requiredInt(json, 'material_id'),
+      materialName: _requiredString(json, 'material_name'),
+      availableQuantity: _requiredDouble(json, 'available_quantity'),
+      reservedQuantity: _requiredDouble(json, 'reserved_quantity'),
+      totalQuantity: _requiredDouble(json, 'total_quantity'),
+      averagePrice: _requiredDouble(json, 'average_price'),
+      totalValue: _requiredDouble(json, 'total_value'),
+      isLowStock: _requiredBool(json, 'is_low_stock'),
       photoGallery:
-          _asList(
+          _optionalList(
             json['photo_gallery'],
           ).map(WarehousePhotoModel.fromJson).toList(),
       assetPhotoGallery:
-          _asList(
+          _optionalList(
             json['asset_photo_gallery'],
           ).map(WarehousePhotoModel.fromJson).toList(),
       materialCode: _asNullableString(json['material_code']),
@@ -328,17 +329,17 @@ class WarehouseMaterialOption {
           : (measurementUnitName ?? '');
 
   factory WarehouseMaterialOption.fromJson(Map<String, dynamic> json) {
-    final measurementUnitJson = _asMap(json['measurement_unit']);
+    final measurementUnitJson = _optionalMap(json['measurement_unit']);
 
     return WarehouseMaterialOption(
-      id: _asInt(json['id']),
-      name: _asString(json['name']),
-      defaultPrice: _asDouble(json['default_price']),
+      id: _requiredInt(json, 'id'),
+      name: _requiredString(json, 'name'),
+      defaultPrice: _requiredDouble(json, 'default_price'),
       code: _asNullableString(json['code']),
       measurementUnitId:
           measurementUnitJson.isEmpty
               ? null
-              : _asInt(measurementUnitJson['id']),
+              : _requiredInt(measurementUnitJson, 'id'),
       measurementUnitName: _asNullableString(measurementUnitJson['name']),
       measurementUnitShortName: _asNullableString(
         measurementUnitJson['short_name'],
@@ -371,7 +372,7 @@ class WarehouseReceiptPayload {
   final Map<String, dynamic> metadata;
 }
 
-Map<String, dynamic> _asMap(dynamic value) {
+Map<String, dynamic> _optionalMap(dynamic value) {
   if (value is Map<String, dynamic>) {
     return value;
   }
@@ -383,15 +384,44 @@ Map<String, dynamic> _asMap(dynamic value) {
   return const <String, dynamic>{};
 }
 
-List<Map<String, dynamic>> _asList(dynamic value) {
-  if (value is! List) {
+Map<String, dynamic> _requiredMap(Map<String, dynamic> json, String key) {
+  final value = _optionalMap(json[key]);
+  if (value.isEmpty && json[key] is! Map) {
+    throw FormatException('Warehouse field "$key" must be an object.');
+  }
+
+  return value;
+}
+
+List<Map<String, dynamic>> _optionalList(dynamic value) {
+  if (value == null) {
     return const <Map<String, dynamic>>[];
+  }
+
+  if (value is! List) {
+    throw const FormatException('Warehouse field must be a list.');
   }
 
   return value.whereType<Map>().map(_asMap).toList();
 }
 
-int _asInt(dynamic value) {
+List<Map<String, dynamic>> _requiredList(
+  Map<String, dynamic> json,
+  String key,
+) {
+  final value = json[key];
+  if (value is! List) {
+    throw FormatException('Warehouse field "$key" must be a list.');
+  }
+
+  return value.whereType<Map>().map(_asMap).toList();
+}
+
+Map<String, dynamic> _asMap(Map<dynamic, dynamic> value) {
+  return value.map((key, value) => MapEntry(key.toString(), value));
+}
+
+int? _asNullableInt(dynamic value) {
   if (value is int) {
     return value;
   }
@@ -400,24 +430,25 @@ int _asInt(dynamic value) {
     return value.toInt();
   }
 
-  return int.tryParse(value?.toString() ?? '') ?? 0;
+  return int.tryParse(value?.toString() ?? '');
 }
 
-double _asDouble(dynamic value) {
-  if (value is double) {
-    return value;
+int _requiredInt(Map<String, dynamic> json, String key) {
+  final value = _asNullableInt(json[key]);
+  if (value == null) {
+    throw FormatException('Warehouse field "$key" is required.');
   }
 
-  if (value is num) {
-    return value.toDouble();
-  }
-
-  return double.tryParse(value?.toString() ?? '') ?? 0;
+  return value;
 }
 
 double? _asNullableDouble(dynamic value) {
   if (value == null) {
     return null;
+  }
+
+  if (value is double) {
+    return value;
   }
 
   if (value is num) {
@@ -427,8 +458,35 @@ double? _asNullableDouble(dynamic value) {
   return double.tryParse(value.toString());
 }
 
-String _asString(dynamic value) {
-  return value?.toString() ?? '';
+double _requiredDouble(Map<String, dynamic> json, String key) {
+  final value = _asNullableDouble(json[key]);
+  if (value == null) {
+    throw FormatException('Warehouse field "$key" is required.');
+  }
+
+  return value;
+}
+
+String _requiredString(Map<String, dynamic> json, String key) {
+  final value = json[key]?.toString().trim();
+  if (value == null || value.isEmpty) {
+    throw FormatException('Warehouse field "$key" is required.');
+  }
+
+  return value;
+}
+
+String _requiredKnownString(
+  Map<String, dynamic> json,
+  String key,
+  Set<String> allowedValues,
+) {
+  final value = _requiredString(json, key);
+  if (!allowedValues.contains(value)) {
+    throw FormatException('Warehouse field "$key" has unknown value.');
+  }
+
+  return value;
 }
 
 String? _asNullableString(dynamic value) {
@@ -436,7 +494,11 @@ String? _asNullableString(dynamic value) {
   return normalized.isEmpty ? null : normalized;
 }
 
-bool _asBool(dynamic value) {
+bool? _asNullableBool(dynamic value) {
+  if (value == null) {
+    return null;
+  }
+
   if (value is bool) {
     return value;
   }
@@ -446,28 +508,52 @@ bool _asBool(dynamic value) {
   }
 
   final normalized = value?.toString().toLowerCase().trim();
-  return normalized == 'true' || normalized == '1';
-}
-
-String _resolveMovementTypeLabel(String movementType, String? rawLabel) {
-  if (!_needsMovementTypeFallback(rawLabel)) {
-    return rawLabel!.trim();
+  if (normalized == 'true' || normalized == '1') {
+    return true;
+  }
+  if (normalized == 'false' || normalized == '0') {
+    return false;
   }
 
-  return switch (movementType) {
-    'receipt' => 'Приход',
-    'write_off' => 'Списание',
-    'transfer_in' => 'Перемещение на склад',
-    'transfer_out' => 'Перемещение со склада',
-    'adjustment' => 'Корректировка',
-    'return' => 'Возврат',
-    _ => 'Движение',
-  };
+  return null;
 }
 
-bool _needsMovementTypeFallback(String? value) {
-  final normalized = value?.trim() ?? '';
+bool _requiredBool(Map<String, dynamic> json, String key) {
+  final value = _asNullableBool(json[key]);
+  if (value == null) {
+    throw FormatException('Warehouse field "$key" is required.');
+  }
 
-  return normalized.isEmpty ||
-      normalized.startsWith('mobile_warehouse.movement_types.');
+  return value;
 }
+
+String? _cleanLabel(dynamic value) {
+  final text = value?.toString().trim();
+  if (text == null || text.isEmpty) {
+    return null;
+  }
+
+  if (text.startsWith('mobile_warehouse.')) {
+    return null;
+  }
+
+  return text;
+}
+
+String _requiredCleanLabel(Map<String, dynamic> json, String key) {
+  final label = _cleanLabel(json[key]);
+  if (label == null) {
+    throw FormatException('Warehouse field "$key" must be readable.');
+  }
+
+  return label;
+}
+
+const _movementTypes = {
+  'receipt',
+  'write_off',
+  'transfer_in',
+  'transfer_out',
+  'adjustment',
+  'return',
+};
