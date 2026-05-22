@@ -28,6 +28,7 @@ import 'package:prohelpers_mobile/features/safety/presentation/safety_screen.dar
 import 'package:prohelpers_mobile/features/schedule/presentation/schedule_screen.dart';
 import 'package:prohelpers_mobile/features/site_requests/domain/site_requests_scope.dart';
 import 'package:prohelpers_mobile/features/site_requests/presentation/screens/site_requests_screen.dart';
+import 'package:prohelpers_mobile/features/time_tracking/presentation/time_tracking_screen.dart';
 import 'package:prohelpers_mobile/features/warehouse/presentation/warehouse_screen.dart';
 import 'package:prohelpers_mobile/features/workflow_management/presentation/workflow_management_screen.dart';
 import 'package:prohelpers_mobile/features/workforce/presentation/workforce_attendance_screen.dart';
@@ -362,6 +363,8 @@ class DashboardScreen extends ConsumerWidget {
       'handover_acceptance' => Icons.handshake_rounded,
       'workflow_management' => Icons.hub_outlined,
       'workflow-management' => Icons.hub_outlined,
+      'time_tracking' => Icons.timer_outlined,
+      'time-tracking' => Icons.timer_outlined,
       _ => Icons.dashboard_customize_outlined,
     };
   }
@@ -388,6 +391,8 @@ class DashboardScreen extends ConsumerWidget {
       'construction_journal' => const ConstructionJournalScreen(),
       'workflow-management' => const WorkflowManagementScreen(),
       'workflow_management' => const WorkflowManagementScreen(),
+      'time-tracking' => const TimeTrackingScreen(),
+      'time_tracking' => const TimeTrackingScreen(),
       'quality-control' => const QualityControlScreen(),
       'safety-management' => const SafetyScreen(),
       'machinery-operations' => const MachineryOperationsScreen(),

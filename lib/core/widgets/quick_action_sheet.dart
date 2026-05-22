@@ -13,6 +13,7 @@ import '../../features/quality_control/presentation/quality_control_screen.dart'
 import '../../features/safety/presentation/safety_screen.dart';
 import '../../features/schedule/presentation/schedule_screen.dart';
 import '../../features/site_requests/presentation/screens/site_requests_screen.dart';
+import '../../features/time_tracking/presentation/time_tracking_screen.dart';
 import '../../features/warehouse/presentation/warehouse_screen.dart';
 import '../../features/workflow_management/presentation/workflow_management_screen.dart';
 import '../../features/workforce/presentation/workforce_attendance_screen.dart';
@@ -210,6 +211,12 @@ class QuickActionSheet extends ConsumerWidget {
           MaterialPageRoute(builder: (_) => const WorkflowManagementScreen()),
         );
         return;
+      case 'time_tracking':
+      case 'time-tracking':
+        navigator.push(
+          MaterialPageRoute(builder: (_) => const TimeTrackingScreen()),
+        );
+        return;
       default:
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -272,6 +279,8 @@ class QuickActionSheet extends ConsumerWidget {
       'ai-assistant' => scheme.secondary,
       'workflow_management' => scheme.primary,
       'workflow-management' => scheme.primary,
+      'time_tracking' => AppColors.success,
+      'time-tracking' => AppColors.success,
       _ => scheme.onSurfaceVariant,
     };
   }
