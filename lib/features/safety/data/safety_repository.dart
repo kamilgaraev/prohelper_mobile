@@ -4,14 +4,24 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import '../../../core/network/api_exception.dart';
 import '../../../core/network/dio_client.dart';
 import '../../../core/network/mobile_api_response.dart';
+import '../../../core/sync/sync_queue_draft.dart';
+import '../../../core/sync/sync_queue_provider.dart';
+import '../../../core/sync/sync_queue_repository.dart';
+import '../../../core/sync/sync_queue_service.dart';
 import 'safety_model.dart';
 
 final safetyRepositoryProvider = Provider<SafetyRepository>((ref) {
-  return SafetyRepository(ref.read(dioProvider));
+  return SafetyRepository(
+    ref.read(dioProvider),
+    syncQueueServiceFuture: ref.read(syncQueueServiceProvider.future),
+  );
 });
 
-class SafetyRepository {
-  SafetyRepository(this._dio);
+class SafetyRepository extends SyncQueueAwareRepository {
+  SafetyRepository(
+    this._dio, {
+    Future<SyncQueueService>? syncQueueServiceFuture,
+  }) : super(syncQueueServiceFuture);
 
   final Dio _dio;
 
@@ -83,6 +93,8 @@ class SafetyRepository {
   }
 
   Future<SafetyIncidentModel> createIncident(Map<String, dynamic> data) async {
+    final payload = Map<String, dynamic>.from(data);
+
     try {
       final response = await _dio.post(
         '/safety-management/incidents',
@@ -91,6 +103,18 @@ class SafetyRepository {
 
       return SafetyIncidentModel.fromJson(_object(response.data));
     } on DioException catch (error) {
+      if (SyncQueueService.shouldQueueDioException(error)) {
+        await queueAndThrow(
+          SyncQueueDraft(
+            moduleSlug: 'safety',
+            operationType: 'create_incident',
+            method: 'POST',
+            endpoint: '/safety-management/incidents',
+            payload: payload,
+          ),
+        );
+      }
+
       throw ApiException.fromDio(error);
     }
   }

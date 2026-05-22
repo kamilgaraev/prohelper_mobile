@@ -4,15 +4,25 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import '../../../core/network/api_exception.dart';
 import '../../../core/network/dio_client.dart';
 import '../../../core/network/mobile_api_response.dart';
+import '../../../core/sync/sync_queue_draft.dart';
+import '../../../core/sync/sync_queue_provider.dart';
+import '../../../core/sync/sync_queue_repository.dart';
+import '../../../core/sync/sync_queue_service.dart';
 import '../domain/site_requests_scope.dart';
 import 'site_request_model.dart';
 
 final siteRequestsRepositoryProvider = Provider<SiteRequestsRepository>((ref) {
-  return SiteRequestsRepository(ref.read(dioProvider));
+  return SiteRequestsRepository(
+    ref.read(dioProvider),
+    syncQueueServiceFuture: ref.read(syncQueueServiceProvider.future),
+  );
 });
 
-class SiteRequestsRepository {
-  SiteRequestsRepository(this._dio);
+class SiteRequestsRepository extends SyncQueueAwareRepository {
+  SiteRequestsRepository(
+    this._dio, {
+    Future<SyncQueueService>? syncQueueServiceFuture,
+  }) : super(syncQueueServiceFuture);
 
   final Dio _dio;
 
@@ -72,12 +82,26 @@ class SiteRequestsRepository {
   }
 
   Future<SiteRequestModel> createSiteRequest(Map<String, dynamic> data) async {
+    final payload = Map<String, dynamic>.from(data);
+
     try {
       final response = await _dio.post('/site-requests', data: data);
       return _parseSiteRequestResponse(
         MobileApiResponse.payload(response.data),
       );
     } on DioException catch (error) {
+      if (SyncQueueService.shouldQueueDioException(error)) {
+        await queueAndThrow(
+          SyncQueueDraft(
+            moduleSlug: 'site_requests',
+            operationType: 'create_site_request',
+            method: 'POST',
+            endpoint: '/site-requests',
+            payload: payload,
+          ),
+        );
+      }
+
       throw ApiException.fromDio(
         error,
         fallbackMessage: 'Не удалось создать заявку.',

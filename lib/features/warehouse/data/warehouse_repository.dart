@@ -7,16 +7,26 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import '../../../core/network/api_exception.dart';
 import '../../../core/network/dio_client.dart';
 import '../../../core/network/mobile_api_response.dart';
+import '../../../core/sync/sync_queue_draft.dart';
+import '../../../core/sync/sync_queue_provider.dart';
+import '../../../core/sync/sync_queue_repository.dart';
+import '../../../core/sync/sync_queue_service.dart';
 import 'project_material_delivery_model.dart';
 import 'warehouse_scan_model.dart';
 import 'warehouse_summary_model.dart';
 
 final warehouseRepositoryProvider = Provider<WarehouseRepository>((ref) {
-  return WarehouseRepository(ref.read(dioProvider));
+  return WarehouseRepository(
+    ref.read(dioProvider),
+    syncQueueServiceFuture: ref.read(syncQueueServiceProvider.future),
+  );
 });
 
-class WarehouseRepository {
-  WarehouseRepository(this._dio);
+class WarehouseRepository extends SyncQueueAwareRepository {
+  WarehouseRepository(
+    this._dio, {
+    Future<SyncQueueService>? syncQueueServiceFuture,
+  }) : super(syncQueueServiceFuture);
 
   final Dio _dio;
 
@@ -162,20 +172,32 @@ class WarehouseRepository {
   }
 
   Future<void> createReceipt(WarehouseReceiptPayload payload) async {
+    final receiptPayload = <String, dynamic>{
+      'warehouse_id': payload.warehouseId.toString(),
+      'material_id': payload.materialId.toString(),
+      'quantity': payload.quantity.toString(),
+      'price': payload.price.toString(),
+      if (payload.projectId != null) 'project_id': payload.projectId.toString(),
+      if ((payload.documentNumber ?? '').trim().isNotEmpty)
+        'document_number': payload.documentNumber!.trim(),
+      if ((payload.reason ?? '').trim().isNotEmpty)
+        'reason': payload.reason!.trim(),
+      if (payload.metadata.isNotEmpty) 'metadata': jsonEncode(payload.metadata),
+    };
+    final attachments =
+        payload.photos
+            .map(
+              (path) => SyncAttachmentRef(
+                field: 'photos[]',
+                path: path,
+                filename: _fileNameFromPath(path),
+              ),
+            )
+            .toList();
+
     try {
       final formData = FormData.fromMap({
-        'warehouse_id': payload.warehouseId.toString(),
-        'material_id': payload.materialId.toString(),
-        'quantity': payload.quantity.toString(),
-        'price': payload.price.toString(),
-        if (payload.projectId != null)
-          'project_id': payload.projectId.toString(),
-        if ((payload.documentNumber ?? '').trim().isNotEmpty)
-          'document_number': payload.documentNumber!.trim(),
-        if ((payload.reason ?? '').trim().isNotEmpty)
-          'reason': payload.reason!.trim(),
-        if (payload.metadata.isNotEmpty)
-          'metadata': jsonEncode(payload.metadata),
+        ...receiptPayload,
         'photos[]': await Future.wait(
           payload.photos.map(
             (path) =>
@@ -192,6 +214,19 @@ class WarehouseRepository {
 
       _requirePositiveInt(data, 'movement_id');
     } on DioException catch (error) {
+      if (SyncQueueService.shouldQueueDioException(error)) {
+        await queueAndThrow(
+          SyncQueueDraft(
+            moduleSlug: 'warehouse',
+            operationType: 'create_receipt',
+            method: 'POST',
+            endpoint: '/warehouse/operations/receipt',
+            payload: receiptPayload,
+            attachments: attachments,
+          ),
+        );
+      }
+
       throw ApiException.fromDio(
         error,
         fallbackMessage: 'Не удалось выполнить оприходование.',
@@ -365,6 +400,17 @@ class WarehouseRepository {
     String path,
     List<String> photoPaths,
   ) async {
+    final attachments =
+        photoPaths
+            .map(
+              (photoPath) => SyncAttachmentRef(
+                field: 'photos[]',
+                path: photoPath,
+                filename: _fileNameFromPath(photoPath),
+              ),
+            )
+            .toList();
+
     try {
       final formData = FormData.fromMap({
         'photos[]': await Future.wait(
@@ -382,6 +428,19 @@ class WarehouseRepository {
 
       return payload.map(WarehousePhotoModel.fromJson).toList();
     } on DioException catch (error) {
+      if (SyncQueueService.shouldQueueDioException(error)) {
+        await queueAndThrow(
+          SyncQueueDraft(
+            moduleSlug: 'warehouse',
+            operationType: 'upload_photos',
+            method: 'POST',
+            endpoint: path,
+            payload: const <String, dynamic>{},
+            attachments: attachments,
+          ),
+        );
+      }
+
       throw ApiException.fromDio(
         error,
         fallbackMessage: 'Не удалось загрузить фотографии.',

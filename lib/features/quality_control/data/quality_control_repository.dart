@@ -4,16 +4,26 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import '../../../core/network/api_exception.dart';
 import '../../../core/network/dio_client.dart';
 import '../../../core/network/mobile_api_response.dart';
+import '../../../core/sync/sync_queue_draft.dart';
+import '../../../core/sync/sync_queue_provider.dart';
+import '../../../core/sync/sync_queue_repository.dart';
+import '../../../core/sync/sync_queue_service.dart';
 import 'quality_defect_model.dart';
 
 final qualityControlRepositoryProvider = Provider<QualityControlRepository>((
   ref,
 ) {
-  return QualityControlRepository(ref.read(dioProvider));
+  return QualityControlRepository(
+    ref.read(dioProvider),
+    syncQueueServiceFuture: ref.read(syncQueueServiceProvider.future),
+  );
 });
 
-class QualityControlRepository {
-  QualityControlRepository(this._dio);
+class QualityControlRepository extends SyncQueueAwareRepository {
+  QualityControlRepository(
+    this._dio, {
+    Future<SyncQueueService>? syncQueueServiceFuture,
+  }) : super(syncQueueServiceFuture);
 
   final Dio _dio;
 
@@ -47,12 +57,26 @@ class QualityControlRepository {
   }
 
   Future<QualityDefectModel> createDefect(Map<String, dynamic> data) async {
+    final payload = Map<String, dynamic>.from(data);
+
     try {
       final response = await _dio.post('/quality-control/defects', data: data);
       return QualityDefectModel.fromJson(
         MobileApiResponse.dataMap(response.data),
       );
     } on DioException catch (error) {
+      if (SyncQueueService.shouldQueueDioException(error)) {
+        await queueAndThrow(
+          SyncQueueDraft(
+            moduleSlug: 'quality_control',
+            operationType: 'create_defect',
+            method: 'POST',
+            endpoint: '/quality-control/defects',
+            payload: payload,
+          ),
+        );
+      }
+
       throw ApiException.fromDio(error);
     }
   }
@@ -91,9 +115,26 @@ class QualityControlRepository {
     String? comment,
     String? photoPath,
   }) async {
+    final trimmedComment = comment?.trim();
+    final trimmedPhotoPath = photoPath?.trim();
+    final payload = <String, dynamic>{
+      if (trimmedComment != null && trimmedComment.isNotEmpty)
+        'comment': trimmedComment,
+      if (trimmedPhotoPath != null && trimmedPhotoPath.isNotEmpty)
+        'photos[0][type]': 'after',
+    };
+    final attachments =
+        trimmedPhotoPath != null && trimmedPhotoPath.isNotEmpty
+            ? <SyncAttachmentRef>[
+              SyncAttachmentRef(
+                field: 'photos[0][file]',
+                path: trimmedPhotoPath,
+                filename: _fileName(trimmedPhotoPath),
+              ),
+            ]
+            : const <SyncAttachmentRef>[];
+
     try {
-      final trimmedComment = comment?.trim();
-      final trimmedPhotoPath = photoPath?.trim();
       final Object data;
 
       if (trimmedPhotoPath != null && trimmedPhotoPath.isNotEmpty) {
@@ -121,6 +162,19 @@ class QualityControlRepository {
         MobileApiResponse.dataMap(response.data),
       );
     } on DioException catch (error) {
+      if (SyncQueueService.shouldQueueDioException(error)) {
+        await queueAndThrow(
+          SyncQueueDraft(
+            moduleSlug: 'quality_control',
+            operationType: 'resolve_defect',
+            method: 'POST',
+            endpoint: '/quality-control/defects/$id/resolve',
+            payload: payload,
+            attachments: attachments,
+          ),
+        );
+      }
+
       throw ApiException.fromDio(error);
     }
   }

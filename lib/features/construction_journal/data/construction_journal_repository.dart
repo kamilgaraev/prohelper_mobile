@@ -4,15 +4,25 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import '../../../core/network/api_exception.dart';
 import '../../../core/network/dio_client.dart';
 import '../../../core/network/mobile_api_response.dart';
+import '../../../core/sync/sync_queue_draft.dart';
+import '../../../core/sync/sync_queue_provider.dart';
+import '../../../core/sync/sync_queue_repository.dart';
+import '../../../core/sync/sync_queue_service.dart';
 import 'construction_journal_models.dart';
 
 final constructionJournalRepositoryProvider =
     Provider<ConstructionJournalRepository>((ref) {
-      return ConstructionJournalRepository(ref.read(dioProvider));
+      return ConstructionJournalRepository(
+        ref.read(dioProvider),
+        syncQueueServiceFuture: ref.read(syncQueueServiceProvider.future),
+      );
     });
 
-class ConstructionJournalRepository {
-  ConstructionJournalRepository(this._dio);
+class ConstructionJournalRepository extends SyncQueueAwareRepository {
+  ConstructionJournalRepository(
+    this._dio, {
+    Future<SyncQueueService>? syncQueueServiceFuture,
+  }) : super(syncQueueServiceFuture);
 
   final Dio _dio;
 
@@ -214,28 +224,42 @@ class ConstructionJournalRepository {
     List<ConstructionJournalWorkVolumeModel> workVolumes = const [],
     List<ConstructionJournalMaterialUsageModel> materials = const [],
   }) async {
+    final payload = <String, dynamic>{
+      if (scheduleTaskId != null) 'schedule_task_id': scheduleTaskId,
+      if (estimateId != null) 'estimate_id': estimateId,
+      'entry_date': entryDate,
+      'work_description': workDescription,
+      'status': 'draft',
+      'problems_description': problemsDescription,
+      'safety_notes': safetyNotes,
+      'visitors_notes': visitorsNotes,
+      'quality_notes': qualityNotes,
+      'work_volumes': workVolumes.map((volume) => volume.toJson()).toList(),
+      'materials': materials.map((material) => material.toJson()).toList(),
+    };
+
     try {
       final response = await _dio.post(
         '/construction-journals/$journalId/entries',
-        data: {
-          if (scheduleTaskId != null) 'schedule_task_id': scheduleTaskId,
-          if (estimateId != null) 'estimate_id': estimateId,
-          'entry_date': entryDate,
-          'work_description': workDescription,
-          'status': 'draft',
-          'problems_description': problemsDescription,
-          'safety_notes': safetyNotes,
-          'visitors_notes': visitorsNotes,
-          'quality_notes': qualityNotes,
-          'work_volumes': workVolumes.map((volume) => volume.toJson()).toList(),
-          'materials': materials.map((material) => material.toJson()).toList(),
-        },
+        data: payload,
       );
 
       return ConstructionJournalEntryModel.fromJson(
         _extractMap(MobileApiResponse.payload(response.data)),
       );
     } on DioException catch (error) {
+      if (SyncQueueService.shouldQueueDioException(error)) {
+        await queueAndThrow(
+          SyncQueueDraft(
+            moduleSlug: 'construction_journal',
+            operationType: 'create_entry',
+            method: 'POST',
+            endpoint: '/construction-journals/$journalId/entries',
+            payload: payload,
+          ),
+        );
+      }
+
       throw ApiException.fromDio(
         error,
         fallbackMessage: 'Не удалось создать запись.',

@@ -4,14 +4,24 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import '../../../core/network/api_exception.dart';
 import '../../../core/network/dio_client.dart';
 import '../../../core/network/mobile_api_response.dart';
+import '../../../core/sync/sync_queue_draft.dart';
+import '../../../core/sync/sync_queue_provider.dart';
+import '../../../core/sync/sync_queue_repository.dart';
+import '../../../core/sync/sync_queue_service.dart';
 import 'schedule_model.dart';
 
 final scheduleRepositoryProvider = Provider<ScheduleRepository>((ref) {
-  return ScheduleRepository(ref.read(dioProvider));
+  return ScheduleRepository(
+    ref.read(dioProvider),
+    syncQueueServiceFuture: ref.read(syncQueueServiceProvider.future),
+  );
 });
 
-class ScheduleRepository {
-  ScheduleRepository(this._dio);
+class ScheduleRepository extends SyncQueueAwareRepository {
+  ScheduleRepository(
+    this._dio, {
+    Future<SyncQueueService>? syncQueueServiceFuture,
+  }) : super(syncQueueServiceFuture);
 
   final Dio _dio;
 
@@ -95,21 +105,35 @@ class ScheduleRepository {
     required int assignmentId,
     required DailyWorkFactInput input,
   }) async {
+    final requestPayload = input.toJson();
+
     try {
       final response = await _dio.patch(
         '/schedule/daily-plan-assignments/$assignmentId/fact',
-        data: input.toJson(),
+        data: requestPayload,
       );
-      final payload = MobileApiResponse.dataMap(response.data);
+      final responsePayload = MobileApiResponse.dataMap(response.data);
 
-      if (payload.isNotEmpty) {
-        return DailyWorkPlanAssignmentModel.fromJson(payload);
+      if (responsePayload.isNotEmpty) {
+        return DailyWorkPlanAssignmentModel.fromJson(responsePayload);
       }
 
       throw const ApiException(
         'Сервер вернул пустой ответ по факту дневного задания.',
       );
     } on DioException catch (error) {
+      if (SyncQueueService.shouldQueueDioException(error)) {
+        await queueAndThrow(
+          SyncQueueDraft(
+            moduleSlug: 'schedule',
+            operationType: 'record_daily_work_fact',
+            method: 'PATCH',
+            endpoint: '/schedule/daily-plan-assignments/$assignmentId/fact',
+            payload: requestPayload,
+          ),
+        );
+      }
+
       throw ApiException.fromDio(
         error,
         fallbackMessage: 'Не удалось зафиксировать факт дневного задания.',

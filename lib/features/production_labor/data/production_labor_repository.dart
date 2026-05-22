@@ -4,16 +4,26 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import '../../../core/network/api_exception.dart';
 import '../../../core/network/dio_client.dart';
 import '../../../core/network/mobile_api_response.dart';
+import '../../../core/sync/sync_queue_draft.dart';
+import '../../../core/sync/sync_queue_provider.dart';
+import '../../../core/sync/sync_queue_repository.dart';
+import '../../../core/sync/sync_queue_service.dart';
 import 'production_labor_model.dart';
 
 final productionLaborRepositoryProvider = Provider<ProductionLaborRepository>((
   ref,
 ) {
-  return ProductionLaborRepository(ref.read(dioProvider));
+  return ProductionLaborRepository(
+    ref.read(dioProvider),
+    syncQueueServiceFuture: ref.read(syncQueueServiceProvider.future),
+  );
 });
 
-class ProductionLaborRepository {
-  ProductionLaborRepository(this._dio);
+class ProductionLaborRepository extends SyncQueueAwareRepository {
+  ProductionLaborRepository(
+    this._dio, {
+    Future<SyncQueueService>? syncQueueServiceFuture,
+  }) : super(syncQueueServiceFuture);
 
   final Dio _dio;
 
@@ -39,21 +49,35 @@ class ProductionLaborRepository {
     required String workDate,
     String? comment,
   }) async {
+    final payload = <String, dynamic>{
+      'work_order_line_id': workOrderLineId,
+      'work_date': workDate,
+      'quantity': quantity,
+      'hours': hours,
+      if (comment != null && comment.trim().isNotEmpty)
+        'comment': comment.trim(),
+    };
+
     try {
       final response = await _dio.post(
         '/production-labor/output-entries',
-        data: {
-          'work_order_line_id': workOrderLineId,
-          'work_date': workDate,
-          'quantity': quantity,
-          'hours': hours,
-          if (comment != null && comment.trim().isNotEmpty)
-            'comment': comment.trim(),
-        },
+        data: payload,
       );
 
       return LaborOutputModel.fromJson(_object(response.data));
     } on DioException catch (error) {
+      if (SyncQueueService.shouldQueueDioException(error)) {
+        await queueAndThrow(
+          SyncQueueDraft(
+            moduleSlug: 'production_labor',
+            operationType: 'record_output',
+            method: 'POST',
+            endpoint: '/production-labor/output-entries',
+            payload: payload,
+          ),
+        );
+      }
+
       throw ApiException.fromDio(error);
     } catch (_) {
       throw const ApiException('Не удалось зафиксировать выработку.');

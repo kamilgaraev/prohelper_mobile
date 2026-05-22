@@ -4,15 +4,25 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import '../../../core/network/api_exception.dart';
 import '../../../core/network/dio_client.dart';
 import '../../../core/network/mobile_api_response.dart';
+import '../../../core/sync/sync_queue_draft.dart';
+import '../../../core/sync/sync_queue_provider.dart';
+import '../../../core/sync/sync_queue_repository.dart';
+import '../../../core/sync/sync_queue_service.dart';
 import 'handover_acceptance_model.dart';
 
 final handoverAcceptanceRepositoryProvider =
     Provider<HandoverAcceptanceRepository>((ref) {
-      return HandoverAcceptanceRepository(ref.read(dioProvider));
+      return HandoverAcceptanceRepository(
+        ref.read(dioProvider),
+        syncQueueServiceFuture: ref.read(syncQueueServiceProvider.future),
+      );
     });
 
-class HandoverAcceptanceRepository {
-  HandoverAcceptanceRepository(this._dio);
+class HandoverAcceptanceRepository extends SyncQueueAwareRepository {
+  HandoverAcceptanceRepository(
+    this._dio, {
+    Future<SyncQueueService>? syncQueueServiceFuture,
+  }) : super(syncQueueServiceFuture);
 
   final Dio _dio;
 
@@ -80,6 +90,12 @@ class HandoverAcceptanceRepository {
     int documentId, {
     required String filePath,
   }) async {
+    final attachment = SyncAttachmentRef(
+      field: 'file',
+      path: filePath,
+      filename: _fileName(filePath),
+    );
+
     try {
       final response = await _dio.post(
         '/handover-acceptance/package-documents/$documentId/upload',
@@ -95,6 +111,20 @@ class HandoverAcceptanceRepository {
         MobileApiResponse.dataMap(response.data),
       );
     } on DioException catch (error) {
+      if (SyncQueueService.shouldQueueDioException(error)) {
+        await queueAndThrow(
+          SyncQueueDraft(
+            moduleSlug: 'handover_acceptance',
+            operationType: 'upload_package_document',
+            method: 'POST',
+            endpoint:
+                '/handover-acceptance/package-documents/$documentId/upload',
+            payload: const <String, dynamic>{},
+            attachments: <SyncAttachmentRef>[attachment],
+          ),
+        );
+      }
+
       throw ApiException.fromDio(error);
     }
   }
@@ -103,6 +133,8 @@ class HandoverAcceptanceRepository {
     int sessionId,
     Map<String, dynamic> data,
   ) async {
+    final payload = Map<String, dynamic>.from(data);
+
     try {
       final response = await _dio.post(
         '/handover-acceptance/sessions/$sessionId/findings',
@@ -112,6 +144,18 @@ class HandoverAcceptanceRepository {
         MobileApiResponse.dataMap(response.data),
       );
     } on DioException catch (error) {
+      if (SyncQueueService.shouldQueueDioException(error)) {
+        await queueAndThrow(
+          SyncQueueDraft(
+            moduleSlug: 'handover_acceptance',
+            operationType: 'create_finding',
+            method: 'POST',
+            endpoint: '/handover-acceptance/sessions/$sessionId/findings',
+            payload: payload,
+          ),
+        );
+      }
+
       throw ApiException.fromDio(error);
     }
   }

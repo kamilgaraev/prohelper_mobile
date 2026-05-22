@@ -4,15 +4,25 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import '../../../core/network/api_exception.dart';
 import '../../../core/network/dio_client.dart';
 import '../../../core/network/mobile_api_response.dart';
+import '../../../core/sync/sync_queue_draft.dart';
+import '../../../core/sync/sync_queue_provider.dart';
+import '../../../core/sync/sync_queue_repository.dart';
+import '../../../core/sync/sync_queue_service.dart';
 import 'machinery_operations_model.dart';
 
 final machineryOperationsRepositoryProvider =
     Provider<MachineryOperationsRepository>((ref) {
-      return MachineryOperationsRepository(ref.read(dioProvider));
+      return MachineryOperationsRepository(
+        ref.read(dioProvider),
+        syncQueueServiceFuture: ref.read(syncQueueServiceProvider.future),
+      );
     });
 
-class MachineryOperationsRepository {
-  MachineryOperationsRepository(this._dio);
+class MachineryOperationsRepository extends SyncQueueAwareRepository {
+  MachineryOperationsRepository(
+    this._dio, {
+    Future<SyncQueueService>? syncQueueServiceFuture,
+  }) : super(syncQueueServiceFuture);
 
   final Dio _dio;
 
@@ -59,23 +69,37 @@ class MachineryOperationsRepository {
     required double fuelConsumed,
     String? workDescription,
   }) async {
+    final payload = <String, dynamic>{
+      'asset_id': assetId,
+      'project_id': projectId,
+      'report_date': reportDate,
+      if (plannedHours != null) 'planned_hours': plannedHours,
+      'actual_hours': actualHours,
+      'fuel_consumed': fuelConsumed,
+      if (workDescription != null && workDescription.trim().isNotEmpty)
+        'work_description': workDescription.trim(),
+    };
+
     try {
       final response = await _dio.post(
         '/machinery-operations/shift-reports',
-        data: {
-          'asset_id': assetId,
-          'project_id': projectId,
-          'report_date': reportDate,
-          if (plannedHours != null) 'planned_hours': plannedHours,
-          'actual_hours': actualHours,
-          'fuel_consumed': fuelConsumed,
-          if (workDescription != null && workDescription.trim().isNotEmpty)
-            'work_description': workDescription.trim(),
-        },
+        data: payload,
       );
 
       return MachineryShiftReportModel.fromJson(_object(response.data));
     } on DioException catch (error) {
+      if (SyncQueueService.shouldQueueDioException(error)) {
+        await queueAndThrow(
+          SyncQueueDraft(
+            moduleSlug: 'machinery_operations',
+            operationType: 'create_shift_report',
+            method: 'POST',
+            endpoint: '/machinery-operations/shift-reports',
+            payload: payload,
+          ),
+        );
+      }
+
       throw ApiException.fromDio(error);
     } catch (_) {
       throw const ApiException('Не удалось создать сменный рапорт.');
