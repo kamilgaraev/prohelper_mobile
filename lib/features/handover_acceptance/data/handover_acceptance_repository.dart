@@ -16,16 +16,61 @@ class HandoverAcceptanceRepository {
 
   final Dio _dio;
 
-  Future<List<AcceptanceScopeModel>> fetchScopes({int? projectId}) async {
+  Future<List<AcceptanceScopeModel>> fetchScopes({
+    int? projectId,
+    String? status,
+    String? plannedFrom,
+    String? plannedTo,
+  }) async {
     try {
       final response = await _dio.get(
         '/handover-acceptance/scopes',
-        queryParameters: {if (projectId != null) 'project_id': projectId},
+        queryParameters: {
+          if (projectId != null) 'project_id': projectId,
+          if (status != null && status.isNotEmpty) 'status': status,
+          if (plannedFrom != null && plannedFrom.isNotEmpty)
+            'planned_from': plannedFrom,
+          if (plannedTo != null && plannedTo.isNotEmpty)
+            'planned_to': plannedTo,
+        },
       );
 
       return MobileApiResponse.dataList(
         response.data,
       ).map(AcceptanceScopeModel.fromJson).toList();
+    } on DioException catch (error) {
+      throw ApiException.fromDio(error);
+    }
+  }
+
+  Future<AcceptanceScopeModel> fetchScope(int scopeId) async {
+    try {
+      final response = await _dio.get('/handover-acceptance/scopes/$scopeId');
+      return AcceptanceScopeModel.fromJson(
+        MobileApiResponse.dataMap(response.data),
+      );
+    } on DioException catch (error) {
+      throw ApiException.fromDio(error);
+    }
+  }
+
+  Future<AcceptanceChecklistModel> reviewChecklistItem(
+    int itemId, {
+    required String status,
+    String? comment,
+  }) async {
+    try {
+      final response = await _dio.post(
+        '/handover-acceptance/checklist-items/$itemId/review',
+        data: {
+          'status': status,
+          if (comment != null && comment.trim().isNotEmpty)
+            'comment': comment.trim(),
+        },
+      );
+      return AcceptanceChecklistModel.fromJson(
+        MobileApiResponse.dataMap(response.data),
+      );
     } on DioException catch (error) {
       throw ApiException.fromDio(error);
     }

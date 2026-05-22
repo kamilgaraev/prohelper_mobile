@@ -17,12 +17,16 @@ class _RecordingHandoverRepository extends HandoverAcceptanceRepository {
   String? resolutionComment;
   String? rejectReason;
   int? rejectedScopeId;
+  int? loadedScopeId;
+  int? reviewedChecklistItemId;
+  String? reviewedChecklistStatus;
 
   AcceptanceScopeModel get scope => const AcceptanceScopeModel(
     id: 5,
     projectId: 9,
     title: 'Секция А',
     status: 'findings_open',
+    plannedAcceptanceDate: '2026-06-10',
     workflowSummary: HandoverWorkflowSummary(
       status: 'findings_open',
       availableActions: [
@@ -33,6 +37,23 @@ class _RecordingHandoverRepository extends HandoverAcceptanceRepository {
       ],
       problemFlags: [],
     ),
+    checklists: [
+      AcceptanceChecklistModel(
+        id: 30,
+        scopeId: 5,
+        title: 'Чек-лист квартиры',
+        status: 'active',
+        items: [
+          AcceptanceChecklistItemModel(
+            id: 31,
+            title: 'Окна проверены',
+            required: true,
+            status: 'pending',
+            availableActions: ['accept', 'reject'],
+          ),
+        ],
+      ),
+    ],
     sessions: [
       AcceptanceSessionModel(
         id: 7,
@@ -57,11 +78,48 @@ class _RecordingHandoverRepository extends HandoverAcceptanceRepository {
         status: 'open',
       ),
     ],
+    handoverPackage: HandoverPackageModel(
+      id: 40,
+      title: 'Комплект передачи',
+      status: 'draft',
+      documents: [
+        HandoverPackageDocumentModel(
+          id: 41,
+          title: 'Фотофиксация',
+          required: true,
+          status: 'approved',
+          documentType: 'photo_report',
+          externalUrl: 'https://storage.example/photo.pdf',
+        ),
+      ],
+    ),
   );
 
   @override
-  Future<List<AcceptanceScopeModel>> fetchScopes({int? projectId}) async {
+  Future<List<AcceptanceScopeModel>> fetchScopes({
+    int? projectId,
+    String? status,
+    String? plannedFrom,
+    String? plannedTo,
+  }) async {
     return [scope];
+  }
+
+  @override
+  Future<AcceptanceScopeModel> fetchScope(int scopeId) async {
+    loadedScopeId = scopeId;
+    return scope;
+  }
+
+  @override
+  Future<AcceptanceChecklistModel> reviewChecklistItem(
+    int itemId, {
+    required String status,
+    String? comment,
+  }) async {
+    reviewedChecklistItemId = itemId;
+    reviewedChecklistStatus = status;
+    return scope.checklists.single;
   }
 
   @override
@@ -187,7 +245,7 @@ void main() {
     await tester.tap(find.byIcon(Icons.add_comment_outlined));
     await pumpUi(tester);
     await tester.enterText(find.byType(TextField).first, 'Неровная плитка');
-    await tester.tap(find.byType(DropdownButtonFormField<String>));
+    await tester.tap(find.byType(DropdownButtonFormField<String>).last);
     await pumpUi(tester);
     await tester.tap(find.text('Средняя').last);
     await pumpUi(tester);
@@ -266,5 +324,30 @@ void main() {
 
     expect(repository.rejectedScopeId, 5);
     expect(repository.rejectReason, 'Нужно переделать');
+  });
+
+  testWidgets('opens detail and reviews checklist item', (tester) async {
+    final repository = _RecordingHandoverRepository();
+    useLargeSurface(tester);
+
+    await tester.pumpWidget(buildScreen(repository));
+    await pumpUi(tester);
+
+    await tester.tap(find.text('Подробнее').first);
+    await pumpUi(tester);
+    await tester.pump(const Duration(milliseconds: 400));
+
+    expect(repository.loadedScopeId, 5);
+    expect(find.text('Чек-лист квартиры'), findsOneWidget);
+    expect(find.text('Окна проверены'), findsOneWidget);
+    expect(find.text('Фотофиксация'), findsOneWidget);
+
+    await tester.ensureVisible(find.text('Принять').last);
+    await tester.pump();
+    await tester.tap(find.text('Принять').last);
+    await pumpUi(tester);
+
+    expect(repository.reviewedChecklistItemId, 31);
+    expect(repository.reviewedChecklistStatus, 'accepted');
   });
 }

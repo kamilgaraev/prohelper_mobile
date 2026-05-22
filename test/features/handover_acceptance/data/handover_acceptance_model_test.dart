@@ -23,6 +23,23 @@ void main() {
           },
         ],
       },
+      'checklists': [
+        {
+          'id': 12,
+          'acceptance_scope_id': 10,
+          'title': 'Чек-лист квартиры',
+          'status': 'active',
+          'items': [
+            {
+              'id': 13,
+              'title': 'Окна проверены',
+              'is_required': true,
+              'status': 'pending',
+              'available_actions': ['accept', 'reject'],
+            },
+          ],
+        },
+      ],
       'sessions': [
         {
           'id': 21,
@@ -57,14 +74,17 @@ void main() {
           {
             'id': 41,
             'title': 'Исполнительная документация',
+            'document_type': 'executive_document',
             'is_required': true,
             'status': 'draft',
           },
           {
             'id': 42,
             'title': 'Фотофиксация',
+            'document_type': 'photo_report',
             'is_required': true,
             'status': 'approved',
+            'external_url': 'https://storage.example/photo.pdf',
           },
         ],
       },
@@ -77,10 +97,19 @@ void main() {
       contains('ready_for_reinspection'),
     );
     expect(scope.workflowSummary.problemFlags.single.count, 1);
+    expect(scope.checklists.single.items.single.availableActions, [
+      'accept',
+      'reject',
+    ]);
+    expect(scope.checklists.single.requiredItems, 1);
     expect(scope.sessions.single.findings.single.qualityDefectId, 55);
     expect(scope.openFindings, 1);
     expect(scope.handoverPackage?.requiredDocuments, 2);
     expect(scope.handoverPackage?.approvedRequiredDocuments, 1);
+    expect(
+      scope.handoverPackage?.documents.last.externalUrl,
+      'https://storage.example/photo.pdf',
+    );
   });
 
   test('rejects scope payload without workflow summary', () {

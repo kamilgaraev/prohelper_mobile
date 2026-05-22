@@ -8,6 +8,13 @@ class _FakeHandoverAcceptanceRepository extends HandoverAcceptanceRepository {
   _FakeHandoverAcceptanceRepository() : super(Dio());
 
   int? loadedProjectId;
+  String? loadedStatus;
+  String? loadedPlannedFrom;
+  String? loadedPlannedTo;
+  int? loadedScopeId;
+  int? reviewedChecklistItemId;
+  String? reviewedChecklistStatus;
+  String? reviewedChecklistComment;
   int? createdFindingSessionId;
   int? resolvedFindingId;
   int? readyScopeId;
@@ -21,9 +28,35 @@ class _FakeHandoverAcceptanceRepository extends HandoverAcceptanceRepository {
   String? reopenedReason;
 
   @override
-  Future<List<AcceptanceScopeModel>> fetchScopes({int? projectId}) async {
+  Future<List<AcceptanceScopeModel>> fetchScopes({
+    int? projectId,
+    String? status,
+    String? plannedFrom,
+    String? plannedTo,
+  }) async {
     loadedProjectId = projectId;
+    loadedStatus = status;
+    loadedPlannedFrom = plannedFrom;
+    loadedPlannedTo = plannedTo;
     return [_scope];
+  }
+
+  @override
+  Future<AcceptanceScopeModel> fetchScope(int scopeId) async {
+    loadedScopeId = scopeId;
+    return _scope;
+  }
+
+  @override
+  Future<AcceptanceChecklistModel> reviewChecklistItem(
+    int itemId, {
+    required String status,
+    String? comment,
+  }) async {
+    reviewedChecklistItemId = itemId;
+    reviewedChecklistStatus = status;
+    reviewedChecklistComment = comment;
+    return _checklist;
   }
 
   @override
@@ -101,6 +134,22 @@ const _finding = AcceptanceFindingModel(
   status: 'open',
 );
 
+const _checklistItem = AcceptanceChecklistItemModel(
+  id: 41,
+  title: 'Окна проверены',
+  required: true,
+  status: 'pending',
+  availableActions: ['accept', 'reject'],
+);
+
+const _checklist = AcceptanceChecklistModel(
+  id: 40,
+  scopeId: 10,
+  title: 'Чек-лист квартиры',
+  status: 'active',
+  items: [_checklistItem],
+);
+
 const _scope = AcceptanceScopeModel(
   id: 10,
   projectId: 15,
@@ -111,6 +160,8 @@ const _scope = AcceptanceScopeModel(
     availableActions: ['resolve_findings', 'ready_for_reinspection'],
     problemFlags: [],
   ),
+  plannedAcceptanceDate: '2026-06-10',
+  checklists: [_checklist],
   sessions: [
     AcceptanceSessionModel(id: 21, status: 'planned', findings: [_finding]),
   ],
@@ -128,6 +179,38 @@ void main() {
     expect(repository.loadedProjectId, 15);
     expect(notifier.state.scopes.single.id, 10);
     expect(notifier.state.error, isNull);
+  });
+
+  test('передает фильтры приемки в репозиторий', () async {
+    final repository = _FakeHandoverAcceptanceRepository();
+    final notifier = HandoverAcceptanceNotifier(repository)..syncProject(15);
+
+    await notifier.setStatusFilter('planned');
+    await notifier.setPlannedFromFilter(DateTime(2026, 6, 1));
+    await notifier.setPlannedToFilter(DateTime(2026, 6, 30));
+
+    expect(repository.loadedProjectId, 15);
+    expect(repository.loadedStatus, 'planned');
+    expect(repository.loadedPlannedFrom, '2026-06-01');
+    expect(repository.loadedPlannedTo, '2026-06-30');
+  });
+
+  test('загружает детали зоны и обновляет пункт чек-листа', () async {
+    final repository = _FakeHandoverAcceptanceRepository();
+    final notifier = HandoverAcceptanceNotifier(repository)..syncProject(15);
+
+    await notifier.loadScopeDetail(10);
+    await notifier.reviewChecklistItem(
+      41,
+      status: 'rejected',
+      comment: 'Нужно заменить стеклопакет',
+    );
+
+    expect(repository.loadedScopeId, 10);
+    expect(repository.reviewedChecklistItemId, 41);
+    expect(repository.reviewedChecklistStatus, 'rejected');
+    expect(repository.reviewedChecklistComment, 'Нужно заменить стеклопакет');
+    expect(notifier.state.selectedScope?.id, 10);
   });
 
   test('после действий обновляет зоны приемки', () async {
