@@ -177,6 +177,18 @@ class HandoverAcceptanceNotifier
     }
   }
 
+  Future<void> uploadPackageDocument(
+    int documentId, {
+    required String filePath,
+  }) async {
+    final selectedScopeId = state.selectedScope?.id;
+    await _repository.uploadPackageDocument(documentId, filePath: filePath);
+    await loadScopes();
+    if (selectedScopeId != null) {
+      await loadScopeDetail(selectedScopeId);
+    }
+  }
+
   Future<void> createFinding(int sessionId, Map<String, dynamic> data) async {
     await _repository.createFinding(sessionId, data);
     await loadScopes();

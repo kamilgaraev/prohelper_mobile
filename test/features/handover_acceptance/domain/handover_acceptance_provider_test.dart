@@ -17,6 +17,8 @@ class _FakeHandoverAcceptanceRepository extends HandoverAcceptanceRepository {
   String? loadedPlannedTo;
   int? loadedScopeId;
   int? reviewedChecklistItemId;
+  int? uploadedDocumentId;
+  String? uploadedDocumentPath;
   String? reviewedChecklistStatus;
   String? reviewedChecklistComment;
   int? createdFindingSessionId;
@@ -68,6 +70,16 @@ class _FakeHandoverAcceptanceRepository extends HandoverAcceptanceRepository {
     reviewedChecklistStatus = status;
     reviewedChecklistComment = comment;
     return _checklist;
+  }
+
+  @override
+  Future<HandoverPackageModel> uploadPackageDocument(
+    int documentId, {
+    required String filePath,
+  }) async {
+    uploadedDocumentId = documentId;
+    uploadedDocumentPath = filePath;
+    return _package;
   }
 
   @override
@@ -161,6 +173,22 @@ const _checklist = AcceptanceChecklistModel(
   items: [_checklistItem],
 );
 
+const _package = HandoverPackageModel(
+  id: 50,
+  title: 'Комплект передачи',
+  status: 'draft',
+  documents: [
+    HandoverPackageDocumentModel(
+      id: 51,
+      title: 'Фотофиксация',
+      required: true,
+      status: 'missing',
+      documentType: 'photo_report',
+      availableActions: ['upload'],
+    ),
+  ],
+);
+
 const _scope = AcceptanceScopeModel(
   id: 10,
   projectId: 15,
@@ -177,6 +205,7 @@ const _scope = AcceptanceScopeModel(
     AcceptanceSessionModel(id: 21, status: 'planned', findings: [_finding]),
   ],
   findings: [_finding],
+  handoverPackage: _package,
 );
 
 void main() {
@@ -222,6 +251,22 @@ void main() {
     expect(repository.reviewedChecklistStatus, 'rejected');
     expect(repository.reviewedChecklistComment, 'Нужно заменить стеклопакет');
     expect(notifier.state.selectedScope?.id, 10);
+  });
+
+  test('загружает файл документа и обновляет детали зоны', () async {
+    final repository = _FakeHandoverAcceptanceRepository();
+    final notifier = HandoverAcceptanceNotifier(repository)..syncProject(15);
+
+    await notifier.loadScopeDetail(10);
+    await notifier.uploadPackageDocument(51, filePath: 'C:\\temp\\photo.jpg');
+
+    expect(repository.uploadedDocumentId, 51);
+    expect(repository.uploadedDocumentPath, 'C:\\temp\\photo.jpg');
+    expect(repository.loadedScopeId, 10);
+    expect(
+      notifier.state.selectedScope?.handoverPackage?.documents.single.id,
+      51,
+    );
   });
 
   test('после действий обновляет зоны приемки', () async {

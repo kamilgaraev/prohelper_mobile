@@ -77,6 +77,7 @@ void main() {
             'document_type': 'executive_document',
             'is_required': true,
             'status': 'draft',
+            'available_actions': ['upload'],
           },
           {
             'id': 42,
@@ -85,6 +86,7 @@ void main() {
             'is_required': true,
             'status': 'approved',
             'external_url': 'https://storage.example/photo.pdf',
+            'available_actions': [],
           },
         ],
       },
@@ -106,6 +108,7 @@ void main() {
     expect(scope.openFindings, 1);
     expect(scope.handoverPackage?.requiredDocuments, 2);
     expect(scope.handoverPackage?.approvedRequiredDocuments, 1);
+    expect(scope.handoverPackage?.documents.first.availableActions, ['upload']);
     expect(
       scope.handoverPackage?.documents.last.externalUrl,
       'https://storage.example/photo.pdf',

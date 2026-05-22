@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:prohelpers_mobile/features/handover_acceptance/data/handover_acceptance_model.dart';
+import 'package:prohelpers_mobile/features/handover_acceptance/data/handover_document_picker.dart';
 import 'package:prohelpers_mobile/features/handover_acceptance/data/handover_acceptance_repository.dart';
 import 'package:prohelpers_mobile/features/handover_acceptance/domain/handover_acceptance_provider.dart';
 import 'package:prohelpers_mobile/features/handover_acceptance/presentation/handover_acceptance_screen.dart';
@@ -19,6 +20,8 @@ class _RecordingHandoverRepository extends HandoverAcceptanceRepository {
   int? rejectedScopeId;
   int? loadedScopeId;
   int? reviewedChecklistItemId;
+  int? uploadedDocumentId;
+  String? uploadedDocumentPath;
   String? reviewedChecklistStatus;
 
   AcceptanceScopeModel get scope => const AcceptanceScopeModel(
@@ -87,9 +90,9 @@ class _RecordingHandoverRepository extends HandoverAcceptanceRepository {
           id: 41,
           title: 'Фотофиксация',
           required: true,
-          status: 'approved',
+          status: 'missing',
           documentType: 'photo_report',
-          externalUrl: 'https://storage.example/photo.pdf',
+          availableActions: ['upload'],
         ),
       ],
     ),
@@ -120,6 +123,16 @@ class _RecordingHandoverRepository extends HandoverAcceptanceRepository {
     reviewedChecklistItemId = itemId;
     reviewedChecklistStatus = status;
     return scope.checklists.single;
+  }
+
+  @override
+  Future<HandoverPackageModel> uploadPackageDocument(
+    int documentId, {
+    required String filePath,
+  }) async {
+    uploadedDocumentId = documentId;
+    uploadedDocumentPath = filePath;
+    return scope.handoverPackage!;
   }
 
   @override
@@ -199,6 +212,11 @@ class _TestProjectsNotifier extends ProjectsNotifier {
   }
 }
 
+class _FakeHandoverDocumentPicker extends HandoverDocumentPicker {
+  @override
+  Future<String?> pickDocumentPhoto() async => 'C:\\temp\\handover.jpg';
+}
+
 void main() {
   Project project() {
     return Project()
@@ -215,6 +233,9 @@ void main() {
         ),
         handoverAcceptanceProvider.overrideWith(
           (ref) => _TestHandoverNotifier(repository),
+        ),
+        handoverDocumentPickerProvider.overrideWith(
+          (ref) => _FakeHandoverDocumentPicker(),
         ),
       ],
       child: const MaterialApp(home: HandoverAcceptanceScreen()),
@@ -341,6 +362,13 @@ void main() {
     expect(find.text('Чек-лист квартиры'), findsOneWidget);
     expect(find.text('Окна проверены'), findsOneWidget);
     expect(find.text('Фотофиксация'), findsOneWidget);
+    expect(find.text('Загрузить фото'), findsOneWidget);
+
+    await tester.tap(find.text('Загрузить фото'));
+    await pumpUi(tester);
+
+    expect(repository.uploadedDocumentId, 41);
+    expect(repository.uploadedDocumentPath, 'C:\\temp\\handover.jpg');
 
     await tester.ensureVisible(find.text('Принять').last);
     await tester.pump();

@@ -76,6 +76,29 @@ class HandoverAcceptanceRepository {
     }
   }
 
+  Future<HandoverPackageModel> uploadPackageDocument(
+    int documentId, {
+    required String filePath,
+  }) async {
+    try {
+      final response = await _dio.post(
+        '/handover-acceptance/package-documents/$documentId/upload',
+        data: FormData.fromMap({
+          'file': await MultipartFile.fromFile(
+            filePath,
+            filename: _fileName(filePath),
+          ),
+        }),
+      );
+
+      return HandoverPackageModel.fromJson(
+        MobileApiResponse.dataMap(response.data),
+      );
+    } on DioException catch (error) {
+      throw ApiException.fromDio(error);
+    }
+  }
+
   Future<AcceptanceFindingModel> createFinding(
     int sessionId,
     Map<String, dynamic> data,
@@ -200,4 +223,10 @@ class HandoverAcceptanceRepository {
       throw ApiException.fromDio(error);
     }
   }
+}
+
+String _fileName(String path) {
+  final normalized = path.replaceAll('\\', '/');
+  final parts = normalized.split('/');
+  return parts.isEmpty ? 'handover-document.jpg' : parts.last;
 }

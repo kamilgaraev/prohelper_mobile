@@ -186,6 +186,7 @@ class HandoverPackageDocumentModel {
     required this.required,
     required this.status,
     required this.documentType,
+    required this.availableActions,
     this.externalUrl,
     this.approvedAt,
   });
@@ -195,6 +196,7 @@ class HandoverPackageDocumentModel {
   final bool required;
   final String status;
   final String documentType;
+  final List<String> availableActions;
   final String? externalUrl;
   final String? approvedAt;
 
@@ -207,6 +209,7 @@ class HandoverPackageDocumentModel {
       required: _requiredBool(json, 'is_required'),
       status: _requiredStringIn(json, 'status', _packageDocumentStatuses),
       documentType: _requiredString(json, 'document_type'),
+      availableActions: _requiredStringList(json, 'available_actions'),
       externalUrl: json['external_url']?.toString(),
       approvedAt: json['approved_at']?.toString(),
     );

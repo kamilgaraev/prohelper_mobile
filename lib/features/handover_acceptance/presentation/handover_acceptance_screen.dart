@@ -10,6 +10,7 @@ import '../../../core/widgets/mesh_background.dart';
 import '../../../core/widgets/pro_card.dart';
 import '../../projects/domain/projects_provider.dart';
 import '../data/handover_acceptance_model.dart';
+import '../data/handover_document_picker.dart';
 import '../domain/handover_acceptance_provider.dart';
 
 class HandoverAcceptanceScreen extends ConsumerStatefulWidget {
@@ -756,6 +757,11 @@ class _HandoverAcceptanceScreenState
                                     item,
                                     status: 'rejected',
                                   ),
+                              onUploadDocument:
+                                  (document) => _uploadPackageDocument(
+                                    sheetContext,
+                                    document,
+                                  ),
                             ),
                   ),
                 ),
@@ -763,6 +769,35 @@ class _HandoverAcceptanceScreenState
             },
           ),
     );
+  }
+
+  Future<void> _uploadPackageDocument(
+    BuildContext context,
+    HandoverPackageDocumentModel document,
+  ) async {
+    final filePath =
+        await ref.read(handoverDocumentPickerProvider).pickDocumentPhoto();
+
+    if (filePath == null) {
+      return;
+    }
+
+    try {
+      await ref
+          .read(handoverAcceptanceProvider.notifier)
+          .uploadPackageDocument(document.id, filePath: filePath);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Документ комплекта загружен')),
+        );
+      }
+    } catch (error) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('$error')));
+      }
+    }
   }
 
   Future<void> _reviewChecklistItem(
@@ -1059,11 +1094,13 @@ class _ScopeDetailContent extends StatelessWidget {
     required this.scope,
     required this.onAcceptChecklistItem,
     required this.onRejectChecklistItem,
+    required this.onUploadDocument,
   });
 
   final AcceptanceScopeModel scope;
   final ValueChanged<AcceptanceChecklistItemModel> onAcceptChecklistItem;
   final ValueChanged<AcceptanceChecklistItemModel> onRejectChecklistItem;
+  final ValueChanged<HandoverPackageDocumentModel> onUploadDocument;
 
   @override
   Widget build(BuildContext context) {
@@ -1153,7 +1190,10 @@ class _ScopeDetailContent extends StatelessWidget {
                       ),
                       const SizedBox(height: 8),
                       ...package.documents.map(
-                        (document) => _DocumentRow(document: document),
+                        (document) => _DocumentRow(
+                          document: document,
+                          onUpload: () => onUploadDocument(document),
+                        ),
                       ),
                     ],
                   ),
@@ -1374,30 +1414,50 @@ class _FindingRow extends StatelessWidget {
 }
 
 class _DocumentRow extends StatelessWidget {
-  const _DocumentRow({required this.document});
+  const _DocumentRow({required this.document, required this.onUpload});
 
   final HandoverPackageDocumentModel document;
+  final VoidCallback onUpload;
 
   @override
   Widget build(BuildContext context) {
-    return ListTile(
-      dense: true,
-      contentPadding: EdgeInsets.zero,
-      leading: Icon(
-        document.approved
-            ? Icons.verified_outlined
-            : Icons.description_outlined,
+    final actions = document.availableActions.toSet();
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          ListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            leading: Icon(
+              document.approved
+                  ? Icons.verified_outlined
+                  : Icons.description_outlined,
+            ),
+            title: Text(document.title),
+            subtitle: Text(
+              document.externalUrl == null || document.externalUrl!.isEmpty
+                  ? _documentStatusLabel(document.status)
+                  : '${_documentStatusLabel(document.status)} · файл приложен',
+            ),
+            trailing:
+                document.required
+                    ? const Icon(Icons.priority_high_rounded)
+                    : const SizedBox.shrink(),
+          ),
+          if (actions.contains('upload'))
+            Align(
+              alignment: Alignment.centerLeft,
+              child: OutlinedButton.icon(
+                onPressed: onUpload,
+                icon: const Icon(Icons.camera_alt_outlined),
+                label: const Text('Загрузить фото'),
+              ),
+            ),
+        ],
       ),
-      title: Text(document.title),
-      subtitle: Text(
-        document.externalUrl == null || document.externalUrl!.isEmpty
-            ? _documentStatusLabel(document.status)
-            : '${_documentStatusLabel(document.status)} · файл приложен',
-      ),
-      trailing:
-          document.required
-              ? const Icon(Icons.priority_high_rounded)
-              : const SizedBox.shrink(),
     );
   }
 }
