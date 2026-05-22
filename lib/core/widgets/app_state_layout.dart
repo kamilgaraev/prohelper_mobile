@@ -27,10 +27,10 @@ class AppStateLayout extends StatelessWidget {
     final color = iconColor ?? theme.colorScheme.onSurfaceVariant;
 
     return Center(
-      child: ConstrainedBox(
-        constraints: BoxConstraints(minHeight: minHeight, maxWidth: 420),
-        child: Padding(
-          padding: const EdgeInsets.all(24),
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(minHeight: minHeight, maxWidth: 420),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             mainAxisAlignment: MainAxisAlignment.center,

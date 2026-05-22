@@ -218,6 +218,7 @@ class _SiteRequestsScreenState extends ConsumerState<SiteRequestsScreen> {
         appBar: AppBar(
           backgroundColor: Colors.transparent,
           elevation: 0,
+          toolbarHeight: selectedProject == null ? kToolbarHeight : 72,
           title: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -226,6 +227,8 @@ class _SiteRequestsScreenState extends ConsumerState<SiteRequestsScreen> {
                     ? 'Нуждаются в рассмотрении'
                     : 'Заявки с объекта',
                 style: AppTypography.h1(context),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
               if (selectedProject != null)
                 Text(
@@ -233,6 +236,8 @@ class _SiteRequestsScreenState extends ConsumerState<SiteRequestsScreen> {
                   style: AppTypography.caption(
                     context,
                   ).copyWith(color: theme.colorScheme.onSurfaceVariant),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
             ],
           ),
