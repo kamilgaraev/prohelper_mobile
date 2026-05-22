@@ -54,8 +54,6 @@ class SiteRequestsRepository {
         error,
         fallbackMessage: 'Не удалось загрузить заявки.',
       );
-    } catch (_) {
-      throw const ApiException('Не удалось загрузить заявки.');
     }
   }
 
@@ -70,8 +68,6 @@ class SiteRequestsRepository {
         error,
         fallbackMessage: 'Не удалось загрузить детали заявки.',
       );
-    } catch (_) {
-      throw const ApiException('Не удалось загрузить детали заявки.');
     }
   }
 
@@ -86,12 +82,6 @@ class SiteRequestsRepository {
         error,
         fallbackMessage: 'Не удалось создать заявку.',
       );
-    } catch (error) {
-      if (error is ApiException) {
-        rethrow;
-      }
-
-      throw const ApiException('Не удалось создать заявку.');
     }
   }
 
@@ -109,8 +99,6 @@ class SiteRequestsRepository {
         error,
         fallbackMessage: 'Не удалось обновить заявку.',
       );
-    } catch (_) {
-      throw const ApiException('Не удалось обновить заявку.');
     }
   }
 
@@ -131,8 +119,6 @@ class SiteRequestsRepository {
         error,
         fallbackMessage: 'Не удалось обновить группу заявок.',
       );
-    } catch (_) {
-      throw const ApiException('Не удалось обновить группу заявок.');
     }
   }
 
@@ -147,8 +133,6 @@ class SiteRequestsRepository {
         error,
         fallbackMessage: 'Не удалось отправить заявку.',
       );
-    } catch (_) {
-      throw const ApiException('Не удалось отправить заявку.');
     }
   }
 
@@ -166,8 +150,6 @@ class SiteRequestsRepository {
         error,
         fallbackMessage: 'Не удалось отменить заявку.',
       );
-    } catch (_) {
-      throw const ApiException('Не удалось отменить заявку.');
     }
   }
 
@@ -185,8 +167,6 @@ class SiteRequestsRepository {
         error,
         fallbackMessage: 'Не удалось завершить заявку.',
       );
-    } catch (_) {
-      throw const ApiException('Не удалось завершить заявку.');
     }
   }
 
@@ -211,8 +191,6 @@ class SiteRequestsRepository {
         error,
         fallbackMessage: 'Не удалось изменить статус заявки.',
       );
-    } catch (_) {
-      throw const ApiException('Не удалось изменить статус заявки.');
     }
   }
 
@@ -225,8 +203,6 @@ class SiteRequestsRepository {
         error,
         fallbackMessage: 'Не удалось загрузить шаблоны.',
       );
-    } catch (_) {
-      throw const ApiException('Не удалось загрузить шаблоны.');
     }
   }
 
@@ -247,8 +223,6 @@ class SiteRequestsRepository {
         error,
         fallbackMessage: 'Не удалось создать заявку из шаблона.',
       );
-    } catch (_) {
-      throw const ApiException('Не удалось создать заявку из шаблона.');
     }
   }
 
@@ -261,8 +235,6 @@ class SiteRequestsRepository {
         error,
         fallbackMessage: 'Не удалось загрузить справочники.',
       );
-    } catch (_) {
-      throw const ApiException('Не удалось загрузить справочники.');
     }
   }
 

@@ -255,21 +255,6 @@ class SiteRequestFormScreen extends HookConsumerWidget {
                     final equipmentTypes =
                         (meta['equipment_types'] as List<dynamic>? ?? const []);
 
-                    if (materialItems.value.any((item) => item.unit == null) &&
-                        units.isNotEmpty) {
-                      WidgetsBinding.instance.addPostFrameCallback((_) {
-                        final defaultUnit =
-                            units.first['short_name']?.toString();
-                        if (defaultUnit == null || defaultUnit.isEmpty) {
-                          return;
-                        }
-
-                        for (final item in materialItems.value) {
-                          item.unit ??= defaultUnit;
-                        }
-                      });
-                    }
-
                     return SingleChildScrollView(
                       padding: const EdgeInsets.all(16),
                       child: Column(
@@ -607,9 +592,7 @@ class SiteRequestFormScreen extends HookConsumerWidget {
                   : () {
                     itemsState.value = [
                       ...itemsState.value,
-                      _MaterialRequestItemDraft(
-                        unit: unitOptions.isNotEmpty ? unitOptions.first : null,
-                      ),
+                      _MaterialRequestItemDraft(),
                     ];
                   },
           icon: const Icon(Icons.add_rounded),

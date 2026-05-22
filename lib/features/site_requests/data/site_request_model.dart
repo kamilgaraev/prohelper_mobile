@@ -14,9 +14,18 @@ class SiteRequestTransition {
   final String? icon;
 
   factory SiteRequestTransition.fromJson(Map<String, dynamic> json) {
+    final status = _requiredString(json, 'status');
+    final name = _cleanLabel(json['name']);
+
+    if (!_siteRequestStatuses.contains(status) && name == null) {
+      throw FormatException(
+        'Site request transition "$status" must include a readable name.',
+      );
+    }
+
     return SiteRequestTransition(
-      status: json['status']?.toString() ?? '',
-      name: json['name']?.toString(),
+      status: status,
+      name: name,
       color: json['color']?.toString(),
       icon: json['icon']?.toString(),
     );
@@ -48,10 +57,9 @@ class SiteRequestHistoryEntry {
     final user = json['user'];
 
     return SiteRequestHistoryEntry(
-      id: _asInt(json['id']),
-      action: json['action']?.toString() ?? '',
-      actionLabel:
-          _cleanLabel(json['action_label']) ?? json['action']?.toString() ?? '',
+      id: _requiredInt(json, 'id'),
+      action: _requiredString(json, 'action'),
+      actionLabel: _requiredCleanLabel(json, 'action_label'),
       notes: json['notes']?.toString(),
       createdAt:
           json['created_at'] != null
@@ -97,12 +105,15 @@ class SiteRequestGroupItem {
     final assignedUser = json['assigned_user'];
 
     return SiteRequestGroupItem(
-      id: _asInt(json['id']),
-      title: json['title']?.toString() ?? '',
-      status: json['status']?.toString() ?? '',
-      statusLabel:
-          _cleanLabel(json['status_label']) ?? json['status']?.toString() ?? '',
-      requestType: json['request_type']?.toString() ?? '',
+      id: _requiredInt(json, 'id'),
+      title: _requiredString(json, 'title'),
+      status: _requiredKnownString(json, 'status', _siteRequestStatuses),
+      statusLabel: _requiredCleanLabel(json, 'status_label'),
+      requestType: _requiredKnownString(
+        json,
+        'request_type',
+        _siteRequestTypes,
+      ),
       requestTypeLabel: _cleanLabel(json['request_type_label']),
       materialName: json['material_name']?.toString(),
       materialQuantity: _asDouble(json['material_quantity']),
@@ -134,12 +145,9 @@ class SiteRequestPurchaseRequestSummary {
     Map<String, dynamic> json,
   ) {
     return SiteRequestPurchaseRequestSummary(
-      id: _asInt(json['id']),
-      number:
-          json['request_number']?.toString() ??
-          json['number']?.toString() ??
-          '',
-      status: json['status']?.toString() ?? '',
+      id: _requiredInt(json, 'id'),
+      number: _requiredString(json, 'request_number'),
+      status: _requiredString(json, 'status'),
       statusLabel: _cleanLabel(json['status_label']),
       createdAt:
           json['created_at'] != null
@@ -172,10 +180,9 @@ class SiteRequestPurchaseOrderSummary {
     final supplier = json['supplier'];
 
     return SiteRequestPurchaseOrderSummary(
-      id: _asInt(json['id']),
-      number:
-          json['order_number']?.toString() ?? json['number']?.toString() ?? '',
-      status: json['status']?.toString() ?? '',
+      id: _requiredInt(json, 'id'),
+      number: _requiredString(json, 'order_number'),
+      status: _requiredString(json, 'status'),
       statusLabel: _cleanLabel(json['status_label']),
       supplierName: supplier is Map ? supplier['name']?.toString() : null,
       deliveryDate: json['delivery_date']?.toString(),
@@ -213,12 +220,9 @@ class SiteRequestSupplierRequestSummary {
     final externalSupplier = json['external_supplier_contact'];
 
     return SiteRequestSupplierRequestSummary(
-      id: _asInt(json['id']),
-      number:
-          json['request_number']?.toString() ??
-          json['number']?.toString() ??
-          '',
-      status: json['status']?.toString() ?? '',
+      id: _requiredInt(json, 'id'),
+      number: _requiredString(json, 'request_number'),
+      status: _requiredString(json, 'status'),
       statusLabel: _cleanLabel(json['status_label']),
       supplierName:
           supplier is Map
@@ -262,7 +266,7 @@ class SiteRequestDeliverySummary {
 
   factory SiteRequestDeliverySummary.fromJson(Map<String, dynamic> json) {
     return SiteRequestDeliverySummary(
-      status: json['status']?.toString() ?? '',
+      status: _requiredString(json, 'status'),
       statusLabel: _cleanLabel(json['status_label']),
       statusColor: json['status_color']?.toString(),
       requestedQuantity: _asDouble(json['requested_quantity']),
@@ -336,6 +340,13 @@ class SiteRequestModel {
   SiteRequestModel();
 
   factory SiteRequestModel.fromJson(Map<String, dynamic> json) {
+    _rejectDeprecatedKeys(json, const {
+      'purchaseRequests': 'purchase_requests',
+      'purchaseOrders': 'purchase_orders',
+      'supplierRequests': 'supplier_requests',
+      'deliverySummary': 'delivery_summary',
+    });
+
     final rawTransitions = json['available_transitions'];
     final transitions =
         rawTransitions is List
@@ -346,7 +357,6 @@ class SiteRequestModel {
                     item.map((key, value) => MapEntry(key.toString(), value)),
                   ),
                 )
-                .where((item) => item.status.isNotEmpty)
                 .toList(growable: false)
             : const <SiteRequestTransition>[];
     final rawHistory = json['history'];
@@ -363,8 +373,8 @@ class SiteRequestModel {
             : const <SiteRequestHistoryEntry>[];
     final groupContext = json['group_context'] ?? json['group'];
     final groupItems =
-        groupContext is Map && groupContext['items'] is List
-            ? (groupContext['items'] as List)
+        groupContext is Map
+            ? _requiredList(groupContext, 'items')
                 .whereType<Map>()
                 .map(
                   (item) => SiteRequestGroupItem.fromJson(
@@ -374,8 +384,7 @@ class SiteRequestModel {
                 .toList(growable: false)
             : const <SiteRequestGroupItem>[];
     final metadata = json['metadata'];
-    final rawPurchaseRequests =
-        json['purchase_requests'] ?? json['purchaseRequests'];
+    final rawPurchaseRequests = json['purchase_requests'];
     final purchaseRequests =
         rawPurchaseRequests is List
             ? rawPurchaseRequests
@@ -385,11 +394,9 @@ class SiteRequestModel {
                     item.map((key, value) => MapEntry(key.toString(), value)),
                   ),
                 )
-                .where((item) => item.id > 0)
                 .toList(growable: false)
             : const <SiteRequestPurchaseRequestSummary>[];
-    final rawSupplierRequests =
-        json['supplier_requests'] ?? json['supplierRequests'];
+    final rawSupplierRequests = json['supplier_requests'];
     final supplierRequests =
         rawSupplierRequests is List
             ? rawSupplierRequests
@@ -399,10 +406,9 @@ class SiteRequestModel {
                     item.map((key, value) => MapEntry(key.toString(), value)),
                   ),
                 )
-                .where((item) => item.id > 0)
                 .toList(growable: false)
             : const <SiteRequestSupplierRequestSummary>[];
-    final rawPurchaseOrders = json['purchase_orders'] ?? json['purchaseOrders'];
+    final rawPurchaseOrders = json['purchase_orders'];
     final purchaseOrders =
         rawPurchaseOrders is List
             ? rawPurchaseOrders
@@ -412,25 +418,32 @@ class SiteRequestModel {
                     item.map((key, value) => MapEntry(key.toString(), value)),
                   ),
                 )
-                .where((item) => item.id > 0)
                 .toList(growable: false)
             : const <SiteRequestPurchaseOrderSummary>[];
     final user = json['user'];
     final assignedUser = json['assigned_user'];
-    final rawDeliverySummary = json['delivery_summary'] ?? json['deliverySummary'];
+    final rawDeliverySummary = json['delivery_summary'];
 
     return SiteRequestModel()
-      ..serverId = _asInt(json['id'])
-      ..title = json['title']?.toString() ?? ''
+      ..serverId = _requiredInt(json, 'id')
+      ..title = _requiredString(json, 'title')
       ..description = json['description']?.toString()
       ..notes = json['notes']?.toString()
-      ..status = json['status']?.toString() ?? 'draft'
+      ..status = _requiredKnownString(json, 'status', _siteRequestStatuses)
       ..statusLabel = _cleanLabel(json['status_label'])
       ..statusColor = json['status_color']?.toString()
-      ..priority = json['priority']?.toString() ?? 'normal'
+      ..priority = _requiredKnownString(
+        json,
+        'priority',
+        _siteRequestPriorities,
+      )
       ..priorityLabel = _cleanLabel(json['priority_label'])
       ..priorityColor = json['priority_color']?.toString()
-      ..requestType = json['request_type']?.toString() ?? 'material_request'
+      ..requestType = _requiredKnownString(
+        json,
+        'request_type',
+        _siteRequestTypes,
+      )
       ..requestTypeLabel = _cleanLabel(json['request_type_label'])
       ..requiredDate = json['required_date']?.toString()
       ..materialName = json['material_name']?.toString()
@@ -463,7 +476,12 @@ class SiteRequestModel {
           groupContext is Map ? _cleanLabel(groupContext['status_label']) : null
       ..groupRequestCount =
           groupContext is Map
-              ? (_asNullableInt(groupContext['request_count']) ?? 0)
+              ? _requiredInt(
+                groupContext.map(
+                  (key, value) => MapEntry(key.toString(), value),
+                ),
+                'request_count',
+              )
               : 0
       ..canBeCancelled = json['can_be_cancelled'] == true
       ..canBeEdited = json['can_be_edited'] == true
@@ -493,17 +511,16 @@ class SiteRequestModel {
       ..purchaseRequests = purchaseRequests
       ..supplierRequests = supplierRequests
       ..purchaseOrders = purchaseOrders
-      ..deliverySummary = rawDeliverySummary is Map
-          ? SiteRequestDeliverySummary.fromJson(
-              rawDeliverySummary.map(
-                (key, value) => MapEntry(key.toString(), value),
-              ),
-            )
-          : null;
+      ..deliverySummary =
+          rawDeliverySummary is Map
+              ? SiteRequestDeliverySummary.fromJson(
+                rawDeliverySummary.map(
+                  (key, value) => MapEntry(key.toString(), value),
+                ),
+              )
+              : null;
   }
 }
-
-int _asInt(dynamic value) => _asNullableInt(value) ?? 0;
 
 int? _asNullableInt(dynamic value) {
   if (value is int) {
@@ -529,6 +546,37 @@ double? _asDouble(dynamic value) {
   return double.tryParse(value?.toString() ?? '');
 }
 
+int _requiredInt(Map<String, dynamic> json, String key) {
+  final value = _asNullableInt(json[key]);
+  if (value == null) {
+    throw FormatException('Site request field "$key" is required.');
+  }
+
+  return value;
+}
+
+String _requiredString(Map<String, dynamic> json, String key) {
+  final value = json[key]?.toString().trim();
+  if (value == null || value.isEmpty) {
+    throw FormatException('Site request field "$key" is required.');
+  }
+
+  return value;
+}
+
+String _requiredKnownString(
+  Map<String, dynamic> json,
+  String key,
+  Set<String> allowedValues,
+) {
+  final value = _requiredString(json, key);
+  if (!allowedValues.contains(value)) {
+    throw FormatException('Site request field "$key" has unknown value.');
+  }
+
+  return value;
+}
+
 String? _cleanLabel(dynamic value) {
   final text = value?.toString().trim();
   if (text == null || text.isEmpty) {
@@ -540,6 +588,37 @@ String? _cleanLabel(dynamic value) {
   }
 
   return text;
+}
+
+String _requiredCleanLabel(Map<String, dynamic> json, String key) {
+  final label = _cleanLabel(json[key]);
+  if (label == null) {
+    throw FormatException('Site request field "$key" must be readable.');
+  }
+
+  return label;
+}
+
+List<dynamic> _requiredList(Map<dynamic, dynamic> json, String key) {
+  final value = json[key];
+  if (value is! List) {
+    throw FormatException('Site request field "$key" must be a list.');
+  }
+
+  return value;
+}
+
+void _rejectDeprecatedKeys(
+  Map<String, dynamic> json,
+  Map<String, String> replacements,
+) {
+  for (final entry in replacements.entries) {
+    if (json.containsKey(entry.key)) {
+      throw FormatException(
+        'Site request field "${entry.key}" was replaced by "${entry.value}".',
+      );
+    }
+  }
 }
 
 String? _resolveEquipmentTypeLabel(String? rawLabel, String? rawType) {
@@ -566,6 +645,31 @@ String? _resolveEquipmentTypeLabel(String? rawLabel, String? rawType) {
     'grader' => 'Грейдер',
     'roller' => 'Каток',
     'other' => 'Другое',
-    _ => rawType,
+    '' => null,
+    _ => throw FormatException('Unknown site request equipment type.'),
   };
 }
+
+const _siteRequestStatuses = {
+  'draft',
+  'pending',
+  'in_review',
+  'approved',
+  'rejected',
+  'in_progress',
+  'fulfilled',
+  'completed',
+  'cancelled',
+  'on_hold',
+};
+
+const _siteRequestPriorities = {'low', 'medium', 'high', 'urgent'};
+
+const _siteRequestTypes = {
+  'material_request',
+  'personnel_request',
+  'equipment_request',
+  'info_request',
+  'issue_report',
+  'other',
+};

@@ -2,15 +2,24 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:prohelpers_mobile/features/site_requests/data/site_request_model.dart';
 
 void main() {
+  Map<String, dynamic> basePayload() {
+    return {
+      'id': 42,
+      'title': 'Аренда лесов',
+      'status': 'pending',
+      'status_label': 'На согласовании',
+      'priority': 'medium',
+      'priority_label': 'Средний',
+      'request_type': 'equipment_request',
+      'request_type_label': 'Техника',
+    };
+  }
+
   test(
     'SiteRequestModel.fromJson подставляет русский label и парсит контекст заявки',
     () {
-      final model = SiteRequestModel.fromJson(const {
-        'id': 42,
-        'title': 'Аренда лесов',
-        'status': 'pending',
-        'priority': 'medium',
-        'request_type': 'equipment_request',
+      final model = SiteRequestModel.fromJson({
+        ...basePayload(),
         'equipment_type': 'scaffolding',
         'user': {'name': 'Иван Петров'},
         'assigned_user': {'name': 'Снабжение'},
@@ -48,4 +57,75 @@ void main() {
       expect(model.history, hasLength(1));
     },
   );
+
+  test('парсит закупочный контур только из актуальных snake_case полей', () {
+    final model = SiteRequestModel.fromJson({
+      ...basePayload(),
+      'purchase_requests': [
+        {
+          'id': 501,
+          'request_number': 'PR-501',
+          'status': 'approved',
+          'status_label': 'Согласована',
+        },
+      ],
+      'purchase_orders': [
+        {
+          'id': 601,
+          'order_number': 'PO-601',
+          'status': 'sent',
+          'status_label': 'Отправлен',
+        },
+      ],
+      'delivery_summary': {
+        'status': 'accepted',
+        'status_label': 'Принято',
+        'accepted_quantity': 12,
+      },
+    });
+
+    expect(model.purchaseRequests.single.number, 'PR-501');
+    expect(model.purchaseOrders.single.number, 'PO-601');
+    expect(model.deliverySummary?.status, 'accepted');
+  });
+
+  test('отклоняет старые camelCase поля закупочного контура', () {
+    expect(
+      () => SiteRequestModel.fromJson({
+        ...basePayload(),
+        'purchaseRequests': [
+          {'id': 501, 'request_number': 'PR-501', 'status': 'approved'},
+        ],
+      }),
+      throwsFormatException,
+    );
+  });
+
+  test('отклоняет неполную заявку без обязательного статуса', () {
+    final payload = basePayload()..remove('status');
+
+    expect(() => SiteRequestModel.fromJson(payload), throwsFormatException);
+  });
+
+  test('отклоняет неизвестный тип техники без человекочитаемого названия', () {
+    expect(
+      () => SiteRequestModel.fromJson({
+        ...basePayload(),
+        'equipment_type': 'unknown_machine',
+      }),
+      throwsFormatException,
+    );
+  });
+
+  test('принимает кастомный workflow-переход только с названием действия', () {
+    final model = SiteRequestModel.fromJson({
+      ...basePayload(),
+      'available_transitions': [
+        {'status': 'manager_review', 'name': 'Передать руководителю'},
+      ],
+    });
+
+    expect(model.availableTransitions.single.status, 'manager_review');
+    expect(model.availableTransitions.single.name, 'Передать руководителю');
+  });
 }

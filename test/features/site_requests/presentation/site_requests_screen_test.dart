@@ -49,6 +49,8 @@ class _FakeSiteRequestsNotifier extends SiteRequestsNotifier {
   _FakeSiteRequestsNotifier({
     required List<SiteRequestModel> requests,
     required SiteRequestsScope scope,
+    bool permissionDenied = false,
+    String? error,
   }) : super(
          _FakeSiteRequestsRepository(),
          initialProjectId: 15,
@@ -59,7 +61,8 @@ class _FakeSiteRequestsNotifier extends SiteRequestsNotifier {
       requests: requests,
       currentPage: 2,
       hasMore: false,
-      error: null,
+      permissionDenied: permissionDenied,
+      error: error,
       statusFilter: null,
       projectFilter: 15,
       scope: scope,
@@ -131,6 +134,8 @@ void main() {
   Widget createWidget({
     SiteRequestsScope scope = SiteRequestsScope.own,
     List<SiteRequestModel>? requests,
+    bool permissionDenied = false,
+    String? error,
   }) {
     final project = buildProject();
     final resolvedRequests = requests ?? _requests;
@@ -142,6 +147,8 @@ void main() {
           (ref) => _FakeSiteRequestsNotifier(
             requests: resolvedRequests,
             scope: scope,
+            permissionDenied: permissionDenied,
+            error: error,
           ),
         ),
       ],
@@ -205,6 +212,7 @@ void main() {
         materialQuantity: 3,
         materialUnit: 'т',
         createdAt: DateTime(2026, 3, 14),
+        transitions: const [SiteRequestTransition(status: 'in_review')],
       ),
       _buildRequest(
         serverId: 2002,
@@ -217,6 +225,10 @@ void main() {
         requestTypeLabel: 'Техника',
         equipmentTypeLabel: 'Автокран 25 т',
         createdAt: DateTime(2026, 3, 13),
+        transitions: const [
+          SiteRequestTransition(status: 'approved'),
+          SiteRequestTransition(status: 'rejected'),
+        ],
       ),
     ];
 
@@ -273,6 +285,54 @@ void main() {
       expect(find.text('Отменить'), findsOneWidget);
     },
   );
+
+  testWidgets('не придумывает быстрые действия без available transitions', (
+    tester,
+  ) async {
+    final requests = [
+      _buildRequest(
+        serverId: 4001,
+        title: 'Арматура на плиту',
+        status: 'pending',
+        statusLabel: 'На согласовании',
+        priority: 'high',
+        priorityLabel: 'Высокий',
+        requestType: 'material_request',
+        requestTypeLabel: 'Материалы',
+        materialName: 'Арматура А500',
+        materialQuantity: 3,
+        materialUnit: 'т',
+        createdAt: DateTime(2026, 3, 14),
+      ),
+    ];
+
+    await tester.pumpWidget(
+      createWidget(scope: SiteRequestsScope.approvals, requests: requests),
+    );
+    await tester.pump();
+
+    expect(find.text('Арматура на плиту'), findsOneWidget);
+    expect(find.text('Взять в рассмотрение'), findsNothing);
+  });
+
+  testWidgets('показывает состояние недостаточных прав отдельным экраном', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      createWidget(
+        requests: const [],
+        permissionDenied: true,
+        error: 'Недостаточно прав для просмотра заявок.',
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('Нет доступа к заявкам объекта'), findsOneWidget);
+    expect(
+      find.text('Недостаточно прав для просмотра заявок.'),
+      findsOneWidget,
+    );
+  });
 }
 
 SiteRequestModel _buildRequest({
@@ -291,6 +351,7 @@ SiteRequestModel _buildRequest({
   int? personnelCount,
   String? equipmentTypeLabel,
   required DateTime createdAt,
+  List<SiteRequestTransition> transitions = const [],
 }) {
   return SiteRequestModel()
     ..serverId = serverId
@@ -309,5 +370,6 @@ SiteRequestModel _buildRequest({
     ..equipmentTypeLabel = equipmentTypeLabel
     ..projectId = 15
     ..projectName = 'Дом 300м Царево'
+    ..availableTransitions = transitions
     ..createdAt = createdAt;
 }

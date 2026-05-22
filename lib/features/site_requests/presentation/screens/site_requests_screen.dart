@@ -265,7 +265,11 @@ class _SiteRequestsScreenState extends ConsumerState<SiteRequestsScreen> {
                 SliverFillRemaining(
                   child: AppErrorState(
                     title:
-                        _isApprovalsMode
+                        state.permissionDenied
+                            ? (_isApprovalsMode
+                                ? 'Нет доступа к согласованию заявок'
+                                : 'Нет доступа к заявкам объекта')
+                            : _isApprovalsMode
                             ? 'Не удалось загрузить очередь согласования'
                             : 'Не удалось загрузить заявки',
                     description: state.error,
@@ -520,7 +524,7 @@ String? _primaryActionStatus(
   SiteRequestsScope scope,
 ) {
   final actions = _quickActions(request, scope);
-  return actions.isEmpty ? null : actions.first;
+  return actions.isEmpty ? null : actions.first.status;
 }
 
 String? _secondaryActionStatus(
@@ -528,62 +532,44 @@ String? _secondaryActionStatus(
   SiteRequestsScope scope,
 ) {
   final actions = _quickActions(request, scope);
-  return actions.length < 2 ? null : actions[1];
+  return actions.length < 2 ? null : actions[1].status;
 }
 
-List<String> _quickActions(SiteRequestModel request, SiteRequestsScope scope) {
-  final statuses = request.availableTransitions
-      .map((transition) => transition.status.trim().toLowerCase())
-      .where((status) => status.isNotEmpty)
-      .toList(growable: false);
+List<SiteRequestTransition> _quickActions(
+  SiteRequestModel request,
+  SiteRequestsScope scope,
+) {
+  final priorities =
+      scope == SiteRequestsScope.approvals
+          ? <String, int>{
+            'in_review': 100,
+            'approved': 90,
+            'rejected': 80,
+            'in_progress': 70,
+            'fulfilled': 60,
+            'completed': 50,
+            'cancelled': 40,
+            'pending': 30,
+          }
+          : <String, int>{
+            'pending': 100,
+            'completed': 90,
+            'cancelled': 80,
+            'in_progress': 70,
+            'fulfilled': 60,
+          };
 
-  if (statuses.isNotEmpty) {
-    final priorities =
-        scope == SiteRequestsScope.approvals
-            ? <String, int>{
-              'in_review': 100,
-              'approved': 90,
-              'rejected': 80,
-              'in_progress': 70,
-              'fulfilled': 60,
-              'completed': 50,
-              'cancelled': 40,
-              'pending': 30,
-            }
-            : <String, int>{
-              'pending': 100,
-              'completed': 90,
-              'cancelled': 80,
-              'in_progress': 70,
-              'fulfilled': 60,
-            };
+  final sorted = [...request.availableTransitions]..sort(
+    (left, right) => (priorities[right.status.trim().toLowerCase()] ?? 0)
+        .compareTo(priorities[left.status.trim().toLowerCase()] ?? 0),
+  );
 
-    final sorted = [...statuses]..sort(
-      (left, right) =>
-          (priorities[right] ?? 0).compareTo(priorities[left] ?? 0),
-    );
-
-    return sorted.take(2).toList(growable: false);
-  }
-
-  final status = request.status.trim().toLowerCase();
-
-  if (scope == SiteRequestsScope.approvals) {
-    return switch (status) {
-      'pending' => const ['in_review'],
-      'in_review' => const ['approved', 'rejected'],
-      _ => const [],
-    };
-  }
-
-  return switch (status) {
-    'draft' => const ['pending', 'cancelled'],
-    'fulfilled' => const ['completed'],
-    _ => const [],
-  };
+  return sorted.take(2).toList(growable: false);
 }
 
-String _actionLabel(String status) {
+String _actionLabel(SiteRequestTransition transition) {
+  final status = transition.status.trim().toLowerCase();
+
   return switch (status) {
     'pending' => 'Отправить',
     'in_review' => 'Взять в рассмотрение',
@@ -593,7 +579,7 @@ String _actionLabel(String status) {
     'fulfilled' => 'Отметить исполненной',
     'completed' => 'Подтвердить получение',
     'cancelled' => 'Отменить',
-    _ => status,
+    _ => transition.name ?? 'Выполнить',
   };
 }
 

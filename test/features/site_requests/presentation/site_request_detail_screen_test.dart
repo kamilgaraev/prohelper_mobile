@@ -8,11 +8,13 @@ import 'package:prohelpers_mobile/features/site_requests/domain/site_request_det
 import 'package:prohelpers_mobile/features/site_requests/presentation/screens/site_request_detail_screen.dart';
 
 class _FakeSiteRequestsRepository extends SiteRequestsRepository {
-  _FakeSiteRequestsRepository() : super(Dio());
+  _FakeSiteRequestsRepository(this.request) : super(Dio());
+
+  final SiteRequestModel request;
 
   @override
   Future<SiteRequestModel> fetchSiteRequestDetails(int id) async {
-    return _request;
+    return request;
   }
 }
 
@@ -89,12 +91,15 @@ final _request =
       ..createdAt = DateTime(2026, 3, 14);
 
 void main() {
-  Widget createWidget() {
+  Widget createWidget({SiteRequestModel? request}) {
     return ProviderScope(
       overrides: [
         siteRequestDetailProvider.overrideWith(
-          (ref, id) =>
-              SiteRequestDetailNotifier(_FakeSiteRequestsRepository(), ref, id),
+          (ref, id) => SiteRequestDetailNotifier(
+            _FakeSiteRequestsRepository(request ?? _request),
+            ref,
+            id,
+          ),
         ),
       ],
       child: const TickerMode(
@@ -124,5 +129,30 @@ void main() {
     expect(find.text('Дом 300м Царево'), findsOneWidget);
     expect(find.text('Иван Петров'), findsWidgets);
     expect(find.text('Подтвердить время поставки до 14:00.'), findsOneWidget);
+  });
+
+  testWidgets('не показывает действия, если backend не прислал переходы', (
+    tester,
+  ) async {
+    final requestWithoutTransitions =
+        SiteRequestModel()
+          ..serverId = 1002
+          ..title = 'Арматура'
+          ..status = 'draft'
+          ..statusLabel = 'Черновик'
+          ..priority = 'medium'
+          ..priorityLabel = 'Средний'
+          ..requestType = 'material_request'
+          ..requestTypeLabel = 'Материалы'
+          ..projectId = 15
+          ..projectName = 'Дом 300м Царево';
+
+    await tester.pumpWidget(createWidget(request: requestWithoutTransitions));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    expect(find.text('Арматура'), findsOneWidget);
+    expect(find.text('Отправить на согласование'), findsNothing);
+    expect(find.text('Отменить заявку'), findsNothing);
   });
 }

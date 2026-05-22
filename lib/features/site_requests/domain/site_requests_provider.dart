@@ -1,5 +1,6 @@
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
+import '../../../core/network/api_exception.dart';
 import '../../auth/domain/auth_provider.dart';
 import '../../projects/domain/projects_provider.dart';
 import '../data/site_request_model.dart';
@@ -13,6 +14,7 @@ class SiteRequestsState {
   final List<SiteRequestModel> requests;
   final int currentPage;
   final bool hasMore;
+  final bool permissionDenied;
   final String? error;
   final String? statusFilter;
   final int? projectFilter;
@@ -23,6 +25,7 @@ class SiteRequestsState {
     this.requests = const [],
     this.currentPage = 1,
     this.hasMore = true,
+    this.permissionDenied = false,
     this.error,
     this.statusFilter,
     this.projectFilter,
@@ -34,6 +37,7 @@ class SiteRequestsState {
     List<SiteRequestModel>? requests,
     int? currentPage,
     bool? hasMore,
+    bool? permissionDenied,
     Object? error = _siteRequestsSentinel,
     String? statusFilter,
     int? projectFilter,
@@ -46,6 +50,7 @@ class SiteRequestsState {
       requests: requests ?? this.requests,
       currentPage: currentPage ?? this.currentPage,
       hasMore: hasMore ?? this.hasMore,
+      permissionDenied: permissionDenied ?? this.permissionDenied,
       error:
           identical(error, _siteRequestsSentinel)
               ? this.error
@@ -90,13 +95,18 @@ class SiteRequestsNotifier extends StateNotifier<SiteRequestsState> {
     if (refresh) {
       state = state.copyWith(
         isLoading: true,
+        permissionDenied: false,
         error: null,
         currentPage: 1,
         hasMore: true,
         requests: [],
       );
     } else {
-      state = state.copyWith(isLoading: true, error: null);
+      state = state.copyWith(
+        isLoading: true,
+        permissionDenied: false,
+        error: null,
+      );
     }
 
     try {
@@ -113,8 +123,12 @@ class SiteRequestsNotifier extends StateNotifier<SiteRequestsState> {
         currentPage: state.currentPage + 1,
         hasMore: newRequests.isNotEmpty,
       );
-    } catch (e) {
-      state = state.copyWith(isLoading: false, error: e.toString());
+    } catch (error) {
+      state = state.copyWith(
+        isLoading: false,
+        permissionDenied: _isPermissionDenied(error),
+        error: _errorMessage(error),
+      );
     }
   }
 
@@ -130,6 +144,7 @@ class SiteRequestsNotifier extends StateNotifier<SiteRequestsState> {
       currentPage: 1,
       hasMore: true,
       error: null,
+      permissionDenied: false,
     );
   }
 
@@ -144,6 +159,7 @@ class SiteRequestsNotifier extends StateNotifier<SiteRequestsState> {
       currentPage: 1,
       hasMore: true,
       error: null,
+      permissionDenied: false,
       clearStatusFilter: true,
     );
   }
@@ -193,8 +209,27 @@ class SiteRequestsNotifier extends StateNotifier<SiteRequestsState> {
 
       state = state.copyWith(requests: nextRequests, error: null);
     } catch (error) {
-      state = state.copyWith(error: error.toString());
+      state = state.copyWith(
+        permissionDenied: _isPermissionDenied(error),
+        error: _errorMessage(error),
+      );
       rethrow;
     }
   }
+}
+
+bool _isPermissionDenied(Object error) {
+  return error is ApiException && error.statusCode == 403;
+}
+
+String _errorMessage(Object error) {
+  if (error is ApiException) {
+    return error.message;
+  }
+
+  if (error is FormatException) {
+    return 'Данные заявки пришли неполными. Обновите экран и повторите попытку.';
+  }
+
+  return 'Не удалось обработать данные заявок.';
 }

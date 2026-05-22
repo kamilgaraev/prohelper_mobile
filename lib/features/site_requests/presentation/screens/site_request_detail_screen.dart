@@ -42,7 +42,10 @@ class SiteRequestDetailScreen extends ConsumerWidget {
                 ? const AppLoadingState(message: 'Загружаем заявку')
                 : state.error != null && state.request == null
                 ? AppErrorState(
-                  title: 'Не удалось загрузить заявку',
+                  title:
+                      state.permissionDenied
+                          ? 'Нет доступа к заявке'
+                          : 'Не удалось загрузить заявку',
                   description: state.error,
                   onRetry:
                       () =>
@@ -81,7 +84,7 @@ class SiteRequestDetailScreen extends ConsumerWidget {
             state.request == null
                 ? null
                 : _SiteRequestActions(
-                  transitions: _resolvedTransitions(state.request!),
+                  transitions: state.request!.availableTransitions,
                   isLoading: state.isActionLoading,
                   onTransitionSelected:
                       (transition) =>
@@ -811,24 +814,7 @@ class _RequestGroupCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final items =
-        request.groupItems.isNotEmpty
-            ? request.groupItems
-            : [
-              SiteRequestGroupItem(
-                id: request.serverId,
-                title: request.title,
-                status: request.status,
-                statusLabel: _statusLabel(request),
-                requestType: request.requestType,
-                requestTypeLabel: _requestTypeLabel(request),
-                materialName: request.materialName,
-                materialQuantity: request.materialQuantity,
-                materialUnit: request.materialUnit,
-                assignedUserName: request.assignedUserName,
-                isCurrent: true,
-              ),
-            ];
+    final items = request.groupItems;
 
     return ProCard(
       child: Column(
@@ -1234,21 +1220,6 @@ class _ParamRow extends StatelessWidget {
   }
 }
 
-List<SiteRequestTransition> _resolvedTransitions(SiteRequestModel request) {
-  if (request.availableTransitions.isNotEmpty) {
-    return request.availableTransitions;
-  }
-
-  return switch (request.status.trim().toLowerCase()) {
-    'draft' => const [
-      SiteRequestTransition(status: 'pending'),
-      SiteRequestTransition(status: 'cancelled'),
-    ],
-    'fulfilled' => const [SiteRequestTransition(status: 'completed')],
-    _ => const [],
-  };
-}
-
 bool _hasResourceSection(SiteRequestModel request) {
   return (request.materialName ?? '').trim().isNotEmpty ||
       request.materialQuantity != null ||
@@ -1284,12 +1255,12 @@ String _supplierRequestStatusLabel(SiteRequestSupplierRequestSummary item) {
     'responded' => 'Получен ответ',
     'cancelled' => 'Отменена',
     'expired' => 'Истек срок',
-    _ => item.status.isNotEmpty ? item.status : 'Без статуса',
+    _ => 'Статус не распознан',
   };
 }
 
 bool _hasGroupSection(SiteRequestModel request) {
-  return request.groupRequestCount > 1 || request.groupItems.length > 1;
+  return request.groupItems.isNotEmpty;
 }
 
 String _purchaseRequestStatusLabel(SiteRequestPurchaseRequestSummary item) {
@@ -1304,7 +1275,7 @@ String _purchaseRequestStatusLabel(SiteRequestPurchaseRequestSummary item) {
     'approved' => 'Согласована',
     'rejected' => 'Отклонена',
     'cancelled' => 'Отменена',
-    _ => item.status.isNotEmpty ? item.status : 'Без статуса',
+    _ => 'Статус не распознан',
   };
 }
 
@@ -1323,7 +1294,7 @@ String _purchaseOrderStatusLabel(SiteRequestPurchaseOrderSummary item) {
     'delivered' => 'Доставлен',
     'cancelled' => 'Отменен',
     'approved' => 'Подтвержден',
-    _ => item.status.isNotEmpty ? item.status : 'Без статуса',
+    _ => 'Статус не распознан',
   };
 }
 
@@ -1339,7 +1310,7 @@ String _deliveryStatusLabel(String status) {
     'accepted' => 'Принято',
     'problem' => 'Проблема',
     'cancelled' => 'Отменено',
-    _ => status,
+    _ => 'Состояние поставки не распознано',
   };
 }
 
@@ -1356,7 +1327,7 @@ String _transitionActionLabel(SiteRequestTransition transition) {
     _ =>
       transition.name?.trim().isNotEmpty == true
           ? transition.name!.trim()
-          : transition.status,
+          : 'Выполнить действие',
   };
 }
 
@@ -1500,6 +1471,9 @@ String _requestTypeLabel(SiteRequestModel request) {
     'material' || 'material_request' => 'Материалы',
     'personnel' || 'personnel_request' => 'Персонал',
     'equipment' || 'equipment_request' => 'Техника',
+    'info_request' => 'Запрос информации',
+    'issue_report' => 'Сообщение о проблеме',
+    'other' => 'Другое',
     _ => 'Заявка',
   };
 }
