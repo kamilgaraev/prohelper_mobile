@@ -371,7 +371,14 @@ class SiteRequestModel {
                 )
                 .toList(growable: false)
             : const <SiteRequestHistoryEntry>[];
-    final groupContext = json['group_context'] ?? json['group'];
+    final groupSummary = json['group'];
+    final groupContext = json['group_context'];
+    final groupPayload =
+        groupContext is Map
+            ? groupContext.map((key, value) => MapEntry(key.toString(), value))
+            : groupSummary is Map
+            ? groupSummary.map((key, value) => MapEntry(key.toString(), value))
+            : null;
     final groupItems =
         groupContext is Map
             ? _requiredList(groupContext, 'items')
@@ -468,12 +475,12 @@ class SiteRequestModel {
       ..assignedUserName =
           assignedUser is Map ? assignedUser['name']?.toString() : null
       ..siteRequestGroupId = _asNullableInt(json['site_request_group_id'])
-      ..groupTitle =
-          groupContext is Map ? groupContext['title']?.toString() : null
-      ..groupStatus =
-          groupContext is Map ? groupContext['status']?.toString() : null
+      ..groupTitle = groupPayload?['title']?.toString()
+      ..groupStatus = groupPayload?['status']?.toString()
       ..groupStatusLabel =
-          groupContext is Map ? _cleanLabel(groupContext['status_label']) : null
+          groupPayload != null
+              ? _cleanLabel(groupPayload['status_label'])
+              : null
       ..groupRequestCount =
           groupContext is Map
               ? _requiredInt(

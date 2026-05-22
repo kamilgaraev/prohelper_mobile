@@ -29,6 +29,7 @@ class IndustrialCard extends StatelessWidget {
     final theme = Theme.of(context);
 
     return GestureDetector(
+      behavior: HitTestBehavior.opaque,
       onTap:
           onTap != null
               ? () {

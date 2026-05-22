@@ -30,7 +30,6 @@ import 'package:prohelpers_mobile/features/production_labor/presentation/product
 import 'package:prohelpers_mobile/features/procurement/presentation/procurement_screen.dart';
 import 'package:prohelpers_mobile/features/project_management/presentation/project_management_screen.dart';
 import 'package:prohelpers_mobile/features/projects/domain/projects_provider.dart';
-import 'package:prohelpers_mobile/features/projects/presentation/project_selection_screen.dart';
 import 'package:prohelpers_mobile/features/quality_control/presentation/quality_control_screen.dart';
 import 'package:prohelpers_mobile/features/safety/presentation/safety_screen.dart';
 import 'package:prohelpers_mobile/features/schedule/presentation/schedule_screen.dart';
@@ -403,7 +402,9 @@ class DashboardScreen extends ConsumerWidget {
 
   Widget? _screenForRoute(String route) {
     return switch (route) {
-      'project_selection' => const ProjectSelectionScreen(),
+      'project_selection' => const ProjectManagementScreen(),
+      'project-overview' => const ProjectManagementScreen(),
+      'project_overview' => const ProjectManagementScreen(),
       'site_requests' => const SiteRequestsScreen(),
       'site_request_approvals' => const SiteRequestsScreen(
         scope: SiteRequestsScope.approvals,

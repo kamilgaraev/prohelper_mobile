@@ -6,6 +6,7 @@ import 'package:prohelpers_mobile/core/models/user_context.dart';
 import 'package:prohelpers_mobile/core/providers/module_provider.dart';
 import 'package:prohelpers_mobile/core/services/permission_service.dart';
 import 'package:prohelpers_mobile/core/storage/secure_storage_service.dart';
+import 'package:prohelpers_mobile/core/widgets/industrial_card.dart';
 import 'package:prohelpers_mobile/features/auth/data/auth_repository.dart';
 import 'package:prohelpers_mobile/features/auth/data/user_model.dart';
 import 'package:prohelpers_mobile/features/auth/domain/auth_provider.dart';
@@ -15,9 +16,20 @@ import 'package:prohelpers_mobile/features/dashboard/presentation/controllers/da
 import 'package:prohelpers_mobile/features/dashboard/presentation/dashboard_screen.dart';
 import 'package:prohelpers_mobile/features/notifications/data/notification_model.dart';
 import 'package:prohelpers_mobile/features/notifications/data/notifications_repository.dart';
+import 'package:prohelpers_mobile/features/project_management/presentation/project_management_screen.dart';
 import 'package:prohelpers_mobile/features/projects/data/project_model.dart';
 import 'package:prohelpers_mobile/features/projects/data/projects_repository.dart';
 import 'package:prohelpers_mobile/features/projects/domain/projects_provider.dart';
+
+class _NavigatorPushObserver extends NavigatorObserver {
+  int pushCount = 0;
+
+  @override
+  void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    pushCount += 1;
+    super.didPush(route, previousRoute);
+  }
+}
 
 class _TestSecureStorageService extends SecureStorageService {
   @override
@@ -161,7 +173,7 @@ void main() {
     ];
   }
 
-  Widget createWidget() {
+  Widget createWidget({NavigatorObserver? navigatorObserver}) {
     final user = buildUser();
     final project = buildProject();
     final widgets = buildWidgets();
@@ -194,7 +206,10 @@ void main() {
           );
         }),
       ],
-      child: const MaterialApp(home: DashboardScreen()),
+      child: MaterialApp(
+        navigatorObservers: [if (navigatorObserver != null) navigatorObserver],
+        home: const DashboardScreen(),
+      ),
     );
   }
 
@@ -212,5 +227,29 @@ void main() {
     expect(find.text('Складов'), findsOneWidget);
     expect(find.text('Низкий остаток'), findsOneWidget);
     expect(find.text('Ассистент'), findsNothing);
+  });
+
+  testWidgets('карточка обзора объекта открывает управление проектом', (
+    tester,
+  ) async {
+    final observer = _NavigatorPushObserver();
+
+    await tester.pumpWidget(createWidget(navigatorObserver: observer));
+    await tester.pump();
+
+    final overviewCard = find.ancestor(
+      of: find.text('Обзор объекта'),
+      matching: find.byType(IndustrialCard),
+    );
+
+    expect(overviewCard, findsOneWidget);
+
+    observer.pushCount = 0;
+    await tester.tap(overviewCard);
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 2));
+
+    expect(observer.pushCount, 1);
+    expect(find.byType(ProjectManagementScreen), findsOneWidget);
   });
 }

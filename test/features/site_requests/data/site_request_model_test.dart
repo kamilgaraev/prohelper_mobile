@@ -89,6 +89,25 @@ void main() {
     expect(model.deliverySummary?.status, 'accepted');
   });
 
+  test('parses list payload group summary without detail group items', () {
+    final model = SiteRequestModel.fromJson({
+      ...basePayload(),
+      'group': {
+        'id': 7,
+        'title': 'Batch materials',
+        'status': 'pending',
+        'status_label': 'Pending',
+        'status_color': 'warning',
+      },
+    });
+
+    expect(model.groupTitle, 'Batch materials');
+    expect(model.groupStatus, 'pending');
+    expect(model.groupStatusLabel, 'Pending');
+    expect(model.groupRequestCount, 0);
+    expect(model.groupItems, isEmpty);
+  });
+
   test('отклоняет старые camelCase поля закупочного контура', () {
     expect(
       () => SiteRequestModel.fromJson({

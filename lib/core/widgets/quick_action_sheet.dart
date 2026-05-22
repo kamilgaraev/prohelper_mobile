@@ -41,8 +41,10 @@ class QuickActionSheet extends ConsumerWidget {
     final theme = Theme.of(context);
     final modulesState = ref.watch(modulesProvider);
     final modules = ref.watch(supportedMobileModulesProvider);
+    final sheetMaxHeight = MediaQuery.sizeOf(context).height * 0.92;
 
     return Container(
+      constraints: BoxConstraints(maxHeight: sheetMaxHeight),
       padding: const EdgeInsets.fromLTRB(24, 12, 24, 40),
       decoration: BoxDecoration(
         color: theme.colorScheme.surface,
@@ -53,7 +55,6 @@ class QuickActionSheet extends ConsumerWidget {
         ),
       ),
       child: Column(
-        mainAxisSize: MainAxisSize.min,
         children: [
           Container(
             width: 40,
@@ -73,16 +74,16 @@ class QuickActionSheet extends ConsumerWidget {
           ),
           const SizedBox(height: 24),
           if (modulesState.isLoading && modules.isEmpty)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 32),
-              child: AppLoadingState(
-                message: 'Загружаем доступные действия',
-                compact: true,
+            const Expanded(
+              child: Center(
+                child: AppLoadingState(
+                  message: 'Загружаем доступные действия',
+                  compact: true,
+                ),
               ),
             )
           else if (modulesState.error != null && modules.isEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 24),
+            Expanded(
               child: AppErrorState(
                 title: 'Не удалось загрузить модули',
                 description: modulesState.error!,
@@ -91,8 +92,7 @@ class QuickActionSheet extends ConsumerWidget {
               ),
             )
           else if (modules.isEmpty)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 24),
+            const Expanded(
               child: AppEmptyState(
                 icon: Icons.grid_view_rounded,
                 title: 'Нет доступных действий',
@@ -101,34 +101,37 @@ class QuickActionSheet extends ConsumerWidget {
               ),
             )
           else
-            GridView.builder(
-              shrinkWrap: true,
-              itemCount: modules.length,
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 3,
-                crossAxisSpacing: 20,
-                mainAxisSpacing: 20,
-                childAspectRatio: 0.82,
-              ),
-              physics: const NeverScrollableScrollPhysics(),
-              itemBuilder: (context, index) {
-                final module = modules[index];
+            Expanded(
+              child: GridView.builder(
+                itemCount: modules.length + 1,
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 3,
+                  crossAxisSpacing: 20,
+                  mainAxisSpacing: 20,
+                  childAspectRatio: 0.82,
+                ),
+                physics: const ClampingScrollPhysics(),
+                itemBuilder: (context, index) {
+                  if (index == modules.length) {
+                    return _ActionItem(
+                      icon: Icons.notifications_none_rounded,
+                      label: 'Уведомления',
+                      color: theme.colorScheme.primary,
+                      onTap: () => _openNotifications(context),
+                    );
+                  }
 
-                return _ActionItem(
-                  icon: _iconFor(module.icon),
-                  label: module.title,
-                  color: _colorFor(module.route, theme),
-                  onTap: () => _openModule(context, module),
-                );
-              },
+                  final module = modules[index];
+
+                  return _ActionItem(
+                    icon: _iconFor(module.icon),
+                    label: module.title,
+                    color: _colorFor(module.route, theme),
+                    onTap: () => _openModule(context, module),
+                  );
+                },
+              ),
             ),
-          const SizedBox(height: 20),
-          _ActionItem(
-            icon: Icons.notifications_none_rounded,
-            label: 'Уведомления',
-            color: theme.colorScheme.primary,
-            onTap: () => _openNotifications(context),
-          ),
         ],
       ),
     );

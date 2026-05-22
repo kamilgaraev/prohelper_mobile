@@ -156,6 +156,181 @@ void main() {
     expect(find.text('График работ'), findsOneWidget);
   });
 
+  testWidgets('прокручивает длинный список модулей до нижних действий', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(393, 852));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      createWidget(
+        ModulesState(
+          isLoading: false,
+          modules: const [
+            MobileModuleModel(
+              slug: 'site-requests',
+              title: 'Site requests',
+              description: 'Requests',
+              icon: 'clipboard',
+              supportedOnMobile: true,
+              order: 1,
+              route: 'site_requests',
+            ),
+            MobileModuleModel(
+              slug: 'basic-warehouse',
+              title: 'Warehouse',
+              description: 'Warehouse',
+              icon: 'warehouse',
+              supportedOnMobile: true,
+              order: 2,
+              route: 'warehouse',
+            ),
+            MobileModuleModel(
+              slug: 'schedule-management',
+              title: 'Schedule',
+              description: 'Schedule',
+              icon: 'timeline',
+              supportedOnMobile: true,
+              order: 3,
+              route: 'schedule',
+            ),
+            MobileModuleModel(
+              slug: 'ai-assistant',
+              title: 'AI assistant',
+              description: 'Assistant',
+              icon: 'spark',
+              supportedOnMobile: true,
+              order: 4,
+              route: 'ai_assistant',
+            ),
+            MobileModuleModel(
+              slug: 'workflow-management',
+              title: 'Workflow',
+              description: 'Workflow',
+              icon: 'hub',
+              supportedOnMobile: true,
+              order: 5,
+              route: 'workflow_management',
+            ),
+            MobileModuleModel(
+              slug: 'time-tracking',
+              title: 'Time tracking',
+              description: 'Time',
+              icon: 'timer',
+              supportedOnMobile: true,
+              order: 6,
+              route: 'time_tracking',
+            ),
+            MobileModuleModel(
+              slug: 'construction-journal',
+              title: 'Journal',
+              description: 'Journal',
+              icon: 'journal',
+              supportedOnMobile: true,
+              order: 7,
+              route: 'construction_journal',
+            ),
+            MobileModuleModel(
+              slug: 'budget-estimates',
+              title: 'Budget',
+              description: 'Budget',
+              icon: 'calculate',
+              supportedOnMobile: true,
+              order: 8,
+              route: 'budget_estimates',
+            ),
+            MobileModuleModel(
+              slug: 'quality-control',
+              title: 'Quality',
+              description: 'Quality',
+              icon: 'quality',
+              supportedOnMobile: true,
+              order: 9,
+              route: 'quality-control',
+            ),
+            MobileModuleModel(
+              slug: 'safety-management',
+              title: 'Safety',
+              description: 'Safety',
+              icon: 'shield-check',
+              supportedOnMobile: true,
+              order: 10,
+              route: 'safety-management',
+            ),
+            MobileModuleModel(
+              slug: 'machinery-operations',
+              title: 'Machinery',
+              description: 'Machinery',
+              icon: 'machinery',
+              supportedOnMobile: true,
+              order: 11,
+              route: 'machinery-operations',
+            ),
+            MobileModuleModel(
+              slug: 'production-labor',
+              title: 'Production',
+              description: 'Production',
+              icon: 'engineer',
+              supportedOnMobile: true,
+              order: 12,
+              route: 'production-labor',
+            ),
+            MobileModuleModel(
+              slug: 'workforce-management',
+              title: 'Workforce',
+              description: 'Workforce',
+              icon: 'workforce',
+              supportedOnMobile: true,
+              order: 13,
+              route: 'workforce-management',
+            ),
+            MobileModuleModel(
+              slug: 'handover-acceptance',
+              title: 'Handover',
+              description: 'Handover',
+              icon: 'handover',
+              supportedOnMobile: true,
+              order: 14,
+              route: 'handover-acceptance',
+            ),
+            MobileModuleModel(
+              slug: 'procurement',
+              title: 'Procurement',
+              description: 'Procurement',
+              icon: 'procurement',
+              supportedOnMobile: true,
+              order: 15,
+              route: 'procurement',
+            ),
+            MobileModuleModel(
+              slug: 'video-monitoring',
+              title: 'Video monitoring',
+              description: 'Video',
+              icon: 'video',
+              supportedOnMobile: true,
+              order: 16,
+              route: 'video-monitoring',
+            ),
+          ],
+          error: null,
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+
+    await tester.scrollUntilVisible(
+      find.text('Video monitoring'),
+      180,
+      scrollable: find.descendant(
+        of: find.byType(GridView),
+        matching: find.byType(Scrollable),
+      ),
+    );
+
+    expect(find.text('Video monitoring'), findsOneWidget);
+  });
+
   testWidgets('показывает модули качества и приемки', (tester) async {
     await tester.pumpWidget(
       createWidget(
