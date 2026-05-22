@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../features/ai_assistant/presentation/ai_assistant_home_screen.dart';
+import '../../features/budget_estimates/presentation/budget_estimates_screen.dart';
 import '../../features/construction_journal/presentation/construction_journal_screen.dart';
 import '../../features/handover_acceptance/presentation/handover_acceptance_screen.dart';
 import '../../features/machinery_operations/presentation/machinery_operations_screen.dart';
@@ -217,6 +218,12 @@ class QuickActionSheet extends ConsumerWidget {
           MaterialPageRoute(builder: (_) => const TimeTrackingScreen()),
         );
         return;
+      case 'budget_estimates':
+      case 'budget-estimates':
+        navigator.push(
+          MaterialPageRoute(builder: (_) => const BudgetEstimatesScreen()),
+        );
+        return;
       default:
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -281,6 +288,8 @@ class QuickActionSheet extends ConsumerWidget {
       'workflow-management' => scheme.primary,
       'time_tracking' => AppColors.success,
       'time-tracking' => AppColors.success,
+      'budget_estimates' => scheme.tertiary,
+      'budget-estimates' => scheme.tertiary,
       _ => scheme.onSurfaceVariant,
     };
   }

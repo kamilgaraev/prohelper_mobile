@@ -13,6 +13,7 @@ import 'package:prohelpers_mobile/features/ai_assistant/presentation/ai_assistan
 import 'package:prohelpers_mobile/features/auth/domain/auth_provider.dart';
 import 'package:prohelpers_mobile/features/auth/presentation/widgets/profile_pill.dart';
 import 'package:prohelpers_mobile/features/auth/presentation/widgets/user_profile_bottom_sheet.dart';
+import 'package:prohelpers_mobile/features/budget_estimates/presentation/budget_estimates_screen.dart';
 import 'package:prohelpers_mobile/features/construction_journal/presentation/construction_journal_screen.dart';
 import 'package:prohelpers_mobile/features/dashboard/data/dashboard_widget_model.dart';
 import 'package:prohelpers_mobile/features/dashboard/presentation/controllers/dashboard_controller.dart';
@@ -365,6 +366,8 @@ class DashboardScreen extends ConsumerWidget {
       'workflow-management' => Icons.hub_outlined,
       'time_tracking' => Icons.timer_outlined,
       'time-tracking' => Icons.timer_outlined,
+      'budget_estimates' => Icons.calculate_outlined,
+      'budget-estimates' => Icons.calculate_outlined,
       _ => Icons.dashboard_customize_outlined,
     };
   }
@@ -393,6 +396,8 @@ class DashboardScreen extends ConsumerWidget {
       'workflow_management' => const WorkflowManagementScreen(),
       'time-tracking' => const TimeTrackingScreen(),
       'time_tracking' => const TimeTrackingScreen(),
+      'budget-estimates' => const BudgetEstimatesScreen(),
+      'budget_estimates' => const BudgetEstimatesScreen(),
       'quality-control' => const QualityControlScreen(),
       'safety-management' => const SafetyScreen(),
       'machinery-operations' => const MachineryOperationsScreen(),
