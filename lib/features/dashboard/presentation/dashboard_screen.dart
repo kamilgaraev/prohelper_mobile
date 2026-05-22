@@ -13,16 +13,22 @@ import 'package:prohelpers_mobile/features/ai_assistant/presentation/ai_assistan
 import 'package:prohelpers_mobile/features/auth/domain/auth_provider.dart';
 import 'package:prohelpers_mobile/features/auth/presentation/widgets/profile_pill.dart';
 import 'package:prohelpers_mobile/features/auth/presentation/widgets/user_profile_bottom_sheet.dart';
+import 'package:prohelpers_mobile/features/brigades/presentation/brigades_screen.dart';
 import 'package:prohelpers_mobile/features/budget_estimates/presentation/budget_estimates_screen.dart';
+import 'package:prohelpers_mobile/features/catalog_management/presentation/catalog_management_screen.dart';
+import 'package:prohelpers_mobile/features/change_management/presentation/change_management_screen.dart';
 import 'package:prohelpers_mobile/features/construction_journal/presentation/construction_journal_screen.dart';
+import 'package:prohelpers_mobile/features/contract_management/presentation/contract_management_screen.dart';
 import 'package:prohelpers_mobile/features/dashboard/data/dashboard_widget_model.dart';
 import 'package:prohelpers_mobile/features/dashboard/presentation/controllers/dashboard_controller.dart';
+import 'package:prohelpers_mobile/features/executive_documentation/presentation/executive_documentation_screen.dart';
 import 'package:prohelpers_mobile/features/handover_acceptance/presentation/handover_acceptance_screen.dart';
 import 'package:prohelpers_mobile/features/machinery_operations/presentation/machinery_operations_screen.dart';
 import 'package:prohelpers_mobile/features/notifications/domain/notifications_provider.dart';
 import 'package:prohelpers_mobile/features/notifications/presentation/notifications_screen.dart';
 import 'package:prohelpers_mobile/features/production_labor/presentation/production_labor_screen.dart';
 import 'package:prohelpers_mobile/features/procurement/presentation/procurement_screen.dart';
+import 'package:prohelpers_mobile/features/project_management/presentation/project_management_screen.dart';
 import 'package:prohelpers_mobile/features/projects/domain/projects_provider.dart';
 import 'package:prohelpers_mobile/features/projects/presentation/project_selection_screen.dart';
 import 'package:prohelpers_mobile/features/quality_control/presentation/quality_control_screen.dart';
@@ -32,6 +38,7 @@ import 'package:prohelpers_mobile/features/site_requests/domain/site_requests_sc
 import 'package:prohelpers_mobile/features/site_requests/presentation/screens/site_requests_screen.dart';
 import 'package:prohelpers_mobile/features/time_tracking/presentation/time_tracking_screen.dart';
 import 'package:prohelpers_mobile/features/warehouse/presentation/warehouse_screen.dart';
+import 'package:prohelpers_mobile/features/video_monitoring/presentation/video_monitoring_screen.dart';
 import 'package:prohelpers_mobile/features/workflow_management/presentation/workflow_management_screen.dart';
 import 'package:prohelpers_mobile/features/workforce/presentation/workforce_attendance_screen.dart';
 
@@ -370,6 +377,17 @@ class DashboardScreen extends ConsumerWidget {
       'budget_estimates' => Icons.calculate_outlined,
       'budget-estimates' => Icons.calculate_outlined,
       'procurement' => Icons.inventory_2_outlined,
+      'contract_management' => Icons.assignment_outlined,
+      'contract-management' => Icons.assignment_outlined,
+      'change_management' => Icons.change_circle_outlined,
+      'change-management' => Icons.change_circle_outlined,
+      'executive_documentation' => Icons.description_outlined,
+      'executive-documentation' => Icons.description_outlined,
+      'catalog_management' => Icons.category_outlined,
+      'catalog-management' => Icons.category_outlined,
+      'brigades' => Icons.groups_2_outlined,
+      'video_monitoring' => Icons.videocam_outlined,
+      'video-monitoring' => Icons.videocam_outlined,
       _ => Icons.dashboard_customize_outlined,
     };
   }
@@ -401,6 +419,19 @@ class DashboardScreen extends ConsumerWidget {
       'budget-estimates' => const BudgetEstimatesScreen(),
       'budget_estimates' => const BudgetEstimatesScreen(),
       'procurement' => const ProcurementScreen(),
+      'contract-management' => const ContractManagementScreen(),
+      'contract_management' => const ContractManagementScreen(),
+      'change-management' => const ChangeManagementScreen(),
+      'change_management' => const ChangeManagementScreen(),
+      'executive-documentation' => const ExecutiveDocumentationScreen(),
+      'executive_documentation' => const ExecutiveDocumentationScreen(),
+      'project-management' => const ProjectManagementScreen(),
+      'project_management' => const ProjectManagementScreen(),
+      'catalog-management' => const CatalogManagementScreen(),
+      'catalog_management' => const CatalogManagementScreen(),
+      'brigades' => const BrigadesScreen(),
+      'video-monitoring' => const VideoMonitoringScreen(),
+      'video_monitoring' => const VideoMonitoringScreen(),
       'quality-control' => const QualityControlScreen(),
       'safety-management' => const SafetyScreen(),
       'machinery-operations' => const MachineryOperationsScreen(),

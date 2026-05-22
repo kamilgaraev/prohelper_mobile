@@ -3,20 +3,27 @@ import 'package:flutter/services.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../features/ai_assistant/presentation/ai_assistant_home_screen.dart';
+import '../../features/brigades/presentation/brigades_screen.dart';
 import '../../features/budget_estimates/presentation/budget_estimates_screen.dart';
+import '../../features/catalog_management/presentation/catalog_management_screen.dart';
+import '../../features/change_management/presentation/change_management_screen.dart';
 import '../../features/construction_journal/presentation/construction_journal_screen.dart';
+import '../../features/contract_management/presentation/contract_management_screen.dart';
+import '../../features/executive_documentation/presentation/executive_documentation_screen.dart';
 import '../../features/handover_acceptance/presentation/handover_acceptance_screen.dart';
 import '../../features/machinery_operations/presentation/machinery_operations_screen.dart';
 import '../../features/modules/data/mobile_module_model.dart';
 import '../../features/notifications/presentation/notifications_screen.dart';
 import '../../features/production_labor/presentation/production_labor_screen.dart';
 import '../../features/procurement/presentation/procurement_screen.dart';
+import '../../features/project_management/presentation/project_management_screen.dart';
 import '../../features/quality_control/presentation/quality_control_screen.dart';
 import '../../features/safety/presentation/safety_screen.dart';
 import '../../features/schedule/presentation/schedule_screen.dart';
 import '../../features/site_requests/presentation/screens/site_requests_screen.dart';
 import '../../features/time_tracking/presentation/time_tracking_screen.dart';
 import '../../features/warehouse/presentation/warehouse_screen.dart';
+import '../../features/video_monitoring/presentation/video_monitoring_screen.dart';
 import '../../features/workflow_management/presentation/workflow_management_screen.dart';
 import '../../features/workforce/presentation/workforce_attendance_screen.dart';
 import '../providers/module_provider.dart';
@@ -230,6 +237,43 @@ class QuickActionSheet extends ConsumerWidget {
           MaterialPageRoute(builder: (_) => const ProcurementScreen()),
         );
         return;
+      case 'contract-management':
+        navigator.push(
+          MaterialPageRoute(builder: (_) => const ContractManagementScreen()),
+        );
+        return;
+      case 'change-management':
+        navigator.push(
+          MaterialPageRoute(builder: (_) => const ChangeManagementScreen()),
+        );
+        return;
+      case 'executive-documentation':
+        navigator.push(
+          MaterialPageRoute(
+            builder: (_) => const ExecutiveDocumentationScreen(),
+          ),
+        );
+        return;
+      case 'project-management':
+        navigator.push(
+          MaterialPageRoute(builder: (_) => const ProjectManagementScreen()),
+        );
+        return;
+      case 'catalog-management':
+        navigator.push(
+          MaterialPageRoute(builder: (_) => const CatalogManagementScreen()),
+        );
+        return;
+      case 'brigades':
+        navigator.push(
+          MaterialPageRoute(builder: (_) => const BrigadesScreen()),
+        );
+        return;
+      case 'video-monitoring':
+        navigator.push(
+          MaterialPageRoute(builder: (_) => const VideoMonitoringScreen()),
+        );
+        return;
       default:
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -255,6 +299,13 @@ class QuickActionSheet extends ConsumerWidget {
       'calculate' => Icons.calculate_outlined,
       'procurement' => Icons.inventory_2_outlined,
       'inventory' => Icons.inventory_2_outlined,
+      'contract' => Icons.assignment_outlined,
+      'change' => Icons.change_circle_outlined,
+      'documents' => Icons.description_outlined,
+      'project' => Icons.domain_rounded,
+      'catalog' => Icons.category_outlined,
+      'brigades' => Icons.groups_2_outlined,
+      'video' => Icons.videocam_outlined,
       'machinery' => Icons.precision_manufacturing_outlined,
       'engineer' => Icons.engineering_outlined,
       'people' => Icons.groups_rounded,
@@ -297,6 +348,13 @@ class QuickActionSheet extends ConsumerWidget {
       'budget_estimates' => scheme.tertiary,
       'budget-estimates' => scheme.tertiary,
       'procurement' => scheme.secondary,
+      'contract-management' => scheme.primary,
+      'change-management' => AppColors.warning,
+      'executive-documentation' => scheme.tertiary,
+      'project-management' => scheme.primary,
+      'catalog-management' => scheme.secondary,
+      'brigades' => AppColors.success,
+      'video-monitoring' => scheme.error,
       _ => scheme.onSurfaceVariant,
     };
   }
