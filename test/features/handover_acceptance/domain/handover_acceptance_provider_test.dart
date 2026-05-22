@@ -1,11 +1,15 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:prohelpers_mobile/core/network/api_exception.dart';
 import 'package:prohelpers_mobile/features/handover_acceptance/data/handover_acceptance_model.dart';
 import 'package:prohelpers_mobile/features/handover_acceptance/data/handover_acceptance_repository.dart';
 import 'package:prohelpers_mobile/features/handover_acceptance/domain/handover_acceptance_provider.dart';
 
 class _FakeHandoverAcceptanceRepository extends HandoverAcceptanceRepository {
-  _FakeHandoverAcceptanceRepository() : super(Dio());
+  _FakeHandoverAcceptanceRepository({this.permissionDenied = false})
+    : super(Dio());
+
+  final bool permissionDenied;
 
   int? loadedProjectId;
   String? loadedStatus;
@@ -34,6 +38,13 @@ class _FakeHandoverAcceptanceRepository extends HandoverAcceptanceRepository {
     String? plannedFrom,
     String? plannedTo,
   }) async {
+    if (permissionDenied) {
+      throw const ApiException(
+        'Недостаточно прав для просмотра приемки зон.',
+        statusCode: 403,
+      );
+    }
+
     loadedProjectId = projectId;
     loadedStatus = status;
     loadedPlannedFrom = plannedFrom;
@@ -238,5 +249,21 @@ void main() {
     expect(repository.reopenedScopeId, 10);
     expect(repository.reopenedReason, 'Вернуть на проверку');
     expect(notifier.state.scopes, hasLength(1));
+  });
+
+  test('фиксирует состояние недостаточных прав при загрузке', () async {
+    final repository = _FakeHandoverAcceptanceRepository(
+      permissionDenied: true,
+    );
+    final notifier = HandoverAcceptanceNotifier(repository)..syncProject(15);
+
+    await notifier.loadScopes();
+
+    expect(notifier.state.permissionDenied, isTrue);
+    expect(
+      notifier.state.error,
+      'Недостаточно прав для просмотра приемки зон.',
+    );
+    expect(notifier.state.scopes, isEmpty);
   });
 }

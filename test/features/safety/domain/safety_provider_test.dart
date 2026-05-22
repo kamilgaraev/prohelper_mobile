@@ -1,11 +1,14 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:prohelpers_mobile/core/network/api_exception.dart';
 import 'package:prohelpers_mobile/features/safety/data/safety_model.dart';
 import 'package:prohelpers_mobile/features/safety/data/safety_repository.dart';
 import 'package:prohelpers_mobile/features/safety/domain/safety_provider.dart';
 
 class _FakeSafetyRepository extends SafetyRepository {
-  _FakeSafetyRepository() : super(Dio());
+  _FakeSafetyRepository({this.permissionDenied = false}) : super(Dio());
+
+  final bool permissionDenied;
 
   int? loadedProjectId;
   int? resolvedViolationId;
@@ -28,6 +31,13 @@ class _FakeSafetyRepository extends SafetyRepository {
     int? projectId,
     String? status,
   }) async {
+    if (permissionDenied) {
+      throw const ApiException(
+        'Недостаточно прав для просмотра охраны труда.',
+        statusCode: 403,
+      );
+    }
+
     loadedProjectId = projectId;
     return [_permit];
   }
@@ -213,6 +223,22 @@ void main() {
       expect(repository.closedPermitId, 1);
       expect(repository.closeComment, 'Работы завершены');
       expect(notifier.state.violations, hasLength(1));
+    });
+
+    test('фиксирует состояние недостаточных прав при загрузке', () async {
+      final repository = _FakeSafetyRepository(permissionDenied: true);
+      final notifier = SafetyNotifier(repository)..syncProject(15);
+
+      await notifier.load();
+
+      expect(notifier.state.permissionDenied, isTrue);
+      expect(
+        notifier.state.error,
+        'Недостаточно прав для просмотра охраны труда.',
+      );
+      expect(notifier.state.permits, isEmpty);
+      expect(notifier.state.incidents, isEmpty);
+      expect(notifier.state.violations, isEmpty);
     });
   });
 }

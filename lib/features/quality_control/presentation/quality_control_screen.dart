@@ -74,7 +74,10 @@ class _QualityControlScreenState extends ConsumerState<QualityControlScreen> {
                 ? const AppLoadingState(message: 'Загружаем замечания')
                 : state.error != null && state.defects.isEmpty
                 ? AppErrorState(
-                  title: 'Не удалось загрузить замечания',
+                  title:
+                      state.permissionDenied
+                          ? 'Нет доступа к контролю качества'
+                          : 'Не удалось загрузить замечания',
                   description: state.error,
                   onRetry:
                       () =>

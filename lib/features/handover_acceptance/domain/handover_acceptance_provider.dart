@@ -1,5 +1,6 @@
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
+import '../../../core/network/api_exception.dart';
 import '../data/handover_acceptance_model.dart';
 import '../data/handover_acceptance_repository.dart';
 
@@ -13,6 +14,7 @@ class HandoverAcceptanceState {
     this.plannedFromFilter,
     this.plannedToFilter,
     this.selectedScope,
+    this.permissionDenied = false,
     this.error,
     this.detailError,
   });
@@ -25,6 +27,7 @@ class HandoverAcceptanceState {
   final DateTime? plannedFromFilter;
   final DateTime? plannedToFilter;
   final AcceptanceScopeModel? selectedScope;
+  final bool permissionDenied;
   final String? error;
   final String? detailError;
 
@@ -37,6 +40,7 @@ class HandoverAcceptanceState {
     Object? plannedFromFilter = _stateSentinel,
     Object? plannedToFilter = _stateSentinel,
     Object? selectedScope = _stateSentinel,
+    bool? permissionDenied,
     Object? error = _errorSentinel,
     Object? detailError = _errorSentinel,
   }) {
@@ -64,6 +68,7 @@ class HandoverAcceptanceState {
           identical(selectedScope, _stateSentinel)
               ? this.selectedScope
               : selectedScope as AcceptanceScopeModel?,
+      permissionDenied: permissionDenied ?? this.permissionDenied,
       error: identical(error, _errorSentinel) ? this.error : error as String?,
       detailError:
           identical(detailError, _errorSentinel)
@@ -117,7 +122,11 @@ class HandoverAcceptanceNotifier
   }
 
   Future<void> loadScopes() async {
-    state = state.copyWith(isLoading: true, error: null);
+    state = state.copyWith(
+      isLoading: true,
+      permissionDenied: false,
+      error: null,
+    );
 
     try {
       final scopes = await _repository.fetchScopes(
@@ -128,7 +137,11 @@ class HandoverAcceptanceNotifier
       );
       state = state.copyWith(isLoading: false, scopes: scopes);
     } catch (error) {
-      state = state.copyWith(isLoading: false, error: error.toString());
+      state = state.copyWith(
+        isLoading: false,
+        permissionDenied: _isPermissionDenied(error),
+        error: error.toString(),
+      );
     }
   }
 
@@ -219,6 +232,10 @@ class HandoverAcceptanceNotifier
     final day = value.day.toString().padLeft(2, '0');
     return '${value.year}-$month-$day';
   }
+}
+
+bool _isPermissionDenied(Object error) {
+  return error is ApiException && error.statusCode == 403;
 }
 
 final handoverAcceptanceProvider =

@@ -92,7 +92,10 @@ class _SafetyScreenState extends ConsumerState<SafetyScreen> {
                     state.incidents.isEmpty &&
                     state.violations.isEmpty
                 ? AppErrorState(
-                  title: 'Не удалось загрузить охрану труда',
+                  title:
+                      state.permissionDenied
+                          ? 'Нет доступа к охране труда'
+                          : 'Не удалось загрузить охрану труда',
                   description: state.error,
                   onRetry: () => ref.read(safetyProvider.notifier).load(),
                 )

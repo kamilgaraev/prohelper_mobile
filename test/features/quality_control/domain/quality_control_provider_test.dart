@@ -1,11 +1,14 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:prohelpers_mobile/core/network/api_exception.dart';
 import 'package:prohelpers_mobile/features/quality_control/data/quality_control_repository.dart';
 import 'package:prohelpers_mobile/features/quality_control/data/quality_defect_model.dart';
 import 'package:prohelpers_mobile/features/quality_control/domain/quality_control_provider.dart';
 
 class _FakeQualityControlRepository extends QualityControlRepository {
-  _FakeQualityControlRepository() : super(Dio());
+  _FakeQualityControlRepository({this.permissionDenied = false}) : super(Dio());
+
+  final bool permissionDenied;
 
   int? loadedProjectId;
   String? loadedStatus;
@@ -28,6 +31,13 @@ class _FakeQualityControlRepository extends QualityControlRepository {
     String? severity,
     bool overdueOnly = false,
   }) async {
+    if (permissionDenied) {
+      throw const ApiException(
+        'Недостаточно прав для просмотра контроля качества.',
+        statusCode: 403,
+      );
+    }
+
     loadedProjectId = projectId;
     loadedStatus = status;
     loadedSeverity = severity;
@@ -160,5 +170,19 @@ void main() {
 
     expect(repository.fetchedDefectId, 7);
     expect(defect.id, 7);
+  });
+
+  test('фиксирует состояние недостаточных прав при загрузке', () async {
+    final repository = _FakeQualityControlRepository(permissionDenied: true);
+    final notifier = QualityControlNotifier(repository)..syncProject(15);
+
+    await notifier.loadDefects();
+
+    expect(notifier.state.permissionDenied, isTrue);
+    expect(
+      notifier.state.error,
+      'Недостаточно прав для просмотра контроля качества.',
+    );
+    expect(notifier.state.defects, isEmpty);
   });
 }

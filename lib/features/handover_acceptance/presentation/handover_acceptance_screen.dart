@@ -71,7 +71,10 @@ class _HandoverAcceptanceScreenState
                 ? const AppLoadingState(message: 'Загружаем зоны приемки')
                 : state.error != null && state.scopes.isEmpty
                 ? AppErrorState(
-                  title: 'Не удалось загрузить приемку',
+                  title:
+                      state.permissionDenied
+                          ? 'Нет доступа к приемке зон'
+                          : 'Не удалось загрузить приемку',
                   description: state.error,
                   onRetry:
                       () =>

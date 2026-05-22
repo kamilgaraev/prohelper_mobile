@@ -1,5 +1,6 @@
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
+import '../../../core/network/api_exception.dart';
 import '../data/safety_model.dart';
 import '../data/safety_repository.dart';
 
@@ -13,6 +14,7 @@ class SafetyState {
     this.permits = const [],
     this.incidents = const [],
     this.violations = const [],
+    this.permissionDenied = false,
     this.error,
   });
 
@@ -21,6 +23,7 @@ class SafetyState {
   final List<SafetyWorkPermitModel> permits;
   final List<SafetyIncidentModel> incidents;
   final List<SafetyViolationModel> violations;
+  final bool permissionDenied;
   final String? error;
 
   SafetyState copyWith({
@@ -29,6 +32,7 @@ class SafetyState {
     List<SafetyWorkPermitModel>? permits,
     List<SafetyIncidentModel>? incidents,
     List<SafetyViolationModel>? violations,
+    bool? permissionDenied,
     Object? error = _errorSentinel,
   }) {
     return SafetyState(
@@ -40,6 +44,7 @@ class SafetyState {
       permits: permits ?? this.permits,
       incidents: incidents ?? this.incidents,
       violations: violations ?? this.violations,
+      permissionDenied: permissionDenied ?? this.permissionDenied,
       error: identical(error, _errorSentinel) ? this.error : error as String?,
     );
   }
@@ -60,12 +65,17 @@ class SafetyNotifier extends StateNotifier<SafetyState> {
       permits: const [],
       incidents: const [],
       violations: const [],
+      permissionDenied: false,
       error: null,
     );
   }
 
   Future<void> load() async {
-    state = state.copyWith(isLoading: true, error: null);
+    state = state.copyWith(
+      isLoading: true,
+      permissionDenied: false,
+      error: null,
+    );
 
     try {
       final result = await Future.wait<Object>([
@@ -81,7 +91,11 @@ class SafetyNotifier extends StateNotifier<SafetyState> {
         violations: result[2] as List<SafetyViolationModel>,
       );
     } catch (error) {
-      state = state.copyWith(isLoading: false, error: error.toString());
+      state = state.copyWith(
+        isLoading: false,
+        permissionDenied: _isPermissionDenied(error),
+        error: error.toString(),
+      );
     }
   }
 
@@ -141,3 +155,7 @@ final safetyProvider = StateNotifierProvider<SafetyNotifier, SafetyState>((
 ) {
   return SafetyNotifier(ref.read(safetyRepositoryProvider));
 });
+
+bool _isPermissionDenied(Object error) {
+  return error is ApiException && error.statusCode == 403;
+}

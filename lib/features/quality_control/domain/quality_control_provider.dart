@@ -1,5 +1,6 @@
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
+import '../../../core/network/api_exception.dart';
 import '../data/quality_control_repository.dart';
 import '../data/quality_defect_model.dart';
 
@@ -11,6 +12,7 @@ class QualityControlState {
     this.statusFilter,
     this.severityFilter,
     this.overdueOnly = false,
+    this.permissionDenied = false,
     this.error,
   });
 
@@ -20,6 +22,7 @@ class QualityControlState {
   final String? statusFilter;
   final String? severityFilter;
   final bool overdueOnly;
+  final bool permissionDenied;
   final String? error;
 
   QualityControlState copyWith({
@@ -29,6 +32,7 @@ class QualityControlState {
     Object? statusFilter = _statusFilterSentinel,
     Object? severityFilter = _severityFilterSentinel,
     bool? overdueOnly,
+    bool? permissionDenied,
     Object? error = _errorSentinel,
   }) {
     return QualityControlState(
@@ -47,6 +51,7 @@ class QualityControlState {
               ? this.severityFilter
               : severityFilter as String?,
       overdueOnly: overdueOnly ?? this.overdueOnly,
+      permissionDenied: permissionDenied ?? this.permissionDenied,
       error: identical(error, _errorSentinel) ? this.error : error as String?,
     );
   }
@@ -95,7 +100,11 @@ class QualityControlNotifier extends StateNotifier<QualityControlState> {
   }
 
   Future<void> loadDefects() async {
-    state = state.copyWith(isLoading: true, error: null);
+    state = state.copyWith(
+      isLoading: true,
+      permissionDenied: false,
+      error: null,
+    );
 
     try {
       final defects = await _repository.fetchDefects(
@@ -106,7 +115,11 @@ class QualityControlNotifier extends StateNotifier<QualityControlState> {
       );
       state = state.copyWith(isLoading: false, defects: defects);
     } catch (error) {
-      state = state.copyWith(isLoading: false, error: error.toString());
+      state = state.copyWith(
+        isLoading: false,
+        permissionDenied: _isPermissionDenied(error),
+        error: error.toString(),
+      );
     }
   }
 
@@ -142,6 +155,10 @@ class QualityControlNotifier extends StateNotifier<QualityControlState> {
     await _repository.rejectDefect(id, comment: comment);
     await loadDefects();
   }
+}
+
+bool _isPermissionDenied(Object error) {
+  return error is ApiException && error.statusCode == 403;
 }
 
 final qualityControlProvider =
