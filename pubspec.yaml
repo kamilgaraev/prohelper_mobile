@@ -41,7 +41,6 @@ dependencies:
   isar_flutter_libs: ^3.1.0+1
   flutter_secure_storage: ^9.0.0
   path_provider: ^2.1.2
-  google_fonts: ^6.2.1
   shimmer: ^3.0.0
   flutter_svg: ^2.0.16
   flutter_hooks: ^0.20.5
@@ -54,6 +53,8 @@ dependencies:
 
 dev_dependencies:
   flutter_test:
+    sdk: flutter
+  integration_test:
     sdk: flutter
 
   isar_generator: ^3.1.0+1

@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'app_colors.dart';
 
 class ProHelperTheme {
@@ -61,23 +60,22 @@ class ProHelperTheme {
   }
 
   static TextTheme _buildTextTheme(TextTheme base, bool isDark) {
-    return GoogleFonts.outfitTextTheme(base).copyWith(
-      displayLarge: GoogleFonts.outfit(
-        color: isDark ? AppColors.textPrimary : AppColors.textPrimaryLight,
-      ),
-      bodyLarge: GoogleFonts.inter(
-        color: isDark ? AppColors.textPrimary : AppColors.textPrimaryLight,
-      ),
-      bodyMedium: GoogleFonts.inter(
-        color: isDark ? AppColors.textPrimary : AppColors.textPrimaryLight,
-      ),
-      labelSmall: GoogleFonts.jetBrainsMono(
+    final textColor =
+        isDark ? AppColors.textPrimary : AppColors.textPrimaryLight;
+
+    return base.copyWith(
+      displayLarge: base.displayLarge?.copyWith(color: textColor),
+      bodyLarge: base.bodyLarge?.copyWith(color: textColor),
+      bodyMedium: base.bodyMedium?.copyWith(color: textColor),
+      labelSmall: base.labelSmall?.copyWith(
         fontSize: 12,
         color: isDark ? Colors.white70 : Colors.black54,
+        fontFamily: 'monospace',
       ),
-      bodySmall: GoogleFonts.jetBrainsMono(
+      bodySmall: base.bodySmall?.copyWith(
         fontSize: 10,
         color: isDark ? Colors.white60 : Colors.black45,
+        fontFamily: 'monospace',
       ),
     );
   }
