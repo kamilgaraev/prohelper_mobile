@@ -14,6 +14,9 @@ class _FakeQualityControlRepository extends QualityControlRepository {
   int? fetchedDefectId;
   int? startedDefectId;
   int? resolvedDefectId;
+  int? verifiedDefectId;
+  int? rejectedDefectId;
+  String? rejectedComment;
   Map<String, dynamic>? createdData;
 
   @override
@@ -54,9 +57,25 @@ class _FakeQualityControlRepository extends QualityControlRepository {
   Future<QualityDefectModel> resolveDefect(
     int id, {
     String? comment,
-    String? photoUrl,
+    String? photoPath,
   }) async {
     resolvedDefectId = id;
+    return _defect;
+  }
+
+  @override
+  Future<QualityDefectModel> verifyDefect(int id, {String? comment}) async {
+    verifiedDefectId = id;
+    return _defect;
+  }
+
+  @override
+  Future<QualityDefectModel> rejectDefect(
+    int id, {
+    required String comment,
+  }) async {
+    rejectedDefectId = id;
+    rejectedComment = comment;
     return _defect;
   }
 }
@@ -69,6 +88,11 @@ const _defect = QualityDefectModel(
   status: 'open',
   availableActions: ['start', 'resolve'],
   inspectionRequired: true,
+  workflowSummary: QualityDefectWorkflowSummary(
+    status: 'open',
+    availableActions: ['start', 'resolve'],
+    problemFlags: [],
+  ),
 );
 
 void main() {
@@ -92,10 +116,15 @@ void main() {
     await notifier.createDefect({'project_id': 15, 'title': 'Скол'});
     await notifier.startDefect(7, comment: 'Взято в работу');
     await notifier.resolveDefect(7, comment: 'Исправлено');
+    await notifier.verifyDefect(7, comment: 'Проверено');
+    await notifier.rejectDefect(7, comment: 'Нужно переделать');
 
     expect(repository.createdData?['project_id'], 15);
     expect(repository.startedDefectId, 7);
     expect(repository.resolvedDefectId, 7);
+    expect(repository.verifiedDefectId, 7);
+    expect(repository.rejectedDefectId, 7);
+    expect(repository.rejectedComment, 'Нужно переделать');
     expect(notifier.state.defects, hasLength(1));
   });
 

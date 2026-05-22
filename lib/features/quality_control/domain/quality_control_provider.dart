@@ -127,9 +127,19 @@ class QualityControlNotifier extends StateNotifier<QualityControlState> {
   Future<void> resolveDefect(
     int id, {
     String? comment,
-    String? photoUrl,
+    String? photoPath,
   }) async {
-    await _repository.resolveDefect(id, comment: comment, photoUrl: photoUrl);
+    await _repository.resolveDefect(id, comment: comment, photoPath: photoPath);
+    await loadDefects();
+  }
+
+  Future<void> verifyDefect(int id, {String? comment}) async {
+    await _repository.verifyDefect(id, comment: comment);
+    await loadDefects();
+  }
+
+  Future<void> rejectDefect(int id, {required String comment}) async {
+    await _repository.rejectDefect(id, comment: comment);
     await loadDefects();
   }
 }

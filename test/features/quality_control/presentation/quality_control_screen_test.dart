@@ -11,13 +11,20 @@ import 'package:prohelpers_mobile/features/quality_control/domain/quality_contro
 import 'package:prohelpers_mobile/features/quality_control/presentation/quality_control_screen.dart';
 
 class _RecordingQualityRepository extends QualityControlRepository {
-  _RecordingQualityRepository() : super(Dio());
+  _RecordingQualityRepository({this.listDefect = _defect}) : super(Dio());
+
+  final QualityDefectModel listDefect;
 
   int? loadedProjectId;
   String? loadedStatus;
   String? loadedSeverity;
   bool? loadedOverdueOnly;
   int? fetchedDefectId;
+  int? startedDefectId;
+  int? resolvedDefectId;
+  int? verifiedDefectId;
+  int? rejectedDefectId;
+  String? rejectedComment;
   Map<String, dynamic>? createPayload;
 
   @override
@@ -34,7 +41,7 @@ class _RecordingQualityRepository extends QualityControlRepository {
     loadedSeverity = severity;
     loadedOverdueOnly = overdueOnly;
 
-    return [_defect];
+    return [listDefect];
   }
 
   @override
@@ -55,7 +62,44 @@ class _RecordingQualityRepository extends QualityControlRepository {
       status: 'open',
       availableActions: ['start'],
       inspectionRequired: false,
+      workflowSummary: QualityDefectWorkflowSummary(
+        status: 'open',
+        availableActions: ['start'],
+        problemFlags: [],
+      ),
     );
+  }
+
+  @override
+  Future<QualityDefectModel> startDefect(int id, {String? comment}) async {
+    startedDefectId = id;
+    return listDefect;
+  }
+
+  @override
+  Future<QualityDefectModel> resolveDefect(
+    int id, {
+    String? comment,
+    String? photoPath,
+  }) async {
+    resolvedDefectId = id;
+    return listDefect;
+  }
+
+  @override
+  Future<QualityDefectModel> verifyDefect(int id, {String? comment}) async {
+    verifiedDefectId = id;
+    return listDefect;
+  }
+
+  @override
+  Future<QualityDefectModel> rejectDefect(
+    int id, {
+    required String comment,
+  }) async {
+    rejectedDefectId = id;
+    rejectedComment = comment;
+    return listDefect;
   }
 }
 
@@ -69,6 +113,28 @@ const _defect = QualityDefectModel(
   statusLabel: 'Открыт',
   availableActions: ['start', 'resolve'],
   inspectionRequired: true,
+  workflowSummary: QualityDefectWorkflowSummary(
+    status: 'open',
+    availableActions: ['start', 'resolve'],
+    problemFlags: [],
+  ),
+);
+
+const _reviewDefect = QualityDefectModel(
+  id: 4,
+  defectNumber: 'QD-4',
+  title: 'Повторная проверка',
+  severity: 'critical',
+  severityLabel: 'Критический',
+  status: 'ready_for_review',
+  statusLabel: 'На проверке',
+  availableActions: ['verify', 'reject'],
+  inspectionRequired: true,
+  workflowSummary: QualityDefectWorkflowSummary(
+    status: 'ready_for_review',
+    availableActions: ['verify', 'reject'],
+    problemFlags: [],
+  ),
 );
 
 const _detailDefect = QualityDefectModel(
@@ -82,8 +148,13 @@ const _detailDefect = QualityDefectModel(
   statusLabel: 'На проверке',
   locationName: 'Секция А',
   dueDate: '2026-05-22',
-  availableActions: ['resolve'],
+  availableActions: ['verify', 'reject'],
   inspectionRequired: true,
+  workflowSummary: QualityDefectWorkflowSummary(
+    status: 'ready_for_review',
+    availableActions: ['verify', 'reject'],
+    problemFlags: [],
+  ),
   photos: [
     QualityDefectPhotoModel(
       id: 8,
@@ -146,6 +217,13 @@ void main() {
   Future<void> pumpUi(WidgetTester tester) async {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
+  }
+
+  void useLargeSurface(WidgetTester tester) {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(1000, 1200);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
   }
 
   testWidgets('submits explicit inspection requirement from create form', (
@@ -215,5 +293,42 @@ void main() {
     expect(find.text('Фото результата'), findsOneWidget);
     expect(find.text('https://cdn.example.test/qc-after.jpg'), findsOneWidget);
     expect(find.text('Исправлено'), findsOneWidget);
+  });
+
+  testWidgets('verifies and rejects quality review with visible decision', (
+    tester,
+  ) async {
+    final repository = _RecordingQualityRepository(listDefect: _reviewDefect);
+    useLargeSurface(tester);
+
+    await tester.pumpWidget(buildScreen(repository));
+    await pumpUi(tester);
+
+    await tester.tap(find.text('Подтвердить').first);
+    await pumpUi(tester);
+    await tester.tap(find.text('Подтвердить').last);
+    await pumpUi(tester);
+
+    expect(repository.verifiedDefectId, 4);
+
+    await tester.ensureVisible(find.text('Вернуть').first);
+    await tester.pump();
+    await tester.tap(find.text('Вернуть').first);
+    await pumpUi(tester);
+    await tester.ensureVisible(find.text('Вернуть').last);
+    await tester.pump();
+    await tester.tap(find.text('Вернуть').last);
+    await pumpUi(tester);
+
+    expect(repository.rejectedDefectId, isNull);
+
+    await tester.enterText(find.byType(TextField).last, 'Нужно переделать');
+    await tester.ensureVisible(find.text('Вернуть').last);
+    await tester.pump();
+    await tester.tap(find.text('Вернуть').last);
+    await pumpUi(tester);
+
+    expect(repository.rejectedDefectId, 4);
+    expect(repository.rejectedComment, 'Нужно переделать');
   });
 }

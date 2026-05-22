@@ -10,6 +10,7 @@ import '../../../core/widgets/mesh_background.dart';
 import '../../../core/widgets/pro_card.dart';
 import '../../projects/domain/projects_provider.dart';
 import '../data/quality_defect_model.dart';
+import '../data/quality_photo_picker.dart';
 import '../domain/quality_control_provider.dart';
 
 class QualityControlScreen extends ConsumerStatefulWidget {
@@ -124,6 +125,18 @@ class _QualityControlScreenState extends ConsumerState<QualityControlScreen> {
                                     context,
                                     defect,
                                     _QualityAction.resolve,
+                                  ),
+                              onVerify:
+                                  () => _submitAction(
+                                    context,
+                                    defect,
+                                    _QualityAction.verify,
+                                  ),
+                              onReject:
+                                  () => _submitAction(
+                                    context,
+                                    defect,
+                                    _QualityAction.reject,
                                   ),
                             ),
                           ),
@@ -383,8 +396,9 @@ class _QualityControlScreenState extends ConsumerState<QualityControlScreen> {
     _QualityAction action,
   ) async {
     final commentController = TextEditingController();
-    final photoController = TextEditingController();
+    String? resultPhotoPath;
     var submitting = false;
+    var pickingPhoto = false;
 
     await showModalBottomSheet<void>(
       context: context,
@@ -404,9 +418,7 @@ class _QualityControlScreenState extends ConsumerState<QualityControlScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        action == _QualityAction.start
-                            ? 'Взять в работу'
-                            : 'Отправить на проверку',
+                        _qualityActionTitle(action),
                         style: AppTypography.h2(context),
                       ),
                       const SizedBox(height: 8),
@@ -423,10 +435,35 @@ class _QualityControlScreenState extends ConsumerState<QualityControlScreen> {
                         ),
                       ),
                       if (action == _QualityAction.resolve)
-                        TextField(
-                          controller: photoController,
-                          decoration: const InputDecoration(
-                            labelText: 'Ссылка на фото результата',
+                        OutlinedButton.icon(
+                          onPressed:
+                              pickingPhoto
+                                  ? null
+                                  : () async {
+                                    setSheetState(() => pickingPhoto = true);
+                                    try {
+                                      final path =
+                                          await ref
+                                              .read(qualityPhotoPickerProvider)
+                                              .pickResultPhoto();
+                                      if (path != null && path.isNotEmpty) {
+                                        setSheetState(
+                                          () => resultPhotoPath = path,
+                                        );
+                                      }
+                                    } finally {
+                                      if (context.mounted) {
+                                        setSheetState(
+                                          () => pickingPhoto = false,
+                                        );
+                                      }
+                                    }
+                                  },
+                          icon: const Icon(Icons.camera_alt_outlined),
+                          label: Text(
+                            resultPhotoPath == null
+                                ? 'Сделать фото результата'
+                                : 'Фото результата добавлено',
                           ),
                         ),
                       const SizedBox(height: 16),
@@ -435,10 +472,22 @@ class _QualityControlScreenState extends ConsumerState<QualityControlScreen> {
                             submitting
                                 ? null
                                 : () async {
+                                  final comment = commentController.text.trim();
+                                  if (action == _QualityAction.reject &&
+                                      comment.isEmpty) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text(
+                                          'Укажите причину возврата',
+                                        ),
+                                      ),
+                                    );
+                                    return;
+                                  }
                                   if (action == _QualityAction.resolve &&
                                       defect.inspectionRequired &&
-                                      commentController.text.trim().isEmpty &&
-                                      photoController.text.trim().isEmpty) {
+                                      comment.isEmpty &&
+                                      resultPhotoPath == null) {
                                     ScaffoldMessenger.of(context).showSnackBar(
                                       const SnackBar(
                                         content: Text(
@@ -451,21 +500,31 @@ class _QualityControlScreenState extends ConsumerState<QualityControlScreen> {
 
                                   setSheetState(() => submitting = true);
                                   try {
-                                    if (action == _QualityAction.start) {
-                                      await ref
-                                          .read(qualityControlProvider.notifier)
-                                          .startDefect(
-                                            defect.id,
-                                            comment: commentController.text,
-                                          );
-                                    } else {
-                                      await ref
-                                          .read(qualityControlProvider.notifier)
-                                          .resolveDefect(
-                                            defect.id,
-                                            comment: commentController.text,
-                                            photoUrl: photoController.text,
-                                          );
+                                    final notifier = ref.read(
+                                      qualityControlProvider.notifier,
+                                    );
+                                    switch (action) {
+                                      case _QualityAction.start:
+                                        await notifier.startDefect(
+                                          defect.id,
+                                          comment: comment,
+                                        );
+                                      case _QualityAction.resolve:
+                                        await notifier.resolveDefect(
+                                          defect.id,
+                                          comment: comment,
+                                          photoPath: resultPhotoPath,
+                                        );
+                                      case _QualityAction.verify:
+                                        await notifier.verifyDefect(
+                                          defect.id,
+                                          comment: comment,
+                                        );
+                                      case _QualityAction.reject:
+                                        await notifier.rejectDefect(
+                                          defect.id,
+                                          comment: comment,
+                                        );
                                     }
 
                                     if (sheetContext.mounted) {
@@ -478,7 +537,9 @@ class _QualityControlScreenState extends ConsumerState<QualityControlScreen> {
                                   }
                                 },
                         child: Text(
-                          submitting ? 'Выполнение...' : 'Подтвердить',
+                          submitting
+                              ? 'Выполнение...'
+                              : _qualityActionButton(action),
                         ),
                       ),
                     ],
@@ -799,18 +860,24 @@ class _QualityDefectCard extends StatelessWidget {
     required this.onOpen,
     required this.onStart,
     required this.onResolve,
+    required this.onVerify,
+    required this.onReject,
   });
 
   final QualityDefectModel defect;
   final VoidCallback onOpen;
   final VoidCallback onStart;
   final VoidCallback onResolve;
+  final VoidCallback onVerify;
+  final VoidCallback onReject;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final canStart = defect.availableActions.contains('start');
     final canResolve = defect.availableActions.contains('resolve');
+    final canVerify = defect.availableActions.contains('verify');
+    final canReject = defect.availableActions.contains('reject');
 
     return ProCard(
       child: Column(
@@ -881,6 +948,18 @@ class _QualityDefectCard extends StatelessWidget {
                   icon: const Icon(Icons.fact_check_rounded),
                   label: const Text('На проверку'),
                 ),
+              if (canVerify)
+                FilledButton.icon(
+                  onPressed: onVerify,
+                  icon: const Icon(Icons.verified_outlined),
+                  label: const Text('Подтвердить'),
+                ),
+              if (canReject)
+                OutlinedButton.icon(
+                  onPressed: onReject,
+                  icon: const Icon(Icons.undo_rounded),
+                  label: const Text('Вернуть'),
+                ),
             ],
           ),
         ],
@@ -907,7 +986,7 @@ class _StatusBadge extends StatelessWidget {
           'resolved' => 'Закрыт',
           'rejected' => 'Отклонен',
           'cancelled' => 'Отменен',
-          _ => 'Статус указан',
+          _ => throw ArgumentError.value(status, 'status'),
         };
 
     return Chip(
@@ -931,7 +1010,7 @@ class _SeverityPill extends StatelessWidget {
           'minor' => 'Низкая',
           'critical' => 'Критичная',
           'major' => 'Средняя',
-          _ => 'Критичность указана',
+          _ => throw ArgumentError.value(severity, 'severity'),
         };
     final color =
         severity == 'critical'
@@ -955,7 +1034,7 @@ String _severityText(QualityDefectModel defect) {
         'minor' => 'Низкая',
         'major' => 'Средняя',
         'critical' => 'Критичная',
-        _ => 'Критичность указана',
+        _ => throw ArgumentError.value(defect.severity, 'severity'),
       };
 }
 
@@ -969,7 +1048,7 @@ String _qualityStatusLabel(String status) {
     'resolved' => 'Устранен',
     'rejected' => 'Возвращен',
     'cancelled' => 'Отменен',
-    _ => 'Статус указан',
+    _ => throw ArgumentError.value(status, 'status'),
   };
 }
 
@@ -979,7 +1058,7 @@ String _photoTypeLabel(String type) {
     'after' => 'После устранения',
     'evidence' => 'Подтверждение',
     'other' => 'Фото',
-    _ => 'Фото',
+    _ => throw ArgumentError.value(type, 'type'),
   };
 }
 
@@ -992,7 +1071,25 @@ String _formatQualityDate(String value) {
   return '${parsed.day.toString().padLeft(2, '0')}.${parsed.month.toString().padLeft(2, '0')}.${parsed.year}';
 }
 
-enum _QualityAction { start, resolve }
+String _qualityActionTitle(_QualityAction action) {
+  return switch (action) {
+    _QualityAction.start => 'Взять в работу',
+    _QualityAction.resolve => 'Отправить на проверку',
+    _QualityAction.verify => 'Подтвердить результат',
+    _QualityAction.reject => 'Вернуть на доработку',
+  };
+}
+
+String _qualityActionButton(_QualityAction action) {
+  return switch (action) {
+    _QualityAction.start => 'Взять в работу',
+    _QualityAction.resolve => 'Отправить',
+    _QualityAction.verify => 'Подтвердить',
+    _QualityAction.reject => 'Вернуть',
+  };
+}
+
+enum _QualityAction { start, resolve, verify, reject }
 
 class _QualityFilterOption {
   const _QualityFilterOption(this.value, this.label);

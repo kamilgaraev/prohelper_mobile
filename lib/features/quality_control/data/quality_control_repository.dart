@@ -89,18 +89,49 @@ class QualityControlRepository {
   Future<QualityDefectModel> resolveDefect(
     int id, {
     String? comment,
-    String? photoUrl,
+    String? photoPath,
   }) async {
     try {
+      final trimmedComment = comment?.trim();
+      final trimmedPhotoPath = photoPath?.trim();
+      final Object data;
+
+      if (trimmedPhotoPath != null && trimmedPhotoPath.isNotEmpty) {
+        data = FormData.fromMap({
+          if (trimmedComment != null && trimmedComment.isNotEmpty)
+            'comment': trimmedComment,
+          'photos[0][type]': 'after',
+          'photos[0][file]': await MultipartFile.fromFile(
+            trimmedPhotoPath,
+            filename: _fileName(trimmedPhotoPath),
+          ),
+        });
+      } else {
+        data = {
+          if (trimmedComment != null && trimmedComment.isNotEmpty)
+            'comment': trimmedComment,
+        };
+      }
+
       final response = await _dio.post(
         '/quality-control/defects/$id/resolve',
+        data: data,
+      );
+      return QualityDefectModel.fromJson(
+        MobileApiResponse.dataMap(response.data),
+      );
+    } on DioException catch (error) {
+      throw ApiException.fromDio(error);
+    }
+  }
+
+  Future<QualityDefectModel> verifyDefect(int id, {String? comment}) async {
+    try {
+      final response = await _dio.post(
+        '/quality-control/defects/$id/verify',
         data: {
           if (comment != null && comment.trim().isNotEmpty)
             'comment': comment.trim(),
-          if (photoUrl != null && photoUrl.trim().isNotEmpty)
-            'photos': [
-              {'type': 'after', 'url': photoUrl.trim()},
-            ],
         },
       );
       return QualityDefectModel.fromJson(
@@ -110,4 +141,27 @@ class QualityControlRepository {
       throw ApiException.fromDio(error);
     }
   }
+
+  Future<QualityDefectModel> rejectDefect(
+    int id, {
+    required String comment,
+  }) async {
+    try {
+      final response = await _dio.post(
+        '/quality-control/defects/$id/reject',
+        data: {'comment': comment.trim()},
+      );
+      return QualityDefectModel.fromJson(
+        MobileApiResponse.dataMap(response.data),
+      );
+    } on DioException catch (error) {
+      throw ApiException.fromDio(error);
+    }
+  }
+}
+
+String _fileName(String path) {
+  final normalized = path.replaceAll('\\', '/');
+  final parts = normalized.split('/');
+  return parts.isEmpty ? 'quality-result.jpg' : parts.last;
 }

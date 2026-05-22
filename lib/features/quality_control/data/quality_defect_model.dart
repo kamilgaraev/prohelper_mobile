@@ -6,12 +6,8 @@ class QualityDefectRef {
 
   factory QualityDefectRef.fromJson(Map<String, dynamic> json) {
     return QualityDefectRef(
-      id: _asInt(json['id']),
-      name:
-          json['name']?.toString() ??
-          json['full_name']?.toString() ??
-          json['title']?.toString() ??
-          '',
+      id: _requiredInt(json, 'id'),
+      name: _requiredString(json, 'name'),
     );
   }
 }
@@ -29,20 +25,26 @@ class QualityDefectProblemFlag {
 
   factory QualityDefectProblemFlag.fromJson(Map<String, dynamic> json) {
     return QualityDefectProblemFlag(
-      code: json['code']?.toString() ?? json['key']?.toString() ?? '',
-      severity: json['severity']?.toString() ?? '',
-      message: json['message']?.toString() ?? json['label']?.toString() ?? '',
+      code: _requiredString(json, 'code'),
+      severity: _requiredStringIn(json, 'severity', _problemFlagSeverities),
+      message: _requiredString(json, 'message'),
     );
   }
 }
 
 class QualityDefectWorkflowSummary {
   const QualityDefectWorkflowSummary({
+    required this.status,
+    required this.availableActions,
+    required this.problemFlags,
     this.nextAction,
     this.nextActionLabel,
     this.overdue = false,
   });
 
+  final String status;
+  final List<String> availableActions;
+  final List<QualityDefectProblemFlag> problemFlags;
   final String? nextAction;
   final String? nextActionLabel;
   final bool overdue;
@@ -51,6 +53,13 @@ class QualityDefectWorkflowSummary {
     final meta = _asMap(json['meta']);
 
     return QualityDefectWorkflowSummary(
+      status: _requiredStringIn(json, 'status', _qualityStatuses),
+      availableActions: _requiredStringList(json, 'available_actions'),
+      problemFlags:
+          _requiredMapList(
+            json,
+            'problem_flags',
+          ).map(QualityDefectProblemFlag.fromJson).toList(),
       nextAction: json['next_action']?.toString(),
       nextActionLabel: json['next_action_label']?.toString(),
       overdue: meta['overdue'] == true,
@@ -76,7 +85,7 @@ class QualityDefectPhotoModel {
   factory QualityDefectPhotoModel.fromJson(Map<String, dynamic> json) {
     return QualityDefectPhotoModel(
       id: _requiredInt(json, 'id'),
-      type: _requiredString(json, 'type'),
+      type: _requiredStringIn(json, 'type', _photoTypes),
       url: _requiredString(json, 'url'),
       caption: _asNullableString(json['caption']),
       createdAt: _asNullableString(json['created_at']),
@@ -102,8 +111,8 @@ class QualityDefectHistoryModel {
   factory QualityDefectHistoryModel.fromJson(Map<String, dynamic> json) {
     return QualityDefectHistoryModel(
       id: _requiredInt(json, 'id'),
-      fromStatus: _asNullableString(json['from_status']),
-      toStatus: _requiredString(json, 'to_status'),
+      fromStatus: _nullableStatus(json['from_status']),
+      toStatus: _requiredStringIn(json, 'to_status', _qualityStatuses),
       comment: _asNullableString(json['comment']),
       changedAt: _asNullableString(json['changed_at']),
     );
@@ -127,7 +136,7 @@ class QualityDefectModel {
     this.project,
     this.contractor,
     this.assignedUser,
-    this.workflowSummary,
+    required this.workflowSummary,
     this.photos = const [],
     this.statusHistory = const [],
     this.problemFlags = const [],
@@ -148,7 +157,7 @@ class QualityDefectModel {
   final QualityDefectRef? project;
   final QualityDefectRef? contractor;
   final QualityDefectRef? assignedUser;
-  final QualityDefectWorkflowSummary? workflowSummary;
+  final QualityDefectWorkflowSummary workflowSummary;
   final List<QualityDefectPhotoModel> photos;
   final List<QualityDefectHistoryModel> statusHistory;
   final List<QualityDefectProblemFlag> problemFlags;
@@ -158,7 +167,7 @@ class QualityDefectModel {
   String get assignedUserName => assignedUser?.name ?? '';
 
   bool get isOverdue =>
-      workflowSummary?.overdue == true ||
+      workflowSummary.overdue ||
       problemFlags.any((flag) => flag.code == 'quality_defect_overdue');
 
   bool get canStart =>
@@ -174,18 +183,17 @@ class QualityDefectModel {
     final project = _asMap(json['project']);
     final contractor = _asMap(json['contractor']);
     final assignedUser = _asMap(json['assigned_user']);
-    final workflow = _asMap(json['workflow_summary']);
 
     return QualityDefectModel(
       id: _requiredInt(json, 'id'),
       defectNumber: _requiredString(json, 'defect_number'),
       title: _requiredString(json, 'title'),
       description: json['description']?.toString(),
-      severity: _requiredString(json, 'severity'),
+      severity: _requiredStringIn(json, 'severity', _qualitySeverities),
       severityLabel: json['severity_label']?.toString(),
-      status: _requiredString(json, 'status'),
+      status: _requiredStringIn(json, 'status', _qualityStatuses),
       statusLabel: json['status_label']?.toString(),
-      availableActions: _actions(json['available_actions']),
+      availableActions: _requiredStringList(json, 'available_actions'),
       locationName: json['location_name']?.toString(),
       dueDate: json['due_date']?.toString(),
       inspectionRequired: _requiredBool(json, 'inspection_required'),
@@ -194,61 +202,26 @@ class QualityDefectModel {
           contractor.isEmpty ? null : QualityDefectRef.fromJson(contractor),
       assignedUser:
           assignedUser.isEmpty ? null : QualityDefectRef.fromJson(assignedUser),
-      workflowSummary:
-          workflow.isEmpty
-              ? null
-              : QualityDefectWorkflowSummary.fromJson(workflow),
-      photos: _photos(json['photos']),
-      statusHistory: _history(json['status_history']),
+      workflowSummary: QualityDefectWorkflowSummary.fromJson(
+        _requiredMap(json, 'workflow_summary'),
+      ),
+      photos:
+          _requiredMapList(
+            json,
+            'photos',
+          ).map(QualityDefectPhotoModel.fromJson).toList(),
+      statusHistory:
+          _requiredMapList(
+            json,
+            'status_history',
+          ).map(QualityDefectHistoryModel.fromJson).toList(),
       problemFlags:
-          (json['problem_flags'] as List<dynamic>? ?? const [])
-              .whereType<Map>()
-              .map(
-                (item) => QualityDefectProblemFlag.fromJson(
-                  item.map((key, value) => MapEntry(key.toString(), value)),
-                ),
-              )
-              .toList(),
+          _requiredMapList(
+            json,
+            'problem_flags',
+          ).map(QualityDefectProblemFlag.fromJson).toList(),
     );
   }
-}
-
-List<QualityDefectPhotoModel> _photos(dynamic value) {
-  return (value as List<dynamic>? ?? const [])
-      .whereType<Map>()
-      .map(
-        (item) => QualityDefectPhotoModel.fromJson(
-          item.map((key, value) => MapEntry(key.toString(), value)),
-        ),
-      )
-      .toList();
-}
-
-List<QualityDefectHistoryModel> _history(dynamic value) {
-  return (value as List<dynamic>? ?? const [])
-      .whereType<Map>()
-      .map(
-        (item) => QualityDefectHistoryModel.fromJson(
-          item.map((key, value) => MapEntry(key.toString(), value)),
-        ),
-      )
-      .toList();
-}
-
-List<String> _actions(dynamic value) {
-  return (value as List<dynamic>? ?? const [])
-      .map((item) {
-        if (item is Map) {
-          return item['key']?.toString() ??
-              item['action']?.toString() ??
-              item['name']?.toString() ??
-              '';
-        }
-
-        return item.toString();
-      })
-      .where((item) => item.isNotEmpty)
-      .toList();
 }
 
 int _requiredInt(Map<String, dynamic> json, String key) {
@@ -277,10 +250,36 @@ String _requiredString(Map<String, dynamic> json, String key) {
   return value;
 }
 
+String _requiredStringIn(
+  Map<String, dynamic> json,
+  String key,
+  Set<String> allowed,
+) {
+  final value = _requiredString(json, key);
+  if (!allowed.contains(value)) {
+    throw FormatException('Invalid string field: $key');
+  }
+
+  return value;
+}
+
 String? _asNullableString(dynamic value) {
   final text = value?.toString().trim() ?? '';
 
   return text.isEmpty ? null : text;
+}
+
+String? _nullableStatus(dynamic value) {
+  final text = _asNullableString(value);
+  if (text == null) {
+    return null;
+  }
+
+  if (!_qualityStatuses.contains(text)) {
+    throw const FormatException('Invalid nullable status field');
+  }
+
+  return text;
 }
 
 bool _requiredBool(Map<String, dynamic> json, String key) {
@@ -290,14 +289,6 @@ bool _requiredBool(Map<String, dynamic> json, String key) {
   }
 
   throw FormatException('Missing boolean field: $key');
-}
-
-int _asInt(dynamic value) {
-  if (value is int) {
-    return value;
-  }
-
-  return int.tryParse(value?.toString() ?? '') ?? 0;
 }
 
 Map<String, dynamic> _asMap(dynamic value) {
@@ -311,3 +302,64 @@ Map<String, dynamic> _asMap(dynamic value) {
 
   return const {};
 }
+
+Map<String, dynamic> _requiredMap(Map<String, dynamic> json, String key) {
+  final value = _asMap(json[key]);
+  if (value.isEmpty) {
+    throw FormatException('Missing map field: $key');
+  }
+
+  return value;
+}
+
+List<Map<String, dynamic>> _requiredMapList(
+  Map<String, dynamic> json,
+  String key,
+) {
+  if (!json.containsKey(key)) {
+    throw FormatException('Missing list field: $key');
+  }
+
+  final value = json[key];
+  if (value is! List) {
+    throw FormatException('Invalid list field: $key');
+  }
+
+  return value
+      .whereType<Map>()
+      .map((item) => item.map((key, value) => MapEntry(key.toString(), value)))
+      .toList();
+}
+
+List<String> _requiredStringList(Map<String, dynamic> json, String key) {
+  if (!json.containsKey(key)) {
+    throw FormatException('Missing list field: $key');
+  }
+
+  final value = json[key];
+  if (value is! List) {
+    throw FormatException('Invalid list field: $key');
+  }
+
+  return value
+      .map((item) => item.toString())
+      .where((item) => item.isNotEmpty)
+      .toList();
+}
+
+const _qualityStatuses = {
+  'draft',
+  'open',
+  'assigned',
+  'in_progress',
+  'ready_for_review',
+  'resolved',
+  'rejected',
+  'cancelled',
+};
+
+const _qualitySeverities = {'minor', 'major', 'critical'};
+
+const _photoTypes = {'before', 'after', 'evidence', 'other'};
+
+const _problemFlagSeverities = {'blocker', 'warning'};

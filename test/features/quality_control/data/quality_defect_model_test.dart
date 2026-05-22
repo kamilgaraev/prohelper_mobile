@@ -12,8 +12,20 @@ void main() {
       'status': 'ready_for_review',
       'inspection_required': true,
       'location_name': 'Section A',
-      'project': {'name': 'Tower'},
-      'assigned_user': {'full_name': 'Foreman'},
+      'project': {'id': 3, 'name': 'Tower'},
+      'assigned_user': {'id': 9, 'name': 'Foreman'},
+      'workflow_summary': {
+        'status': 'ready_for_review',
+        'available_actions': ['verify', 'reject'],
+        'problem_flags': [
+          {
+            'code': 'verification_required',
+            'severity': 'warning',
+            'message': 'Needs acceptance',
+          },
+        ],
+        'meta': {'overdue': false},
+      },
       'photos': [
         {
           'id': 4,
@@ -33,12 +45,13 @@ void main() {
         },
       ],
       'problem_flags': [
-        {'key': 'verification_required', 'label': 'Needs acceptance'},
+        {
+          'code': 'verification_required',
+          'severity': 'warning',
+          'message': 'Needs acceptance',
+        },
       ],
-      'available_actions': [
-        {'key': 'verify', 'label': 'Accept'},
-        {'key': 'reject', 'label': 'Return'},
-      ],
+      'available_actions': ['verify', 'reject'],
     });
 
     expect(defect.serverId, 7);
