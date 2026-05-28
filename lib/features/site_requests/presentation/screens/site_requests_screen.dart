@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:prohelpers_mobile/core/error/user_message.dart';
+import 'package:prohelpers_mobile/core/design/pro_status.dart';
 import 'package:prohelpers_mobile/core/theme/app_typography.dart';
 import 'package:prohelpers_mobile/core/widgets/app_empty_state.dart';
 import 'package:prohelpers_mobile/core/widgets/app_error_state.dart';
 import 'package:prohelpers_mobile/core/widgets/app_loading_state.dart';
 import 'package:prohelpers_mobile/core/widgets/mesh_background.dart';
-import 'package:prohelpers_mobile/core/widgets/pro_card.dart';
+import 'package:prohelpers_mobile/core/widgets/pro_search_filter_bar.dart';
+import 'package:prohelpers_mobile/core/widgets/pro_status_banner.dart';
 import 'package:prohelpers_mobile/features/projects/domain/projects_provider.dart';
 import 'package:prohelpers_mobile/features/site_requests/data/site_request_model.dart';
 import 'package:prohelpers_mobile/features/site_requests/domain/site_requests_provider.dart';
@@ -106,7 +109,7 @@ class _SiteRequestsScreenState extends ConsumerState<SiteRequestsScreen> {
 
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text(error.toString())));
+      ).showSnackBar(SnackBar(content: Text(UserMessage.fromError(error))));
     }
   }
 
@@ -189,9 +192,9 @@ class _SiteRequestsScreenState extends ConsumerState<SiteRequestsScreen> {
         return;
       }
 
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(next.error!)));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(UserMessage.fromError(next.error!))),
+      );
     });
 
     if (state.scope != widget.scope && !state.isLoading) {
@@ -277,7 +280,10 @@ class _SiteRequestsScreenState extends ConsumerState<SiteRequestsScreen> {
                             : _isApprovalsMode
                             ? 'Не удалось загрузить очередь согласования'
                             : 'Не удалось загрузить заявки',
-                    description: state.error,
+                    description:
+                        state.error == null
+                            ? null
+                            : UserMessage.fromError(state.error!),
                     onRetry:
                         () => ref
                             .read(siteRequestsProvider.notifier)
@@ -607,7 +613,6 @@ class _RequestsOperationalBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final hasAttention =
         pendingCount > 0 || inReviewCount > 0 || urgentCount > 0;
 
@@ -629,50 +634,10 @@ class _RequestsOperationalBanner extends StatelessWidget {
                 ? 'На согласовании: $pendingCount. Срочных: $urgentCount. В работе: $inWorkCount.'
                 : 'Всего заявок: $totalCount. Активных в работе: $inWorkCount.');
 
-    final accentColor =
-        hasAttention ? theme.colorScheme.secondary : theme.colorScheme.primary;
-
-    return ProCard(
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: accentColor.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: Icon(
-              hasAttention
-                  ? Icons.priority_high_rounded
-                  : Icons.assignment_turned_in,
-              color: accentColor,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: AppTypography.bodyLarge(
-                    context,
-                  ).copyWith(fontWeight: FontWeight.w800),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  description,
-                  style: AppTypography.bodyMedium(
-                    context,
-                  ).copyWith(color: theme.colorScheme.onSurfaceVariant),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
+    return ProStatusBanner(
+      title: title,
+      description: description,
+      tone: hasAttention ? ProStatusTone.warning : ProStatusTone.success,
     );
   }
 }
@@ -700,65 +665,21 @@ class _RequestsFiltersCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return ProCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          TextField(
-            controller: controller,
-            textInputAction: TextInputAction.search,
-            decoration: InputDecoration(
-              hintText: searchHint,
-              prefixIcon: const Icon(Icons.search_rounded),
-              suffixIcon:
-                  onClearSearch == null
-                      ? null
-                      : IconButton(
-                        onPressed: onClearSearch,
-                        icon: const Icon(Icons.close_rounded),
-                      ),
-              filled: true,
-              fillColor: theme.colorScheme.surfaceContainerHighest.withValues(
-                alpha: 0.45,
-              ),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(16),
-                borderSide: BorderSide.none,
-              ),
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 16,
-                vertical: 14,
-              ),
+    return ProSearchFilterBar<_RequestFilter>(
+      controller: controller,
+      hintText: searchHint,
+      options: options
+          .map(
+            (option) => ProFilterOption<_RequestFilter>(
+              value: option.filter,
+              label: option.label,
             ),
-          ),
-          const SizedBox(height: 14),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children:
-                  options.map((option) {
-                    return Padding(
-                      padding: const EdgeInsets.only(right: 8),
-                      child: FilterChip(
-                        selected: selectedFilter == option.filter,
-                        label: Text(option.label),
-                        onSelected: (_) => onFilterChanged(option.filter),
-                      ),
-                    );
-                  }).toList(),
-            ),
-          ),
-          const SizedBox(height: 12),
-          Text(
-            'Найдено: $resultCount из $totalCount',
-            style: AppTypography.caption(
-              context,
-            ).copyWith(color: theme.colorScheme.onSurfaceVariant),
-          ),
-        ],
-      ),
+          )
+          .toList(growable: false),
+      selectedValue: selectedFilter,
+      onFilterChanged: onFilterChanged,
+      onClearSearch: onClearSearch,
+      resultLabel: 'Найдено: $resultCount из $totalCount',
     );
   }
 }

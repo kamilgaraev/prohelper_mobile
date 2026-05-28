@@ -2,11 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/theme/app_colors.dart';
+import '../../../core/design/pro_status.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../core/widgets/app_empty_state.dart';
 import '../../../core/widgets/app_error_state.dart';
 import '../../../core/widgets/app_loading_state.dart';
 import '../../../core/widgets/industrial_card.dart';
+import '../../../core/widgets/pro_metric_tile.dart';
+import '../../../core/widgets/pro_search_filter_bar.dart';
+import '../../../core/widgets/pro_status_banner.dart';
 import '../../projects/domain/projects_provider.dart';
 import '../data/schedule_model.dart';
 import '../domain/schedule_provider.dart';
@@ -410,7 +414,6 @@ class _ScheduleOperationalBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final hasAttention = attentionCount > 0;
     final title = hasAttention ? 'Нужны действия' : 'Ситуация под контролем';
     final description =
@@ -418,47 +421,10 @@ class _ScheduleOperationalBanner extends StatelessWidget {
             ? 'Графиков с риском: $attentionCount. Из них с просрочкой: $overdueSchedulesCount.'
             : 'Все $totalSchedules графиков сейчас без критичных сигналов.';
 
-    return IndustrialCard(
-      backgroundColor:
-          hasAttention
-              ? theme.colorScheme.secondaryContainer.withValues(alpha: 0.45)
-              : theme.colorScheme.primaryContainer.withValues(alpha: 0.35),
-      borderColor:
-          hasAttention
-              ? theme.colorScheme.secondary.withValues(alpha: 0.3)
-              : theme.colorScheme.primary.withValues(alpha: 0.2),
-      child: Row(
-        children: [
-          Icon(
-            hasAttention ? Icons.priority_high_rounded : Icons.track_changes,
-            color:
-                hasAttention
-                    ? theme.colorScheme.secondary
-                    : theme.colorScheme.primary,
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: AppTypography.bodyLarge(
-                    context,
-                  ).copyWith(fontWeight: FontWeight.w800),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  description,
-                  style: AppTypography.bodyMedium(
-                    context,
-                  ).copyWith(color: theme.colorScheme.onSurfaceVariant),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
+    return ProStatusBanner(
+      title: title,
+      description: description,
+      tone: hasAttention ? ProStatusTone.warning : ProStatusTone.success,
     );
   }
 }
@@ -482,65 +448,21 @@ class _ScheduleFiltersCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return IndustrialCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          TextField(
-            controller: controller,
-            textInputAction: TextInputAction.search,
-            decoration: InputDecoration(
-              hintText: 'Поиск по названию, описанию или статусу',
-              prefixIcon: const Icon(Icons.search_rounded),
-              suffixIcon:
-                  onClearSearch == null
-                      ? null
-                      : IconButton(
-                        onPressed: onClearSearch,
-                        icon: const Icon(Icons.close_rounded),
-                      ),
-              filled: true,
-              fillColor: theme.colorScheme.surfaceContainerHighest.withValues(
-                alpha: 0.45,
-              ),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(16),
-                borderSide: BorderSide.none,
-              ),
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 16,
-                vertical: 14,
-              ),
+    return ProSearchFilterBar<_ScheduleFilter>(
+      controller: controller,
+      hintText: 'Поиск по названию, описанию или статусу',
+      options: _ScheduleFilter.values
+          .map(
+            (filter) => ProFilterOption<_ScheduleFilter>(
+              value: filter,
+              label: filter.label,
             ),
-          ),
-          const SizedBox(height: 14),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children:
-                  _ScheduleFilter.values.map((filter) {
-                    return Padding(
-                      padding: const EdgeInsets.only(right: 8),
-                      child: FilterChip(
-                        selected: selectedFilter == filter,
-                        label: Text(filter.label),
-                        onSelected: (_) => onFilterChanged(filter),
-                      ),
-                    );
-                  }).toList(),
-            ),
-          ),
-          const SizedBox(height: 12),
-          Text(
-            'Найдено: $resultCount из $totalCount',
-            style: AppTypography.caption(
-              context,
-            ).copyWith(color: theme.colorScheme.onSurfaceVariant),
-          ),
-        ],
-      ),
+          )
+          .toList(growable: false),
+      selectedValue: selectedFilter,
+      onFilterChanged: onFilterChanged,
+      onClearSearch: onClearSearch,
+      resultLabel: 'Найдено: $resultCount из $totalCount',
     );
   }
 }
@@ -560,18 +482,7 @@ class _ScheduleSummaryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return IndustrialCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, color: color),
-          const SizedBox(height: 12),
-          Text(value, style: AppTypography.h2(context)),
-          const SizedBox(height: 4),
-          Text(title, style: AppTypography.caption(context)),
-        ],
-      ),
-    );
+    return ProMetricTile(label: title, value: value, icon: icon, color: color);
   }
 }
 

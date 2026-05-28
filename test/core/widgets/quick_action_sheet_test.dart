@@ -113,9 +113,9 @@ void main() {
 
     await tester.pumpAndSettle();
 
-    expect(find.text('Быстрые действия'), findsOneWidget);
+    expect(find.text('Действия'), findsOneWidget);
     expect(
-      find.text('Для вашей роли пока нет мобильных модулей.'),
+      find.text('Для вашей роли пока нет мобильных разделов.'),
       findsOneWidget,
     );
   });
@@ -152,8 +152,8 @@ void main() {
 
     await tester.pumpAndSettle();
 
-    expect(find.text('Склад'), findsOneWidget);
-    expect(find.text('График работ'), findsOneWidget);
+    expect(find.text('Склад'), findsWidgets);
+    expect(find.text('График'), findsOneWidget);
   });
 
   testWidgets('прокручивает длинный список модулей до нижних действий', (
@@ -319,16 +319,16 @@ void main() {
 
     await tester.pumpAndSettle();
 
-    await tester.scrollUntilVisible(
-      find.text('Video monitoring'),
-      180,
-      scrollable: find.descendant(
-        of: find.byType(GridView),
-        matching: find.byType(Scrollable),
-      ),
-    );
+    expect(find.text('Все разделы'), findsOneWidget);
+    expect(find.text('Полевые работы'), findsOneWidget);
 
-    expect(find.text('Video monitoring'), findsOneWidget);
+    await tester.drag(
+      find.byKey(const ValueKey('quick-action-sheet-scroll')),
+      const Offset(0, -700),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Управление'), findsOneWidget);
   });
 
   testWidgets('показывает модули качества и приемки', (tester) async {
@@ -363,8 +363,8 @@ void main() {
 
     await tester.pumpAndSettle();
 
-    expect(find.text('Контроль качества'), findsOneWidget);
-    expect(find.text('Приемка зон'), findsOneWidget);
+    expect(find.text('Качество'), findsWidgets);
+    expect(find.text('Приемка'), findsOneWidget);
   });
 
   testWidgets('открывает экран контроля качества', (tester) async {
@@ -390,7 +390,7 @@ void main() {
 
     await tester.tap(find.text('Открыть'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Контроль качества'));
+    await tester.tap(find.text('Качество'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
 
@@ -420,7 +420,7 @@ void main() {
 
     await tester.tap(find.text('Открыть'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Охрана труда'));
+    await tester.tap(find.text('Безопасность'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
 
@@ -450,7 +450,7 @@ void main() {
 
     await tester.tap(find.text('Открыть'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Приемка зон'));
+    await tester.tap(find.text('Приемка'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
 

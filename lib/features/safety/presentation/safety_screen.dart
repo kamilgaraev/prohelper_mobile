@@ -2,11 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/theme/app_typography.dart';
+import '../../../core/design/pro_status.dart';
 import '../../../core/widgets/app_empty_state.dart';
 import '../../../core/widgets/app_error_state.dart';
 import '../../../core/widgets/app_loading_state.dart';
 import '../../../core/widgets/mesh_background.dart';
 import '../../../core/widgets/pro_card.dart';
+import '../../../core/widgets/pro_metric_tile.dart';
+import '../../../core/widgets/pro_status_banner.dart';
 import '../../projects/domain/projects_provider.dart';
 import '../data/safety_model.dart';
 import '../domain/safety_provider.dart';
@@ -1125,32 +1128,13 @@ class _RiskBanner extends StatelessWidget {
   Widget build(BuildContext context) {
     final criticalCount =
         flags.where((flag) => flag.severity == 'critical').length;
-    final theme = Theme.of(context);
 
-    return ProCard(
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(
-            criticalCount > 0
-                ? Icons.priority_high_rounded
-                : Icons.warning_amber_rounded,
-            color:
-                criticalCount > 0
-                    ? theme.colorScheme.error
-                    : theme.colorScheme.tertiary,
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              criticalCount > 0
-                  ? 'Критичные риски: $criticalCount'
-                  : 'Есть предупреждения по охране труда',
-              style: AppTypography.bodyMedium(context),
-            ),
-          ),
-        ],
-      ),
+    return ProStatusBanner(
+      title:
+          criticalCount > 0
+              ? 'Критичные риски: $criticalCount'
+              : 'Есть предупреждения по охране труда',
+      tone: criticalCount > 0 ? ProStatusTone.danger : ProStatusTone.warning,
     );
   }
 }
@@ -1588,19 +1572,7 @@ class _MetricCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return ProCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, color: theme.colorScheme.primary),
-          const SizedBox(height: 8),
-          Text(value, style: AppTypography.h2(context)),
-          Text(label, style: AppTypography.caption(context)),
-        ],
-      ),
-    );
+    return ProMetricTile(label: label, value: value, icon: icon);
   }
 }
 

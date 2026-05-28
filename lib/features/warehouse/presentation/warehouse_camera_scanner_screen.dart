@@ -94,7 +94,7 @@ class _WarehouseCameraScannerScreenState
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
                 color: theme.colorScheme.surface.withValues(alpha: 0.92),
-                borderRadius: BorderRadius.circular(24),
+                borderRadius: BorderRadius.circular(8),
               ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -108,7 +108,7 @@ class _WarehouseCameraScannerScreenState
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'После распознавания код автоматически подставится в складской scan-flow.',
+                    'После распознавания код автоматически подставится в складскую операцию.',
                     style: AppTypography.bodyMedium(context),
                   ),
                   const SizedBox(height: 12),

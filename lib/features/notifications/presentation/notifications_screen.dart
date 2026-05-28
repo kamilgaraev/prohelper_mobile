@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
+import '../../../core/error/user_message.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../core/widgets/app_action_buttons.dart';
 import '../../../core/widgets/app_empty_state.dart';
@@ -12,7 +13,9 @@ import 'notification_detail_screen.dart';
 import 'widgets/notification_card.dart';
 
 class NotificationsScreen extends ConsumerWidget {
-  const NotificationsScreen({super.key});
+  const NotificationsScreen({super.key, this.asTab = false});
+
+  final bool asTab;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -23,6 +26,7 @@ class NotificationsScreen extends ConsumerWidget {
       appBar: AppBar(
         title: const Text('Уведомления'),
         centerTitle: false,
+        automaticallyImplyLeading: !asTab,
         actions: [
           if (state.unreadCount > 0)
             TextButton.icon(
@@ -62,7 +66,10 @@ class NotificationsScreen extends ConsumerWidget {
               SliverFillRemaining(
                 child: AppErrorState(
                   title: 'Не удалось загрузить уведомления',
-                  description: state.error,
+                  description:
+                      state.error == null
+                          ? null
+                          : UserMessage.fromError(state.error!),
                   onRetry: () => notifier.load(refresh: true),
                 ),
               )

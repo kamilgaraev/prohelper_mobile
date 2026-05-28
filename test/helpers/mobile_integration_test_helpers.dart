@@ -30,6 +30,7 @@ class MemorySecureStorageService extends SecureStorageService {
 
   String? _token;
   int? _selectedProjectId;
+  List<String> _pinnedMobileActionIds = const [];
 
   @override
   Future<String?> getToken() async => _token;
@@ -55,6 +56,16 @@ class MemorySecureStorageService extends SecureStorageService {
   @override
   Future<void> clearSelectedProjectId() async {
     _selectedProjectId = null;
+  }
+
+  @override
+  Future<List<String>> getPinnedMobileActionIds() async {
+    return _pinnedMobileActionIds;
+  }
+
+  @override
+  Future<void> savePinnedMobileActionIds(List<String> actionIds) async {
+    _pinnedMobileActionIds = actionIds.take(2).toList(growable: false);
   }
 }
 

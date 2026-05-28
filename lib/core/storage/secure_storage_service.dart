@@ -10,6 +10,7 @@ class SecureStorageService {
 
   static const _tokenKey = 'auth_token';
   static const _selectedProjectIdKey = 'selected_project_id';
+  static const _pinnedMobileActionsKey = 'pinned_mobile_action_ids';
 
   Future<void> saveToken(String token) async {
     await _storage.write(key: _tokenKey, value: token);
@@ -37,5 +38,29 @@ class SecureStorageService {
 
   Future<void> clearSelectedProjectId() async {
     await _storage.delete(key: _selectedProjectIdKey);
+  }
+
+  Future<List<String>> getPinnedMobileActionIds() async {
+    final value = await _storage.read(key: _pinnedMobileActionsKey);
+    if (value == null || value.trim().isEmpty) {
+      return const [];
+    }
+
+    return value
+        .split(',')
+        .map((item) => item.trim())
+        .where((item) => item.isNotEmpty)
+        .take(2)
+        .toList(growable: false);
+  }
+
+  Future<void> savePinnedMobileActionIds(List<String> actionIds) async {
+    final normalized = actionIds
+        .map((item) => item.trim())
+        .where((item) => item.isNotEmpty)
+        .take(2)
+        .join(',');
+
+    await _storage.write(key: _pinnedMobileActionsKey, value: normalized);
   }
 }

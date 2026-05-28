@@ -23,21 +23,23 @@ class AppTypography {
 
   static TextStyle bodyMedium(BuildContext context) => TextStyle(
     fontSize: 14,
-    fontWeight: FontWeight.w400,
+    fontWeight: FontWeight.w500,
     color: Theme.of(context).colorScheme.onSurface,
+    letterSpacing: 0,
   );
 
   static TextStyle caption(BuildContext context) => TextStyle(
     fontSize: 12,
     fontWeight: FontWeight.w400,
     color: Theme.of(context).colorScheme.onSurfaceVariant,
+    letterSpacing: 0,
   );
 
   static TextStyle bodySmall(BuildContext context) => TextStyle(
     fontSize: 12,
     fontWeight: FontWeight.w500,
     color: Theme.of(context).colorScheme.onSurfaceVariant,
-    fontFamily: 'monospace',
+    letterSpacing: 0,
   );
 
   static TextStyle get button => const TextStyle(
@@ -50,5 +52,6 @@ class AppTypography {
     fontSize: 12,
     fontWeight: FontWeight.w500,
     fontFamily: 'monospace',
+    letterSpacing: 0,
   );
 }

@@ -8,6 +8,7 @@ import '../../../core/widgets/app_error_state.dart';
 import '../../../core/widgets/app_loading_state.dart';
 import '../../../core/widgets/mesh_background.dart';
 import '../../../core/widgets/pro_card.dart';
+import '../../../core/widgets/pro_metric_tile.dart';
 import '../../projects/domain/projects_provider.dart';
 import '../data/quality_defect_model.dart';
 import '../data/quality_photo_picker.dart';
@@ -568,14 +569,28 @@ class _SummaryStrip extends StatelessWidget {
 
     return Row(
       children: [
-        Expanded(child: _SummaryTile(label: 'Открыто', value: open.toString())),
-        const SizedBox(width: 8),
         Expanded(
-          child: _SummaryTile(label: 'Проверка', value: review.toString()),
+          child: _SummaryTile(
+            label: 'Открыто',
+            value: open.toString(),
+            icon: Icons.fact_check_outlined,
+          ),
         ),
         const SizedBox(width: 8),
         Expanded(
-          child: _SummaryTile(label: 'Критично', value: critical.toString()),
+          child: _SummaryTile(
+            label: 'Проверка',
+            value: review.toString(),
+            icon: Icons.rule_folder_outlined,
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: _SummaryTile(
+            label: 'Критично',
+            value: critical.toString(),
+            icon: Icons.priority_high_rounded,
+          ),
         ),
       ],
     );
@@ -583,24 +598,19 @@ class _SummaryStrip extends StatelessWidget {
 }
 
 class _SummaryTile extends StatelessWidget {
-  const _SummaryTile({required this.label, required this.value});
+  const _SummaryTile({
+    required this.label,
+    required this.value,
+    required this.icon,
+  });
 
   final String label;
   final String value;
+  final IconData icon;
 
   @override
   Widget build(BuildContext context) {
-    return ProCard(
-      padding: const EdgeInsets.all(12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(label, style: AppTypography.caption(context)),
-          const SizedBox(height: 4),
-          Text(value, style: AppTypography.h2(context)),
-        ],
-      ),
-    );
+    return ProMetricTile(label: label, value: value, icon: icon);
   }
 }
 

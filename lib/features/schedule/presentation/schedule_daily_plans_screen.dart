@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
+import '../../../core/error/user_message.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../core/widgets/app_empty_state.dart';
 import '../../../core/widgets/app_error_state.dart';
@@ -73,7 +74,10 @@ class _ScheduleDailyPlansScreenState
                       state.permissionDenied
                           ? 'Недостаточно прав'
                           : 'Не удалось загрузить дневные планы',
-                  description: state.error,
+                  description:
+                      state.error == null
+                          ? null
+                          : UserMessage.fromError(state.error!),
                   onRetry:
                       () => ref
                           .read(dailyWorkPlansProvider.notifier)
@@ -391,7 +395,7 @@ class _DailyAssignmentTile extends ConsumerWidget {
       if (context.mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text(error.toString())));
+        ).showSnackBar(SnackBar(content: Text(UserMessage.fromError(error))));
       }
     }
   }
@@ -487,7 +491,7 @@ class _SubmitDailyPlanSheetState extends State<_SubmitDailyPlanSheet> {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text(error.toString())));
+        ).showSnackBar(SnackBar(content: Text(UserMessage.fromError(error))));
       }
     } finally {
       if (mounted) {
@@ -719,7 +723,7 @@ class _DailyFactSheetState extends State<_DailyFactSheet> {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text(error.toString())));
+        ).showSnackBar(SnackBar(content: Text(UserMessage.fromError(error))));
       }
     } finally {
       if (mounted) {

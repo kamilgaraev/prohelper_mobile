@@ -1,12 +1,16 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/theme/app_colors.dart';
+import '../../../core/design/pro_status.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../core/widgets/app_empty_state.dart';
 import '../../../core/widgets/app_error_state.dart';
 import '../../../core/widgets/app_loading_state.dart';
 import '../../../core/widgets/industrial_card.dart';
+import '../../../core/widgets/pro_action_tile.dart';
+import '../../../core/widgets/pro_metric_tile.dart';
+import '../../../core/widgets/pro_status_banner.dart';
 import '../data/warehouse_media_picker.dart';
 import '../data/warehouse_repository.dart';
 import '../data/warehouse_summary_model.dart';
@@ -453,51 +457,12 @@ class _ScanEntryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return IndustrialCard(
+    return ProActionTile(
+      title: 'Сканирование склада',
+      subtitle:
+          'Распознать код и сразу перейти к подходящей складской операции.',
+      icon: Icons.qr_code_scanner_rounded,
       onTap: onTap,
-      child: Row(
-        children: [
-          Container(
-            width: 52,
-            height: 52,
-            decoration: BoxDecoration(
-              color: theme.colorScheme.primary.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Icon(
-              Icons.qr_code_scanner_rounded,
-              color: theme.colorScheme.primary,
-            ),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Сканирование склада',
-                  style: AppTypography.bodyLarge(
-                    context,
-                  ).copyWith(fontWeight: FontWeight.w800),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Открой скан-flow, распознай код и сразу перейди к релевантной операции.',
-                  style: AppTypography.bodyMedium(
-                    context,
-                  ).copyWith(color: theme.colorScheme.onSurfaceVariant),
-                ),
-              ],
-            ),
-          ),
-          Icon(
-            Icons.chevron_right_rounded,
-            color: theme.colorScheme.onSurfaceVariant,
-          ),
-        ],
-      ),
     );
   }
 }
@@ -509,51 +474,13 @@ class _TaskQueueEntryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return IndustrialCard(
+    return ProActionTile(
+      title: 'Очередь складских задач',
+      subtitle:
+          'Приемка, размещение, перемещение и инвентаризация в одном потоке.',
+      icon: Icons.task_alt_rounded,
+      tone: ProStatusTone.success,
       onTap: onTap,
-      child: Row(
-        children: [
-          Container(
-            width: 52,
-            height: 52,
-            decoration: BoxDecoration(
-              color: theme.colorScheme.secondaryContainer.withValues(
-                alpha: 0.7,
-              ),
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Icon(
-              Icons.task_alt_rounded,
-              color: theme.colorScheme.onSecondaryContainer,
-            ),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Очередь складских задач',
-                  style: AppTypography.bodyLarge(
-                    context,
-                  ).copyWith(fontWeight: FontWeight.w800),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Приемка, размещение, перемещение и инвентаризация в одном рабочем потоке.',
-                  style: AppTypography.bodyMedium(
-                    context,
-                  ).copyWith(color: theme.colorScheme.onSurfaceVariant),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 12),
-          const Icon(Icons.chevron_right_rounded),
-        ],
-      ),
     );
   }
 }
@@ -565,51 +492,12 @@ class _ProjectDeliveriesEntryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return IndustrialCard(
+    return ProActionTile(
+      title: 'Материалы на объект',
+      subtitle: 'Поставки из склада и закупок, приемка доставки на объекте.',
+      icon: Icons.local_shipping_outlined,
+      tone: ProStatusTone.success,
       onTap: onTap,
-      child: Row(
-        children: [
-          Container(
-            width: 52,
-            height: 52,
-            decoration: BoxDecoration(
-              color: AppColors.success.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: const Icon(
-              Icons.local_shipping_outlined,
-              color: AppColors.success,
-            ),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Материалы на объект',
-                  style: AppTypography.bodyLarge(
-                    context,
-                  ).copyWith(fontWeight: FontWeight.w800),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Отслеживай поставки из склада и закупок, принимай доставку на объект.',
-                  style: AppTypography.bodyMedium(
-                    context,
-                  ).copyWith(color: theme.colorScheme.onSurfaceVariant),
-                ),
-              ],
-            ),
-          ),
-          Icon(
-            Icons.chevron_right_rounded,
-            color: theme.colorScheme.onSurfaceVariant,
-          ),
-        ],
-      ),
     );
   }
 }
@@ -727,55 +615,16 @@ class _OperationalHighlights extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final hasAttention =
         summary.lowStockCount > 0 || summary.reservedItemsCount > 0;
 
-    return IndustrialCard(
-      backgroundColor:
+    return ProStatusBanner(
+      title: hasAttention ? 'Требует внимания' : 'Склад в норме',
+      description:
           hasAttention
-              ? theme.colorScheme.secondaryContainer.withValues(alpha: 0.45)
-              : theme.colorScheme.primaryContainer.withValues(alpha: 0.35),
-      borderColor:
-          hasAttention
-              ? theme.colorScheme.secondary.withValues(alpha: 0.3)
-              : theme.colorScheme.primary.withValues(alpha: 0.2),
-      child: Row(
-        children: [
-          Icon(
-            hasAttention
-                ? Icons.priority_high_rounded
-                : Icons.check_circle_outline,
-            color:
-                hasAttention
-                    ? theme.colorScheme.secondary
-                    : theme.colorScheme.primary,
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  hasAttention ? 'Требует внимания' : 'Склад в норме',
-                  style: AppTypography.bodyLarge(
-                    context,
-                  ).copyWith(fontWeight: FontWeight.w800),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  hasAttention
-                      ? 'Низкий остаток: ${summary.lowStockCount}. В резерве: ${summary.reservedItemsCount}.'
-                      : 'Критических складских сигналов сейчас нет.',
-                  style: AppTypography.bodyMedium(
-                    context,
-                  ).copyWith(color: theme.colorScheme.onSurfaceVariant),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
+              ? 'Низкий остаток: ${summary.lowStockCount}. В резерве: ${summary.reservedItemsCount}.'
+              : 'Критических складских сигналов сейчас нет.',
+      tone: hasAttention ? ProStatusTone.warning : ProStatusTone.success,
     );
   }
 }
@@ -795,18 +644,7 @@ class _SummaryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return IndustrialCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, color: color),
-          const SizedBox(height: 12),
-          Text(value, style: AppTypography.h2(context)),
-          const SizedBox(height: 4),
-          Text(title, style: AppTypography.caption(context)),
-        ],
-      ),
-    );
+    return ProMetricTile(label: title, value: value, icon: icon, color: color);
   }
 }
 

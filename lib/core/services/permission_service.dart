@@ -29,6 +29,13 @@ class PermissionService {
             canAccessModule(AppModule.siteRequests),
       'view_schedule' => canAccessModule(AppModule.scheduleManagement),
       'view_budget' => canAccessModule(AppModule.budgetEstimates),
+      'quality_control' => canAccessModule(AppModule.qualityControl),
+      'view_safety' => canAccessModule(AppModule.safetyManagement),
+      'view_workflow' => canAccessModule(AppModule.workflowManagement),
+      'view_procurement' => canAccessModule(AppModule.procurement),
+      'view_handover' => canAccessModule(AppModule.handoverAcceptance),
+      'view_construction_journal' =>
+        canAccessModule(AppModule.constructionJournal),
       'track_time' => canAccessModule(AppModule.timeTracking),
       'record_machinery_shift' =>
         context == UserContext.field &&

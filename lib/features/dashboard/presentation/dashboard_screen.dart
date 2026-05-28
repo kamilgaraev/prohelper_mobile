@@ -2,44 +2,23 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
+import 'package:prohelpers_mobile/core/error/user_message.dart';
+import 'package:prohelpers_mobile/core/navigation/mobile_navigation_registry.dart';
 import 'package:prohelpers_mobile/core/theme/app_colors.dart';
 import 'package:prohelpers_mobile/core/theme/app_typography.dart';
-import 'package:prohelpers_mobile/core/widgets/action_hub.dart';
 import 'package:prohelpers_mobile/core/widgets/app_empty_state.dart';
 import 'package:prohelpers_mobile/core/widgets/app_error_state.dart';
 import 'package:prohelpers_mobile/core/widgets/app_loading_state.dart';
 import 'package:prohelpers_mobile/core/widgets/industrial_card.dart';
-import 'package:prohelpers_mobile/features/ai_assistant/presentation/ai_assistant_home_screen.dart';
+import 'package:prohelpers_mobile/core/widgets/smart_action_strip.dart';
 import 'package:prohelpers_mobile/features/auth/domain/auth_provider.dart';
 import 'package:prohelpers_mobile/features/auth/presentation/widgets/profile_pill.dart';
 import 'package:prohelpers_mobile/features/auth/presentation/widgets/user_profile_bottom_sheet.dart';
-import 'package:prohelpers_mobile/features/brigades/presentation/brigades_screen.dart';
-import 'package:prohelpers_mobile/features/budget_estimates/presentation/budget_estimates_screen.dart';
-import 'package:prohelpers_mobile/features/catalog_management/presentation/catalog_management_screen.dart';
-import 'package:prohelpers_mobile/features/change_management/presentation/change_management_screen.dart';
-import 'package:prohelpers_mobile/features/construction_journal/presentation/construction_journal_screen.dart';
-import 'package:prohelpers_mobile/features/contract_management/presentation/contract_management_screen.dart';
 import 'package:prohelpers_mobile/features/dashboard/data/dashboard_widget_model.dart';
 import 'package:prohelpers_mobile/features/dashboard/presentation/controllers/dashboard_controller.dart';
-import 'package:prohelpers_mobile/features/executive_documentation/presentation/executive_documentation_screen.dart';
-import 'package:prohelpers_mobile/features/handover_acceptance/presentation/handover_acceptance_screen.dart';
-import 'package:prohelpers_mobile/features/machinery_operations/presentation/machinery_operations_screen.dart';
 import 'package:prohelpers_mobile/features/notifications/domain/notifications_provider.dart';
 import 'package:prohelpers_mobile/features/notifications/presentation/notifications_screen.dart';
-import 'package:prohelpers_mobile/features/production_labor/presentation/production_labor_screen.dart';
-import 'package:prohelpers_mobile/features/procurement/presentation/procurement_screen.dart';
-import 'package:prohelpers_mobile/features/project_management/presentation/project_management_screen.dart';
 import 'package:prohelpers_mobile/features/projects/domain/projects_provider.dart';
-import 'package:prohelpers_mobile/features/quality_control/presentation/quality_control_screen.dart';
-import 'package:prohelpers_mobile/features/safety/presentation/safety_screen.dart';
-import 'package:prohelpers_mobile/features/schedule/presentation/schedule_screen.dart';
-import 'package:prohelpers_mobile/features/site_requests/domain/site_requests_scope.dart';
-import 'package:prohelpers_mobile/features/site_requests/presentation/screens/site_requests_screen.dart';
-import 'package:prohelpers_mobile/features/time_tracking/presentation/time_tracking_screen.dart';
-import 'package:prohelpers_mobile/features/warehouse/presentation/warehouse_screen.dart';
-import 'package:prohelpers_mobile/features/video_monitoring/presentation/video_monitoring_screen.dart';
-import 'package:prohelpers_mobile/features/workflow_management/presentation/workflow_management_screen.dart';
-import 'package:prohelpers_mobile/features/workforce/presentation/workforce_attendance_screen.dart';
 
 class DashboardScreen extends ConsumerWidget {
   const DashboardScreen({super.key});
@@ -49,59 +28,55 @@ class DashboardScreen extends ConsumerWidget {
     final dashboardState = ref.watch(dashboardControllerProvider);
 
     return Scaffold(
-      body: Stack(
-        children: [
-          CustomScrollView(
-            slivers: [
-              _buildAppBar(context),
-              if (dashboardState.isLoading && dashboardState.widgets.isEmpty)
-                const SliverFillRemaining(
-                  child: AppLoadingState(message: 'Загружаем рабочий стол'),
-                )
-              else if (dashboardState.error != null &&
-                  dashboardState.widgets.isEmpty)
-                SliverFillRemaining(
-                  child: AppErrorState(
-                    title: 'Не удалось загрузить дашборд',
-                    description: dashboardState.error,
-                    onRetry:
-                        () =>
-                            ref
-                                .read(dashboardControllerProvider.notifier)
-                                .loadDashboard(),
-                  ),
-                )
-              else if (dashboardState.widgets.isEmpty)
-                const SliverFillRemaining(
-                  child: AppEmptyState(
-                    icon: Icons.dashboard_customize_outlined,
-                    title: 'Пока нет доступных разделов',
-                    description:
-                        'Для вашей роли еще не назначены разделы для работы в приложении.',
-                  ),
-                )
-              else ...[
-                SliverPadding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 8,
-                  ),
-                  sliver: SliverList(
-                    delegate: SliverChildBuilderDelegate((context, index) {
-                      final dashboardWidget = dashboardState.widgets[index];
+      body: CustomScrollView(
+        slivers: [
+          _buildAppBar(context),
+          const SliverToBoxAdapter(child: SmartActionStrip()),
+          if (dashboardState.isLoading && dashboardState.widgets.isEmpty)
+            const SliverFillRemaining(
+              child: AppLoadingState(message: 'Загружаем рабочий стол'),
+            )
+          else if (dashboardState.error != null &&
+              dashboardState.widgets.isEmpty)
+            SliverFillRemaining(
+              child: AppErrorState(
+                title: 'Не удалось загрузить дашборд',
+                description:
+                    dashboardState.error == null
+                        ? null
+                        : UserMessage.fromError(dashboardState.error!),
+                onRetry:
+                    () =>
+                        ref
+                            .read(dashboardControllerProvider.notifier)
+                            .loadDashboard(),
+              ),
+            )
+          else if (dashboardState.widgets.isEmpty)
+            const SliverFillRemaining(
+              child: AppEmptyState(
+                icon: Icons.dashboard_customize_outlined,
+                title: 'Пока нет доступных разделов',
+                description:
+                    'Для вашей роли еще не назначены разделы для работы в приложении.',
+              ),
+            )
+          else ...[
+            SliverPadding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              sliver: SliverList(
+                delegate: SliverChildBuilderDelegate((context, index) {
+                  final dashboardWidget = dashboardState.widgets[index];
 
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 16),
-                        child: _buildDashboardCard(context, dashboardWidget),
-                      );
-                    }, childCount: dashboardState.widgets.length),
-                  ),
-                ),
-                const SliverToBoxAdapter(child: SizedBox(height: 110)),
-              ],
-            ],
-          ),
-          const Positioned(bottom: 0, left: 0, right: 0, child: ActionHub()),
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 16),
+                    child: _buildDashboardCard(context, dashboardWidget),
+                  );
+                }, childCount: dashboardState.widgets.length),
+              ),
+            ),
+            const SliverToBoxAdapter(child: SizedBox(height: 110)),
+          ],
         ],
       ),
     );
@@ -239,7 +214,7 @@ class DashboardScreen extends ConsumerWidget {
   ) {
     final theme = Theme.of(context);
     final color = _colorForStatus(context, dashboardWidget.status);
-    final target = _screenForRoute(dashboardWidget.route);
+    final target = _screenForRoute(context, dashboardWidget.route);
 
     return IndustrialCard(
       onTap:
@@ -261,7 +236,10 @@ class DashboardScreen extends ConsumerWidget {
               color: color.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(12),
             ),
-            child: Icon(_iconForSlug(dashboardWidget.slug), color: color),
+            child: Icon(
+              _iconForRoute(dashboardWidget.route, dashboardWidget.slug),
+              color: color,
+            ),
           ),
           const SizedBox(width: 14),
           Expanded(
@@ -354,41 +332,10 @@ class DashboardScreen extends ConsumerWidget {
     );
   }
 
-  IconData _iconForSlug(String slug) {
-    return switch (slug) {
-      'project_overview' => Icons.domain_rounded,
-      'site_requests' => Icons.add_task_rounded,
-      'site_request_approvals' => Icons.fact_check_rounded,
-      'warehouse' => Icons.warehouse_outlined,
-      'schedule' => Icons.timeline_rounded,
-      'ai_assistant' => Icons.smart_toy_outlined,
-      'construction_journal' => Icons.menu_book_rounded,
-      'quality_control' => Icons.verified_outlined,
-      'safety_management' => Icons.health_and_safety_rounded,
-      'machinery_operations' => Icons.precision_manufacturing_rounded,
-      'production_labor' => Icons.assignment_turned_in_rounded,
-      'workforce_management' => Icons.badge_rounded,
-      'handover_acceptance' => Icons.handshake_rounded,
-      'workflow_management' => Icons.hub_outlined,
-      'workflow-management' => Icons.hub_outlined,
-      'time_tracking' => Icons.timer_outlined,
-      'time-tracking' => Icons.timer_outlined,
-      'budget_estimates' => Icons.calculate_outlined,
-      'budget-estimates' => Icons.calculate_outlined,
-      'procurement' => Icons.inventory_2_outlined,
-      'contract_management' => Icons.assignment_outlined,
-      'contract-management' => Icons.assignment_outlined,
-      'change_management' => Icons.change_circle_outlined,
-      'change-management' => Icons.change_circle_outlined,
-      'executive_documentation' => Icons.description_outlined,
-      'executive-documentation' => Icons.description_outlined,
-      'catalog_management' => Icons.category_outlined,
-      'catalog-management' => Icons.category_outlined,
-      'brigades' => Icons.groups_2_outlined,
-      'video_monitoring' => Icons.videocam_outlined,
-      'video-monitoring' => Icons.videocam_outlined,
-      _ => Icons.dashboard_customize_outlined,
-    };
+  IconData _iconForRoute(String route, String slug) {
+    return MobileNavigationRegistry.destinationForRoute(route)?.icon ??
+        MobileNavigationRegistry.destinationForRoute(slug)?.icon ??
+        Icons.dashboard_customize_outlined;
   }
 
   Color _colorForStatus(BuildContext context, DashboardWidgetStatus status) {
@@ -400,46 +347,7 @@ class DashboardScreen extends ConsumerWidget {
     };
   }
 
-  Widget? _screenForRoute(String route) {
-    return switch (route) {
-      'project_selection' => const ProjectManagementScreen(),
-      'project-overview' => const ProjectManagementScreen(),
-      'project_overview' => const ProjectManagementScreen(),
-      'site_requests' => const SiteRequestsScreen(),
-      'site_request_approvals' => const SiteRequestsScreen(
-        scope: SiteRequestsScope.approvals,
-      ),
-      'warehouse' => const WarehouseScreen(),
-      'schedule' => const ScheduleScreen(),
-      'ai_assistant' => const AiAssistantHomeScreen(),
-      'construction_journal' => const ConstructionJournalScreen(),
-      'workflow-management' => const WorkflowManagementScreen(),
-      'workflow_management' => const WorkflowManagementScreen(),
-      'time-tracking' => const TimeTrackingScreen(),
-      'time_tracking' => const TimeTrackingScreen(),
-      'budget-estimates' => const BudgetEstimatesScreen(),
-      'budget_estimates' => const BudgetEstimatesScreen(),
-      'procurement' => const ProcurementScreen(),
-      'contract-management' => const ContractManagementScreen(),
-      'contract_management' => const ContractManagementScreen(),
-      'change-management' => const ChangeManagementScreen(),
-      'change_management' => const ChangeManagementScreen(),
-      'executive-documentation' => const ExecutiveDocumentationScreen(),
-      'executive_documentation' => const ExecutiveDocumentationScreen(),
-      'project-management' => const ProjectManagementScreen(),
-      'project_management' => const ProjectManagementScreen(),
-      'catalog-management' => const CatalogManagementScreen(),
-      'catalog_management' => const CatalogManagementScreen(),
-      'brigades' => const BrigadesScreen(),
-      'video-monitoring' => const VideoMonitoringScreen(),
-      'video_monitoring' => const VideoMonitoringScreen(),
-      'quality-control' => const QualityControlScreen(),
-      'safety-management' => const SafetyScreen(),
-      'machinery-operations' => const MachineryOperationsScreen(),
-      'production-labor' => const ProductionLaborScreen(),
-      'workforce-management' => const WorkforceAttendanceScreen(),
-      'handover-acceptance' => const HandoverAcceptanceScreen(),
-      _ => null,
-    };
+  Widget? _screenForRoute(BuildContext context, String route) {
+    return MobileNavigationRegistry.screenForRoute(route, context);
   }
 }

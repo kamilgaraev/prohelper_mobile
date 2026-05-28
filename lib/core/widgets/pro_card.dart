@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'package:prohelpers_mobile/core/design/pro_design_tokens.dart';
+
 class ProCard extends StatelessWidget {
   final Widget child;
   final EdgeInsetsGeometry? padding;
@@ -13,7 +15,7 @@ class ProCard extends StatelessWidget {
     this.padding,
     this.onTap,
     this.gradient,
-    this.borderRadius = 24.0,
+    this.borderRadius = ProRadius.sm,
   });
 
   @override
@@ -24,18 +26,18 @@ class ProCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: theme.cardTheme.color ?? theme.colorScheme.surface,
         borderRadius: BorderRadius.circular(borderRadius),
-        boxShadow:
-            theme.cardTheme.shadowColor != null
-                ? [
-                  BoxShadow(
-                    color: theme.cardTheme.shadowColor!.withValues(
-                      alpha: theme.brightness == Brightness.dark ? 0.5 : 0.05,
-                    ),
-                    blurRadius: 20,
-                    offset: const Offset(0, 8),
-                  ),
-                ]
-                : null,
+        border: Border.all(
+          color: theme.colorScheme.outline.withValues(alpha: 0.14),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(
+              alpha: theme.brightness == Brightness.dark ? 0.18 : 0.04,
+            ),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Material(
         color: Colors.transparent,

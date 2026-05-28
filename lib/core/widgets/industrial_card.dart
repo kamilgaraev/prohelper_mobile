@@ -54,9 +54,11 @@ class IndustrialCard extends StatelessWidget {
             BoxShadow(
               color:
                   theme.cardTheme.shadowColor ??
-                  Colors.black.withValues(alpha: 0.1),
-              blurRadius: 20,
-              offset: const Offset(0, 8),
+                  Colors.black.withValues(
+                    alpha: theme.brightness == Brightness.dark ? 0.18 : 0.04,
+                  ),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
             ),
           ],
         ),

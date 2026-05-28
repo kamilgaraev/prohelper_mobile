@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
+import '../../../core/error/user_message.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../core/widgets/app_empty_state.dart';
 import '../../../core/widgets/industrial_card.dart';
@@ -312,7 +313,7 @@ class _WarehouseScanScreenState extends ConsumerState<WarehouseScanScreen> {
         ),
       );
     } catch (error) {
-      _showMessage(error.toString());
+      _showMessage(error);
     } finally {
       if (mounted) {
         setState(() {
@@ -322,10 +323,10 @@ class _WarehouseScanScreenState extends ConsumerState<WarehouseScanScreen> {
     }
   }
 
-  void _showMessage(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message.replaceFirst('ApiException: ', ''))),
-    );
+  void _showMessage(Object message) {
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(UserMessage.fromError(message))));
   }
 }
 

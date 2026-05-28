@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'core/widgets/app_loading_state.dart';
+import 'core/widgets/mobile_app_shell.dart';
 import 'core/theme/pro_theme.dart';
 import 'features/auth/domain/auth_provider.dart';
 import 'features/auth/presentation/login_screen.dart';
-import 'features/dashboard/presentation/dashboard_screen.dart';
 import 'features/projects/domain/projects_provider.dart';
 import 'features/projects/presentation/project_selection_screen.dart';
 
@@ -26,7 +26,7 @@ class ProHelperApp extends ConsumerWidget {
     if (authState is AuthAuthenticated) {
       home =
           projectsState.selectedProject != null
-              ? const DashboardScreen()
+              ? const MobileAppShell()
               : const ProjectSelectionScreen();
     } else if (authState is AuthInitial) {
       home = const Scaffold(body: AppLoadingState(message: 'Проверяем сессию'));
