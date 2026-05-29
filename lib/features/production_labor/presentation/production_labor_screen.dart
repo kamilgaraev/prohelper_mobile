@@ -125,7 +125,6 @@ class _ProductionLaborScreenState extends ConsumerState<ProductionLaborScreen> {
     return showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.transparent,
       builder:
           (_) => _OutputSheet(
             line: line,
@@ -156,7 +155,6 @@ class _ProductionLaborScreenState extends ConsumerState<ProductionLaborScreen> {
     return showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.transparent,
       builder:
           (_) => _TimesheetSheet(
             workOrder: workOrder,

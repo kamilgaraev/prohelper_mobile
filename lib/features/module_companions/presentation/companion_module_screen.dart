@@ -269,7 +269,6 @@ class _CompanionModuleDetailScreenState
     final comment = await showModalBottomSheet<String>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.transparent,
       builder:
           (_) => _ActionBottomSheet(
             action: action,

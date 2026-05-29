@@ -194,7 +194,6 @@ class DashboardScreen extends ConsumerWidget {
                     showModalBottomSheet(
                       context: context,
                       isScrollControlled: true,
-                      backgroundColor: Colors.transparent,
                       builder:
                           (_) => UserProfileBottomSheet(user: authState.user),
                     );

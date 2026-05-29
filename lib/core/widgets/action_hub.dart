@@ -129,7 +129,6 @@ class ActionHub extends ConsumerWidget {
         HapticFeedback.heavyImpact();
         showModalBottomSheet(
           context: context,
-          backgroundColor: Colors.transparent,
           isScrollControlled: true,
           builder: (context) => const QuickActionSheet(),
         );

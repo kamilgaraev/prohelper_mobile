@@ -153,7 +153,6 @@ class _MachineryOperationsScreenState
     return showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.transparent,
       builder:
           (_) => _ShiftReportSheet(
             asset: asset,
@@ -182,7 +181,6 @@ class _MachineryOperationsScreenState
     return showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.transparent,
       builder:
           (_) => _DowntimeSheet(
             asset: asset,
@@ -209,7 +207,6 @@ class _MachineryOperationsScreenState
     return showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.transparent,
       builder:
           (_) => _FuelIssueSheet(
             asset: asset,
@@ -238,7 +235,6 @@ class _MachineryOperationsScreenState
     return showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.transparent,
       builder:
           (_) => _ProductionRecordSheet(
             asset: asset,

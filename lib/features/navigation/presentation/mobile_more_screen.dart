@@ -54,7 +54,6 @@ class MobileMoreScreen extends ConsumerWidget {
                   () => showModalBottomSheet<void>(
                     context: context,
                     isScrollControlled: true,
-                    backgroundColor: Colors.transparent,
                     builder: (_) => UserProfileBottomSheet(user: user),
                   ),
               child: Row(
@@ -148,7 +147,6 @@ class MobileMoreScreen extends ConsumerWidget {
                       () => showModalBottomSheet<void>(
                         context: context,
                         isScrollControlled: true,
-                        backgroundColor: Colors.transparent,
                         builder: (_) => UserProfileBottomSheet(user: user),
                       ),
                 ),
