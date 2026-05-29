@@ -70,9 +70,11 @@ class ProHelperTheme {
           borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
         ),
       ),
+      floatingActionButtonTheme: _floatingActionButtonTheme(scheme),
       inputDecorationTheme: _inputDecorationTheme(scheme),
       chipTheme: _chipTheme(scheme),
       filledButtonTheme: _filledButtonTheme(scheme),
+      elevatedButtonTheme: _elevatedButtonTheme(scheme),
       outlinedButtonTheme: _outlinedButtonTheme(scheme),
     );
   }
@@ -128,9 +130,11 @@ class ProHelperTheme {
           borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
         ),
       ),
+      floatingActionButtonTheme: _floatingActionButtonTheme(scheme),
       inputDecorationTheme: _inputDecorationTheme(scheme),
       chipTheme: _chipTheme(scheme),
       filledButtonTheme: _filledButtonTheme(scheme),
+      elevatedButtonTheme: _elevatedButtonTheme(scheme),
       outlinedButtonTheme: _outlinedButtonTheme(scheme),
     );
   }
@@ -194,10 +198,44 @@ class ProHelperTheme {
   static FilledButtonThemeData _filledButtonTheme(ColorScheme scheme) {
     return FilledButtonThemeData(
       style: FilledButton.styleFrom(
+        backgroundColor: scheme.primary,
+        foregroundColor: scheme.onPrimary,
+        disabledBackgroundColor: scheme.onSurface.withValues(alpha: 0.12),
+        disabledForegroundColor: scheme.onSurface.withValues(alpha: 0.38),
         minimumSize: const Size(0, 52),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(buttonRadius),
         ),
+      ),
+    );
+  }
+
+  static ElevatedButtonThemeData _elevatedButtonTheme(ColorScheme scheme) {
+    return ElevatedButtonThemeData(
+      style: ElevatedButton.styleFrom(
+        backgroundColor: scheme.primary,
+        foregroundColor: scheme.onPrimary,
+        disabledBackgroundColor: scheme.onSurface.withValues(alpha: 0.12),
+        disabledForegroundColor: scheme.onSurface.withValues(alpha: 0.38),
+        minimumSize: const Size(0, 52),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(buttonRadius),
+        ),
+      ),
+    );
+  }
+
+  static FloatingActionButtonThemeData _floatingActionButtonTheme(
+    ColorScheme scheme,
+  ) {
+    return FloatingActionButtonThemeData(
+      backgroundColor: scheme.primary,
+      foregroundColor: scheme.onPrimary,
+      extendedTextStyle: TextStyle(
+        color: scheme.onPrimary,
+        fontSize: 16,
+        fontWeight: FontWeight.w700,
+        letterSpacing: 0,
       ),
     );
   }
