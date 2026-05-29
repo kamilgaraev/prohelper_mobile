@@ -26,6 +26,7 @@ class ProHelperTheme {
       brightness: Brightness.dark,
     ).copyWith(
       primary: AppColors.primary,
+      onPrimary: Colors.white,
       secondary: AppColors.secondary,
       surface: AppColors.surface,
       surfaceContainer: const Color(0xFF202124),
@@ -83,6 +84,7 @@ class ProHelperTheme {
       brightness: Brightness.light,
     ).copyWith(
       primary: AppColors.primary,
+      onPrimary: Colors.white,
       secondary: AppColors.secondary,
       surface: AppColors.surfaceLightMode,
       surfaceContainer: const Color(0xFFF7F8FA),

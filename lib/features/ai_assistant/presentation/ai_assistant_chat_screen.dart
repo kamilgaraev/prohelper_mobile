@@ -2,11 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../../core/models/user_context.dart';
 import '../../../core/network/api_exception.dart';
+import '../../../core/providers/context_provider.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../core/widgets/app_empty_state.dart';
 import '../../../core/widgets/app_loading_state.dart';
 import '../../../core/widgets/industrial_card.dart';
+import '../../projects/domain/projects_provider.dart';
 import '../data/ai_assistant_models.dart';
 import '../data/ai_assistant_repository.dart';
 
@@ -126,9 +129,15 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
     _scrollToBottom();
 
     try {
+      final assistantContext = _assistantContext();
       final details = await ref
           .read(aiAssistantRepositoryProvider)
-          .sendMessage(message: message, conversationId: _conversationId);
+          .sendMessage(
+            message: message,
+            conversationId: _conversationId,
+            desiredMode: 'grounded',
+            context: assistantContext,
+          );
 
       setState(() {
         _conversationId = details.conversation.id;
@@ -295,6 +304,37 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
     ).showSnackBar(SnackBar(content: Text(message)));
   }
 
+  Map<String, dynamic> _assistantContext() {
+    final selectedProject = ref.read(projectsProvider).selectedProject;
+    final userContext = ref.read(userContextProvider);
+    final entityRefs = <Map<String, dynamic>>[];
+    final filters = <String, dynamic>{};
+    final uiState = <String, dynamic>{
+      'assistant_path': 'mobile/ai-assistant/chat',
+      'client': 'mobile',
+      'user_context': _userContextSlug(userContext),
+    };
+
+    if (selectedProject != null) {
+      entityRefs.add({
+        'type': 'project',
+        'id': selectedProject.serverId,
+        'label': selectedProject.name,
+      });
+      filters['project_id'] = selectedProject.serverId;
+      uiState['selected_project_id'] = selectedProject.serverId;
+      uiState['selected_project_name'] = selectedProject.name;
+    }
+
+    return {
+      'source_module': 'ai-assistant',
+      'source_route': 'mobile/ai-assistant/chat',
+      'entity_refs': entityRefs,
+      'filters': filters,
+      'ui_state': uiState,
+    };
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -409,6 +449,17 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
                             isUser
                                 ? const <AiAssistantActionModel>[]
                                 : message.actions;
+                        final bubbleColor =
+                            isUser
+                                ? theme.colorScheme.primary
+                                : theme.colorScheme.surfaceContainerHighest;
+                        final bubbleTextColor =
+                            isUser
+                                ? _readableForeground(
+                                  bubbleColor,
+                                  theme.colorScheme.onPrimary,
+                                )
+                                : theme.colorScheme.onSurface;
 
                         return Align(
                           alignment:
@@ -423,12 +474,7 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
                                   MediaQuery.of(context).size.width * 0.84,
                             ),
                             decoration: BoxDecoration(
-                              color:
-                                  isUser
-                                      ? theme.colorScheme.primary
-                                      : theme
-                                          .colorScheme
-                                          .surfaceContainerHighest,
+                              color: bubbleColor,
                               borderRadius: BorderRadius.circular(18),
                             ),
                             child: Column(
@@ -440,12 +486,7 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
                                     message.content,
                                     style: AppTypography.bodyMedium(
                                       context,
-                                    ).copyWith(
-                                      color:
-                                          isUser
-                                              ? theme.colorScheme.onPrimary
-                                              : theme.colorScheme.onSurface,
-                                    ),
+                                    ).copyWith(color: bubbleTextColor),
                                   ),
                                 if (reportArtifacts.isNotEmpty)
                                   ...reportArtifacts.map(
@@ -534,6 +575,35 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
       ),
     );
   }
+}
+
+String _userContextSlug(UserContext context) {
+  return switch (context) {
+    UserContext.field => 'field',
+    UserContext.office => 'office',
+  };
+}
+
+Color _readableForeground(Color background, Color preferred) {
+  if (_contrastRatio(background, preferred) >= 4.5) {
+    return preferred;
+  }
+
+  final whiteContrast = _contrastRatio(background, Colors.white);
+  final blackContrast = _contrastRatio(background, Colors.black87);
+
+  return whiteContrast >= blackContrast ? Colors.white : Colors.black87;
+}
+
+double _contrastRatio(Color first, Color second) {
+  final firstLuminance = first.computeLuminance();
+  final secondLuminance = second.computeLuminance();
+  final lighter =
+      firstLuminance > secondLuminance ? firstLuminance : secondLuminance;
+  final darker =
+      firstLuminance > secondLuminance ? secondLuminance : firstLuminance;
+
+  return (lighter + 0.05) / (darker + 0.05);
 }
 
 class _AssistantActionCard extends StatelessWidget {

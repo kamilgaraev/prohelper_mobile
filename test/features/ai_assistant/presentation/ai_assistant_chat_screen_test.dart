@@ -7,12 +7,40 @@ import 'package:prohelpers_mobile/features/ai_assistant/data/ai_assistant_reposi
 import 'package:prohelpers_mobile/features/ai_assistant/presentation/ai_assistant_chat_screen.dart';
 
 void main() {
-  Widget buildScreen(_AiAssistantRepository repository) {
+  Widget buildScreen(_AiAssistantRepository repository, {ThemeData? theme}) {
     return ProviderScope(
       overrides: [aiAssistantRepositoryProvider.overrideWithValue(repository)],
-      child: const MaterialApp(home: AiAssistantChatScreen(conversationId: 1)),
+      child: MaterialApp(
+        theme: theme,
+        home: const AiAssistantChatScreen(conversationId: 1),
+      ),
     );
   }
+
+  testWidgets('keeps user message readable on primary bubble', (tester) async {
+    final repository = _AiAssistantRepository(
+      messages: [
+        AiMessageModel(
+          id: 7,
+          role: 'user',
+          content: 'Запрос по проекту',
+          createdAt: DateTime(2026, 5, 22),
+        ),
+      ],
+    );
+    final theme = ThemeData(
+      colorScheme: ColorScheme.fromSeed(
+        seedColor: Colors.blue,
+      ).copyWith(primary: Colors.blue.shade800, onPrimary: Colors.black),
+    );
+
+    await tester.pumpWidget(buildScreen(repository, theme: theme));
+    await tester.pumpAndSettle();
+
+    final text = tester.widget<Text>(find.text('Запрос по проекту'));
+
+    expect(text.style?.color, Colors.white);
+  });
 
   testWidgets('shows action preview before execution', (tester) async {
     final repository = _AiAssistantRepository(

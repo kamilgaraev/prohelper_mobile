@@ -80,18 +80,25 @@ class AiAssistantRepository {
   Future<AiConversationDetailsModel> sendMessage({
     required String message,
     int? conversationId,
+    String? goal,
+    String? desiredMode,
+    bool? allowActions,
+    Map<String, dynamic>? context,
   }) async {
     try {
-      final response = await _dio.post(
-        '/ai-assistant/chat',
-        data: {
-          'message': message,
-          if (conversationId != null) 'conversation_id': conversationId,
-        },
-      );
+      final payload = {
+        'message': message,
+        if (conversationId != null) 'conversation_id': conversationId,
+        if ((goal ?? '').trim().isNotEmpty) 'goal': goal!.trim(),
+        if ((desiredMode ?? '').trim().isNotEmpty)
+          'desired_mode': desiredMode!.trim(),
+        if (allowActions != null) 'allow_actions': allowActions,
+        if (context != null && context.isNotEmpty) 'context': context,
+      };
+      final response = await _dio.post('/ai-assistant/chat', data: payload);
 
-      final payload = _asMap(_unwrapData(response.data));
-      final nextConversationId = _intValue(payload['conversation_id']);
+      final responsePayload = _asMap(_unwrapData(response.data));
+      final nextConversationId = _intValue(responsePayload['conversation_id']);
 
       if (nextConversationId <= 0) {
         throw const ApiException('Сервер не вернул идентификатор диалога.');
