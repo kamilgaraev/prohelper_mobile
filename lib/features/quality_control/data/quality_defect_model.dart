@@ -72,6 +72,8 @@ class QualityDefectPhotoModel {
     required this.id,
     required this.type,
     required this.url,
+    this.path,
+    this.previewUrl,
     this.caption,
     this.createdAt,
   });
@@ -79,14 +81,20 @@ class QualityDefectPhotoModel {
   final int id;
   final String type;
   final String url;
+  final String? path;
+  final String? previewUrl;
   final String? caption;
   final String? createdAt;
+
+  String get displayUrl => previewUrl ?? url;
 
   factory QualityDefectPhotoModel.fromJson(Map<String, dynamic> json) {
     return QualityDefectPhotoModel(
       id: _requiredInt(json, 'id'),
       type: _requiredStringIn(json, 'type', _photoTypes),
       url: _requiredString(json, 'url'),
+      path: _asNullableString(json['path']),
+      previewUrl: _asNullableString(json['preview_url']),
       caption: _asNullableString(json['caption']),
       createdAt: _asNullableString(json['created_at']),
     );

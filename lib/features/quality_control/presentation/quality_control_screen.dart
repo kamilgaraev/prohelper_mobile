@@ -181,7 +181,9 @@ class _QualityControlScreenState extends ConsumerState<QualityControlScreen> {
     final locationController = TextEditingController();
     String? severity;
     bool? inspectionRequired;
+    String? beforePhotoPath;
     var submitting = false;
+    var pickingPhoto = false;
 
     await showModalBottomSheet<void>(
       context: context,
@@ -189,13 +191,7 @@ class _QualityControlScreenState extends ConsumerState<QualityControlScreen> {
       builder:
           (sheetContext) => StatefulBuilder(
             builder:
-                (context, setSheetState) => Padding(
-                  padding: EdgeInsets.only(
-                    left: 16,
-                    right: 16,
-                    top: 20,
-                    bottom: MediaQuery.of(context).viewInsets.bottom + 20,
-                  ),
+                (context, setSheetState) => _QualitySheetFrame(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -268,6 +264,36 @@ class _QualityControlScreenState extends ConsumerState<QualityControlScreen> {
                               inspectionRequired = value;
                             }),
                       ),
+                      const SizedBox(height: 12),
+                      OutlinedButton.icon(
+                        onPressed:
+                            pickingPhoto
+                                ? null
+                                : () async {
+                                  setSheetState(() => pickingPhoto = true);
+                                  try {
+                                    final path =
+                                        await ref
+                                            .read(qualityPhotoPickerProvider)
+                                            .pickInitialPhoto();
+                                    if (path != null && path.isNotEmpty) {
+                                      setSheetState(
+                                        () => beforePhotoPath = path,
+                                      );
+                                    }
+                                  } finally {
+                                    if (context.mounted) {
+                                      setSheetState(() => pickingPhoto = false);
+                                    }
+                                  }
+                                },
+                        icon: const Icon(Icons.add_a_photo_outlined),
+                        label: Text(
+                          beforePhotoPath == null
+                              ? 'Добавить фото до исправления'
+                              : 'Фото до исправления добавлено',
+                        ),
+                      ),
                       const SizedBox(height: 16),
                       FilledButton(
                         onPressed:
@@ -328,7 +354,7 @@ class _QualityControlScreenState extends ConsumerState<QualityControlScreen> {
                                                 locationController.text.trim(),
                                           'inspection_required':
                                               selectedInspectionRequired,
-                                        });
+                                        }, photoPath: beforePhotoPath);
 
                                     if (sheetContext.mounted) {
                                       Navigator.pop(sheetContext);
@@ -356,40 +382,36 @@ class _QualityControlScreenState extends ConsumerState<QualityControlScreen> {
       context: context,
       isScrollControlled: true,
       builder:
-          (sheetContext) => SafeArea(
-            child: FutureBuilder<QualityDefectModel>(
-              future: ref
-                  .read(qualityControlProvider.notifier)
-                  .fetchDefect(defect.id),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState != ConnectionState.done) {
-                  return const AppLoadingState(
+          (sheetContext) => FutureBuilder<QualityDefectModel>(
+            future: ref
+                .read(qualityControlProvider.notifier)
+                .fetchDefect(defect.id),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState != ConnectionState.done) {
+                return const _QualitySheetFrame(
+                  child: AppLoadingState(
                     message: 'Загружаем замечание',
                     minHeight: 260,
-                  );
-                }
+                  ),
+                );
+              }
 
-                if (snapshot.hasError || !snapshot.hasData) {
-                  return AppErrorState(
+              if (snapshot.hasError || !snapshot.hasData) {
+                return _QualitySheetFrame(
+                  child: AppErrorState(
                     title: 'Не удалось загрузить замечание',
                     description: snapshot.error?.toString(),
                     minHeight: 260,
-                  );
-                }
-
-                final detail = snapshot.data!;
-
-                return SingleChildScrollView(
-                  padding: EdgeInsets.only(
-                    left: 16,
-                    right: 16,
-                    top: 20,
-                    bottom: MediaQuery.of(context).viewInsets.bottom + 20,
                   ),
-                  child: _QualityDefectDetail(defect: detail),
                 );
-              },
-            ),
+              }
+
+              final detail = snapshot.data!;
+
+              return _QualitySheetFrame(
+                child: _QualityDefectDetail(defect: detail),
+              );
+            },
           ),
     );
   }
@@ -410,13 +432,7 @@ class _QualityControlScreenState extends ConsumerState<QualityControlScreen> {
       builder:
           (sheetContext) => StatefulBuilder(
             builder:
-                (context, setSheetState) => Padding(
-                  padding: EdgeInsets.only(
-                    left: 16,
-                    right: 16,
-                    top: 20,
-                    bottom: MediaQuery.of(context).viewInsets.bottom + 20,
-                  ),
+                (context, setSheetState) => _QualitySheetFrame(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -550,6 +566,42 @@ class _QualityControlScreenState extends ConsumerState<QualityControlScreen> {
                   ),
                 ),
           ),
+    );
+  }
+}
+
+class _QualitySheetFrame extends StatelessWidget {
+  const _QualitySheetFrame({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final media = MediaQuery.of(context);
+    final availableHeight =
+        media.size.height -
+        media.viewInsets.bottom -
+        media.padding.top -
+        media.padding.bottom -
+        32;
+    final sheetCap = media.size.height * 0.82;
+    final minHeight = sheetCap < 260 ? sheetCap : 260.0;
+    final maxHeight = availableHeight.clamp(minHeight, sheetCap).toDouble();
+
+    return SafeArea(
+      top: false,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxHeight: maxHeight),
+        child: SingleChildScrollView(
+          padding: EdgeInsets.only(
+            left: 16,
+            right: 16,
+            top: 20,
+            bottom: media.viewInsets.bottom + 20,
+          ),
+          child: child,
+        ),
+      ),
     );
   }
 }
@@ -804,25 +856,79 @@ class _QualityPhotoRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Row(
+    final theme = Theme.of(context);
+    final displayUrl = photo.displayUrl;
+    final canPreview = _isNetworkUrl(displayUrl);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: theme.colorScheme.outline.withValues(alpha: 0.18),
+        ),
+        color: theme.colorScheme.surfaceContainerHigh.withValues(alpha: 0.36),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.photo_outlined, size: 20),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+          if (canPreview)
+            AspectRatio(
+              aspectRatio: 16 / 9,
+              child: Image.network(
+                displayUrl,
+                fit: BoxFit.cover,
+                loadingBuilder: (context, child, loadingProgress) {
+                  if (loadingProgress == null) {
+                    return child;
+                  }
+
+                  return const Center(child: CircularProgressIndicator());
+                },
+                errorBuilder:
+                    (context, error, stackTrace) =>
+                        const _PhotoPreviewFallback(),
+              ),
+            )
+          else
+            const _PhotoPreviewFallback(),
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: Row(
               children: [
-                Text(
-                  photo.caption ?? _photoTypeLabel(photo.type),
-                  style: AppTypography.bodyMedium(context),
+                const Icon(Icons.photo_outlined, size: 20),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    photo.caption ?? _photoTypeLabel(photo.type),
+                    style: AppTypography.bodyMedium(context),
+                  ),
                 ),
-                Text(photo.url, style: AppTypography.caption(context)),
               ],
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PhotoPreviewFallback extends StatelessWidget {
+  const _PhotoPreviewFallback();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 160,
+      alignment: Alignment.center,
+      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(Icons.broken_image_outlined, size: 32),
+          const SizedBox(height: 8),
+          Text('Фото недоступно', style: AppTypography.caption(context)),
         ],
       ),
     );
@@ -1082,6 +1188,12 @@ String _formatQualityDate(String value) {
   }
 
   return '${parsed.day.toString().padLeft(2, '0')}.${parsed.month.toString().padLeft(2, '0')}.${parsed.year}';
+}
+
+bool _isNetworkUrl(String value) {
+  final uri = Uri.tryParse(value);
+
+  return uri != null && (uri.scheme == 'http' || uri.scheme == 'https');
 }
 
 String _qualityActionTitle(_QualityAction action) {

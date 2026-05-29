@@ -7,6 +7,7 @@ import 'package:prohelpers_mobile/features/projects/data/projects_repository.dar
 import 'package:prohelpers_mobile/features/projects/domain/projects_provider.dart';
 import 'package:prohelpers_mobile/features/quality_control/data/quality_control_repository.dart';
 import 'package:prohelpers_mobile/features/quality_control/data/quality_defect_model.dart';
+import 'package:prohelpers_mobile/features/quality_control/data/quality_photo_picker.dart';
 import 'package:prohelpers_mobile/features/quality_control/domain/quality_control_provider.dart';
 import 'package:prohelpers_mobile/features/quality_control/presentation/quality_control_screen.dart';
 
@@ -26,6 +27,8 @@ class _RecordingQualityRepository extends QualityControlRepository {
   int? rejectedDefectId;
   String? rejectedComment;
   Map<String, dynamic>? createPayload;
+  String? createPhotoPath;
+  String? resolvedPhotoPath;
 
   @override
   Future<List<QualityDefectModel>> fetchDefects({
@@ -51,8 +54,12 @@ class _RecordingQualityRepository extends QualityControlRepository {
   }
 
   @override
-  Future<QualityDefectModel> createDefect(Map<String, dynamic> data) async {
+  Future<QualityDefectModel> createDefect(
+    Map<String, dynamic> data, {
+    String? photoPath,
+  }) async {
     createPayload = Map<String, dynamic>.from(data);
+    createPhotoPath = photoPath;
 
     return const QualityDefectModel(
       id: 1,
@@ -83,6 +90,7 @@ class _RecordingQualityRepository extends QualityControlRepository {
     String? photoPath,
   }) async {
     resolvedDefectId = id;
+    resolvedPhotoPath = photoPath;
     return listDefect;
   }
 
@@ -101,6 +109,18 @@ class _RecordingQualityRepository extends QualityControlRepository {
     rejectedComment = comment;
     return listDefect;
   }
+}
+
+class _FakeQualityPhotoPicker extends QualityPhotoPicker {
+  _FakeQualityPhotoPicker(this.path);
+
+  final String? path;
+
+  @override
+  Future<String?> pickInitialPhoto() async => path;
+
+  @override
+  Future<String?> pickResultPhoto() async => path;
 }
 
 const _defect = QualityDefectModel(
@@ -160,6 +180,7 @@ const _detailDefect = QualityDefectModel(
       id: 8,
       type: 'after',
       url: 'https://cdn.example.test/qc-after.jpg',
+      previewUrl: 'https://cdn.example.test/qc-after-preview.jpg',
       caption: 'Фото результата',
       createdAt: '2026-05-22T10:00:00Z',
     ),
@@ -200,7 +221,10 @@ void main() {
       ..address = 'Площадка 1';
   }
 
-  Widget buildScreen(_RecordingQualityRepository repository) {
+  Widget buildScreen(
+    _RecordingQualityRepository repository, {
+    QualityPhotoPicker? photoPicker,
+  }) {
     return ProviderScope(
       overrides: [
         projectsProvider.overrideWith(
@@ -209,6 +233,8 @@ void main() {
         qualityControlProvider.overrideWith(
           (ref) => QualityControlNotifier(repository),
         ),
+        if (photoPicker != null)
+          qualityPhotoPickerProvider.overrideWith((ref) => photoPicker),
       ],
       child: const MaterialApp(home: QualityControlScreen()),
     );
@@ -245,6 +271,8 @@ void main() {
     await pumpUi(tester);
     await tester.tap(find.text('Не требуется').last);
     await pumpUi(tester);
+    await tester.ensureVisible(find.byType(FilledButton).last);
+    await tester.pump();
     await tester.tap(find.byType(FilledButton).last);
     await pumpUi(tester);
 
@@ -252,6 +280,43 @@ void main() {
     expect(repository.createPayload?['title'], 'Скол плитки');
     expect(repository.createPayload?['severity'], 'major');
     expect(repository.createPayload?['inspection_required'], isFalse);
+  });
+
+  testWidgets('attaches before photo when creating quality defect', (
+    tester,
+  ) async {
+    final repository = _RecordingQualityRepository();
+
+    await tester.pumpWidget(
+      buildScreen(
+        repository,
+        photoPicker: _FakeQualityPhotoPicker('/tmp/before-quality.jpg'),
+      ),
+    );
+    await pumpUi(tester);
+
+    await tester.tap(find.byType(FloatingActionButton));
+    await pumpUi(tester);
+    await tester.enterText(find.byType(TextField).first, 'Скол плитки');
+    await tester.tap(find.byType(DropdownButtonFormField<String>));
+    await pumpUi(tester);
+    await tester.tap(find.text('Средняя').last);
+    await pumpUi(tester);
+    await tester.tap(find.byType(DropdownButtonFormField<bool>));
+    await pumpUi(tester);
+    await tester.tap(find.text('Не требуется').last);
+    await pumpUi(tester);
+    await tester.ensureVisible(find.text('Добавить фото до исправления'));
+    await tester.pump();
+    await tester.tap(find.text('Добавить фото до исправления'));
+    await pumpUi(tester);
+    await tester.ensureVisible(find.byType(FilledButton).last);
+    await tester.pump();
+    await tester.tap(find.byType(FilledButton).last);
+    await pumpUi(tester);
+
+    expect(repository.createPayload?['title'], 'Скол плитки');
+    expect(repository.createPhotoPath, '/tmp/before-quality.jpg');
   });
 
   testWidgets('applies visible quality filters to defect query', (
@@ -291,7 +356,7 @@ void main() {
     expect(repository.fetchedDefectId, 3);
     expect(find.text('Замечание качества'), findsOneWidget);
     expect(find.text('Фото результата'), findsOneWidget);
-    expect(find.text('https://cdn.example.test/qc-after.jpg'), findsOneWidget);
+    expect(find.byType(Image), findsOneWidget);
     expect(find.text('Исправлено'), findsOneWidget);
   });
 

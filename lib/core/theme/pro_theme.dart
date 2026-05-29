@@ -65,7 +65,7 @@ class ProHelperTheme {
       ),
       bottomSheetTheme: BottomSheetThemeData(
         backgroundColor: scheme.surface,
-        modalBackgroundColor: Colors.transparent,
+        modalBackgroundColor: scheme.surface,
         shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
         ),
@@ -123,7 +123,7 @@ class ProHelperTheme {
       ),
       bottomSheetTheme: BottomSheetThemeData(
         backgroundColor: scheme.surface,
-        modalBackgroundColor: Colors.transparent,
+        modalBackgroundColor: scheme.surface,
         shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
         ),

@@ -10,7 +10,15 @@ class QualityPhotoPicker {
 
   final ImagePicker _picker;
 
+  Future<String?> pickInitialPhoto() async {
+    return _pickPhoto();
+  }
+
   Future<String?> pickResultPhoto() async {
+    return _pickPhoto();
+  }
+
+  Future<String?> _pickPhoto() async {
     final file = await _picker.pickImage(
       source: ImageSource.camera,
       imageQuality: 85,

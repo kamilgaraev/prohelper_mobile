@@ -56,11 +56,46 @@ class QualityControlRepository extends SyncQueueAwareRepository {
     }
   }
 
-  Future<QualityDefectModel> createDefect(Map<String, dynamic> data) async {
+  Future<QualityDefectModel> createDefect(
+    Map<String, dynamic> data, {
+    String? photoPath,
+  }) async {
     final payload = Map<String, dynamic>.from(data);
+    final trimmedPhotoPath = photoPath?.trim();
+    if (trimmedPhotoPath != null && trimmedPhotoPath.isNotEmpty) {
+      payload['photos[0][type]'] = 'before';
+    }
+    final attachments =
+        trimmedPhotoPath != null && trimmedPhotoPath.isNotEmpty
+            ? <SyncAttachmentRef>[
+              SyncAttachmentRef(
+                field: 'photos[0][file]',
+                path: trimmedPhotoPath,
+                filename: _fileName(trimmedPhotoPath),
+              ),
+            ]
+            : const <SyncAttachmentRef>[];
 
     try {
-      final response = await _dio.post('/quality-control/defects', data: data);
+      final Object requestData;
+
+      if (trimmedPhotoPath != null && trimmedPhotoPath.isNotEmpty) {
+        requestData = FormData.fromMap({
+          ...data.map((key, value) => MapEntry(key, _formValue(value))),
+          'photos[0][type]': 'before',
+          'photos[0][file]': await MultipartFile.fromFile(
+            trimmedPhotoPath,
+            filename: _fileName(trimmedPhotoPath),
+          ),
+        });
+      } else {
+        requestData = data;
+      }
+
+      final response = await _dio.post(
+        '/quality-control/defects',
+        data: requestData,
+      );
       return QualityDefectModel.fromJson(
         MobileApiResponse.dataMap(response.data),
       );
@@ -73,6 +108,7 @@ class QualityControlRepository extends SyncQueueAwareRepository {
             method: 'POST',
             endpoint: '/quality-control/defects',
             payload: payload,
+            attachments: attachments,
           ),
         );
       }
@@ -212,6 +248,14 @@ class QualityControlRepository extends SyncQueueAwareRepository {
       throw ApiException.fromDio(error);
     }
   }
+}
+
+Object? _formValue(Object? value) {
+  if (value is bool) {
+    return value ? '1' : '0';
+  }
+
+  return value;
 }
 
 String _fileName(String path) {

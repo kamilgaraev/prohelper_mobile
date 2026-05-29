@@ -46,7 +46,10 @@ class _FakeQualityControlRepository extends QualityControlRepository {
   }
 
   @override
-  Future<QualityDefectModel> createDefect(Map<String, dynamic> data) async {
+  Future<QualityDefectModel> createDefect(
+    Map<String, dynamic> data, {
+    String? photoPath,
+  }) async {
     createdData = data;
     return _defect;
   }

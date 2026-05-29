@@ -123,8 +123,11 @@ class QualityControlNotifier extends StateNotifier<QualityControlState> {
     }
   }
 
-  Future<void> createDefect(Map<String, dynamic> data) async {
-    await _repository.createDefect(data);
+  Future<void> createDefect(
+    Map<String, dynamic> data, {
+    String? photoPath,
+  }) async {
+    await _repository.createDefect(data, photoPath: photoPath);
     await loadDefects();
   }
 

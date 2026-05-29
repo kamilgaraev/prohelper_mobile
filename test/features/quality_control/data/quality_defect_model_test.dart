@@ -30,7 +30,8 @@ void main() {
         {
           'id': 4,
           'type': 'after',
-          'url': 'https://cdn.example.test/qc-after.jpg',
+          'url': 'org-3/quality-control/defects/7/result.jpg',
+          'preview_url': 'https://cdn.example.test/qc-after.jpg',
           'caption': 'Result photo',
           'created_at': '2026-05-22T10:00:00Z',
         },
@@ -61,7 +62,18 @@ void main() {
     expect(defect.problemFlags.single.message, 'Needs acceptance');
     expect(defect.availableActions, ['verify', 'reject']);
     expect(defect.inspectionRequired, isTrue);
-    expect(defect.photos.single.url, 'https://cdn.example.test/qc-after.jpg');
+    expect(
+      defect.photos.single.url,
+      'org-3/quality-control/defects/7/result.jpg',
+    );
+    expect(
+      defect.photos.single.previewUrl,
+      'https://cdn.example.test/qc-after.jpg',
+    );
+    expect(
+      defect.photos.single.displayUrl,
+      'https://cdn.example.test/qc-after.jpg',
+    );
     expect(defect.statusHistory.single.comment, 'Fixed');
   });
 
