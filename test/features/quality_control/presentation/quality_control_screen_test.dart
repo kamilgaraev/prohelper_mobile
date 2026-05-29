@@ -27,8 +27,8 @@ class _RecordingQualityRepository extends QualityControlRepository {
   int? rejectedDefectId;
   String? rejectedComment;
   Map<String, dynamic>? createPayload;
-  String? createPhotoPath;
-  String? resolvedPhotoPath;
+  List<String> createPhotoPaths = const [];
+  List<String> resolvedPhotoPaths = const [];
 
   @override
   Future<List<QualityDefectModel>> fetchDefects({
@@ -56,10 +56,10 @@ class _RecordingQualityRepository extends QualityControlRepository {
   @override
   Future<QualityDefectModel> createDefect(
     Map<String, dynamic> data, {
-    String? photoPath,
+    List<String> photoPaths = const [],
   }) async {
     createPayload = Map<String, dynamic>.from(data);
-    createPhotoPath = photoPath;
+    createPhotoPaths = List<String>.from(photoPaths);
 
     return const QualityDefectModel(
       id: 1,
@@ -87,10 +87,10 @@ class _RecordingQualityRepository extends QualityControlRepository {
   Future<QualityDefectModel> resolveDefect(
     int id, {
     String? comment,
-    String? photoPath,
+    List<String> photoPaths = const [],
   }) async {
     resolvedDefectId = id;
-    resolvedPhotoPath = photoPath;
+    resolvedPhotoPaths = List<String>.from(photoPaths);
     return listDefect;
   }
 
@@ -112,15 +112,26 @@ class _RecordingQualityRepository extends QualityControlRepository {
 }
 
 class _FakeQualityPhotoPicker extends QualityPhotoPicker {
-  _FakeQualityPhotoPicker(this.path);
+  _FakeQualityPhotoPicker(String? path) : paths = [if (path != null) path];
 
-  final String? path;
-
-  @override
-  Future<String?> pickInitialPhoto() async => path;
+  _FakeQualityPhotoPicker.sequence(this.paths);
 
   @override
-  Future<String?> pickResultPhoto() async => path;
+  Future<String?> pickInitialPhoto() async => _nextPath();
+
+  @override
+  Future<String?> pickResultPhoto() async => _nextPath();
+
+  final List<String> paths;
+  int _index = 0;
+
+  Future<String?> _nextPath() async {
+    if (_index >= paths.length) {
+      return null;
+    }
+
+    return paths[_index++];
+  }
 }
 
 const _defect = QualityDefectModel(
@@ -282,7 +293,7 @@ void main() {
     expect(repository.createPayload?['inspection_required'], isFalse);
   });
 
-  testWidgets('attaches before photo when creating quality defect', (
+  testWidgets('attaches multiple before photos when creating quality defect', (
     tester,
   ) async {
     final repository = _RecordingQualityRepository();
@@ -290,7 +301,10 @@ void main() {
     await tester.pumpWidget(
       buildScreen(
         repository,
-        photoPicker: _FakeQualityPhotoPicker('/tmp/before-quality.jpg'),
+        photoPicker: _FakeQualityPhotoPicker.sequence([
+          '/tmp/before-quality-1.jpg',
+          '/tmp/before-quality-2.jpg',
+        ]),
       ),
     );
     await pumpUi(tester);
@@ -310,13 +324,61 @@ void main() {
     await tester.pump();
     await tester.tap(find.text('Добавить фото до исправления'));
     await pumpUi(tester);
+    await tester.ensureVisible(find.text('Добавить еще фото (1/3)'));
+    await tester.pump();
+    await tester.tap(find.text('Добавить еще фото (1/3)'));
+    await pumpUi(tester);
     await tester.ensureVisible(find.byType(FilledButton).last);
     await tester.pump();
     await tester.tap(find.byType(FilledButton).last);
     await pumpUi(tester);
 
     expect(repository.createPayload?['title'], 'Скол плитки');
-    expect(repository.createPhotoPath, '/tmp/before-quality.jpg');
+    expect(repository.createPhotoPaths, [
+      '/tmp/before-quality-1.jpg',
+      '/tmp/before-quality-2.jpg',
+    ]);
+  });
+
+  testWidgets('attaches multiple result photos when resolving quality defect', (
+    tester,
+  ) async {
+    final repository = _RecordingQualityRepository();
+    useLargeSurface(tester);
+
+    await tester.pumpWidget(
+      buildScreen(
+        repository,
+        photoPicker: _FakeQualityPhotoPicker.sequence([
+          '/tmp/after-quality-1.jpg',
+          '/tmp/after-quality-2.jpg',
+        ]),
+      ),
+    );
+    await pumpUi(tester);
+
+    await tester.ensureVisible(find.text('На проверку').first);
+    await tester.pump();
+    await tester.tap(find.text('На проверку').first);
+    await pumpUi(tester);
+    await tester.ensureVisible(find.text('Сделать фото результата'));
+    await tester.pump();
+    await tester.tap(find.text('Сделать фото результата'));
+    await pumpUi(tester);
+    await tester.ensureVisible(find.text('Добавить еще фото результата (1/3)'));
+    await tester.pump();
+    await tester.tap(find.text('Добавить еще фото результата (1/3)'));
+    await pumpUi(tester);
+    await tester.ensureVisible(find.text('Отправить').last);
+    await tester.pump();
+    await tester.tap(find.text('Отправить').last);
+    await pumpUi(tester);
+
+    expect(repository.resolvedDefectId, 3);
+    expect(repository.resolvedPhotoPaths, [
+      '/tmp/after-quality-1.jpg',
+      '/tmp/after-quality-2.jpg',
+    ]);
   });
 
   testWidgets('applies visible quality filters to defect query', (

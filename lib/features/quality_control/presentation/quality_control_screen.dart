@@ -14,6 +14,8 @@ import '../data/quality_defect_model.dart';
 import '../data/quality_photo_picker.dart';
 import '../domain/quality_control_provider.dart';
 
+const int _qualityPhotoLimit = 3;
+
 class QualityControlScreen extends ConsumerStatefulWidget {
   const QualityControlScreen({super.key});
 
@@ -181,7 +183,7 @@ class _QualityControlScreenState extends ConsumerState<QualityControlScreen> {
     final locationController = TextEditingController();
     String? severity;
     bool? inspectionRequired;
-    String? beforePhotoPath;
+    final beforePhotoPaths = <String>[];
     var submitting = false;
     var pickingPhoto = false;
 
@@ -204,10 +206,12 @@ class _QualityControlScreenState extends ConsumerState<QualityControlScreen> {
                           labelText: 'Название',
                         ),
                       ),
+                      const SizedBox(height: 12),
                       TextField(
                         controller: locationController,
                         decoration: const InputDecoration(labelText: 'Локация'),
                       ),
+                      const SizedBox(height: 12),
                       DropdownButtonFormField<String>(
                         value: severity,
                         decoration: const InputDecoration(
@@ -235,6 +239,7 @@ class _QualityControlScreenState extends ConsumerState<QualityControlScreen> {
                               }
                             }),
                       ),
+                      const SizedBox(height: 12),
                       TextField(
                         controller: descriptionController,
                         minLines: 3,
@@ -243,6 +248,7 @@ class _QualityControlScreenState extends ConsumerState<QualityControlScreen> {
                           labelText: 'Описание',
                         ),
                       ),
+                      const SizedBox(height: 12),
                       DropdownButtonFormField<bool>(
                         value: inspectionRequired,
                         decoration: const InputDecoration(
@@ -264,10 +270,12 @@ class _QualityControlScreenState extends ConsumerState<QualityControlScreen> {
                               inspectionRequired = value;
                             }),
                       ),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 20),
                       OutlinedButton.icon(
                         onPressed:
-                            pickingPhoto
+                            pickingPhoto ||
+                                    beforePhotoPaths.length >=
+                                        _qualityPhotoLimit
                                 ? null
                                 : () async {
                                   setSheetState(() => pickingPhoto = true);
@@ -277,9 +285,13 @@ class _QualityControlScreenState extends ConsumerState<QualityControlScreen> {
                                             .read(qualityPhotoPickerProvider)
                                             .pickInitialPhoto();
                                     if (path != null && path.isNotEmpty) {
-                                      setSheetState(
-                                        () => beforePhotoPath = path,
-                                      );
+                                      setSheetState(() {
+                                        if (!beforePhotoPaths.contains(path) &&
+                                            beforePhotoPaths.length <
+                                                _qualityPhotoLimit) {
+                                          beforePhotoPaths.add(path);
+                                        }
+                                      });
                                     }
                                   } finally {
                                     if (context.mounted) {
@@ -289,12 +301,25 @@ class _QualityControlScreenState extends ConsumerState<QualityControlScreen> {
                                 },
                         icon: const Icon(Icons.add_a_photo_outlined),
                         label: Text(
-                          beforePhotoPath == null
-                              ? 'Добавить фото до исправления'
-                              : 'Фото до исправления добавлено',
+                          _photoButtonLabel(
+                            beforePhotoPaths.length,
+                            empty: 'Добавить фото до исправления',
+                            more: 'Добавить еще фото',
+                            full: 'Добавлено 3 фото до исправления',
+                          ),
                         ),
                       ),
-                      const SizedBox(height: 16),
+                      if (beforePhotoPaths.isNotEmpty) ...[
+                        const SizedBox(height: 12),
+                        _SelectedPhotoList(
+                          paths: beforePhotoPaths,
+                          onRemove:
+                              (path) => setSheetState(
+                                () => beforePhotoPaths.remove(path),
+                              ),
+                        ),
+                      ],
+                      const SizedBox(height: 20),
                       FilledButton(
                         onPressed:
                             submitting
@@ -336,25 +361,32 @@ class _QualityControlScreenState extends ConsumerState<QualityControlScreen> {
                                   try {
                                     await ref
                                         .read(qualityControlProvider.notifier)
-                                        .createDefect({
-                                          'project_id':
-                                              selectedProject.serverId,
-                                          'title': titleController.text.trim(),
-                                          'severity': selectedSeverity,
-                                          if (descriptionController.text
-                                              .trim()
-                                              .isNotEmpty)
-                                            'description':
-                                                descriptionController.text
-                                                    .trim(),
-                                          if (locationController.text
-                                              .trim()
-                                              .isNotEmpty)
-                                            'location_name':
-                                                locationController.text.trim(),
-                                          'inspection_required':
-                                              selectedInspectionRequired,
-                                        }, photoPath: beforePhotoPath);
+                                        .createDefect(
+                                          {
+                                            'project_id':
+                                                selectedProject.serverId,
+                                            'title':
+                                                titleController.text.trim(),
+                                            'severity': selectedSeverity,
+                                            if (descriptionController.text
+                                                .trim()
+                                                .isNotEmpty)
+                                              'description':
+                                                  descriptionController.text
+                                                      .trim(),
+                                            if (locationController.text
+                                                .trim()
+                                                .isNotEmpty)
+                                              'location_name':
+                                                  locationController.text
+                                                      .trim(),
+                                            'inspection_required':
+                                                selectedInspectionRequired,
+                                          },
+                                          photoPaths: List<String>.from(
+                                            beforePhotoPaths,
+                                          ),
+                                        );
 
                                     if (sheetContext.mounted) {
                                       Navigator.pop(sheetContext);
@@ -422,7 +454,7 @@ class _QualityControlScreenState extends ConsumerState<QualityControlScreen> {
     _QualityAction action,
   ) async {
     final commentController = TextEditingController();
-    String? resultPhotoPath;
+    final resultPhotoPaths = <String>[];
     var submitting = false;
     var pickingPhoto = false;
 
@@ -446,6 +478,7 @@ class _QualityControlScreenState extends ConsumerState<QualityControlScreen> {
                         defect.title,
                         style: AppTypography.bodyMedium(context),
                       ),
+                      const SizedBox(height: 12),
                       TextField(
                         controller: commentController,
                         minLines: 3,
@@ -455,38 +488,64 @@ class _QualityControlScreenState extends ConsumerState<QualityControlScreen> {
                         ),
                       ),
                       if (action == _QualityAction.resolve)
-                        OutlinedButton.icon(
-                          onPressed:
-                              pickingPhoto
-                                  ? null
-                                  : () async {
-                                    setSheetState(() => pickingPhoto = true);
-                                    try {
-                                      final path =
-                                          await ref
-                                              .read(qualityPhotoPickerProvider)
-                                              .pickResultPhoto();
-                                      if (path != null && path.isNotEmpty) {
-                                        setSheetState(
-                                          () => resultPhotoPath = path,
-                                        );
+                        Padding(
+                          padding: const EdgeInsets.only(top: 16),
+                          child: OutlinedButton.icon(
+                            onPressed:
+                                pickingPhoto ||
+                                        resultPhotoPaths.length >=
+                                            _qualityPhotoLimit
+                                    ? null
+                                    : () async {
+                                      setSheetState(() => pickingPhoto = true);
+                                      try {
+                                        final path =
+                                            await ref
+                                                .read(
+                                                  qualityPhotoPickerProvider,
+                                                )
+                                                .pickResultPhoto();
+                                        if (path != null && path.isNotEmpty) {
+                                          setSheetState(() {
+                                            if (!resultPhotoPaths.contains(
+                                                  path,
+                                                ) &&
+                                                resultPhotoPaths.length <
+                                                    _qualityPhotoLimit) {
+                                              resultPhotoPaths.add(path);
+                                            }
+                                          });
+                                        }
+                                      } finally {
+                                        if (context.mounted) {
+                                          setSheetState(
+                                            () => pickingPhoto = false,
+                                          );
+                                        }
                                       }
-                                    } finally {
-                                      if (context.mounted) {
-                                        setSheetState(
-                                          () => pickingPhoto = false,
-                                        );
-                                      }
-                                    }
-                                  },
-                          icon: const Icon(Icons.camera_alt_outlined),
-                          label: Text(
-                            resultPhotoPath == null
-                                ? 'Сделать фото результата'
-                                : 'Фото результата добавлено',
+                                    },
+                            icon: const Icon(Icons.camera_alt_outlined),
+                            label: Text(
+                              _photoButtonLabel(
+                                resultPhotoPaths.length,
+                                empty: 'Сделать фото результата',
+                                more: 'Добавить еще фото результата',
+                                full: 'Добавлено 3 фото результата',
+                              ),
+                            ),
                           ),
                         ),
-                      const SizedBox(height: 16),
+                      if (resultPhotoPaths.isNotEmpty) ...[
+                        const SizedBox(height: 12),
+                        _SelectedPhotoList(
+                          paths: resultPhotoPaths,
+                          onRemove:
+                              (path) => setSheetState(
+                                () => resultPhotoPaths.remove(path),
+                              ),
+                        ),
+                      ],
+                      const SizedBox(height: 20),
                       FilledButton(
                         onPressed:
                             submitting
@@ -507,7 +566,7 @@ class _QualityControlScreenState extends ConsumerState<QualityControlScreen> {
                                   if (action == _QualityAction.resolve &&
                                       defect.inspectionRequired &&
                                       comment.isEmpty &&
-                                      resultPhotoPath == null) {
+                                      resultPhotoPaths.isEmpty) {
                                     ScaffoldMessenger.of(context).showSnackBar(
                                       const SnackBar(
                                         content: Text(
@@ -533,7 +592,9 @@ class _QualityControlScreenState extends ConsumerState<QualityControlScreen> {
                                         await notifier.resolveDefect(
                                           defect.id,
                                           comment: comment,
-                                          photoPath: resultPhotoPath,
+                                          photoPaths: List<String>.from(
+                                            resultPhotoPaths,
+                                          ),
                                         );
                                       case _QualityAction.verify:
                                         await notifier.verifyDefect(
@@ -604,6 +665,57 @@ class _QualitySheetFrame extends StatelessWidget {
       ),
     );
   }
+}
+
+class _SelectedPhotoList extends StatelessWidget {
+  const _SelectedPhotoList({required this.paths, required this.onRemove});
+
+  final List<String> paths;
+  final ValueChanged<String> onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: paths
+          .map(
+            (path) => InputChip(
+              avatar: const Icon(Icons.image_outlined, size: 18),
+              label: Text(
+                _photoFileName(path),
+                overflow: TextOverflow.ellipsis,
+              ),
+              onDeleted: () => onRemove(path),
+            ),
+          )
+          .toList(growable: false),
+    );
+  }
+}
+
+String _photoButtonLabel(
+  int count, {
+  required String empty,
+  required String more,
+  required String full,
+}) {
+  if (count <= 0) {
+    return empty;
+  }
+
+  if (count >= _qualityPhotoLimit) {
+    return full;
+  }
+
+  return '$more ($count/$_qualityPhotoLimit)';
+}
+
+String _photoFileName(String path) {
+  final normalized = path.replaceAll('\\', '/');
+  final parts = normalized.split('/');
+
+  return parts.isEmpty ? path : parts.last;
 }
 
 class _SummaryStrip extends StatelessWidget {

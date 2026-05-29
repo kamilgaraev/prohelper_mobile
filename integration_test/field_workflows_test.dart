@@ -321,7 +321,7 @@ class _FieldQualityControlRepository extends QualityControlRepository {
   @override
   Future<QualityDefectModel> createDefect(
     Map<String, dynamic> data, {
-    String? photoPath,
+    List<String> photoPaths = const [],
   }) async {
     final defect = _qualityDefect(
       title: data['title']?.toString() ?? 'Quality defect',

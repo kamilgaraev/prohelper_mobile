@@ -58,36 +58,31 @@ class QualityControlRepository extends SyncQueueAwareRepository {
 
   Future<QualityDefectModel> createDefect(
     Map<String, dynamic> data, {
-    String? photoPath,
+    List<String> photoPaths = const [],
   }) async {
     final payload = Map<String, dynamic>.from(data);
-    final trimmedPhotoPath = photoPath?.trim();
-    if (trimmedPhotoPath != null && trimmedPhotoPath.isNotEmpty) {
-      payload['photos[0][type]'] = 'before';
+    final normalizedPhotoPaths = _normalizePhotoPaths(photoPaths);
+    for (var index = 0; index < normalizedPhotoPaths.length; index++) {
+      payload['photos[$index][type]'] = 'before';
     }
-    final attachments =
-        trimmedPhotoPath != null && trimmedPhotoPath.isNotEmpty
-            ? <SyncAttachmentRef>[
-              SyncAttachmentRef(
-                field: 'photos[0][file]',
-                path: trimmedPhotoPath,
-                filename: _fileName(trimmedPhotoPath),
-              ),
-            ]
-            : const <SyncAttachmentRef>[];
+    final attachments = _attachmentRefs(normalizedPhotoPaths);
 
     try {
       final Object requestData;
 
-      if (trimmedPhotoPath != null && trimmedPhotoPath.isNotEmpty) {
-        requestData = FormData.fromMap({
+      if (normalizedPhotoPaths.isNotEmpty) {
+        final formMap = <String, dynamic>{
           ...data.map((key, value) => MapEntry(key, _formValue(value))),
-          'photos[0][type]': 'before',
-          'photos[0][file]': await MultipartFile.fromFile(
-            trimmedPhotoPath,
-            filename: _fileName(trimmedPhotoPath),
-          ),
-        });
+        };
+        for (var index = 0; index < normalizedPhotoPaths.length; index++) {
+          final path = normalizedPhotoPaths[index];
+          formMap['photos[$index][type]'] = 'before';
+          formMap['photos[$index][file]'] = await MultipartFile.fromFile(
+            path,
+            filename: _fileName(path),
+          );
+        }
+        requestData = FormData.fromMap(formMap);
       } else {
         requestData = data;
       }
@@ -149,40 +144,36 @@ class QualityControlRepository extends SyncQueueAwareRepository {
   Future<QualityDefectModel> resolveDefect(
     int id, {
     String? comment,
-    String? photoPath,
+    List<String> photoPaths = const [],
   }) async {
     final trimmedComment = comment?.trim();
-    final trimmedPhotoPath = photoPath?.trim();
+    final normalizedPhotoPaths = _normalizePhotoPaths(photoPaths);
     final payload = <String, dynamic>{
       if (trimmedComment != null && trimmedComment.isNotEmpty)
         'comment': trimmedComment,
-      if (trimmedPhotoPath != null && trimmedPhotoPath.isNotEmpty)
-        'photos[0][type]': 'after',
     };
-    final attachments =
-        trimmedPhotoPath != null && trimmedPhotoPath.isNotEmpty
-            ? <SyncAttachmentRef>[
-              SyncAttachmentRef(
-                field: 'photos[0][file]',
-                path: trimmedPhotoPath,
-                filename: _fileName(trimmedPhotoPath),
-              ),
-            ]
-            : const <SyncAttachmentRef>[];
+    for (var index = 0; index < normalizedPhotoPaths.length; index++) {
+      payload['photos[$index][type]'] = 'after';
+    }
+    final attachments = _attachmentRefs(normalizedPhotoPaths);
 
     try {
       final Object data;
 
-      if (trimmedPhotoPath != null && trimmedPhotoPath.isNotEmpty) {
-        data = FormData.fromMap({
+      if (normalizedPhotoPaths.isNotEmpty) {
+        final formMap = <String, dynamic>{
           if (trimmedComment != null && trimmedComment.isNotEmpty)
             'comment': trimmedComment,
-          'photos[0][type]': 'after',
-          'photos[0][file]': await MultipartFile.fromFile(
-            trimmedPhotoPath,
-            filename: _fileName(trimmedPhotoPath),
-          ),
-        });
+        };
+        for (var index = 0; index < normalizedPhotoPaths.length; index++) {
+          final path = normalizedPhotoPaths[index];
+          formMap['photos[$index][type]'] = 'after';
+          formMap['photos[$index][file]'] = await MultipartFile.fromFile(
+            path,
+            filename: _fileName(path),
+          );
+        }
+        data = FormData.fromMap(formMap);
       } else {
         data = {
           if (trimmedComment != null && trimmedComment.isNotEmpty)
@@ -262,4 +253,23 @@ String _fileName(String path) {
   final normalized = path.replaceAll('\\', '/');
   final parts = normalized.split('/');
   return parts.isEmpty ? 'quality-result.jpg' : parts.last;
+}
+
+List<String> _normalizePhotoPaths(List<String> paths) {
+  return paths
+      .map((path) => path.trim())
+      .where((path) => path.isNotEmpty)
+      .toSet()
+      .toList(growable: false);
+}
+
+List<SyncAttachmentRef> _attachmentRefs(List<String> paths) {
+  return [
+    for (var index = 0; index < paths.length; index++)
+      SyncAttachmentRef(
+        field: 'photos[$index][file]',
+        path: paths[index],
+        filename: _fileName(paths[index]),
+      ),
+  ];
 }

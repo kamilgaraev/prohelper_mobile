@@ -21,6 +21,8 @@ class _FakeQualityControlRepository extends QualityControlRepository {
   int? rejectedDefectId;
   String? rejectedComment;
   Map<String, dynamic>? createdData;
+  List<String> createdPhotoPaths = const <String>[];
+  List<String> resolvedPhotoPaths = const <String>[];
 
   @override
   Future<List<QualityDefectModel>> fetchDefects({
@@ -48,9 +50,10 @@ class _FakeQualityControlRepository extends QualityControlRepository {
   @override
   Future<QualityDefectModel> createDefect(
     Map<String, dynamic> data, {
-    String? photoPath,
+    List<String> photoPaths = const [],
   }) async {
     createdData = data;
+    createdPhotoPaths = List<String>.from(photoPaths);
     return _defect;
   }
 
@@ -70,9 +73,10 @@ class _FakeQualityControlRepository extends QualityControlRepository {
   Future<QualityDefectModel> resolveDefect(
     int id, {
     String? comment,
-    String? photoPath,
+    List<String> photoPaths = const [],
   }) async {
     resolvedDefectId = id;
+    resolvedPhotoPaths = List<String>.from(photoPaths);
     return _defect;
   }
 
@@ -126,15 +130,30 @@ void main() {
     final repository = _FakeQualityControlRepository();
     final notifier = QualityControlNotifier(repository)..syncProject(15);
 
-    await notifier.createDefect({'project_id': 15, 'title': 'Скол'});
+    await notifier.createDefect(
+      {'project_id': 15, 'title': 'Скол'},
+      photoPaths: const ['/tmp/before-1.jpg', '/tmp/before-2.jpg'],
+    );
     await notifier.startDefect(7, comment: 'Взято в работу');
-    await notifier.resolveDefect(7, comment: 'Исправлено');
+    await notifier.resolveDefect(
+      7,
+      comment: 'Исправлено',
+      photoPaths: const ['/tmp/after-1.jpg', '/tmp/after-2.jpg'],
+    );
     await notifier.verifyDefect(7, comment: 'Проверено');
     await notifier.rejectDefect(7, comment: 'Нужно переделать');
 
     expect(repository.createdData?['project_id'], 15);
+    expect(repository.createdPhotoPaths, [
+      '/tmp/before-1.jpg',
+      '/tmp/before-2.jpg',
+    ]);
     expect(repository.startedDefectId, 7);
     expect(repository.resolvedDefectId, 7);
+    expect(repository.resolvedPhotoPaths, [
+      '/tmp/after-1.jpg',
+      '/tmp/after-2.jpg',
+    ]);
     expect(repository.verifiedDefectId, 7);
     expect(repository.rejectedDefectId, 7);
     expect(repository.rejectedComment, 'Нужно переделать');
