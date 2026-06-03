@@ -19,6 +19,7 @@ import 'warehouse_receipt_sheet.dart';
 import 'warehouse_scan_screen.dart';
 import 'warehouse_tasks_screen.dart';
 import 'project_material_deliveries_screen.dart';
+import 'warehouse_custody_screen.dart';
 
 enum _MovementFilter {
   all('Все'),
@@ -162,6 +163,20 @@ class _WarehouseScreenState extends ConsumerState<WarehouseScreen> {
                         MaterialPageRoute(
                           builder:
                               (_) => const ProjectMaterialDeliveriesScreen(),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ),
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                sliver: SliverToBoxAdapter(
+                  child: _CustodyEntryCard(
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const WarehouseCustodyScreen(),
                         ),
                       );
                     },
@@ -497,6 +512,24 @@ class _ProjectDeliveriesEntryCard extends StatelessWidget {
       subtitle: 'Поставки из склада и закупок, приемка доставки на объекте.',
       icon: Icons.local_shipping_outlined,
       tone: ProStatusTone.success,
+      onTap: onTap,
+    );
+  }
+}
+
+class _CustodyEntryCard extends StatelessWidget {
+  const _CustodyEntryCard({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return ProActionTile(
+      title: 'У меня на ответственности',
+      subtitle:
+          'Выдача материалов сотруднику, возврат на объект и списание в работу.',
+      icon: Icons.assignment_ind_outlined,
+      tone: ProStatusTone.warning,
       onTap: onTap,
     );
   }

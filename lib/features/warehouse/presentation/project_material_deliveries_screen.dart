@@ -147,11 +147,21 @@ class _ProjectMaterialDeliveriesScreenState
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Принять материал', style: AppTypography.h2(context)),
+                Text('Принять на объект', style: AppTypography.h2(context)),
                 const SizedBox(height: 8),
                 Text(
                   delivery.materialName!,
                   style: AppTypography.bodyLarge(context),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'Отгружено: ${_formatQuantity(delivery.shippedQuantity)} ${delivery.materialUnit ?? ''}',
+                ),
+                Text(
+                  'Уже принято: ${_formatQuantity(delivery.acceptedQuantity)} ${delivery.materialUnit ?? ''}',
+                ),
+                Text(
+                  'Осталось принять: ${_formatQuantity(delivery.remainingToAccept)} ${delivery.materialUnit ?? ''}',
                 ),
                 const SizedBox(height: 16),
                 TextField(
@@ -184,10 +194,14 @@ class _ProjectMaterialDeliveriesScreenState
                       final quantity = double.tryParse(
                         quantityController.text.trim().replaceAll(',', '.'),
                       );
-                      if (quantity == null || quantity <= 0) {
+                      if (quantity == null ||
+                          quantity <= 0 ||
+                          quantity > delivery.remainingToAccept) {
                         ScaffoldMessenger.of(sheetContext).showSnackBar(
                           const SnackBar(
-                            content: Text('Укажите корректное количество.'),
+                            content: Text(
+                              'Количество должно быть больше нуля и не больше остатка к приемке.',
+                            ),
                           ),
                         );
                         return;
@@ -221,7 +235,7 @@ class _ProjectMaterialDeliveriesScreenState
                       }
                     },
                     icon: const Icon(Icons.check_circle_outline),
-                    label: const Text('Подтвердить приемку'),
+                    label: const Text('Принять на объект'),
                   ),
                 ),
               ],

@@ -227,9 +227,7 @@ class ProjectMaterialDeliveryUserModel {
   final String name;
   final String? email;
 
-  factory ProjectMaterialDeliveryUserModel.fromJson(
-    Map<String, dynamic> json,
-  ) {
+  factory ProjectMaterialDeliveryUserModel.fromJson(Map<String, dynamic> json) {
     return ProjectMaterialDeliveryUserModel(
       id: _requiredInt(json, 'id'),
       name: _requiredString(json, 'name'),
@@ -247,6 +245,7 @@ class ProjectMaterialStockDeliveryModel {
     this.sourceType,
     this.status,
     this.statusLabel,
+    this.projectWarehouseId,
     this.acceptedAt,
     this.warehouseName,
   });
@@ -255,6 +254,7 @@ class ProjectMaterialStockDeliveryModel {
   final String? sourceType;
   final String? status;
   final String? statusLabel;
+  final int? projectWarehouseId;
   final double acceptedQuantity;
   final double usedQuantity;
   final double availableQuantity;
@@ -265,6 +265,19 @@ class ProjectMaterialStockDeliveryModel {
     Map<String, dynamic> json,
   ) {
     final warehouse = json['warehouse'];
+    final projectWarehouse = json['project_warehouse'];
+    final linkedEntities = json['linked_entities'];
+    final int? projectWarehouseId;
+
+    if (projectWarehouse is Map) {
+      projectWarehouseId = _asNullableInt(projectWarehouse['id']);
+    } else if (linkedEntities is Map) {
+      projectWarehouseId = _asNullableInt(
+        linkedEntities['project_warehouse_id'],
+      );
+    } else {
+      projectWarehouseId = null;
+    }
 
     return ProjectMaterialStockDeliveryModel(
       id: _requiredInt(json, 'id'),
@@ -275,6 +288,7 @@ class ProjectMaterialStockDeliveryModel {
         _projectMaterialDeliveryStatuses,
       ),
       statusLabel: _requiredCleanLabel(json, 'status_label'),
+      projectWarehouseId: projectWarehouseId,
       acceptedQuantity: _requiredDouble(json, 'accepted_quantity'),
       usedQuantity: _requiredDouble(json, 'used_quantity'),
       availableQuantity: _requiredDouble(json, 'available_quantity'),
@@ -340,6 +354,17 @@ class ProjectMaterialStockItemModel {
   final double availableQuantity;
   final List<ProjectMaterialStockDeliveryModel> deliveries;
   final List<ProjectMaterialStockUsageModel> usages;
+
+  int? get projectWarehouseId {
+    for (final delivery in deliveries) {
+      if (delivery.projectWarehouseId != null &&
+          delivery.availableQuantity > 0) {
+        return delivery.projectWarehouseId;
+      }
+    }
+
+    return null;
+  }
 
   factory ProjectMaterialStockItemModel.fromJson(Map<String, dynamic> json) {
     final project = json['project'];

@@ -348,15 +348,33 @@ class ConstructionJournalProjectMaterialOption {
     required this.materialName,
     required this.availableQuantity,
     required this.measurementUnit,
+    this.projectMaterialDeliveryId,
+    this.custodyWarehouseId,
+    this.custodyAvailableQuantity,
+    this.canConsumeFromCustody = false,
+    this.projectWarehouseId,
+    this.projectWarehouseAvailableQuantity,
+    this.canIssueFromProject = false,
+    this.requiresIssueFromProject = false,
+    this.sourceLabel,
     this.status,
     this.acceptedAt,
   });
 
   final int deliveryId;
+  final int? projectMaterialDeliveryId;
+  final int? custodyWarehouseId;
+  final double? custodyAvailableQuantity;
+  final bool canConsumeFromCustody;
+  final int? projectWarehouseId;
+  final double? projectWarehouseAvailableQuantity;
+  final bool canIssueFromProject;
+  final bool requiresIssueFromProject;
   final int materialId;
   final String materialName;
   final double availableQuantity;
   final String measurementUnit;
+  final String? sourceLabel;
   final String? status;
   final String? acceptedAt;
 
@@ -369,10 +387,28 @@ class ConstructionJournalProjectMaterialOption {
 
     return ConstructionJournalProjectMaterialOption(
       deliveryId: _requiredInt(json, 'delivery_id'),
+      projectMaterialDeliveryId:
+          _asNullableInt(json['project_material_delivery_id']) ??
+          _asNullableInt(json['delivery_id']),
+      custodyWarehouseId: _asNullableInt(json['custody_warehouse_id']),
+      custodyAvailableQuantity: _asNullableDouble(
+        json['custody_available_quantity'],
+      ),
+      canConsumeFromCustody:
+          _asNullableBool(json['can_consume_from_custody']) ?? false,
+      projectWarehouseId: _asNullableInt(json['project_warehouse_id']),
+      projectWarehouseAvailableQuantity: _asNullableDouble(
+        json['project_warehouse_available_quantity'],
+      ),
+      canIssueFromProject:
+          _asNullableBool(json['can_issue_from_project']) ?? false,
+      requiresIssueFromProject:
+          _asNullableBool(json['requires_issue_from_project']) ?? false,
       materialId: _requiredInt(json, 'material_id'),
       materialName: _requiredString(json, 'name'),
       availableQuantity: _requiredDouble(json, 'available_quantity'),
       measurementUnit: shortName ?? unitName,
+      sourceLabel: _asNullableString(json['source_label']),
       status: _asNullableString(json['status']),
       acceptedAt: _asNullableString(json['accepted_at']),
     );
@@ -383,6 +419,7 @@ class ConstructionJournalMaterialUsageModel {
   const ConstructionJournalMaterialUsageModel({
     this.materialId,
     this.projectMaterialDeliveryId,
+    this.custodyWarehouseId,
     required this.materialName,
     required this.quantity,
     required this.measurementUnit,
@@ -391,6 +428,7 @@ class ConstructionJournalMaterialUsageModel {
 
   final int? materialId;
   final int? projectMaterialDeliveryId;
+  final int? custodyWarehouseId;
   final String materialName;
   final double quantity;
   final String measurementUnit;
@@ -401,6 +439,8 @@ class ConstructionJournalMaterialUsageModel {
       if (materialId != null) 'material_id': materialId,
       if (projectMaterialDeliveryId != null)
         'project_material_delivery_id': projectMaterialDeliveryId,
+      if (custodyWarehouseId != null)
+        'custody_warehouse_id': custodyWarehouseId,
       'material_name': materialName,
       'quantity': quantity,
       'measurement_unit': measurementUnit,

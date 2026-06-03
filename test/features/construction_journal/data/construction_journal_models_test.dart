@@ -126,9 +126,17 @@ void main() {
       'project_materials': [
         {
           'delivery_id': 701,
+          'project_material_delivery_id': 701,
+          'custody_warehouse_id': 50,
           'material_id': 11,
           'name': 'Арматура',
           'available_quantity': 4.25,
+          'custody_available_quantity': 4.25,
+          'can_consume_from_custody': true,
+          'project_warehouse_id': 22,
+          'project_warehouse_available_quantity': 10,
+          'can_issue_from_project': true,
+          'requires_issue_from_project': false,
           'measurement_unit': {'id': 4, 'name': 'тонна', 'short_name': 'т'},
           'accepted_at': '2026-05-20 09:15:00',
         },
@@ -137,7 +145,31 @@ void main() {
 
     expect(options.estimates.single.items.single.quantity, 12.5);
     expect(options.projectMaterials.single.availableQuantity, 4.25);
+    expect(options.projectMaterials.single.projectMaterialDeliveryId, 701);
+    expect(options.projectMaterials.single.custodyWarehouseId, 50);
+    expect(options.projectMaterials.single.canConsumeFromCustody, isTrue);
+    expect(options.projectMaterials.single.canIssueFromProject, isTrue);
     expect(options.projectMaterials.single.measurementUnit, 'т');
+  });
+
+  test('serializes journal material consumption with custody source', () {
+    final material = ConstructionJournalMaterialUsageModel(
+      materialId: 11,
+      projectMaterialDeliveryId: 701,
+      custodyWarehouseId: 50,
+      materialName: 'Арматура',
+      quantity: 2.5,
+      measurementUnit: 'т',
+    );
+
+    expect(material.toJson(), {
+      'material_id': 11,
+      'project_material_delivery_id': 701,
+      'custody_warehouse_id': 50,
+      'material_name': 'Арматура',
+      'quantity': 2.5,
+      'measurement_unit': 'т',
+    });
   });
 
   test('rejects material option without measurement unit', () {

@@ -113,4 +113,32 @@ void main() {
       throwsFormatException,
     );
   });
+
+  test('парсит склад объекта из строк поставок в остатках объекта', () {
+    final stock = ProjectMaterialStockItemModel.fromJson({
+      'project': {'id': 7, 'name': 'Дом 300м'},
+      'material': {
+        'id': 42,
+        'name': 'Цемент М500',
+        'measurement_unit': {'short_name': 'меш.'},
+      },
+      'accepted_quantity': 12,
+      'used_quantity': 4,
+      'available_quantity': 8,
+      'deliveries': [
+        {
+          'id': 701,
+          'status': 'accepted',
+          'status_label': 'Принято',
+          'accepted_quantity': 12,
+          'used_quantity': 4,
+          'available_quantity': 8,
+          'project_warehouse': {'id': 22, 'name': 'Склад объекта'},
+        },
+      ],
+      'journal_usages': [],
+    });
+
+    expect(stock.projectWarehouseId, 22);
+  });
 }

@@ -47,6 +47,16 @@ class _JournalEntryFormScreenState
   List<ConstructionJournalProjectMaterialOption> get _projectMaterials =>
       _options?.projectMaterials ?? const [];
 
+  List<ConstructionJournalProjectMaterialOption> get _custodyMaterials =>
+      _projectMaterials
+          .where((material) => material.custodyWarehouseId != null)
+          .toList();
+
+  List<ConstructionJournalProjectMaterialOption> get _objectMaterials =>
+      _projectMaterials
+          .where((material) => material.custodyWarehouseId == null)
+          .toList();
+
   List<ConstructionJournalEstimateItemOption> get _selectedEstimateItems {
     final estimate = _estimates.where((item) => item.id == _selectedEstimateId);
     return estimate.isEmpty ? const [] : estimate.first.items;
@@ -286,26 +296,25 @@ class _JournalEntryFormScreenState
               'Принятых материалов по объекту пока нет. После приемки доставки они появятся в этом списке.',
             ),
           )
-        else
-          DropdownButtonFormField<int>(
-            value: null,
-            decoration: const InputDecoration(
-              labelText: 'Добавить принятый материал',
-              border: OutlineInputBorder(),
+        else ...[
+          if (_custodyMaterials.isNotEmpty) ...[
+            const Text('У меня на ответственности'),
+            const SizedBox(height: 8),
+            _buildMaterialPicker(
+              label: 'Добавить материал со своей ответственности',
+              materials: _custodyMaterials,
             ),
-            items:
-                _projectMaterials
-                    .map(
-                      (material) => DropdownMenuItem<int>(
-                        value: material.deliveryId,
-                        child: Text(
-                          '${material.materialName} · ${_formatMaterialQuantity(material.availableQuantity)} ${material.measurementUnit}',
-                        ),
-                      ),
-                    )
-                    .toList(),
-            onChanged: _addProjectMaterial,
-          ),
+          ],
+          if (_objectMaterials.isNotEmpty) ...[
+            if (_custodyMaterials.isNotEmpty) const SizedBox(height: 12),
+            const Text('На объекте'),
+            const SizedBox(height: 8),
+            _buildMaterialPicker(
+              label: 'Добавить принятый материал',
+              materials: _objectMaterials,
+            ),
+          ],
+        ],
         ..._materials.asMap().entries.map(
           (entry) => Padding(
             padding: const EdgeInsets.only(top: 8),
@@ -320,6 +329,31 @@ class _JournalEntryFormScreenState
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildMaterialPicker({
+    required String label,
+    required List<ConstructionJournalProjectMaterialOption> materials,
+  }) {
+    return DropdownButtonFormField<int>(
+      value: null,
+      decoration: InputDecoration(
+        labelText: label,
+        border: const OutlineInputBorder(),
+      ),
+      items:
+          materials
+              .map(
+                (material) => DropdownMenuItem<int>(
+                  value: material.deliveryId,
+                  child: Text(
+                    '${material.materialName} · ${_formatMaterialQuantity(material.availableQuantity)} ${material.measurementUnit}',
+                  ),
+                ),
+              )
+              .toList(),
+      onChanged: _addProjectMaterial,
     );
   }
 
@@ -585,6 +619,7 @@ class _JournalEntryFormScreenState
           return ConstructionJournalMaterialUsageModel(
             materialId: material.materialId,
             projectMaterialDeliveryId: material.projectMaterialDeliveryId,
+            custodyWarehouseId: material.custodyWarehouseId,
             materialName: material.materialName,
             quantity: quantity,
             measurementUnit: material.measurementUnit,
@@ -865,6 +900,7 @@ class _MaterialUsageInput {
   _MaterialUsageInput({
     required this.materialId,
     required this.projectMaterialDeliveryId,
+    required this.custodyWarehouseId,
     required this.materialName,
     required this.measurementUnit,
     String quantity = '',
@@ -874,6 +910,7 @@ class _MaterialUsageInput {
 
   final int? materialId;
   final int? projectMaterialDeliveryId;
+  final int? custodyWarehouseId;
   final String materialName;
   final String measurementUnit;
   final TextEditingController quantityController;
@@ -884,11 +921,16 @@ class _MaterialUsageInput {
   ) {
     return _MaterialUsageInput(
       materialId: material.materialId,
-      projectMaterialDeliveryId: material.deliveryId,
+      projectMaterialDeliveryId: material.projectMaterialDeliveryId,
+      custodyWarehouseId: material.custodyWarehouseId,
       materialName: material.materialName,
       measurementUnit: material.measurementUnit,
       quantity: '',
-      notes: 'Материал принят на объект по поставке #${material.deliveryId}',
+      notes:
+          material.sourceLabel ??
+          (material.custodyWarehouseId == null
+              ? 'Материал принят на объект по поставке #${material.deliveryId}'
+              : 'Материал списан со склада ответственного'),
     );
   }
 
