@@ -337,6 +337,8 @@ class ProjectMaterialStockItemModel {
     required this.availableQuantity,
     required this.deliveries,
     required this.usages,
+    this.onProjectQuantity = 0,
+    this.issuedQuantity = 0,
     this.projectId,
     this.projectName,
     this.materialId,
@@ -350,15 +352,20 @@ class ProjectMaterialStockItemModel {
   final String? materialName;
   final String? materialUnit;
   final double acceptedQuantity;
+  final double onProjectQuantity;
+  final double issuedQuantity;
   final double usedQuantity;
   final double availableQuantity;
   final List<ProjectMaterialStockDeliveryModel> deliveries;
   final List<ProjectMaterialStockUsageModel> usages;
 
   int? get projectWarehouseId {
+    if (onProjectQuantity <= 0) {
+      return null;
+    }
+
     for (final delivery in deliveries) {
-      if (delivery.projectWarehouseId != null &&
-          delivery.availableQuantity > 0) {
+      if (delivery.projectWarehouseId != null) {
         return delivery.projectWarehouseId;
       }
     }
@@ -375,6 +382,7 @@ class ProjectMaterialStockItemModel {
         material is Map ? material['measurement_unit'] : null;
     final rawDeliveries = json['deliveries'];
     final rawUsages = json['journal_usages'];
+    final availableQuantity = _requiredDouble(json, 'available_quantity');
 
     return ProjectMaterialStockItemModel(
       projectId: _requiredInt(projectJson, 'id'),
@@ -387,8 +395,11 @@ class ProjectMaterialStockItemModel {
                   measurementUnit['name']?.toString()
               : null,
       acceptedQuantity: _requiredDouble(json, 'accepted_quantity'),
+      onProjectQuantity:
+          _asDouble(json['on_project_quantity']) ?? availableQuantity,
+      issuedQuantity: _asDouble(json['issued_quantity']) ?? 0,
       usedQuantity: _requiredDouble(json, 'used_quantity'),
-      availableQuantity: _requiredDouble(json, 'available_quantity'),
+      availableQuantity: availableQuantity,
       deliveries:
           rawDeliveries is List
               ? rawDeliveries
@@ -422,21 +433,30 @@ class ProjectMaterialStockSummaryModel {
     required this.acceptedQuantity,
     required this.usedQuantity,
     required this.availableQuantity,
+    this.onProjectQuantity = 0,
+    this.issuedQuantity = 0,
   });
 
   final int materialsCount;
   final int deliveriesCount;
   final double acceptedQuantity;
+  final double onProjectQuantity;
+  final double issuedQuantity;
   final double usedQuantity;
   final double availableQuantity;
 
   factory ProjectMaterialStockSummaryModel.fromJson(Map<String, dynamic> json) {
+    final availableQuantity = _requiredDouble(json, 'available_quantity');
+
     return ProjectMaterialStockSummaryModel(
       materialsCount: _requiredInt(json, 'materials_count'),
       deliveriesCount: _requiredInt(json, 'deliveries_count'),
       acceptedQuantity: _requiredDouble(json, 'accepted_quantity'),
+      onProjectQuantity:
+          _asDouble(json['on_project_quantity']) ?? availableQuantity,
+      issuedQuantity: _asDouble(json['issued_quantity']) ?? 0,
       usedQuantity: _requiredDouble(json, 'used_quantity'),
-      availableQuantity: _requiredDouble(json, 'available_quantity'),
+      availableQuantity: availableQuantity,
     );
   }
 }

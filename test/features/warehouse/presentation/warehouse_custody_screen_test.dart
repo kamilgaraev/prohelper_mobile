@@ -59,6 +59,8 @@ const _projectStock = ProjectMaterialStockModel(
       materialName: 'Цемент М500',
       materialUnit: 'меш.',
       acceptedQuantity: 12,
+      onProjectQuantity: 5,
+      issuedQuantity: 3.5,
       usedQuantity: 3.5,
       availableQuantity: 8.5,
       deliveries: <ProjectMaterialStockDeliveryModel>[
@@ -77,6 +79,8 @@ const _projectStock = ProjectMaterialStockModel(
     materialsCount: 1,
     deliveriesCount: 1,
     acceptedQuantity: 12,
+    onProjectQuantity: 5,
+    issuedQuantity: 3.5,
     usedQuantity: 3.5,
     availableQuantity: 8.5,
   ),

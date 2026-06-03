@@ -126,6 +126,8 @@ const _projectStock = ProjectMaterialStockModel(
     materialsCount: 1,
     deliveriesCount: 1,
     acceptedQuantity: 12,
+    onProjectQuantity: 5,
+    issuedQuantity: 3,
     usedQuantity: 4,
     availableQuantity: 8,
   ),

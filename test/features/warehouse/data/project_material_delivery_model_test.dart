@@ -123,6 +123,8 @@ void main() {
         'measurement_unit': {'short_name': 'меш.'},
       },
       'accepted_quantity': 12,
+      'on_project_quantity': 5,
+      'issued_quantity': 3,
       'used_quantity': 4,
       'available_quantity': 8,
       'deliveries': [
@@ -139,6 +141,38 @@ void main() {
       'journal_usages': [],
     });
 
+    expect(stock.onProjectQuantity, 5);
+    expect(stock.issuedQuantity, 3);
     expect(stock.projectWarehouseId, 22);
+  });
+
+  test('РЅРµ РІРѕР·РІСЂР°С‰Р°РµС‚ СЃРєР»Р°Рґ РѕР±СЉРµРєС‚Р° РґР»СЏ РІС‹РґР°С‡Рё, РµСЃР»Рё РЅР° РѕР±СЉРµРєС‚Рµ РЅРµС‚ РѕСЃС‚Р°С‚РєР°', () {
+    final stock = ProjectMaterialStockItemModel.fromJson({
+      'project': {'id': 7, 'name': 'Р”РѕРј 300Рј'},
+      'material': {
+        'id': 42,
+        'name': 'Р¦РµРјРµРЅС‚ Рњ500',
+        'measurement_unit': {'short_name': 'РјРµС€.'},
+      },
+      'accepted_quantity': 12,
+      'on_project_quantity': 0,
+      'issued_quantity': 8,
+      'used_quantity': 4,
+      'available_quantity': 8,
+      'deliveries': [
+        {
+          'id': 701,
+          'status': 'accepted',
+          'status_label': 'РџСЂРёРЅСЏС‚Рѕ',
+          'accepted_quantity': 12,
+          'used_quantity': 4,
+          'available_quantity': 8,
+          'project_warehouse': {'id': 22, 'name': 'РЎРєР»Р°Рґ РѕР±СЉРµРєС‚Р°'},
+        },
+      ],
+      'journal_usages': [],
+    });
+
+    expect(stock.projectWarehouseId, isNull);
   });
 }

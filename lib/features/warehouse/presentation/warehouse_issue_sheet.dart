@@ -47,6 +47,7 @@ class _WarehouseIssueSheetState extends ConsumerState<WarehouseIssueSheet> {
     final canSubmit =
         widget.stock.projectId != null &&
         widget.stock.materialId != null &&
+        widget.stock.onProjectQuantity > 0 &&
         widget.projectWarehouseId != null &&
         widget.responsibleUserId != null &&
         !_isSubmitting;
@@ -61,7 +62,7 @@ class _WarehouseIssueSheetState extends ConsumerState<WarehouseIssueSheet> {
           Text(widget.stock.materialName ?? 'Материал не указан'),
           const SizedBox(height: 12),
           Text(
-            'Доступно на объекте: ${_formatQuantity(widget.stock.availableQuantity)} ${widget.stock.materialUnit ?? ''}',
+            'Доступно на объекте: ${_formatQuantity(widget.stock.onProjectQuantity)} ${widget.stock.materialUnit ?? ''}',
             style: AppTypography.bodyMedium(context),
           ),
           if (widget.projectWarehouseId == null) ...[
@@ -112,7 +113,7 @@ class _WarehouseIssueSheetState extends ConsumerState<WarehouseIssueSheet> {
       return;
     }
 
-    if (quantity > widget.stock.availableQuantity) {
+    if (quantity > widget.stock.onProjectQuantity) {
       _showMessage('Количество не должно превышать остаток на объекте.');
       return;
     }

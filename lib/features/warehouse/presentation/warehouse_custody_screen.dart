@@ -66,6 +66,11 @@ class _WarehouseCustodyScreenState
     final state = ref.watch(warehouseProvider);
     final selectedProject = ref.watch(projectsProvider).selectedProject;
     final stock = state.projectMaterialStock;
+    final projectStockItems =
+        stock?.items
+            .where((item) => item.onProjectQuantity > 0)
+            .toList(growable: false) ??
+        const <ProjectMaterialStockItemModel>[];
 
     return Scaffold(
       appBar: AppBar(title: const Text('Ответственное хранение')),
@@ -118,7 +123,7 @@ class _WarehouseCustodyScreenState
             const SizedBox(height: 12),
             if (state.isProjectMaterialStockLoading && stock == null)
               const _InlineLoading(text: 'Загружаем остатки объекта')
-            else if (stock == null || stock.items.isEmpty)
+            else if (stock == null || projectStockItems.isEmpty)
               const AppEmptyState(
                 icon: Icons.inventory_2_outlined,
                 title: 'Остатков на объекте нет',
@@ -126,7 +131,7 @@ class _WarehouseCustodyScreenState
                     'Примите материал на объект или измените выбранный объект.',
               )
             else
-              ...stock.items.map(
+              ...projectStockItems.map(
                 (item) => Padding(
                   padding: const EdgeInsets.only(bottom: 12),
                   child: _ProjectStockCard(
@@ -463,7 +468,7 @@ class _ProjectStockCard extends StatelessWidget {
           Text(stock.projectName ?? 'Объект не указан'),
           const SizedBox(height: 12),
           Text(
-            '${_formatQuantity(stock.availableQuantity)} ${stock.materialUnit ?? ''}',
+            '${_formatQuantity(stock.onProjectQuantity)} ${stock.materialUnit ?? ''}',
             style: AppTypography.h2(context),
           ),
           const SizedBox(height: 12),
