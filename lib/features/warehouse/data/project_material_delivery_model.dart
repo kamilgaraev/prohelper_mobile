@@ -63,6 +63,9 @@ class ProjectMaterialDeliveryModel {
     this.materialUnit,
     this.warehouseId,
     this.warehouseName,
+    this.projectWarehouseId,
+    this.projectWarehouseName,
+    this.responsibleUser,
     this.plannedDeliveryDate,
     this.shippedAt,
     this.deliveredAt,
@@ -70,6 +73,8 @@ class ProjectMaterialDeliveryModel {
     this.siteRequestId,
     this.purchaseRequestId,
     this.purchaseOrderId,
+    this.outboundMovementId,
+    this.inboundMovementId,
     this.events = const [],
   });
 
@@ -85,6 +90,9 @@ class ProjectMaterialDeliveryModel {
   final String? materialUnit;
   final int? warehouseId;
   final String? warehouseName;
+  final int? projectWarehouseId;
+  final String? projectWarehouseName;
+  final ProjectMaterialDeliveryUserModel? responsibleUser;
   final double requestedQuantity;
   final double reservedQuantity;
   final double shippedQuantity;
@@ -100,6 +108,8 @@ class ProjectMaterialDeliveryModel {
   final int? siteRequestId;
   final int? purchaseRequestId;
   final int? purchaseOrderId;
+  final int? outboundMovementId;
+  final int? inboundMovementId;
   final bool canReceive;
   final List<ProjectMaterialDeliveryEventModel> events;
 
@@ -111,8 +121,21 @@ class ProjectMaterialDeliveryModel {
     final measurementUnit =
         material is Map ? material['measurement_unit'] : null;
     final warehouse = json['warehouse'];
+    final projectWarehouse = json['project_warehouse'];
+    final responsibleUser = json['responsible_user'];
     final linkedEntities = json['linked_entities'];
     final rawEvents = json['events'];
+    final int? projectWarehouseId;
+
+    if (projectWarehouse is Map) {
+      projectWarehouseId = _asNullableInt(projectWarehouse['id']);
+    } else if (linkedEntities is Map) {
+      projectWarehouseId = _asNullableInt(
+        linkedEntities['project_warehouse_id'],
+      );
+    } else {
+      projectWarehouseId = null;
+    }
 
     return ProjectMaterialDeliveryModel(
       id: _requiredInt(json, 'id'),
@@ -134,6 +157,17 @@ class ProjectMaterialDeliveryModel {
               : null,
       warehouseId: warehouse is Map ? _asNullableInt(warehouse['id']) : null,
       warehouseName: warehouse is Map ? warehouse['name']?.toString() : null,
+      projectWarehouseId: projectWarehouseId,
+      projectWarehouseName:
+          projectWarehouse is Map ? projectWarehouse['name']?.toString() : null,
+      responsibleUser:
+          responsibleUser is Map
+              ? ProjectMaterialDeliveryUserModel.fromJson(
+                responsibleUser.map(
+                  (key, value) => MapEntry(key.toString(), value),
+                ),
+              )
+              : null,
       requestedQuantity: _requiredDouble(json, 'requested_quantity'),
       reservedQuantity: _requiredDouble(json, 'reserved_quantity'),
       shippedQuantity: _requiredDouble(json, 'shipped_quantity'),
@@ -158,6 +192,14 @@ class ProjectMaterialDeliveryModel {
           linkedEntities is Map
               ? _asNullableInt(linkedEntities['purchase_order_id'])
               : null,
+      outboundMovementId:
+          linkedEntities is Map
+              ? _asNullableInt(linkedEntities['outbound_movement_id'])
+              : null,
+      inboundMovementId:
+          linkedEntities is Map
+              ? _asNullableInt(linkedEntities['inbound_movement_id'])
+              : null,
       canReceive: _requiredBool(json, 'can_receive'),
       events:
           rawEvents is List
@@ -170,6 +212,28 @@ class ProjectMaterialDeliveryModel {
                   )
                   .toList(growable: false)
               : const <ProjectMaterialDeliveryEventModel>[],
+    );
+  }
+}
+
+class ProjectMaterialDeliveryUserModel {
+  const ProjectMaterialDeliveryUserModel({
+    required this.id,
+    required this.name,
+    this.email,
+  });
+
+  final int id;
+  final String name;
+  final String? email;
+
+  factory ProjectMaterialDeliveryUserModel.fromJson(
+    Map<String, dynamic> json,
+  ) {
+    return ProjectMaterialDeliveryUserModel(
+      id: _requiredInt(json, 'id'),
+      name: _requiredString(json, 'name'),
+      email: json['email']?.toString(),
     );
   }
 }

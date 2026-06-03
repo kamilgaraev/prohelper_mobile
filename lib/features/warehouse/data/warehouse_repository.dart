@@ -12,6 +12,7 @@ import '../../../core/sync/sync_queue_provider.dart';
 import '../../../core/sync/sync_queue_repository.dart';
 import '../../../core/sync/sync_queue_service.dart';
 import 'project_material_delivery_model.dart';
+import 'warehouse_custody_model.dart';
 import 'warehouse_scan_model.dart';
 import 'warehouse_summary_model.dart';
 
@@ -127,6 +128,90 @@ class WarehouseRepository extends SyncQueueAwareRepository {
       throw ApiException.fromDio(
         error,
         fallbackMessage: 'Не удалось загрузить остатки материалов на объекте.',
+      );
+    }
+  }
+
+  Future<List<WarehouseCustodyBalanceModel>> fetchCustodyBalances({
+    int? projectId,
+    int? responsibleUserId,
+  }) async {
+    try {
+      final response = await _dio.get(
+        '/warehouse/custody/balances',
+        queryParameters: <String, dynamic>{
+          if (projectId != null) 'project_id': projectId,
+          if (responsibleUserId != null)
+            'responsible_user_id': responsibleUserId,
+        },
+      );
+      final payload = _extractList(response.data);
+
+      return payload.map(WarehouseCustodyBalanceModel.fromJson).toList();
+    } on DioException catch (error) {
+      throw ApiException.fromDio(
+        error,
+        fallbackMessage: 'Не удалось загрузить материалы у ответственных.',
+      );
+    }
+  }
+
+  Future<void> issueToResponsible({
+    required int projectId,
+    required int projectWarehouseId,
+    required int materialId,
+    required int responsibleUserId,
+    required double quantity,
+    String? documentNumber,
+    String? reason,
+  }) async {
+    try {
+      await _dio.post(
+        '/warehouse/custody/issue',
+        data: <String, dynamic>{
+          'project_id': projectId,
+          'project_warehouse_id': projectWarehouseId,
+          'material_id': materialId,
+          'responsible_user_id': responsibleUserId,
+          'quantity': quantity,
+          if ((documentNumber ?? '').trim().isNotEmpty)
+            'document_number': documentNumber!.trim(),
+          if ((reason ?? '').trim().isNotEmpty) 'reason': reason!.trim(),
+        },
+      );
+    } on DioException catch (error) {
+      throw ApiException.fromDio(
+        error,
+        fallbackMessage: 'Не удалось выдать материал ответственному.',
+      );
+    }
+  }
+
+  Future<void> returnFromResponsible({
+    required int projectId,
+    required int custodyWarehouseId,
+    required int materialId,
+    required double quantity,
+    String? documentNumber,
+    String? reason,
+  }) async {
+    try {
+      await _dio.post(
+        '/warehouse/custody/return',
+        data: <String, dynamic>{
+          'project_id': projectId,
+          'custody_warehouse_id': custodyWarehouseId,
+          'material_id': materialId,
+          'quantity': quantity,
+          if ((documentNumber ?? '').trim().isNotEmpty)
+            'document_number': documentNumber!.trim(),
+          if ((reason ?? '').trim().isNotEmpty) 'reason': reason!.trim(),
+        },
+      );
+    } on DioException catch (error) {
+      throw ApiException.fromDio(
+        error,
+        fallbackMessage: 'Не удалось вернуть материал на объект.',
       );
     }
   }

@@ -25,10 +25,14 @@ void main() {
         'measurement_unit': {'short_name': 'меш.'},
       },
       'warehouse': {'id': 3, 'name': 'Основной склад'},
+      'project_warehouse': {'id': 22, 'name': 'Склад объекта'},
+      'responsible_user': {'id': 7, 'name': 'Иван Прораб'},
       'linked_entities': {
         'site_request_id': 100,
         'purchase_request_id': 200,
         'purchase_order_id': 300,
+        'outbound_movement_id': 101,
+        'inbound_movement_id': 102,
       },
       'events': [
         {
@@ -50,6 +54,10 @@ void main() {
     expect(delivery.materialName, 'Цемент М500');
     expect(delivery.remainingToAccept, 6);
     expect(delivery.events.single.userName, 'Иван Петров');
+    expect(delivery.projectWarehouseId, 22);
+    expect(delivery.outboundMovementId, 101);
+    expect(delivery.inboundMovementId, 102);
+    expect(delivery.responsibleUser?.id, 7);
   });
 
   test('отклоняет поставку без обязательного количества', () {
