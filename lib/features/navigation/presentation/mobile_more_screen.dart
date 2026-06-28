@@ -14,6 +14,7 @@ import 'package:prohelpers_mobile/core/widgets/pro_surface.dart';
 import 'package:prohelpers_mobile/features/actions/presentation/mobile_action_search.dart';
 import 'package:prohelpers_mobile/features/auth/domain/auth_provider.dart';
 import 'package:prohelpers_mobile/features/auth/presentation/widgets/user_profile_bottom_sheet.dart';
+import 'package:prohelpers_mobile/features/knowledge_hub/presentation/knowledge_hub_screen.dart';
 import 'package:prohelpers_mobile/features/projects/domain/projects_provider.dart';
 import 'package:prohelpers_mobile/features/projects/presentation/project_selection_screen.dart';
 
@@ -111,6 +112,24 @@ class MobileMoreScreen extends ConsumerWidget {
                 label: const Text('Сменить объект'),
               ),
             ),
+          ),
+          const SizedBox(height: 20),
+          ProSectionBlock(
+            title: 'Помощь',
+            subtitle: 'Быстрый доступ к инструкциям по модулям и рабочим сценариям.',
+            children: [
+              ProActionTile(
+                title: 'База знаний',
+                subtitle: 'Статьи, вложенные разделы и поиск по инструкциям',
+                icon: Icons.menu_book_outlined,
+                onTap:
+                    () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const KnowledgeHubScreen(),
+                      ),
+                    ),
+              ),
+            ],
           ),
           if (managementDestinations.isNotEmpty) ...[
             const SizedBox(height: 20),

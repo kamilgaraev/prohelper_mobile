@@ -11,6 +11,7 @@ import 'package:prohelpers_mobile/features/construction_journal/presentation/con
 import 'package:prohelpers_mobile/features/contract_management/presentation/contract_management_screen.dart';
 import 'package:prohelpers_mobile/features/executive_documentation/presentation/executive_documentation_screen.dart';
 import 'package:prohelpers_mobile/features/handover_acceptance/presentation/handover_acceptance_screen.dart';
+import 'package:prohelpers_mobile/features/knowledge_hub/presentation/knowledge_hub_screen.dart';
 import 'package:prohelpers_mobile/features/machinery_operations/presentation/machinery_operations_screen.dart';
 import 'package:prohelpers_mobile/features/production_labor/presentation/production_labor_screen.dart';
 import 'package:prohelpers_mobile/features/procurement/presentation/procurement_screen.dart';
@@ -267,6 +268,25 @@ class MobileNavigationRegistry {
           basePriority: 110,
           builder: (_) => const AiAssistantHomeScreen(),
           aliases: <String>['ai-assistant'],
+          requiresProject: false,
+        ),
+        MobileModuleDestination(
+          route: 'knowledge_hub',
+          slug: 'knowledge_hub',
+          title: 'База знаний',
+          shortTitle: 'База знаний',
+          icon: Icons.menu_book_outlined,
+          group: MobileModuleGroup.management,
+          basePriority: 108,
+          recommendedReason: 'Инструкции и подсказки по доступным модулям',
+          builder: (_) => const KnowledgeHubScreen(),
+          aliases: <String>['knowledge-hub', 'help', 'support'],
+          searchKeywords: <String>[
+            'инструкции',
+            'помощь',
+            'справка',
+            'обучение',
+          ],
           requiresProject: false,
         ),
         MobileModuleDestination(

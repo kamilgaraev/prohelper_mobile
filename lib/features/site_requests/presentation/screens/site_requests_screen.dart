@@ -9,6 +9,7 @@ import 'package:prohelpers_mobile/core/widgets/app_loading_state.dart';
 import 'package:prohelpers_mobile/core/widgets/mesh_background.dart';
 import 'package:prohelpers_mobile/core/widgets/pro_search_filter_bar.dart';
 import 'package:prohelpers_mobile/core/widgets/pro_status_banner.dart';
+import 'package:prohelpers_mobile/features/knowledge_hub/presentation/widgets/knowledge_context_help_button.dart';
 import 'package:prohelpers_mobile/features/projects/domain/projects_provider.dart';
 import 'package:prohelpers_mobile/features/site_requests/data/site_request_model.dart';
 import 'package:prohelpers_mobile/features/site_requests/domain/site_requests_provider.dart';
@@ -301,6 +302,21 @@ class _SiteRequestsScreenState extends ConsumerState<SiteRequestsScreen> {
                       inReviewCount: inReviewCount,
                       urgentCount: urgentCount,
                       inWorkCount: inWorkCount,
+                    ),
+                  ),
+                ),
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                  sliver: SliverToBoxAdapter(
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: KnowledgeContextHelpButton(
+                        contextKey:
+                            _isApprovalsMode
+                                ? 'site_requests.approvals'
+                                : 'site_requests.index',
+                        moduleSlug: 'site-requests',
+                      ),
                     ),
                   ),
                 ),
