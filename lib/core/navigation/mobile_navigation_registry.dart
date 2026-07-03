@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 
 import 'package:prohelpers_mobile/core/models/user_context.dart';
 import 'package:prohelpers_mobile/core/providers/module_provider.dart';

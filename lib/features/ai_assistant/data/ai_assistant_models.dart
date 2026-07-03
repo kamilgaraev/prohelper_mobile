@@ -1,4 +1,4 @@
-class AiUsageModel {
+﻿class AiUsageModel {
   const AiUsageModel({
     required this.monthlyLimit,
     required this.used,

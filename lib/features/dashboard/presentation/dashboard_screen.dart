@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
@@ -18,6 +18,7 @@ import 'package:prohelpers_mobile/features/dashboard/data/dashboard_widget_model
 import 'package:prohelpers_mobile/features/dashboard/presentation/controllers/dashboard_controller.dart';
 import 'package:prohelpers_mobile/features/notifications/domain/notifications_provider.dart';
 import 'package:prohelpers_mobile/features/notifications/presentation/notifications_screen.dart';
+import 'package:prohelpers_mobile/features/notifications/presentation/widgets/notification_action_button.dart';
 import 'package:prohelpers_mobile/features/projects/domain/projects_provider.dart';
 
 class DashboardScreen extends ConsumerWidget {
@@ -108,7 +109,7 @@ class DashboardScreen extends ConsumerWidget {
                   ),
                 ),
               Text(
-                (selectedProject?.name ?? 'PROHELPER').toUpperCase(),
+                (selectedProject?.name ?? 'MOST').toUpperCase(),
                 style: AppTypography.h2(context).copyWith(
                   letterSpacing: 0,
                   fontWeight: FontWeight.w900,
@@ -132,8 +133,8 @@ class DashboardScreen extends ConsumerWidget {
 
             return Padding(
               padding: const EdgeInsets.only(right: 8),
-              child: IconButton(
-                tooltip: 'Уведомления',
+              child: NotificationActionButton(
+                unreadCount: unreadCount,
                 onPressed: () {
                   HapticFeedback.selectionClick();
                   Navigator.of(context).push(
@@ -142,37 +143,6 @@ class DashboardScreen extends ConsumerWidget {
                     ),
                   );
                 },
-                icon: Stack(
-                  clipBehavior: Clip.none,
-                  children: [
-                    const Icon(Icons.notifications_none_rounded),
-                    if (unreadCount > 0)
-                      Positioned(
-                        right: -6,
-                        top: -6,
-                        child: Container(
-                          constraints: const BoxConstraints(
-                            minWidth: 18,
-                            minHeight: 18,
-                          ),
-                          padding: const EdgeInsets.symmetric(horizontal: 5),
-                          decoration: BoxDecoration(
-                            color: AppColors.error,
-                            borderRadius: BorderRadius.circular(999),
-                          ),
-                          child: Text(
-                            unreadCount > 99 ? '99+' : unreadCount.toString(),
-                            textAlign: TextAlign.center,
-                            style: AppTypography.caption(context).copyWith(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w900,
-                              fontSize: 10,
-                            ),
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
               ),
             );
           },

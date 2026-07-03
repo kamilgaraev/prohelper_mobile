@@ -1,5 +1,6 @@
-import 'package:hooks_riverpod/hooks_riverpod.dart';
+﻿import 'package:hooks_riverpod/hooks_riverpod.dart';
 
+import '../../../core/error/user_message.dart';
 import '../../../core/network/api_exception.dart';
 import '../data/procurement_model.dart';
 import '../data/procurement_repository.dart';
@@ -82,7 +83,7 @@ class ProcurementNotifier extends StateNotifier<ProcurementState> {
         summary: null,
         permissionDenied: _isPermissionDenied(error),
         malformedContract: error is FormatException,
-        error: error.toString(),
+        error: UserMessage.fromError(error),
       );
     }
   }

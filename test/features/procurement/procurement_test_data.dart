@@ -1,4 +1,4 @@
-Map<String, dynamic> procurementSummaryJson() {
+﻿Map<String, dynamic> procurementSummaryJson() {
   return {
     'summary': {
       'purchase_requests_count': 1,

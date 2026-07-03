@@ -1,4 +1,4 @@
-class ScheduleSummaryModel {
+﻿class ScheduleSummaryModel {
   const ScheduleSummaryModel({required this.summary, required this.events});
 
   final ScheduleSummaryData summary;

@@ -1,6 +1,7 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
+import '../../../core/error/user_message.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../core/widgets/app_empty_state.dart';
@@ -57,7 +58,7 @@ class _ProjectMaterialDeliveriesScreenState
           if (snapshot.hasError) {
             return AppErrorState(
               title: 'Не удалось загрузить поставки',
-              description: snapshot.error.toString(),
+              description: UserMessage.fromError(snapshot.error!),
               onRetry: _refresh,
             );
           }
@@ -223,12 +224,7 @@ class _ProjectMaterialDeliveriesScreenState
                         if (sheetContext.mounted) {
                           ScaffoldMessenger.of(sheetContext).showSnackBar(
                             SnackBar(
-                              content: Text(
-                                error.toString().replaceFirst(
-                                  'ApiException: ',
-                                  '',
-                                ),
-                              ),
+                              content: Text(UserMessage.fromError(error)),
                             ),
                           );
                         }

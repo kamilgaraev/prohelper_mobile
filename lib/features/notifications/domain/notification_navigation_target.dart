@@ -1,4 +1,4 @@
-import '../../../core/providers/module_provider.dart';
+﻿import '../../../core/providers/module_provider.dart';
 import '../data/notification_model.dart';
 
 enum NotificationTargetType {

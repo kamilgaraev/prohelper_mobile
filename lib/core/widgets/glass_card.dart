@@ -1,4 +1,4 @@
-import 'dart:ui';
+﻿import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:shimmer/shimmer.dart';
 import '../theme/pro_theme.dart';
@@ -24,11 +24,11 @@ class PremiumGlassCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ClipRRect(
-      borderRadius: BorderRadius.circular(ProHelperTheme.cardRadius),
+      borderRadius: BorderRadius.circular(MostTheme.cardRadius),
       child: BackdropFilter(
         filter: ImageFilter.blur(
-          sigmaX: ProHelperTheme.glassBlurSigma,
-          sigmaY: ProHelperTheme.glassBlurSigma,
+          sigmaX: MostTheme.glassBlurSigma,
+          sigmaY: MostTheme.glassBlurSigma,
         ),
         child: GestureDetector(
           onTap: onTap,
@@ -39,11 +39,11 @@ class PremiumGlassCard extends StatelessWidget {
             decoration: BoxDecoration(
               color: const Color(
                 0xFF1E1E22,
-              ).withValues(alpha: ProHelperTheme.glassOpacity),
-              borderRadius: BorderRadius.circular(ProHelperTheme.cardRadius),
+              ).withValues(alpha: MostTheme.glassOpacity),
+              borderRadius: BorderRadius.circular(MostTheme.cardRadius),
               border: Border.all(
                 color: Colors.white.withValues(
-                  alpha: ProHelperTheme.glassBorderOpacity,
+                  alpha: MostTheme.glassBorderOpacity,
                 ),
                 width: 1.5,
               ),

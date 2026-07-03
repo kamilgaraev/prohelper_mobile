@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:prohelpers_mobile/core/error/user_message.dart';
 import 'package:prohelpers_mobile/core/design/pro_status.dart';
@@ -183,6 +183,11 @@ class _SiteRequestsScreenState extends ConsumerState<SiteRequestsScreen> {
     final inReviewCount = state.requests.where(_isInReview).length;
     final inWorkCount =
         state.requests.where((request) => _isInWork(request.status)).length;
+    final canCreateRequest =
+        !_isApprovalsMode &&
+        selectedProject != null &&
+        !state.permissionDenied &&
+        !(state.error != null && state.requests.isEmpty);
 
     ref.listen<SiteRequestsState>(siteRequestsProvider, (previous, next) {
       final shouldShowError =
@@ -432,19 +437,9 @@ class _SiteRequestsScreenState extends ConsumerState<SiteRequestsScreen> {
           ),
         ),
         floatingActionButton:
-            _isApprovalsMode
-                ? null
-                : FloatingActionButton(
+            canCreateRequest
+                ? FloatingActionButton(
                   onPressed: () {
-                    if (selectedProject == null) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Сначала выберите объект.'),
-                        ),
-                      );
-                      return;
-                    }
-
                     Navigator.of(context).push(
                       MaterialPageRoute(
                         builder: (_) => const SiteRequestFormScreen(),
@@ -457,7 +452,8 @@ class _SiteRequestsScreenState extends ConsumerState<SiteRequestsScreen> {
                     color: Colors.white,
                     size: 32,
                   ),
-                ),
+                )
+                : null,
       ),
     );
   }

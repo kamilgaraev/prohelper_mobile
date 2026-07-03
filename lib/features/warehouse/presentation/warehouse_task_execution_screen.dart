@@ -1,6 +1,7 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
+import '../../../core/error/user_message.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../core/widgets/industrial_card.dart';
@@ -365,7 +366,7 @@ class _WarehouseTaskExecutionScreenState
         );
       }
     } catch (error) {
-      _showMessage(error.toString());
+      _showMessage(error);
     } finally {
       if (mounted) {
         setState(() => _isResolving = false);
@@ -410,7 +411,7 @@ class _WarehouseTaskExecutionScreenState
       }
       Navigator.of(context).pop(updatedTask);
     } catch (error) {
-      _showMessage(error.toString());
+      _showMessage(error);
     } finally {
       if (mounted) {
         setState(() => _isSubmitting = false);
@@ -663,10 +664,10 @@ class _WarehouseTaskExecutionScreenState
     return parts.isEmpty ? null : parts.join('\n');
   }
 
-  void _showMessage(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message.replaceFirst('ApiException: ', ''))),
-    );
+  void _showMessage(Object message) {
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(UserMessage.fromError(message))));
   }
 }
 

@@ -1,7 +1,8 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'app_colors.dart';
 
-class ProHelperTheme {
+class MostTheme {
   // Industrial properties
   static const double cardRadius = 8.0;
   static const double buttonRadius = 12.0;
@@ -10,6 +11,24 @@ class ProHelperTheme {
   static const double glassOpacity = 0.72;
   static const double glassBorderOpacity = 0.12;
   static final Color borderColor = const Color(0xFF2C2C2E);
+  static final SystemUiOverlayStyle lightSystemOverlayStyle =
+      SystemUiOverlayStyle.dark.copyWith(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: Brightness.dark,
+        statusBarBrightness: Brightness.light,
+      );
+  static final SystemUiOverlayStyle darkSystemOverlayStyle =
+      SystemUiOverlayStyle.light.copyWith(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: Brightness.light,
+        statusBarBrightness: Brightness.dark,
+      );
+
+  static SystemUiOverlayStyle systemUiOverlayStyleFor(Brightness brightness) {
+    return brightness == Brightness.dark
+        ? darkSystemOverlayStyle
+        : lightSystemOverlayStyle;
+  }
 
   static List<BoxShadow> get premiumShadow => [
     BoxShadow(
@@ -47,6 +66,7 @@ class ProHelperTheme {
         foregroundColor: AppColors.textPrimary,
         elevation: 0,
         centerTitle: false,
+        systemOverlayStyle: darkSystemOverlayStyle,
         titleTextStyle: _buildTextTheme(base.textTheme, true).titleLarge,
       ),
       cardTheme: CardTheme(
@@ -82,10 +102,10 @@ class ProHelperTheme {
   static ThemeData get lightTheme {
     final base = ThemeData.light(useMaterial3: true);
     final scheme = ColorScheme.fromSeed(
-      seedColor: AppColors.primary,
+      seedColor: AppColors.primaryDark,
       brightness: Brightness.light,
     ).copyWith(
-      primary: AppColors.primary,
+      primary: AppColors.primaryDark,
       onPrimary: Colors.white,
       secondary: AppColors.secondary,
       surface: AppColors.surfaceLightMode,
@@ -107,6 +127,7 @@ class ProHelperTheme {
         foregroundColor: AppColors.textPrimaryLight,
         elevation: 0,
         centerTitle: false,
+        systemOverlayStyle: lightSystemOverlayStyle,
         titleTextStyle: _buildTextTheme(base.textTheme, false).titleLarge,
       ),
       cardTheme: CardTheme(

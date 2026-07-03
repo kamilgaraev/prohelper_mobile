@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'dart:collection';
 import 'dart:typed_data';
 
@@ -33,6 +33,7 @@ void main() {
       '/auth/login',
       '/auth/me',
     ]);
+    expect(adapter.requests[1].headers['Authorization'], 'Bearer token-1');
   });
 
   test('login validation error returns business message', () async {
@@ -72,9 +73,48 @@ void main() {
 
     await expectLater(
       repository.login('foreman@example.test', 'wrong'),
-      throwsA(isA<ApiException>()),
+      throwsA(
+        isA<ApiException>()
+            .having(
+              (error) => error.message,
+              'message',
+              'Email или пароль не подошли. Проверьте данные и попробуйте еще раз.',
+            )
+            .having((error) => error.statusCode, 'statusCode', 401),
+      ),
     );
     expect(await storage.getToken(), isNull);
+  });
+
+  test('login preserves profile loading error after token is issued', () async {
+    final adapter =
+        _AuthHttpAdapter()
+          ..responses.add(
+            _AdapterResponse(
+              statusCode: 200,
+              body: '{"data":{"token":"token-1"}}',
+            ),
+          )
+          ..responses.add(
+            _AdapterResponse(
+              statusCode: 500,
+              body: '{"message":"Профиль временно недоступен"}',
+            ),
+          );
+    final storage = _MemorySecureStorage();
+    final repository = AuthRepository(_dio(adapter), storage);
+
+    await expectLater(
+      repository.login('foreman@example.test', 'secret'),
+      throwsA(
+        isA<ApiException>().having(
+          (error) => error.message,
+          'message',
+          'Профиль временно недоступен',
+        ),
+      ),
+    );
+    expect(await storage.getToken(), 'token-1');
   });
 }
 
@@ -95,7 +135,7 @@ String _userJson() {
   "name": "Иван Прораб",
   "current_organization_id": 3,
   "organizations": [
-    {"id": 3, "name": "ПроХелпер", "is_active": true}
+    {"id": 3, "name": "МОСТ", "is_active": true}
   ],
   "auth": {
     "roles": ["foreman"],

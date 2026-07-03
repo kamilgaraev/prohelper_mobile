@@ -1,4 +1,4 @@
-import 'package:isar/isar.dart';
+﻿import 'package:isar/isar.dart';
 
 part 'project_model.g.dart';
 

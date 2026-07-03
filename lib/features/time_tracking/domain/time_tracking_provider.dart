@@ -1,5 +1,6 @@
-import 'package:hooks_riverpod/hooks_riverpod.dart';
+﻿import 'package:hooks_riverpod/hooks_riverpod.dart';
 
+import '../../../core/error/user_message.dart';
 import '../../../core/network/api_exception.dart';
 import '../data/time_entry_model.dart';
 import '../data/time_tracking_repository.dart';
@@ -129,7 +130,7 @@ class TimeTrackingNotifier extends StateNotifier<TimeTrackingState> {
         totals: null,
         permissionDenied: _isPermissionDenied(error),
         malformedContract: error is FormatException,
-        error: error.toString(),
+        error: UserMessage.fromError(error),
       );
     }
   }

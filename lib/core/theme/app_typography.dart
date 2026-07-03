@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 
 class AppTypography {
   static TextStyle h1(BuildContext context) => TextStyle(

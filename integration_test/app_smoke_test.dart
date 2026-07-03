@@ -1,4 +1,4 @@
-import 'package:dio/dio.dart';
+﻿import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -18,16 +18,16 @@ import '../test/helpers/mobile_integration_test_helpers.dart';
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
-  configureProHelperIntegrationTestEnvironment();
+  configureMostIntegrationTestEnvironment();
 
   testWidgets('app starts on login without a saved session', (tester) async {
     await tester.pumpWidget(
       ProviderScope(
-        overrides: proHelperCoreOverrides(
+        overrides: mostCoreOverrides(
           authenticated: false,
           selectedProject: null,
         ),
-        child: const ProHelperApp(),
+        child: const MostApp(),
       ),
     );
 
@@ -41,8 +41,8 @@ void main() {
   ) async {
     await tester.pumpWidget(
       ProviderScope(
-        overrides: proHelperCoreOverrides(selectedProject: null),
-        child: const ProHelperApp(),
+        overrides: mostCoreOverrides(selectedProject: null),
+        child: const MostApp(),
       ),
     );
 
@@ -52,12 +52,12 @@ void main() {
   });
 
   testWidgets('selected project reaches dashboard', (tester) async {
-    final project = ProHelperTestData.project();
+    final project = MostTestData.project();
 
     await tester.pumpWidget(
       ProviderScope(
-        overrides: proHelperCoreOverrides(selectedProject: project),
-        child: const ProHelperApp(),
+        overrides: mostCoreOverrides(selectedProject: project),
+        child: const MostApp(),
       ),
     );
 
@@ -67,17 +67,17 @@ void main() {
   });
 
   testWidgets('notifications open linked site request detail', (tester) async {
-    final project = ProHelperTestData.project();
+    final project = MostTestData.project();
 
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          ...proHelperCoreOverrides(selectedProject: project),
+          ...mostCoreOverrides(selectedProject: project),
           siteRequestsRepositoryProvider.overrideWith(
             (ref) => _SmokeSiteRequestsRepository(),
           ),
         ],
-        child: const ProHelperApp(),
+        child: const MostApp(),
       ),
     );
     await tester.pump();
@@ -116,11 +116,11 @@ class _SmokeSiteRequestsRepository extends SiteRequestsRepository {
     String? search,
     SiteRequestsScope scope = SiteRequestsScope.own,
   }) async {
-    return [ProHelperTestData.siteRequest()];
+    return [MostTestData.siteRequest()];
   }
 
   @override
   Future<SiteRequestModel> fetchSiteRequestDetails(int id) async {
-    return ProHelperTestData.siteRequest(id: id);
+    return MostTestData.siteRequest(id: id);
   }
 }

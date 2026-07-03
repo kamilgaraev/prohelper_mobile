@@ -1,4 +1,4 @@
-class BudgetProjectModel {
+﻿class BudgetProjectModel {
   const BudgetProjectModel({
     required this.id,
     required this.name,

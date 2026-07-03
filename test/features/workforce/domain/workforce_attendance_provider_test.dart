@@ -1,12 +1,19 @@
-import 'package:dio/dio.dart';
+﻿import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:prohelpers_mobile/core/error/user_message.dart';
 import 'package:prohelpers_mobile/core/network/api_exception.dart';
 import 'package:prohelpers_mobile/features/workforce/data/workforce_attendance_model.dart';
 import 'package:prohelpers_mobile/features/workforce/data/workforce_repository.dart';
 import 'package:prohelpers_mobile/features/workforce/domain/workforce_attendance_provider.dart';
 
-enum _FailureMode { none, forbidden, duplicateScan, malformedContract }
+enum _FailureMode {
+  none,
+  forbidden,
+  unauthenticated,
+  duplicateScan,
+  malformedContract,
+}
 
 class _FakeWorkforceRepository extends WorkforceRepository {
   _FakeWorkforceRepository({this.failureMode = _FailureMode.none})
@@ -57,6 +64,9 @@ class _FakeWorkforceRepository extends WorkforceRepository {
         'Недостаточно прав для отметки явки.',
         statusCode: 403,
       );
+    }
+    if (failureMode == _FailureMode.unauthenticated) {
+      throw const ApiException('Unauthenticated.', statusCode: 401);
     }
 
     return _confirmation(
@@ -150,6 +160,31 @@ void main() {
     expect(state.selfAttendanceResult, isNull);
     expect(state.error, 'Недостаточно прав для отметки явки.');
   });
+
+  test(
+    'recordSelfAttendance hides raw unauthenticated server message',
+    () async {
+      final ref = container(
+        _FakeWorkforceRepository(failureMode: _FailureMode.unauthenticated),
+      );
+      addTearDown(ref.dispose);
+
+      await ref
+          .read(workforceAttendanceProvider.notifier)
+          .recordSelfAttendance(workDate: DateTime(2026, 5, 16));
+
+      final state = ref.read(workforceAttendanceProvider);
+      expect(state.permissionDenied, isFalse);
+      expect(state.selfAttendanceResult, isNull);
+      expect(state.error, isNot('Unauthenticated.'));
+      expect(
+        state.error,
+        UserMessage.fromError(
+          const ApiException('Unauthenticated.', statusCode: 401),
+        ),
+      );
+    },
+  );
 
   test(
     'loadHistory exposes malformed contract without hiding it as network error',

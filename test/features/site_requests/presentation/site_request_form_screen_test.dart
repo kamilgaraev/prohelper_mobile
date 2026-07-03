@@ -1,7 +1,8 @@
-import 'package:dio/dio.dart';
+﻿import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:prohelpers_mobile/core/theme/pro_theme.dart';
 import 'package:prohelpers_mobile/features/projects/data/project_model.dart';
 import 'package:prohelpers_mobile/features/projects/data/projects_repository.dart';
 import 'package:prohelpers_mobile/features/projects/domain/projects_provider.dart';
@@ -31,10 +32,17 @@ class _FakeProjectsNotifier extends ProjectsNotifier {
 }
 
 class _FakeSiteRequestsRepository extends SiteRequestsRepository {
-  _FakeSiteRequestsRepository() : super(Dio());
+  _FakeSiteRequestsRepository({this.createError}) : super(Dio());
+
+  final Object? createError;
 
   @override
   Future<SiteRequestModel> createSiteRequest(Map<String, dynamic> data) async {
+    final error = createError;
+    if (error != null) {
+      throw error;
+    }
+
     return SiteRequestModel()
       ..serverId = 1004
       ..title = data['title']?.toString() ?? ''
@@ -138,7 +146,7 @@ void main() {
       ];
   }
 
-  Widget createWidget({SiteRequestModel? initialRequest}) {
+  Widget createWidget({SiteRequestModel? initialRequest, Object? createError}) {
     final project = buildProject();
     const meta = {
       'request_types': [
@@ -164,13 +172,14 @@ void main() {
         projectsProvider.overrideWith((ref) => _FakeProjectsNotifier(project)),
         siteRequestsProvider.overrideWith((ref) => _FakeSiteRequestsNotifier()),
         siteRequestsRepositoryProvider.overrideWith(
-          (ref) => _FakeSiteRequestsRepository(),
+          (ref) => _FakeSiteRequestsRepository(createError: createError),
         ),
         siteRequestsMetaProvider.overrideWith((ref) async => meta),
       ],
       child: TickerMode(
         enabled: false,
         child: MaterialApp(
+          theme: MostTheme.lightTheme,
           home: SiteRequestFormScreen(initialRequest: initialRequest),
         ),
       ),
@@ -235,4 +244,99 @@ void main() {
       expect(find.text('Сохранить группу'), findsOneWidget);
     },
   );
+
+  testWidgets('показывает ошибку заголовка рядом с полем без snackbar', (
+    tester,
+  ) async {
+    await tester.pumpWidget(createWidget());
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    await tester.tap(find.text('Создать заявку'));
+    await tester.pump();
+
+    expect(find.text('Укажите заголовок заявки.'), findsOneWidget);
+    expect(find.byType(SnackBar), findsNothing);
+  });
+
+  testWidgets('показывает ошибки материала рядом с полями без snackbar', (
+    tester,
+  ) async {
+    await tester.pumpWidget(createWidget());
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Заголовок заявки'),
+      'Материалы на фундамент',
+    );
+    await tester.tap(find.text('Создать заявку'));
+    await tester.pump();
+
+    expect(find.text('Укажите материал в позиции 1.'), findsOneWidget);
+    expect(
+      find.text('Количество материала в позиции 1 должно быть больше нуля.'),
+      findsOneWidget,
+    );
+    expect(find.byType(SnackBar), findsNothing);
+  });
+
+  testWidgets('очищает техническую ошибку отправки формы', (tester) async {
+    await tester.pumpWidget(
+      createWidget(
+        createError: const FormatException('Site request payload is broken'),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Заголовок заявки'),
+      'Материалы на фундамент',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Наименование материала'),
+      'Бетон М300',
+    );
+    await tester.enterText(find.widgetWithText(TextField, 'Количество'), '12');
+    await tester.ensureVisible(find.byType(DropdownButtonFormField<String>));
+    await tester.pump();
+    await tester.tap(find.byType(DropdownButtonFormField<String>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('м3').last);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Создать заявку'));
+    await tester.pump();
+
+    expect(
+      find.text('Не удалось выполнить действие. Попробуйте еще раз.'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('FormatException'), findsNothing);
+  });
+
+  testWidgets('форма заявки проходит базовые accessibility guidelines', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final semantics = tester.ensureSemantics();
+
+    try {
+      await tester.pumpWidget(createWidget());
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+
+      await expectLater(tester, meetsGuideline(androidTapTargetGuideline));
+      await expectLater(tester, meetsGuideline(iOSTapTargetGuideline));
+      await expectLater(tester, meetsGuideline(labeledTapTargetGuideline));
+      await expectLater(tester, meetsGuideline(textContrastGuideline));
+    } finally {
+      semantics.dispose();
+    }
+  });
 }

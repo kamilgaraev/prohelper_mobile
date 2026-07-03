@@ -1,5 +1,6 @@
-import 'package:hooks_riverpod/hooks_riverpod.dart';
+﻿import 'package:hooks_riverpod/hooks_riverpod.dart';
 
+import '../../../core/error/user_message.dart';
 import '../../../core/network/api_exception.dart';
 import '../data/handover_acceptance_model.dart';
 import '../data/handover_acceptance_repository.dart';
@@ -140,7 +141,7 @@ class HandoverAcceptanceNotifier
       state = state.copyWith(
         isLoading: false,
         permissionDenied: _isPermissionDenied(error),
-        error: error.toString(),
+        error: UserMessage.fromError(error),
       );
     }
   }
@@ -155,7 +156,7 @@ class HandoverAcceptanceNotifier
       state = state.copyWith(
         isDetailLoading: false,
         selectedScope: null,
-        detailError: error.toString(),
+        detailError: UserMessage.fromError(error),
       );
     }
   }

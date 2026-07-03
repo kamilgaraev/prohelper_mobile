@@ -1,4 +1,4 @@
-enum NotificationFilter {
+﻿enum NotificationFilter {
   all,
   unread,
   read;

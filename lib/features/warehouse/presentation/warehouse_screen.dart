@@ -1,6 +1,7 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
+import '../../../core/error/user_message.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/design/pro_status.dart';
 import '../../../core/theme/app_typography.dart';
@@ -82,14 +83,6 @@ class _WarehouseScreenState extends ConsumerState<WarehouseScreen> {
 
     return Scaffold(
       appBar: AppBar(title: const Text('Склад'), centerTitle: false),
-      floatingActionButton:
-          data == null
-              ? null
-              : FloatingActionButton.extended(
-                onPressed: () => _openReceiptSheet(context, data),
-                icon: const Icon(Icons.add_a_photo_outlined),
-                label: const Text('Оприходовать'),
-              ),
       body: RefreshIndicator(
         onRefresh: () => ref.read(warehouseProvider.notifier).load(),
         child: CustomScrollView(
@@ -130,6 +123,14 @@ class _WarehouseScreenState extends ConsumerState<WarehouseScreen> {
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
                 sliver: SliverToBoxAdapter(
                   child: _OperationalHighlights(summary: data.summary),
+                ),
+              ),
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                sliver: SliverToBoxAdapter(
+                  child: _ReceiptEntryCard(
+                    onTap: () => _openReceiptSheet(context, data),
+                  ),
                 ),
               ),
               SliverPadding(
@@ -461,6 +462,23 @@ class _SectionHeader extends StatelessWidget {
           ).copyWith(color: theme.colorScheme.onSurfaceVariant),
         ),
       ],
+    );
+  }
+}
+
+class _ReceiptEntryCard extends StatelessWidget {
+  const _ReceiptEntryCard({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return ProActionTile(
+      title: 'Оприходовать',
+      subtitle: 'Принять материалы на склад с фото и документом.',
+      icon: Icons.add_a_photo_outlined,
+      tone: ProStatusTone.success,
+      onTap: onTap,
     );
   }
 }
@@ -1058,7 +1076,7 @@ class _WarehouseBalancesSheetState
                   if (snapshot.hasError) {
                     return AppErrorState(
                       title: 'Не удалось загрузить остатки',
-                      description: snapshot.error.toString(),
+                      description: UserMessage.fromError(snapshot.error!),
                       onRetry: _refreshBalances,
                     );
                   }
@@ -1463,7 +1481,7 @@ class _WarehousePhotoGallerySheetState
       }
     } catch (error) {
       if (mounted) {
-        _showMessage(error.toString());
+        _showMessage(error);
       }
     } finally {
       if (mounted) {
@@ -1488,7 +1506,7 @@ class _WarehousePhotoGallerySheetState
       }
     } catch (error) {
       if (mounted) {
-        _showMessage(error.toString());
+        _showMessage(error);
       }
     } finally {
       if (mounted) {
@@ -1531,10 +1549,10 @@ class _WarehousePhotoGallerySheetState
     );
   }
 
-  void _showMessage(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message.replaceFirst('ApiException: ', ''))),
-    );
+  void _showMessage(Object message) {
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(UserMessage.fromError(message))));
   }
 }
 

@@ -1,5 +1,9 @@
+﻿import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'core/localization/most_localizations.dart';
 import 'core/widgets/app_loading_state.dart';
 import 'core/widgets/mobile_app_shell.dart';
 import 'core/theme/pro_theme.dart';
@@ -11,14 +15,25 @@ import 'features/projects/presentation/project_selection_screen.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  runApp(const ProviderScope(child: ProHelperApp()));
+  runApp(const ProviderScope(child: MostApp()));
 }
 
-class ProHelperApp extends ConsumerWidget {
-  const ProHelperApp({super.key});
+class MostApp extends ConsumerStatefulWidget {
+  const MostApp({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<MostApp> createState() => _MostAppState();
+}
+
+class _MostAppState extends ConsumerState<MostApp> {
+  @override
+  void initState() {
+    super.initState();
+    unawaited(ref.read(authProvider.notifier).checkAuth());
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final authState = ref.watch(authProvider);
     final projectsState = ref.watch(projectsProvider);
     final Widget home;
@@ -29,17 +44,30 @@ class ProHelperApp extends ConsumerWidget {
               ? const MobileAppShell()
               : const ProjectSelectionScreen();
     } else if (authState is AuthInitial) {
-      home = const Scaffold(body: AppLoadingState(message: 'Проверяем сессию'));
+      home = const Scaffold(
+        body: AppLoadingState(message: 'Проверяем сессию', minHeight: 156),
+      );
     } else {
       home = const LoginScreen();
     }
 
     return MaterialApp(
-      title: 'ProHelper',
+      title: 'МОСТ',
       debugShowCheckedModeBanner: false,
-      theme: ProHelperTheme.lightTheme,
-      darkTheme: ProHelperTheme.darkTheme,
+      theme: MostTheme.lightTheme,
+      darkTheme: MostTheme.darkTheme,
       themeMode: ThemeMode.system,
+      locale: MostLocalizations.ru,
+      localizationsDelegates: MostLocalizations.delegates,
+      supportedLocales: MostLocalizations.supportedLocales,
+      builder: (context, child) {
+        return AnnotatedRegion<SystemUiOverlayStyle>(
+          value: MostTheme.systemUiOverlayStyleFor(
+            Theme.of(context).brightness,
+          ),
+          child: child ?? const SizedBox.shrink(),
+        );
+      },
       home: home,
     );
   }

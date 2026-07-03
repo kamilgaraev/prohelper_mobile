@@ -1,4 +1,4 @@
-const remainingCompanionSlugs = [
+﻿const remainingCompanionSlugs = [
   'contract-management',
   'change-management',
   'executive-documentation',

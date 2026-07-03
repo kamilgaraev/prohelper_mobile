@@ -1,4 +1,4 @@
-import '../data/warehouse_scan_model.dart';
+﻿import '../data/warehouse_scan_model.dart';
 
 String warehouseActionLabel(String action) {
   return switch (action) {

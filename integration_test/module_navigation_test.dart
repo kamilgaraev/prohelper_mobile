@@ -1,4 +1,4 @@
-import 'package:flutter/widgets.dart';
+﻿import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:prohelpers_mobile/features/ai_assistant/presentation/ai_assistant_home_screen.dart';
@@ -30,16 +30,16 @@ import '../test/helpers/mobile_integration_test_helpers.dart';
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
-  configureProHelperIntegrationTestEnvironment();
+  configureMostIntegrationTestEnvironment();
 
   testWidgets('dashboard cards open every active mobile module', (
     tester,
   ) async {
-    await pumpProHelperWidget(
+    await pumpMostWidget(
       tester,
       const DashboardScreen(),
-      overrides: proHelperCoreOverrides(
-        selectedProject: ProHelperTestData.project(),
+      overrides: mostCoreOverrides(
+        selectedProject: MostTestData.project(),
       ),
     );
 

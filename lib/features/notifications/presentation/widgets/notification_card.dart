@@ -1,6 +1,6 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 
-import '../../../../core/theme/app_colors.dart';
+import '../../../../core/design/pro_status.dart';
 import '../../../../core/theme/app_typography.dart';
 import '../../../../core/widgets/industrial_card.dart';
 import '../../data/notification_model.dart';
@@ -20,17 +20,17 @@ class NotificationCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final color = _priorityColor(context, notification.priority);
+    final statusStyle = proStatusStyle(
+      context,
+      _priorityTone(notification.priority),
+    );
+    final color = statusStyle.foreground;
+    final actionContext = _actionContext(notification);
+    final markRead = onMarkRead;
 
     return IndustrialCard(
-      onTap: onTap,
       borderColor: notification.isUnread ? color.withValues(alpha: 0.45) : null,
-      backgroundColor:
-          notification.isUnread
-              ? color.withValues(
-                alpha: theme.brightness == Brightness.dark ? 0.12 : 0.06,
-              )
-              : null,
+      backgroundColor: notification.isUnread ? statusStyle.background : null,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -95,18 +95,78 @@ class NotificationCard extends StatelessWidget {
                 label: _formatDateTime(notification.createdAt),
                 color: theme.colorScheme.onSurfaceVariant,
               ),
-              if (notification.isUnread && onMarkRead != null)
-                TextButton.icon(
-                  onPressed: onMarkRead,
-                  icon: const Icon(Icons.done_rounded, size: 18),
-                  label: const Text('Прочитано'),
-                ),
             ],
+          ),
+          const SizedBox(height: 12),
+          Align(
+            alignment: Alignment.centerRight,
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              alignment: WrapAlignment.end,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                _NotificationCardActionButton(
+                  semanticsLabel: 'Открыть уведомление: $actionContext',
+                  onPressed: onTap,
+                  child: TextButton.icon(
+                    onPressed: onTap,
+                    icon: const Icon(Icons.open_in_new_rounded, size: 18),
+                    label: const Text('Открыть'),
+                  ),
+                ),
+                if (notification.isUnread && markRead != null)
+                  _NotificationCardActionButton(
+                    semanticsLabel:
+                        'Отметить уведомление прочитанным: $actionContext',
+                    onPressed: markRead,
+                    child: TextButton.icon(
+                      onPressed: markRead,
+                      icon: const Icon(Icons.done_rounded, size: 18),
+                      label: const Text('Отметить прочитанным'),
+                    ),
+                  ),
+              ],
+            ),
           ),
         ],
       ),
     );
   }
+}
+
+class _NotificationCardActionButton extends StatelessWidget {
+  const _NotificationCardActionButton({
+    required this.semanticsLabel,
+    required this.onPressed,
+    required this.child,
+  });
+
+  final String semanticsLabel;
+  final VoidCallback onPressed;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      container: true,
+      button: true,
+      enabled: true,
+      excludeSemantics: true,
+      label: semanticsLabel,
+      onTap: onPressed,
+      child: child,
+    );
+  }
+}
+
+String _actionContext(NotificationModel notification) {
+  final createdAt = notification.createdAt;
+  if (createdAt == null) {
+    return notification.title;
+  }
+
+  return '${notification.title}, ${_formatDateTime(createdAt)}';
 }
 
 class _Pill extends StatelessWidget {
@@ -145,12 +205,12 @@ IconData _iconFor(String category) {
   };
 }
 
-Color _priorityColor(BuildContext context, String priority) {
+ProStatusTone _priorityTone(String priority) {
   return switch (priority.trim().toLowerCase()) {
-    'critical' => AppColors.error,
-    'high' => AppColors.warning,
-    'low' => AppColors.success,
-    _ => Theme.of(context).colorScheme.primary,
+    'critical' => ProStatusTone.danger,
+    'high' => ProStatusTone.warning,
+    'low' => ProStatusTone.success,
+    _ => ProStatusTone.info,
   };
 }
 

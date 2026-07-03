@@ -1,4 +1,4 @@
-import 'package:dio/dio.dart';
+﻿import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -7,6 +7,8 @@ import 'package:prohelpers_mobile/features/warehouse/data/warehouse_custody_mode
 import 'package:prohelpers_mobile/features/warehouse/data/warehouse_repository.dart';
 import 'package:prohelpers_mobile/features/warehouse/domain/warehouse_provider.dart';
 import 'package:prohelpers_mobile/features/warehouse/presentation/warehouse_custody_screen.dart';
+import 'package:prohelpers_mobile/features/warehouse/presentation/warehouse_issue_sheet.dart';
+import 'package:prohelpers_mobile/features/warehouse/presentation/warehouse_return_sheet.dart';
 
 class _FakeWarehouseRepository extends WarehouseRepository {
   _FakeWarehouseRepository() : super(Dio());
@@ -27,6 +29,11 @@ class _FakeWarehouseNotifier extends WarehouseNotifier {
     );
   }
 
+  double? issuedQuantity;
+  double? returnedQuantity;
+  Object? issueError;
+  Object? returnError;
+
   @override
   Future<void> loadCustodyBalances({
     int? projectId,
@@ -35,6 +42,39 @@ class _FakeWarehouseNotifier extends WarehouseNotifier {
 
   @override
   Future<void> loadProjectMaterialStock({int? projectId}) async {}
+
+  @override
+  Future<void> issueToResponsible({
+    required int projectId,
+    required int projectWarehouseId,
+    required int materialId,
+    required int responsibleUserId,
+    required double quantity,
+    String? documentNumber,
+    String? reason,
+  }) async {
+    issuedQuantity = quantity;
+    final error = issueError;
+    if (error != null) {
+      throw error;
+    }
+  }
+
+  @override
+  Future<void> returnFromResponsible({
+    required int projectId,
+    required int custodyWarehouseId,
+    required int materialId,
+    required double quantity,
+    String? documentNumber,
+    String? reason,
+  }) async {
+    returnedQuantity = quantity;
+    final error = returnError;
+    if (error != null) {
+      throw error;
+    }
+  }
 }
 
 const _custodyBalance = WarehouseCustodyBalanceModel(
@@ -134,6 +174,127 @@ void main() {
     await _expectVisibleText(tester, 'Взять под ответственность');
     await _expectVisibleText(tester, 'Принять на объект');
   });
+
+  testWidgets('issue sheet shows inline quantity error without snack bar', (
+    tester,
+  ) async {
+    final notifier = _FakeWarehouseNotifier(_FakeWarehouseRepository());
+
+    await _pumpIssueSheet(tester, notifier);
+    await tester.tap(find.text('Взять под ответственность').last);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Укажите количество'), findsOneWidget);
+    expect(find.byType(SnackBar), findsNothing);
+  });
+
+  testWidgets('return sheet shows inline quantity error without snack bar', (
+    tester,
+  ) async {
+    final notifier = _FakeWarehouseNotifier(_FakeWarehouseRepository());
+
+    await _pumpReturnSheet(tester, notifier);
+    await tester.tap(find.text('Вернуть на объект').last);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Укажите количество'), findsOneWidget);
+    expect(find.byType(SnackBar), findsNothing);
+  });
+
+  testWidgets('issue sheet cleans technical submit errors', (tester) async {
+    final notifier = _FakeWarehouseNotifier(_FakeWarehouseRepository())
+      ..issueError = const FormatException('payload issue_to_responsible');
+
+    await _pumpIssueSheet(tester, notifier);
+    await tester.enterText(find.byType(TextField).first, '2,5');
+    await tester.tap(find.text('Взять под ответственность').last);
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('Не удалось выполнить действие. Попробуйте еще раз.'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('FormatException'), findsNothing);
+    expect(find.textContaining('payload'), findsNothing);
+    expect(notifier.issuedQuantity, 2.5);
+  });
+
+  testWidgets('return sheet cleans technical submit errors', (tester) async {
+    final notifier = _FakeWarehouseNotifier(_FakeWarehouseRepository())
+      ..returnError = const FormatException('payload return_material');
+
+    await _pumpReturnSheet(tester, notifier);
+    await tester.enterText(find.byType(TextField).first, '3');
+    await tester.tap(find.text('Вернуть на объект').last);
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('Не удалось выполнить действие. Попробуйте еще раз.'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('FormatException'), findsNothing);
+    expect(find.textContaining('payload'), findsNothing);
+    expect(notifier.returnedQuantity, 3);
+  });
+}
+
+Future<void> _pumpIssueSheet(
+  WidgetTester tester,
+  _FakeWarehouseNotifier notifier,
+) async {
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [warehouseProvider.overrideWith((ref) => notifier)],
+      child: const MaterialApp(
+        home: Scaffold(
+          body: WarehouseIssueSheet(
+            stock: ProjectMaterialStockItemModel(
+              projectId: 10,
+              projectName: 'Дом 300м',
+              materialId: 42,
+              materialName: 'Цемент М500',
+              materialUnit: 'меш.',
+              acceptedQuantity: 12,
+              onProjectQuantity: 5,
+              issuedQuantity: 3.5,
+              usedQuantity: 3.5,
+              availableQuantity: 8.5,
+              deliveries: <ProjectMaterialStockDeliveryModel>[
+                ProjectMaterialStockDeliveryModel(
+                  id: 701,
+                  projectWarehouseId: 22,
+                  acceptedQuantity: 12,
+                  usedQuantity: 3.5,
+                  availableQuantity: 8.5,
+                ),
+              ],
+              usages: <ProjectMaterialStockUsageModel>[],
+            ),
+            projectWarehouseId: 22,
+            responsibleUserId: 7,
+          ),
+        ),
+      ),
+    ),
+  );
+
+  await tester.pumpAndSettle();
+}
+
+Future<void> _pumpReturnSheet(
+  WidgetTester tester,
+  _FakeWarehouseNotifier notifier,
+) async {
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [warehouseProvider.overrideWith((ref) => notifier)],
+      child: const MaterialApp(
+        home: Scaffold(body: WarehouseReturnSheet(balance: _custodyBalance)),
+      ),
+    ),
+  );
+
+  await tester.pumpAndSettle();
 }
 
 Future<void> _expectVisibleText(WidgetTester tester, String text) async {

@@ -1,6 +1,7 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
+import '../../../core/error/user_message.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../core/widgets/app_empty_state.dart';
@@ -110,7 +111,7 @@ class _TimeTrackingScreenState extends ConsumerState<TimeTrackingScreen> {
                       const SizedBox(height: 12),
                       _TimeActionsPanel(
                         activeTimer: state.activeTimer,
-                        onStart: () => _showStartTimerSheet(context, ref),
+                        onStart: () => _showStartTimerSheet(context),
                         onManual: () => _showManualEntrySheet(context, ref),
                         onStop:
                             state.activeTimer == null
@@ -262,7 +263,10 @@ class _TimeEntryDetailScreenState extends ConsumerState<TimeEntryDetailScreen> {
             if (snapshot.hasError || !snapshot.hasData) {
               return AppErrorState(
                 title: 'Не удалось загрузить запись времени',
-                description: snapshot.error?.toString(),
+                description:
+                    snapshot.error == null
+                        ? null
+                        : UserMessage.fromError(snapshot.error!),
                 onRetry: _reload,
               );
             }
@@ -794,104 +798,145 @@ class _CorrectionRow extends StatelessWidget {
   }
 }
 
-Future<void> _showStartTimerSheet(BuildContext context, WidgetRef ref) async {
-  final titleController = TextEditingController();
-  final startController = TextEditingController();
-  final descriptionController = TextEditingController();
-  var isBillable = true;
-  var submitting = false;
-
+Future<void> _showStartTimerSheet(BuildContext context) async {
   await showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
-    builder:
-        (sheetContext) => StatefulBuilder(
-          builder:
-              (context, setSheetState) => Padding(
-                padding: EdgeInsets.only(
-                  left: 16,
-                  right: 16,
-                  top: 20,
-                  bottom: MediaQuery.of(context).viewInsets.bottom + 20,
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Запустить таймер', style: AppTypography.h2(context)),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: titleController,
-                      decoration: const InputDecoration(labelText: 'Работа'),
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: startController,
-                      decoration: const InputDecoration(
-                        labelText: 'Время начала, ЧЧ:ММ',
-                      ),
-                      keyboardType: TextInputType.datetime,
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: descriptionController,
-                      decoration: const InputDecoration(labelText: 'Описание'),
-                      minLines: 2,
-                      maxLines: 4,
-                    ),
-                    SwitchListTile(
-                      contentPadding: EdgeInsets.zero,
-                      value: isBillable,
-                      onChanged: (value) {
-                        setSheetState(() => isBillable = value);
-                      },
-                      title: const Text('Оплачиваемое время'),
-                    ),
-                    FilledButton.icon(
-                      onPressed:
-                          submitting
-                              ? null
-                              : () async {
-                                if (!_hasText(titleController.text) ||
-                                    !_hasText(startController.text)) {
-                                  _message(
-                                    context,
-                                    'Укажите работу и время начала',
-                                  );
-                                  return;
-                                }
-
-                                setSheetState(() => submitting = true);
-                                try {
-                                  await ref
-                                      .read(timeTrackingProvider.notifier)
-                                      .startTimer(
-                                        startTime: startController.text,
-                                        title: titleController.text,
-                                        isBillable: isBillable,
-                                        description: descriptionController.text,
-                                      );
-                                  if (sheetContext.mounted) {
-                                    Navigator.pop(sheetContext);
-                                  }
-                                } catch (error) {
-                                  if (context.mounted) {
-                                    _message(context, error.toString());
-                                  }
-                                } finally {
-                                  if (context.mounted) {
-                                    setSheetState(() => submitting = false);
-                                  }
-                                }
-                              },
-                      icon: const Icon(Icons.play_arrow_rounded),
-                      label: Text(submitting ? 'Запускаем...' : 'Запустить'),
-                    ),
-                  ],
-                ),
-              ),
-        ),
+    builder: (_) => const _StartTimerSheet(),
   );
+}
+
+class _StartTimerSheet extends ConsumerStatefulWidget {
+  const _StartTimerSheet();
+
+  @override
+  ConsumerState<_StartTimerSheet> createState() => _StartTimerSheetState();
+}
+
+class _StartTimerSheetState extends ConsumerState<_StartTimerSheet> {
+  final formKey = GlobalKey<FormState>();
+  final titleController = TextEditingController();
+  final startController = TextEditingController();
+  final descriptionController = TextEditingController();
+  final titleFocusNode = FocusNode();
+  final startFocusNode = FocusNode();
+  var autovalidateMode = AutovalidateMode.disabled;
+  var isBillable = true;
+  var submitting = false;
+
+  @override
+  void dispose() {
+    titleController.dispose();
+    startController.dispose();
+    descriptionController.dispose();
+    titleFocusNode.dispose();
+    startFocusNode.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(
+        left: 16,
+        right: 16,
+        top: 20,
+        bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+      ),
+      child: Form(
+        key: formKey,
+        autovalidateMode: autovalidateMode,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Запустить таймер', style: AppTypography.h2(context)),
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: titleController,
+              focusNode: titleFocusNode,
+              decoration: const InputDecoration(labelText: 'Работа'),
+              textInputAction: TextInputAction.next,
+              validator:
+                  (value) => _hasText(value ?? '') ? null : 'Укажите работу',
+              onFieldSubmitted: (_) => startFocusNode.requestFocus(),
+            ),
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: startController,
+              focusNode: startFocusNode,
+              decoration: const InputDecoration(
+                labelText: 'Время начала, ЧЧ:ММ',
+              ),
+              keyboardType: TextInputType.datetime,
+              textInputAction: TextInputAction.next,
+              validator:
+                  (value) =>
+                      _hasText(value ?? '') ? null : 'Укажите время начала',
+            ),
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: descriptionController,
+              decoration: const InputDecoration(labelText: 'Описание'),
+              minLines: 2,
+              maxLines: 4,
+            ),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              value: isBillable,
+              onChanged: (value) {
+                setState(() => isBillable = value);
+              },
+              title: const Text('Оплачиваемое время'),
+            ),
+            FilledButton.icon(
+              onPressed: submitting ? null : _submit,
+              icon: const Icon(Icons.play_arrow_rounded),
+              label: Text(submitting ? 'Запускаем...' : 'Запустить'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _submit() async {
+    final form = formKey.currentState;
+    if (form == null || !form.validate()) {
+      setState(() {
+        autovalidateMode = AutovalidateMode.onUserInteraction;
+      });
+      if (!_hasText(titleController.text)) {
+        titleFocusNode.requestFocus();
+      } else {
+        startFocusNode.requestFocus();
+      }
+      return;
+    }
+
+    setState(() => submitting = true);
+    try {
+      await ref
+          .read(timeTrackingProvider.notifier)
+          .startTimer(
+            startTime: startController.text.trim(),
+            title: titleController.text.trim(),
+            isBillable: isBillable,
+            description: descriptionController.text.trim(),
+          );
+      if (mounted) {
+        Navigator.pop(context);
+      }
+    } catch (error) {
+      if (mounted) {
+        _errorMessage(context, error);
+      }
+    } finally {
+      if (mounted) {
+        setState(() => submitting = false);
+      }
+    }
+  }
 }
 
 Future<void> _showManualEntrySheet(BuildContext context, WidgetRef ref) async {
@@ -1022,7 +1067,7 @@ Future<void> _showManualEntrySheet(BuildContext context, WidgetRef ref) async {
                                     }
                                   } catch (error) {
                                     if (context.mounted) {
-                                      _message(context, error.toString());
+                                      _errorMessage(context, error);
                                     }
                                   } finally {
                                     if (context.mounted) {
@@ -1131,7 +1176,7 @@ Future<void> _showStopTimerSheet(
                                   }
                                 } catch (error) {
                                   if (context.mounted) {
-                                    _message(context, error.toString());
+                                    _errorMessage(context, error);
                                   }
                                 } finally {
                                   if (context.mounted) {
@@ -1228,7 +1273,7 @@ Future<void> _showCorrectionSheet(
                                   }
                                 } catch (error) {
                                   if (context.mounted) {
-                                    _message(context, error.toString());
+                                    _errorMessage(context, error);
                                   }
                                 } finally {
                                   if (context.mounted) {
@@ -1257,7 +1302,7 @@ Future<void> _submitEntry(
     onDone?.call();
   } catch (error) {
     if (context.mounted) {
-      _message(context, error.toString());
+      _errorMessage(context, error);
     }
   }
 }
@@ -1303,4 +1348,8 @@ bool _hasText(String value) {
 
 void _message(BuildContext context, String message) {
   ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+}
+
+void _errorMessage(BuildContext context, Object error) {
+  _message(context, UserMessage.fromError(error));
 }

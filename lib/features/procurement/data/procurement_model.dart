@@ -1,4 +1,4 @@
-class ProcurementSummaryModel {
+﻿class ProcurementSummaryModel {
   const ProcurementSummaryModel({
     required this.counters,
     required this.purchaseRequests,

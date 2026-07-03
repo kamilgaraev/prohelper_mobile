@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/theme/app_typography.dart';
@@ -60,9 +60,19 @@ class _SelfAttendanceScreenState extends ConsumerState<SelfAttendanceScreen> {
                           : 'Дата явки: ${_formatDate(_workDate!)}',
                     ),
                   ),
+                  if (_workDate == null) ...[
+                    const SizedBox(height: 10),
+                    _AttendanceFormHint(
+                      text:
+                          'Сначала выберите дату явки. После этого кнопка сохранения станет активной.',
+                    ),
+                  ],
                   const SizedBox(height: 16),
                   AppPrimaryActionButton(
-                    label: 'Отметить явку',
+                    label:
+                        _workDate == null
+                            ? 'Сначала выберите дату'
+                            : 'Отметить явку',
                     onPressed:
                         state.isLoading || _workDate == null
                             ? null
@@ -124,6 +134,30 @@ class _SelfAttendanceScreenState extends ConsumerState<SelfAttendanceScreen> {
     await ref
         .read(workforceAttendanceProvider.notifier)
         .recordSelfAttendance(projectId: projectId, workDate: workDate);
+  }
+}
+
+class _AttendanceFormHint extends StatelessWidget {
+  const _AttendanceFormHint({required this.text});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(
+          Icons.info_outline_rounded,
+          size: 18,
+          color: theme.colorScheme.onSurfaceVariant,
+        ),
+        const SizedBox(width: 8),
+        Expanded(child: Text(text, style: AppTypography.caption(context))),
+      ],
+    );
   }
 }
 

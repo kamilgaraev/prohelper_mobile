@@ -1,4 +1,4 @@
-import 'package:isar/isar.dart';
+﻿import 'package:isar/isar.dart';
 
 class SiteRequestTransition {
   const SiteRequestTransition({

@@ -1,5 +1,6 @@
-import 'package:hooks_riverpod/hooks_riverpod.dart';
+﻿import 'package:hooks_riverpod/hooks_riverpod.dart';
 
+import '../../../core/error/user_message.dart';
 import '../data/machinery_operations_model.dart';
 import '../data/machinery_operations_repository.dart';
 
@@ -68,7 +69,10 @@ class MachineryOperationsNotifier
         shiftReports: shifts,
       );
     } catch (error) {
-      state = state.copyWith(isLoading: false, error: error.toString());
+      state = state.copyWith(
+        isLoading: false,
+        error: UserMessage.fromError(error),
+      );
     }
   }
 

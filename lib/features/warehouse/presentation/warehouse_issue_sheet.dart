@@ -1,6 +1,7 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
+import '../../../core/error/user_message.dart';
 import '../../../core/theme/app_typography.dart';
 import '../data/project_material_delivery_model.dart';
 import '../domain/warehouse_provider.dart';
@@ -23,8 +24,11 @@ class WarehouseIssueSheet extends ConsumerStatefulWidget {
 }
 
 class _WarehouseIssueSheetState extends ConsumerState<WarehouseIssueSheet> {
+  final _formKey = GlobalKey<FormState>();
   late final TextEditingController _quantityController;
   late final TextEditingController _reasonController;
+  late final FocusNode _quantityFocusNode;
+  AutovalidateMode _autovalidateMode = AutovalidateMode.disabled;
   bool _isSubmitting = false;
 
   @override
@@ -32,12 +36,14 @@ class _WarehouseIssueSheetState extends ConsumerState<WarehouseIssueSheet> {
     super.initState();
     _quantityController = TextEditingController();
     _reasonController = TextEditingController();
+    _quantityFocusNode = FocusNode();
   }
 
   @override
   void dispose() {
     _quantityController.dispose();
     _reasonController.dispose();
+    _quantityFocusNode.dispose();
     super.dispose();
   }
 
@@ -54,69 +60,74 @@ class _WarehouseIssueSheetState extends ConsumerState<WarehouseIssueSheet> {
 
     return Padding(
       padding: EdgeInsets.fromLTRB(16, 12, 16, 16 + bottomInset),
-      child: ListView(
-        shrinkWrap: true,
-        children: [
-          Text('Взять под ответственность', style: AppTypography.h2(context)),
-          const SizedBox(height: 8),
-          Text(widget.stock.materialName ?? 'Материал не указан'),
-          const SizedBox(height: 12),
-          Text(
-            'Доступно на объекте: ${_formatQuantity(widget.stock.onProjectQuantity)} ${widget.stock.materialUnit ?? ''}',
-            style: AppTypography.bodyMedium(context),
-          ),
-          if (widget.projectWarehouseId == null) ...[
+      child: Form(
+        key: _formKey,
+        autovalidateMode: _autovalidateMode,
+        child: ListView(
+          shrinkWrap: true,
+          children: [
+            Text('Взять под ответственность', style: AppTypography.h2(context)),
+            const SizedBox(height: 8),
+            Text(widget.stock.materialName ?? 'Материал не указан'),
             const SizedBox(height: 12),
-            const Text(
-              'Выдача будет доступна после синхронизации объектового склада.',
+            Text(
+              'Доступно на объекте: ${_formatQuantity(widget.stock.onProjectQuantity)} ${widget.stock.materialUnit ?? ''}',
+              style: AppTypography.bodyMedium(context),
+            ),
+            if (widget.projectWarehouseId == null) ...[
+              const SizedBox(height: 12),
+              const Text(
+                'Выдача будет доступна после синхронизации объектового склада.',
+              ),
+            ],
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _quantityController,
+              focusNode: _quantityFocusNode,
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
+              decoration: const InputDecoration(
+                labelText: 'Количество',
+                border: OutlineInputBorder(),
+              ),
+              validator: _validateQuantity,
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _reasonController,
+              minLines: 2,
+              maxLines: 4,
+              decoration: const InputDecoration(
+                labelText: 'Основание',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 16),
+            FilledButton.icon(
+              onPressed: canSubmit ? _submit : null,
+              icon: const Icon(Icons.assignment_ind_outlined),
+              label: Text(
+                _isSubmitting ? 'Выдаем...' : 'Взять под ответственность',
+              ),
             ),
           ],
-          const SizedBox(height: 16),
-          TextField(
-            controller: _quantityController,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            decoration: const InputDecoration(
-              labelText: 'Количество',
-              border: OutlineInputBorder(),
-            ),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _reasonController,
-            minLines: 2,
-            maxLines: 4,
-            decoration: const InputDecoration(
-              labelText: 'Основание',
-              border: OutlineInputBorder(),
-            ),
-          ),
-          const SizedBox(height: 16),
-          FilledButton.icon(
-            onPressed: canSubmit ? _submit : null,
-            icon: const Icon(Icons.assignment_ind_outlined),
-            label: Text(
-              _isSubmitting ? 'Выдаем...' : 'Взять под ответственность',
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
 
   Future<void> _submit() async {
-    final quantity = double.tryParse(
-      _quantityController.text.trim().replaceAll(',', '.'),
-    );
-
-    if (quantity == null || quantity <= 0) {
-      _showMessage('Укажите корректное количество.');
+    final form = _formKey.currentState;
+    if (form == null || !form.validate()) {
+      setState(() {
+        _autovalidateMode = AutovalidateMode.onUserInteraction;
+      });
+      _quantityFocusNode.requestFocus();
       return;
     }
 
-    if (quantity > widget.stock.onProjectQuantity) {
-      _showMessage('Количество не должно превышать остаток на объекте.');
-      return;
-    }
+    final quantity = _parseQuantity(_quantityController.text)!;
 
     final projectId = widget.stock.projectId;
     final materialId = widget.stock.materialId;
@@ -151,7 +162,9 @@ class _WarehouseIssueSheetState extends ConsumerState<WarehouseIssueSheet> {
         Navigator.of(context).pop(true);
       }
     } catch (error) {
-      _showMessage(error.toString());
+      if (mounted) {
+        _showMessage(error);
+      }
     } finally {
       if (mounted) {
         setState(() {
@@ -161,10 +174,36 @@ class _WarehouseIssueSheetState extends ConsumerState<WarehouseIssueSheet> {
     }
   }
 
-  void _showMessage(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message.replaceFirst('ApiException: ', ''))),
-    );
+  String? _validateQuantity(String? value) {
+    final quantity = _parseQuantity(value ?? '');
+    if (quantity == null) {
+      return 'Укажите количество';
+    }
+
+    if (quantity <= 0) {
+      return 'Количество должно быть больше нуля';
+    }
+
+    if (quantity > widget.stock.onProjectQuantity) {
+      return 'Количество не должно превышать остаток на объекте';
+    }
+
+    return null;
+  }
+
+  double? _parseQuantity(String value) {
+    final text = value.trim();
+    if (text.isEmpty) {
+      return null;
+    }
+
+    return double.tryParse(text.replaceAll(',', '.'));
+  }
+
+  void _showMessage(Object message) {
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(UserMessage.fromError(message))));
   }
 }
 

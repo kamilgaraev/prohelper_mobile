@@ -1,4 +1,4 @@
-import 'dart:convert';
+﻿import 'dart:convert';
 
 import 'package:dio/dio.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -31,12 +31,21 @@ class AuthRepository {
 
       await _storage.saveToken(token);
 
-      return await getMe();
+      return await getMe(token: token);
     } on DioException catch (error) {
+      if (error.response?.statusCode == 401) {
+        throw const ApiException(
+          'Email или пароль не подошли. Проверьте данные и попробуйте еще раз.',
+          statusCode: 401,
+        );
+      }
+
       throw ApiException.fromDio(
         error,
         fallbackMessage: 'Не удалось выполнить вход.',
       );
+    } on ApiException {
+      rethrow;
     } catch (_) {
       throw const ApiException('Не удалось выполнить вход.');
     }
@@ -67,9 +76,15 @@ class AuthRepository {
     }
   }
 
-  Future<User> getMe() async {
+  Future<User> getMe({String? token}) async {
     try {
-      final response = await _dio.get('/auth/me');
+      final response = await _dio.get(
+        '/auth/me',
+        options:
+            token == null || token.isEmpty
+                ? null
+                : Options(headers: {'Authorization': 'Bearer $token'}),
+      );
       return _mapJsonToUser(MobileApiResponse.dataMap(response.data));
     } on DioException catch (error) {
       throw ApiException.fromDio(

@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'package:prohelpers_mobile/core/design/pro_design_tokens.dart';
@@ -14,6 +14,7 @@ class ProSurface extends StatelessWidget {
     this.tone = ProSurfaceTone.base,
     this.bordered = true,
     this.borderRadius = ProRadius.sm,
+    this.semanticLabel,
   });
 
   final Widget child;
@@ -22,17 +23,39 @@ class ProSurface extends StatelessWidget {
   final ProSurfaceTone tone;
   final bool bordered;
   final double borderRadius;
+  final String? semanticLabel;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
     final color = switch (tone) {
       ProSurfaceTone.base => theme.colorScheme.surface,
       ProSurfaceTone.subtle => theme.colorScheme.surfaceContainer,
-      ProSurfaceTone.tinted => theme.colorScheme.primaryContainer.withValues(
-        alpha: theme.brightness == Brightness.dark ? 0.2 : 0.32,
-      ),
-      ProSurfaceTone.elevated => theme.colorScheme.surfaceContainerHigh,
+      ProSurfaceTone.tinted =>
+        isDark
+            ? theme.colorScheme.primaryContainer.withValues(alpha: 0.2)
+            : Color.alphaBlend(
+              theme.colorScheme.primary.withValues(alpha: 0.08),
+              theme.colorScheme.surface,
+            ),
+      ProSurfaceTone.elevated =>
+        isDark
+            ? theme.colorScheme.surfaceContainerHigh
+            : theme.colorScheme.surface,
+    };
+    final borderAlpha = switch (tone) {
+      ProSurfaceTone.elevated => isDark ? 0.22 : 0.58,
+      ProSurfaceTone.tinted => isDark ? 0.2 : 0.42,
+      _ => isDark ? 0.18 : 0.42,
+    };
+    final elevation = switch (tone) {
+      ProSurfaceTone.elevated => isDark ? 1.0 : 3.0,
+      _ => isDark ? 0.0 : 1.5,
+    };
+    final shadowAlpha = switch (tone) {
+      ProSurfaceTone.elevated => isDark ? 0.16 : 0.14,
+      _ => isDark ? 0.12 : 0.1,
     };
 
     final shape = RoundedRectangleBorder(
@@ -40,7 +63,7 @@ class ProSurface extends StatelessWidget {
       side:
           bordered
               ? BorderSide(
-                color: theme.colorScheme.outline.withValues(alpha: 0.16),
+                color: theme.colorScheme.outline.withValues(alpha: borderAlpha),
               )
               : BorderSide.none,
     );
@@ -49,25 +72,49 @@ class ProSurface extends StatelessWidget {
 
     return Material(
       color: color,
-      elevation: tone == ProSurfaceTone.elevated ? 1 : 0,
-      shadowColor: Colors.black.withValues(alpha: 0.12),
+      surfaceTintColor: Colors.transparent,
+      elevation: elevation,
+      shadowColor: Colors.black.withValues(alpha: shadowAlpha),
       shape: shape,
       clipBehavior: Clip.antiAlias,
       child:
           onTap == null
-              ? content
-              : InkWell(
-                onTap: () {
-                  HapticFeedback.selectionClick();
-                  onTap!();
-                },
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(
-                    minHeight: ProTouchTarget.min,
-                  ),
-                  child: content,
-                ),
-              ),
+              ? Semantics(container: true, child: content)
+              : _buildInteractiveSurface(content),
+    );
+  }
+
+  Widget _buildInteractiveSurface(Widget content) {
+    void handleTap() {
+      HapticFeedback.selectionClick();
+      onTap!();
+    }
+
+    final tappableContent = InkWell(
+      onTap: handleTap,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: ProTouchTarget.min),
+        child: content,
+      ),
+    );
+
+    if (semanticLabel == null) {
+      return Semantics(
+        container: true,
+        button: true,
+        enabled: true,
+        child: tappableContent,
+      );
+    }
+
+    return Semantics(
+      container: true,
+      button: true,
+      enabled: true,
+      focusable: true,
+      label: semanticLabel,
+      onTap: handleTap,
+      child: ExcludeSemantics(child: tappableContent),
     );
   }
 }

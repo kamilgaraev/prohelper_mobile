@@ -1,5 +1,6 @@
-import 'package:hooks_riverpod/hooks_riverpod.dart';
+﻿import 'package:hooks_riverpod/hooks_riverpod.dart';
 
+import '../../../core/error/user_message.dart';
 import '../data/production_labor_model.dart';
 import '../data/production_labor_repository.dart';
 
@@ -56,7 +57,10 @@ class ProductionLaborNotifier extends StateNotifier<ProductionLaborState> {
       );
       state = state.copyWith(isLoading: false, workOrders: workOrders);
     } catch (error) {
-      state = state.copyWith(isLoading: false, error: error.toString());
+      state = state.copyWith(
+        isLoading: false,
+        error: UserMessage.fromError(error),
+      );
     }
   }
 

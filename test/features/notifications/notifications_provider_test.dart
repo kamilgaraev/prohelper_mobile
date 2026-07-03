@@ -1,5 +1,8 @@
+﻿import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:prohelpers_mobile/core/network/api_exception.dart';
 import 'package:prohelpers_mobile/features/notifications/data/notification_model.dart';
 import 'package:prohelpers_mobile/features/notifications/data/notifications_repository.dart';
 import 'package:prohelpers_mobile/features/notifications/domain/notifications_provider.dart';
@@ -37,6 +40,15 @@ void main() {
 
     expect(notifier.state.unreadCount, 0);
     expect(notifier.state.items.every((item) => !item.isUnread), isTrue);
+  });
+
+  test('ignores late notification errors after notifier dispose', () async {
+    final repository = _DelayedNotificationsRepository();
+    final notifier = NotificationsNotifier(repository);
+
+    notifier.dispose();
+    repository.completeWithAuthErrors();
+    await _pumpAsync();
   });
 }
 
@@ -76,6 +88,36 @@ class _NotificationsRepository extends NotificationsRepository {
 
   @override
   Future<int> markAllAsRead() async => 2;
+}
+
+class _DelayedNotificationsRepository extends NotificationsRepository {
+  _DelayedNotificationsRepository() : super(Dio());
+
+  final _listCompleter = Completer<NotificationsPageResult>();
+  final _unreadCompleter = Completer<int>();
+
+  void completeWithAuthErrors() {
+    _listCompleter.completeError(
+      const ApiException('Unauthenticated.', statusCode: 401),
+    );
+    _unreadCompleter.completeError(
+      const ApiException('Unauthenticated.', statusCode: 401),
+    );
+  }
+
+  @override
+  Future<NotificationsPageResult> fetchNotifications({
+    int page = 1,
+    int perPage = 20,
+    NotificationFilter filter = NotificationFilter.all,
+  }) {
+    return _listCompleter.future;
+  }
+
+  @override
+  Future<int> fetchUnreadCount() {
+    return _unreadCompleter.future;
+  }
 }
 
 NotificationModel _notification(String id, {bool read = false}) {

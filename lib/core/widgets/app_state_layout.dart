@@ -1,5 +1,6 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:prohelpers_mobile/core/theme/app_typography.dart';
+import 'package:prohelpers_mobile/core/widgets/pro_surface.dart';
 
 class AppStateLayout extends StatelessWidget {
   final IconData icon;
@@ -29,41 +30,44 @@ class AppStateLayout extends StatelessWidget {
     return Center(
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
-        child: ConstrainedBox(
-          constraints: BoxConstraints(minHeight: minHeight, maxWidth: 420),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Container(
-                width: 68,
-                height: 68,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(18),
-                  border: Border.all(color: color.withValues(alpha: 0.18)),
+        child: ProSurface(
+          tone: ProSurfaceTone.elevated,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: minHeight, maxWidth: 420),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  width: 68,
+                  height: 68,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(color: color.withValues(alpha: 0.18)),
+                  ),
+                  child: Icon(icon, size: 36, color: color),
                 ),
-                child: Icon(icon, size: 36, color: color),
-              ),
-              const SizedBox(height: 18),
-              Text(
-                title,
-                style: titleStyle ?? AppTypography.h2(context),
-                textAlign: TextAlign.center,
-              ),
-              if (description != null) ...[
-                const SizedBox(height: 8),
+                const SizedBox(height: 18),
                 Text(
-                  description!,
-                  style: AppTypography.bodyMedium(
-                    context,
-                  ).copyWith(color: theme.colorScheme.onSurfaceVariant),
+                  title,
+                  style: titleStyle ?? AppTypography.h2(context),
                   textAlign: TextAlign.center,
                 ),
+                if (description != null) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    description!,
+                    style: AppTypography.bodyMedium(
+                      context,
+                    ).copyWith(color: theme.colorScheme.onSurfaceVariant),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+                if (action != null) ...[const SizedBox(height: 24), action!],
               ],
-              if (action != null) ...[const SizedBox(height: 24), action!],
-            ],
+            ),
           ),
         ),
       ),

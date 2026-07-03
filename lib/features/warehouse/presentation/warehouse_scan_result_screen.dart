@@ -1,6 +1,7 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
+import '../../../core/error/user_message.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../core/widgets/app_action_buttons.dart';
 import '../../../core/widgets/app_empty_state.dart';
@@ -231,7 +232,7 @@ class _WarehouseScanResultScreenState
         'Статус задачи обновлен: ${warehouseTaskActionLabel(task, targetStatus).toLowerCase()}.',
       );
     } catch (error) {
-      _showMessage(error.toString());
+      _showMessage(error);
     }
   }
 
@@ -264,7 +265,7 @@ class _WarehouseScanResultScreenState
         _result = refreshed;
       });
     } catch (error) {
-      _showMessage(error.toString());
+      _showMessage(error);
     } finally {
       if (mounted) {
         setState(() {
@@ -338,10 +339,10 @@ class _WarehouseScanResultScreenState
     return null;
   }
 
-  void _showMessage(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message.replaceFirst('ApiException: ', ''))),
-    );
+  void _showMessage(Object message) {
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(UserMessage.fromError(message))));
   }
 }
 

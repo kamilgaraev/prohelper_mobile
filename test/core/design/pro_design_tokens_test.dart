@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:prohelpers_mobile/core/design/pro_design_tokens.dart';
 import 'package:prohelpers_mobile/core/design/pro_status.dart';
@@ -18,7 +18,7 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
-        theme: ProHelperTheme.lightTheme,
+        theme: MostTheme.lightTheme,
         home: Builder(
           builder: (context) {
             status = proStatusStyle(context, ProStatusTone.warning);
@@ -28,12 +28,25 @@ void main() {
       ),
     );
 
-    expect(ProHelperTheme.lightTheme.useMaterial3, isTrue);
-    expect(ProHelperTheme.darkTheme.useMaterial3, isTrue);
+    expect(MostTheme.lightTheme.useMaterial3, isTrue);
+    expect(MostTheme.darkTheme.useMaterial3, isTrue);
     expect(
-      ProHelperTheme.lightTheme.colorScheme.surfaceContainerHighest,
+      MostTheme.lightTheme.colorScheme.surfaceContainerHighest,
       isA<Color>(),
     );
     expect(status.icon, Icons.warning_amber_rounded);
+  });
+
+  test('app bars keep system status icons readable in both themes', () {
+    final lightOverlay =
+        MostTheme.lightTheme.appBarTheme.systemOverlayStyle;
+    final darkOverlay = MostTheme.darkTheme.appBarTheme.systemOverlayStyle;
+
+    expect(lightOverlay, isNotNull);
+    expect(lightOverlay!.statusBarIconBrightness, Brightness.dark);
+    expect(lightOverlay.statusBarBrightness, Brightness.light);
+    expect(darkOverlay, isNotNull);
+    expect(darkOverlay!.statusBarIconBrightness, Brightness.light);
+    expect(darkOverlay.statusBarBrightness, Brightness.dark);
   });
 }

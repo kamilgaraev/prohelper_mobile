@@ -1,4 +1,5 @@
-import 'package:hooks_riverpod/hooks_riverpod.dart';
+﻿import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:prohelpers_mobile/core/error/user_message.dart';
 import 'package:prohelpers_mobile/features/auth/domain/auth_provider.dart';
 import 'package:prohelpers_mobile/features/dashboard/data/dashboard_repository.dart';
 import 'package:prohelpers_mobile/features/dashboard/data/dashboard_widget_model.dart';
@@ -47,10 +48,11 @@ class DashboardController extends StateNotifier<DashboardState> {
       final widgets = await _repository.fetchWidgets();
       state = state.copyWith(isLoading: false, widgets: widgets);
     } catch (error) {
+      final currentWidgets = state.widgets;
       state = state.copyWith(
         isLoading: false,
-        widgets: const [],
-        error: error.toString(),
+        widgets: currentWidgets,
+        error: currentWidgets.isEmpty ? UserMessage.fromError(error) : null,
       );
     }
   }

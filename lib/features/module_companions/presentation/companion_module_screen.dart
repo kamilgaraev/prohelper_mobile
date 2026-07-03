@@ -1,9 +1,11 @@
-import 'dart:async';
+﻿import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:intl/intl.dart';
 
+import '../../../core/error/user_message.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../core/widgets/app_action_buttons.dart';
@@ -81,12 +83,15 @@ class _CompanionModuleScreenState extends ConsumerState<CompanionModuleScreen> {
         title: Text(title),
         actions: [
           IconButton(
-            tooltip: 'Обновить',
+            tooltip: 'Обновить список',
             onPressed:
                 state.isLoading
                     ? null
                     : () => ref.read(provider.notifier).load(),
-            icon: const Icon(Icons.refresh_rounded),
+            icon: const Icon(
+              Icons.refresh_rounded,
+              semanticLabel: 'Обновить список',
+            ),
           ),
         ],
       ),
@@ -220,7 +225,7 @@ class _CompanionModuleDetailScreenState
           if (snapshot.hasError) {
             return AppErrorState(
               title: 'Не удалось загрузить запись',
-              description: snapshot.error.toString(),
+              description: UserMessage.fromError(snapshot.error!),
               onRetry:
                   () => setState(() {
                     _future = _load();
@@ -310,7 +315,7 @@ class _CompanionModuleDetailScreenState
 
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text(error.toString())));
+      ).showSnackBar(SnackBar(content: Text(UserMessage.fromError(error))));
     }
   }
 }
@@ -687,6 +692,7 @@ class _MetricBlock extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final displayValue = _formatMetricValue(label, value);
 
     return Container(
       constraints: const BoxConstraints(minHeight: 58),
@@ -710,7 +716,7 @@ class _MetricBlock extends StatelessWidget {
           ),
           const SizedBox(height: 3),
           Text(
-            value ?? 'Нет данных',
+            displayValue ?? 'Нет данных',
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: AppTypography.bodyMedium(context).copyWith(
@@ -859,4 +865,48 @@ Color _toneColor(BuildContext context, String? tone) {
     'critical' => AppColors.error,
     _ => Theme.of(context).colorScheme.primary,
   };
+}
+
+final NumberFormat _ruAmountFormatter =
+    NumberFormat.decimalPattern('ru_RU')
+      ..minimumFractionDigits = 2
+      ..maximumFractionDigits = 2;
+
+String? _formatMetricValue(String label, String? value) {
+  if (value == null) {
+    return null;
+  }
+
+  if (!_isAmountLabel(label)) {
+    return value;
+  }
+
+  final normalizedValue = value.trim();
+
+  if (!_looksLikeDecimalAmount(normalizedValue)) {
+    return value;
+  }
+
+  final parsed = double.tryParse(
+    normalizedValue.replaceAll(RegExp(r'\s+'), '').replaceAll(',', '.'),
+  );
+
+  if (parsed == null) {
+    return value;
+  }
+
+  return _ruAmountFormatter.format(parsed);
+}
+
+bool _isAmountLabel(String label) {
+  final normalized = label.toLowerCase().replaceAll('ё', 'е');
+
+  return normalized.contains('сумм') ||
+      normalized.contains('стоим') ||
+      normalized.contains('цена') ||
+      normalized.contains('бюджет');
+}
+
+bool _looksLikeDecimalAmount(String value) {
+  return RegExp(r'^[+-]?\d[\d\s]*[,.]\d{1,2}$').hasMatch(value);
 }

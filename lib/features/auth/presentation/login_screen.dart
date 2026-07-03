@@ -1,4 +1,5 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
@@ -15,26 +16,55 @@ class LoginScreen extends HookConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final formKey = useMemoized(() => GlobalKey<FormState>());
     final emailController = useTextEditingController();
     final passwordController = useTextEditingController();
+    final emailFocusNode = useFocusNode();
+    final passwordFocusNode = useFocusNode();
     final showPassword = useState(false);
-    final localError = useState<String?>(null);
+    final autovalidateMode = useState(AutovalidateMode.disabled);
     final authState = ref.watch(authProvider);
     final theme = Theme.of(context);
     final isLoading = authState is AuthLoading;
-    final errorMessage =
-        localError.value ?? (authState is AuthError ? authState.message : null);
+    final errorMessage = authState is AuthError ? authState.message : null;
+    final isKeyboardVisible = MediaQuery.viewInsetsOf(context).bottom > 0;
+    final outerTopPadding = isKeyboardVisible ? ProSpacing.md : 28.0;
+    final outerBottomPadding =
+        isKeyboardVisible ? ProTouchTarget.comfortable : 28.0;
+    final formPadding = isKeyboardVisible ? ProSpacing.md : ProSpacing.lg;
+    final passwordVisibilityLabel =
+        showPassword.value ? 'Скрыть пароль' : 'Показать пароль';
+
+    void togglePasswordVisibility() {
+      showPassword.value = !showPassword.value;
+    }
+
+    void clearSubmitError() {
+      if (authState is AuthError) {
+        ref.read(authProvider.notifier).clearError();
+      }
+    }
 
     void submit() {
-      final email = emailController.text.trim();
-      final password = passwordController.text;
-
-      if (email.isEmpty || password.isEmpty) {
-        localError.value = 'Введите email и пароль.';
+      if (isLoading) {
         return;
       }
 
-      localError.value = null;
+      final form = formKey.currentState;
+      if (form == null || !form.validate()) {
+        autovalidateMode.value = AutovalidateMode.onUserInteraction;
+        if (emailController.text.trim().isEmpty) {
+          emailFocusNode.requestFocus();
+        } else {
+          passwordFocusNode.requestFocus();
+        }
+        return;
+      }
+
+      final email = emailController.text.trim();
+      final password = passwordController.text;
+      FocusScope.of(context).unfocus();
+      TextInput.finishAutofillContext();
       ref.read(authProvider.notifier).login(email, password);
     }
 
@@ -43,12 +73,25 @@ class LoginScreen extends HookConsumerWidget {
         child: LayoutBuilder(
           builder: (context, constraints) {
             return SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(20, 28, 20, 28),
+              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+              padding: EdgeInsets.fromLTRB(
+                20,
+                outerTopPadding,
+                20,
+                outerBottomPadding,
+              ),
               child: ConstrainedBox(
                 constraints: BoxConstraints(
-                  minHeight: constraints.maxHeight - 56,
+                  minHeight:
+                      isKeyboardVisible
+                          ? constraints.maxHeight
+                          : constraints.maxHeight - 56,
                 ),
-                child: Center(
+                child: Align(
+                  alignment:
+                      isKeyboardVisible
+                          ? Alignment.topCenter
+                          : Alignment.center,
                   child: ConstrainedBox(
                     constraints: const BoxConstraints(maxWidth: 420),
                     child: AutofillGroup(
@@ -56,88 +99,124 @@ class LoginScreen extends HookConsumerWidget {
                         mainAxisSize: MainAxisSize.min,
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          _LoginBrandHeader(theme: theme),
-                          const SizedBox(height: 28),
-                          ProSurface(
-                            tone: ProSurfaceTone.elevated,
-                            padding: const EdgeInsets.all(ProSpacing.lg),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                Text(
-                                  'Вход в систему',
-                                  style: AppTypography.h2(context),
-                                ),
-                                const SizedBox(height: 6),
-                                Text(
-                                  'Используйте рабочую учетную запись ProHelper.',
-                                  style: AppTypography.caption(context),
-                                ),
-                                const SizedBox(height: 20),
-                                _LoginTextField(
-                                  controller: emailController,
-                                  label: 'Email',
-                                  icon: Icons.mail_outline_rounded,
-                                  keyboardType: TextInputType.emailAddress,
-                                  textInputAction: TextInputAction.next,
-                                  autofillHints: const [
-                                    AutofillHints.email,
-                                    AutofillHints.username,
-                                  ],
-                                ),
-                                const SizedBox(height: 14),
-                                _LoginTextField(
-                                  controller: passwordController,
-                                  label: 'Пароль',
-                                  icon: Icons.lock_outline_rounded,
-                                  obscureText: !showPassword.value,
-                                  textInputAction: TextInputAction.done,
-                                  autofillHints: const [AutofillHints.password],
-                                  onSubmitted: (_) => submit(),
-                                  suffix: IconButton(
-                                    tooltip:
-                                        showPassword.value
-                                            ? 'Скрыть пароль'
-                                            : 'Показать пароль',
-                                    onPressed:
-                                        () =>
-                                            showPassword.value =
-                                                !showPassword.value,
-                                    icon: Icon(
-                                      showPassword.value
-                                          ? Icons.visibility_off_outlined
-                                          : Icons.visibility_outlined,
+                          if (!isKeyboardVisible) ...[
+                            _LoginBrandHeader(theme: theme),
+                            const SizedBox(height: 28),
+                          ],
+                          Form(
+                            key: formKey,
+                            autovalidateMode: autovalidateMode.value,
+                            child: ProSurface(
+                              tone: ProSurfaceTone.elevated,
+                              padding: EdgeInsets.all(formPadding),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  Text(
+                                    'Вход в систему',
+                                    style: AppTypography.h2(context),
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    'Используйте рабочую учетную запись МОСТ.',
+                                    style: AppTypography.caption(context),
+                                  ),
+                                  const SizedBox(height: 20),
+                                  _LoginTextField(
+                                    controller: emailController,
+                                    focusNode: emailFocusNode,
+                                    label: 'Email',
+                                    icon: Icons.mail_outline_rounded,
+                                    keyboardType: TextInputType.emailAddress,
+                                    textInputAction: TextInputAction.next,
+                                    autocorrect: false,
+                                    enableSuggestions: false,
+                                    enableIMEPersonalizedLearning: false,
+                                    smartDashesType: SmartDashesType.disabled,
+                                    smartQuotesType: SmartQuotesType.disabled,
+                                    autofillHints: const [
+                                      AutofillHints.email,
+                                      AutofillHints.username,
+                                    ],
+                                    onChanged: (_) => clearSubmitError(),
+                                    validator:
+                                        (value) =>
+                                            (value ?? '').trim().isEmpty
+                                                ? 'Введите email'
+                                                : null,
+                                  ),
+                                  const SizedBox(height: 14),
+                                  _LoginTextField(
+                                    controller: passwordController,
+                                    focusNode: passwordFocusNode,
+                                    label: 'Пароль',
+                                    icon: Icons.lock_outline_rounded,
+                                    obscureText: !showPassword.value,
+                                    textInputAction: TextInputAction.done,
+                                    autocorrect: false,
+                                    enableSuggestions: false,
+                                    enableIMEPersonalizedLearning: false,
+                                    smartDashesType: SmartDashesType.disabled,
+                                    smartQuotesType: SmartQuotesType.disabled,
+                                    autofillHints: const [
+                                      AutofillHints.password,
+                                    ],
+                                    onChanged: (_) => clearSubmitError(),
+                                    onSubmitted: (_) => submit(),
+                                    validator:
+                                        (value) =>
+                                            (value ?? '').isEmpty
+                                                ? 'Введите пароль'
+                                                : null,
+                                    suffix: Semantics(
+                                      label: passwordVisibilityLabel,
+                                      button: true,
+                                      toggled: showPassword.value,
+                                      onTap: togglePasswordVisibility,
+                                      child: ExcludeSemantics(
+                                        child: IconButton(
+                                          tooltip: passwordVisibilityLabel,
+                                          onPressed: togglePasswordVisibility,
+                                          icon: Icon(
+                                            showPassword.value
+                                                ? Icons.visibility_off_outlined
+                                                : Icons.visibility_outlined,
+                                          ),
+                                        ),
+                                      ),
                                     ),
                                   ),
-                                ),
-                                if (errorMessage != null) ...[
-                                  const SizedBox(height: 16),
-                                  ProStatusBanner(
-                                    title: 'Не удалось выполнить вход',
-                                    description: errorMessage,
-                                    tone: ProStatusTone.danger,
+                                  if (errorMessage != null) ...[
+                                    const SizedBox(height: 16),
+                                    ProStatusBanner(
+                                      title: 'Не удалось выполнить вход',
+                                      description: errorMessage,
+                                      tone: ProStatusTone.danger,
+                                    ),
+                                  ],
+                                  const SizedBox(height: 22),
+                                  AppPrimaryActionButton(
+                                    label: 'Войти',
+                                    busyLabel: 'Входим',
+                                    leading: const Icon(
+                                      Icons.login_rounded,
+                                      size: 20,
+                                    ),
+                                    onPressed: isLoading ? null : submit,
+                                    isBusy: isLoading,
                                   ),
                                 ],
-                                const SizedBox(height: 22),
-                                AppPrimaryActionButton(
-                                  label: 'Войти',
-                                  busyLabel: 'Входим',
-                                  leading: const Icon(
-                                    Icons.login_rounded,
-                                    size: 20,
-                                  ),
-                                  onPressed: isLoading ? null : submit,
-                                  isBusy: isLoading,
-                                ),
-                              ],
+                              ),
                             ),
                           ),
-                          const SizedBox(height: 18),
-                          Text(
-                            'Если доступ не открывается, обратитесь к администратору организации.',
-                            textAlign: TextAlign.center,
-                            style: AppTypography.caption(context),
-                          ),
+                          if (!isKeyboardVisible) ...[
+                            const SizedBox(height: 18),
+                            Text(
+                              'Если доступ не открывается, обратитесь к администратору организации.',
+                              textAlign: TextAlign.center,
+                              style: AppTypography.caption(context),
+                            ),
+                          ],
                         ],
                       ),
                     ),
@@ -177,13 +256,13 @@ class _LoginBrandHeader extends StatelessWidget {
         ),
         const SizedBox(height: 18),
         Text(
-          'PROHELPER',
+          'MOST',
           textAlign: TextAlign.center,
           style: AppTypography.h1(context).copyWith(fontSize: 32),
         ),
         const SizedBox(height: 4),
         Text(
-          'Industrial management',
+          'Управление строительством',
           textAlign: TextAlign.center,
           style: AppTypography.caption(context),
         ),
@@ -197,41 +276,98 @@ class _LoginTextField extends StatelessWidget {
     required this.controller,
     required this.label,
     required this.icon,
+    this.focusNode,
     this.obscureText = false,
     this.keyboardType,
     this.textInputAction,
+    this.autocorrect = true,
+    this.enableSuggestions = true,
+    this.enableIMEPersonalizedLearning = true,
+    this.smartDashesType,
+    this.smartQuotesType,
     this.autofillHints,
+    this.onChanged,
     this.onSubmitted,
+    this.validator,
     this.suffix,
   });
 
   final TextEditingController controller;
   final String label;
   final IconData icon;
+  final FocusNode? focusNode;
   final bool obscureText;
   final TextInputType? keyboardType;
   final TextInputAction? textInputAction;
+  final bool autocorrect;
+  final bool enableSuggestions;
+  final bool enableIMEPersonalizedLearning;
+  final SmartDashesType? smartDashesType;
+  final SmartQuotesType? smartQuotesType;
   final Iterable<String>? autofillHints;
+  final ValueChanged<String>? onChanged;
   final ValueChanged<String>? onSubmitted;
+  final FormFieldValidator<String>? validator;
   final Widget? suffix;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final collapseFieldSemantics = suffix == null;
 
-    return TextField(
+    final textField = TextFormField(
       controller: controller,
+      focusNode: focusNode,
       obscureText: obscureText,
       keyboardType: keyboardType,
       textInputAction: textInputAction,
+      autocorrect: autocorrect,
+      enableSuggestions: enableSuggestions,
+      enableIMEPersonalizedLearning: enableIMEPersonalizedLearning,
+      smartDashesType: smartDashesType,
+      smartQuotesType: smartQuotesType,
       autofillHints: autofillHints,
-      onSubmitted: onSubmitted,
+      onChanged: onChanged,
+      onFieldSubmitted: onSubmitted,
+      validator: validator,
       style: AppTypography.bodyLarge(context),
       decoration: InputDecoration(
         labelText: label,
+        floatingLabelBehavior: FloatingLabelBehavior.always,
         prefixIcon: Icon(icon, color: theme.colorScheme.onSurfaceVariant),
         suffixIcon: suffix,
       ),
+    );
+
+    return ValueListenableBuilder<TextEditingValue>(
+      valueListenable: controller,
+      child: textField,
+      builder: (context, value, child) {
+        return Semantics(
+          container: true,
+          excludeSemantics: collapseFieldSemantics,
+          label: 'Поле ввода: $label',
+          value:
+              obscureText && value.text.isNotEmpty
+                  ? 'Введено символов: ${value.text.length}'
+                  : value.text,
+          textField: true,
+          enabled: true,
+          focusable: true,
+          focused: focusNode?.hasFocus,
+          obscured: obscureText,
+          currentValueLength: value.text.length,
+          onTap: focusNode?.requestFocus,
+          onSetText: (text) {
+            controller.value = TextEditingValue(
+              text: text,
+              selection: TextSelection.collapsed(offset: text.length),
+            );
+            onChanged?.call(text);
+          },
+          child: child,
+        );
+      },
     );
   }
 }

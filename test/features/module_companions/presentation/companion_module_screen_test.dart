@@ -1,4 +1,4 @@
-import 'package:dio/dio.dart';
+﻿import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -121,6 +121,10 @@ void main() {
     expect(find.text('Договоры'), findsWidgets);
     expect(find.text('C-001'), findsOneWidget);
     expect(find.text('Активно'), findsWidgets);
+    expect(find.bySemanticsLabel('Обновить список'), findsOneWidget);
+    expect(find.text('100 000,00'), findsOneWidget);
+    expect(find.text('100000.00'), findsNothing);
+    expect(find.text('2'), findsOneWidget);
 
     await tester.enterText(find.byKey(const Key('companion-search')), 'Tower');
     await tester.pump(const Duration(milliseconds: 400));

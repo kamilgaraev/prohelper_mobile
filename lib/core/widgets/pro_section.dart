@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 
 import 'package:prohelpers_mobile/core/design/pro_design_tokens.dart';
 import 'package:prohelpers_mobile/core/theme/app_typography.dart';
@@ -30,7 +30,11 @@ class ProSectionHeader extends StatelessWidget {
                   title,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: AppTypography.h2(context),
+                  style: AppTypography.h2(context).copyWith(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                    height: 1.16,
+                  ),
                 ),
                 if (subtitle != null) ...[
                   const SizedBox(height: ProSpacing.xxs),
@@ -76,15 +80,23 @@ class ProSectionBlock extends StatelessWidget {
       return const SizedBox.shrink();
     }
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        ProSectionHeader(title: title, subtitle: subtitle, trailing: trailing),
-        for (var index = 0; index < children.length; index++) ...[
-          children[index],
-          if (index != children.length - 1) SizedBox(height: spacing),
+    return Semantics(
+      container: true,
+      explicitChildNodes: true,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          ProSectionHeader(
+            title: title,
+            subtitle: subtitle,
+            trailing: trailing,
+          ),
+          for (var index = 0; index < children.length; index++) ...[
+            children[index],
+            if (index != children.length - 1) SizedBox(height: spacing),
+          ],
         ],
-      ],
+      ),
     );
   }
 }

@@ -1,6 +1,7 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
+import '../../../core/error/user_message.dart';
 import '../../../core/theme/app_typography.dart';
 import '../data/warehouse_repository.dart';
 import '../data/warehouse_scan_model.dart';
@@ -270,7 +271,7 @@ class _WarehouseTransferSheetState
 
       Navigator.of(context).pop(true);
     } catch (error) {
-      _showMessage(error.toString());
+      _showMessage(error);
     } finally {
       if (mounted) {
         setState(() {
@@ -280,9 +281,9 @@ class _WarehouseTransferSheetState
     }
   }
 
-  void _showMessage(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message.replaceFirst('ApiException: ', ''))),
-    );
+  void _showMessage(Object message) {
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(UserMessage.fromError(message))));
   }
 }

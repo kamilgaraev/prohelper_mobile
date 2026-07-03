@@ -1,5 +1,6 @@
-import 'package:hooks_riverpod/hooks_riverpod.dart';
+﻿import 'package:hooks_riverpod/hooks_riverpod.dart';
 
+import '../../../core/error/user_message.dart';
 import '../data/ai_assistant_models.dart';
 import '../data/ai_assistant_repository.dart';
 
@@ -43,7 +44,10 @@ class AiAssistantHomeNotifier extends StateNotifier<AiAssistantHomeState> {
       final home = await _repository.fetchHome();
       state = state.copyWith(isLoading: false, home: home);
     } catch (error) {
-      state = state.copyWith(isLoading: false, error: error.toString());
+      state = state.copyWith(
+        isLoading: false,
+        error: UserMessage.fromError(error),
+      );
     }
   }
 }

@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 
 import 'package:prohelpers_mobile/core/theme/app_typography.dart';
 
@@ -26,14 +26,22 @@ class AppPrimaryActionButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final color = backgroundColor ?? theme.colorScheme.primary;
+    final disabledBackground =
+        isBusy
+            ? color.withValues(alpha: 0.76)
+            : theme.colorScheme.onSurface.withValues(alpha: 0.12);
+    final disabledForeground =
+        isBusy
+            ? theme.colorScheme.onPrimary
+            : theme.colorScheme.onSurface.withValues(alpha: 0.38);
 
     final button = FilledButton(
       onPressed: isBusy ? null : onPressed,
       style: FilledButton.styleFrom(
         backgroundColor: color,
         foregroundColor: theme.colorScheme.onPrimary,
-        disabledBackgroundColor: color.withValues(alpha: 0.55),
-        disabledForegroundColor: theme.colorScheme.onPrimary,
+        disabledBackgroundColor: disabledBackground,
+        disabledForegroundColor: disabledForeground,
         minimumSize: const Size(0, 52),
         padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),

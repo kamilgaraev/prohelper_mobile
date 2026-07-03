@@ -1,5 +1,6 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:prohelpers_mobile/core/error/user_message.dart';
 import 'package:prohelpers_mobile/core/theme/app_colors.dart';
 import 'package:prohelpers_mobile/core/theme/app_typography.dart';
 import 'package:prohelpers_mobile/core/widgets/app_error_state.dart';
@@ -115,7 +116,7 @@ class SiteRequestDetailScreen extends ConsumerWidget {
 
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text(error.toString())));
+      ).showSnackBar(SnackBar(content: Text(UserMessage.fromError(error))));
     }
   }
 
@@ -166,9 +167,9 @@ class SiteRequestDetailScreen extends ConsumerWidget {
                       return;
                     }
 
-                    ScaffoldMessenger.of(
-                      context,
-                    ).showSnackBar(SnackBar(content: Text(error.toString())));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text(UserMessage.fromError(error))),
+                    );
                   }
                 },
                 child: Text(

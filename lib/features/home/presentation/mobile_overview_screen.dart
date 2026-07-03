@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
@@ -8,6 +8,7 @@ import 'package:prohelpers_mobile/core/navigation/mobile_navigation_registry.dar
 import 'package:prohelpers_mobile/core/navigation/mobile_navigation_state.dart';
 import 'package:prohelpers_mobile/core/widgets/pro_page_scaffold.dart';
 import 'package:prohelpers_mobile/features/auth/domain/auth_provider.dart';
+import 'package:prohelpers_mobile/features/dashboard/data/dashboard_widget_model.dart';
 import 'package:prohelpers_mobile/features/dashboard/presentation/controllers/dashboard_controller.dart';
 import 'package:prohelpers_mobile/features/home/presentation/widgets/overview_next_actions.dart';
 import 'package:prohelpers_mobile/features/home/presentation/widgets/overview_project_header.dart';
@@ -15,6 +16,7 @@ import 'package:prohelpers_mobile/features/home/presentation/widgets/overview_to
 import 'package:prohelpers_mobile/features/home/presentation/widgets/overview_work_summary.dart';
 import 'package:prohelpers_mobile/features/notifications/domain/notifications_provider.dart';
 import 'package:prohelpers_mobile/features/notifications/presentation/notifications_screen.dart';
+import 'package:prohelpers_mobile/features/notifications/presentation/widgets/notification_action_button.dart';
 import 'package:prohelpers_mobile/features/projects/domain/projects_provider.dart';
 import 'package:prohelpers_mobile/features/projects/presentation/project_selection_screen.dart';
 
@@ -28,30 +30,26 @@ class MobileOverviewScreen extends ConsumerWidget {
     final notificationsState = ref.watch(notificationsProvider);
     final authState = ref.watch(authProvider);
     final actions = ref.watch(mobileRecommendedActionsProvider);
+    final headerSubtitle = _overviewSubtitle(
+      widgets: dashboardState.widgets,
+      unreadCount: notificationsState.unreadCount,
+    );
+    void openNotifications() {
+      HapticFeedback.selectionClick();
+      Navigator.of(
+        context,
+      ).push(MaterialPageRoute(builder: (_) => const NotificationsScreen()));
+    }
 
     return ProPageScaffold(
       title: 'Обзор',
-      subtitle: project?.name ?? 'Объект не выбран',
+      subtitle: headerSubtitle,
       onRefresh:
           () => ref.read(dashboardControllerProvider.notifier).loadDashboard(),
       actions: [
-        IconButton(
-          tooltip: 'Уведомления',
-          onPressed: () {
-            HapticFeedback.selectionClick();
-            Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const NotificationsScreen()),
-            );
-          },
-          icon: Badge(
-            isLabelVisible: notificationsState.unreadCount > 0,
-            label: Text(
-              notificationsState.unreadCount > 99
-                  ? '99+'
-                  : notificationsState.unreadCount.toString(),
-            ),
-            child: const Icon(Icons.notifications_none_rounded),
-          ),
+        NotificationActionButton(
+          unreadCount: notificationsState.unreadCount,
+          onPressed: openNotifications,
         ),
       ],
       body: Column(
@@ -78,6 +76,12 @@ class MobileOverviewScreen extends ConsumerWidget {
                     ref
                         .read(dashboardControllerProvider.notifier)
                         .loadDashboard(),
+            onOpenNotifications:
+                () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const NotificationsScreen(),
+                  ),
+                ),
           ),
           const SizedBox(height: 20),
           OverviewNextActions(
@@ -115,4 +119,32 @@ class MobileOverviewScreen extends ConsumerWidget {
 
     Navigator.of(context).push(MaterialPageRoute(builder: destination.builder));
   }
+}
+
+String _overviewSubtitle({
+  required List<DashboardWidgetModel> widgets,
+  required int unreadCount,
+}) {
+  final attentionCount =
+      widgets
+          .where(
+            (widget) =>
+                widget.status == DashboardWidgetStatus.attention ||
+                widget.status == DashboardWidgetStatus.critical,
+          )
+          .length;
+
+  if (attentionCount > 0 && unreadCount > 0) {
+    return 'Внимание: $attentionCount • уведомления: $unreadCount';
+  }
+
+  if (attentionCount > 0) {
+    return 'Внимание: $attentionCount';
+  }
+
+  if (unreadCount > 0) {
+    return 'Уведомления: $unreadCount';
+  }
+
+  return 'Операционный день';
 }

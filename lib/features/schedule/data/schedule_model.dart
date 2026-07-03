@@ -1,4 +1,4 @@
-abstract final class ScheduleActionKeys {
+﻿abstract final class ScheduleActionKeys {
   static const recordFact = 'record_fact';
   static const submit = 'submit';
   static const createLinkedAction = 'create_linked_action';

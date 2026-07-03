@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 
 enum ProStatusTone { neutral, info, success, warning, danger }
 
@@ -18,13 +18,18 @@ class ProStatusStyle {
 
 ProStatusStyle proStatusStyle(BuildContext context, ProStatusTone tone) {
   final scheme = Theme.of(context).colorScheme;
+  final isDark = Theme.of(context).brightness == Brightness.dark;
 
   final color = switch (tone) {
     ProStatusTone.neutral => scheme.onSurfaceVariant,
-    ProStatusTone.info => scheme.primary,
-    ProStatusTone.success => const Color(0xFF2FA866),
-    ProStatusTone.warning => const Color(0xFFE29A24),
-    ProStatusTone.danger => scheme.error,
+    ProStatusTone.info =>
+      isDark ? const Color(0xFF5EB1FF) : const Color(0xFF0056B3),
+    ProStatusTone.success =>
+      isDark ? const Color(0xFF53D88A) : const Color(0xFF087A3B),
+    ProStatusTone.warning =>
+      isDark ? const Color(0xFFFFC15A) : const Color(0xFF8A5200),
+    ProStatusTone.danger =>
+      isDark ? const Color(0xFFFF746B) : const Color(0xFFB42318),
   };
 
   final icon = switch (tone) {

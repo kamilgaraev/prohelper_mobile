@@ -1,5 +1,6 @@
-import 'package:hooks_riverpod/hooks_riverpod.dart';
+﻿import 'package:hooks_riverpod/hooks_riverpod.dart';
 
+import '../../../core/error/user_message.dart';
 import '../../../core/network/api_exception.dart';
 import '../data/workflow_repository.dart';
 import '../data/workflow_task_model.dart';
@@ -138,7 +139,7 @@ class WorkflowNotifier extends StateNotifier<WorkflowState> {
         tasks: const [],
         permissionDenied: _isPermissionDenied(error),
         malformedContract: error is FormatException,
-        error: error.toString(),
+        error: UserMessage.fromError(error),
       );
     }
   }

@@ -1,7 +1,7 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
-import '../../../core/theme/app_colors.dart';
+import '../../../core/design/pro_status.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../core/widgets/app_error_state.dart';
 import '../../../core/widgets/app_loading_state.dart';
@@ -240,6 +240,7 @@ class _NotificationDetailContent extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final target = NotificationNavigationTarget.fromNotification(notification);
+    final canOpenTarget = target.type != NotificationTargetType.unknown;
 
     return RefreshIndicator(
       onRefresh: onRefresh,
@@ -257,7 +258,16 @@ class _NotificationDetailContent extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(notification.title, style: AppTypography.h1(context)),
+                Text(
+                  notification.title,
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTypography.h2(context).copyWith(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
+                    height: 1.15,
+                  ),
+                ),
                 const SizedBox(height: 12),
                 Wrap(
                   spacing: 8,
@@ -268,7 +278,10 @@ class _NotificationDetailContent extends StatelessWidget {
                       color:
                           notification.isUnread
                               ? Theme.of(context).colorScheme.primary
-                              : AppColors.success,
+                              : proStatusStyle(
+                                context,
+                                ProStatusTone.success,
+                              ).foreground,
                     ),
                     _Badge(
                       label: _priorityLabel(notification.priority),
@@ -301,15 +314,17 @@ class _NotificationDetailContent extends StatelessWidget {
                     color: Theme.of(context).colorScheme.onSurfaceVariant,
                   ),
                 ),
-                const SizedBox(height: 16),
-                SizedBox(
-                  width: double.infinity,
-                  child: FilledButton.icon(
-                    onPressed: onOpenTarget,
-                    icon: const Icon(Icons.open_in_new_rounded),
-                    label: const Text('Открыть связанный раздел'),
+                if (canOpenTarget) ...[
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      onPressed: onOpenTarget,
+                      icon: const Icon(Icons.open_in_new_rounded),
+                      label: const Text('Открыть связанный раздел'),
+                    ),
                   ),
-                ),
+                ],
               ],
             ),
           ),
@@ -449,11 +464,15 @@ String _priorityLabel(String priority) {
 }
 
 Color _priorityColor(BuildContext context, String priority) {
+  return proStatusStyle(context, _priorityTone(priority)).foreground;
+}
+
+ProStatusTone _priorityTone(String priority) {
   return switch (priority.trim().toLowerCase()) {
-    'critical' => AppColors.error,
-    'high' => AppColors.warning,
-    'low' => AppColors.success,
-    _ => Theme.of(context).colorScheme.primary,
+    'critical' => ProStatusTone.danger,
+    'high' => ProStatusTone.warning,
+    'low' => ProStatusTone.success,
+    _ => ProStatusTone.info,
   };
 }
 

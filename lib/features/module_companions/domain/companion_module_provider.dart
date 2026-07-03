@@ -1,5 +1,6 @@
-import 'package:hooks_riverpod/hooks_riverpod.dart';
+﻿import 'package:hooks_riverpod/hooks_riverpod.dart';
 
+import '../../../core/error/user_message.dart';
 import '../../../core/network/api_exception.dart';
 import '../data/companion_module_model.dart';
 import '../data/companion_module_repository.dart';
@@ -98,7 +99,7 @@ class CompanionModuleNotifier extends StateNotifier<CompanionModuleState> {
         list: null,
         permissionDenied: _isPermissionDenied(error),
         malformedContract: error is FormatException,
-        error: error.toString(),
+        error: UserMessage.fromError(error),
       );
     }
   }

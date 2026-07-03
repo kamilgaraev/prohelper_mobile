@@ -1,6 +1,7 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
+import '../../../core/error/user_message.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../core/widgets/app_empty_state.dart';
@@ -432,7 +433,10 @@ class _QualityControlScreenState extends ConsumerState<QualityControlScreen> {
                 return _QualitySheetFrame(
                   child: AppErrorState(
                     title: 'Не удалось загрузить замечание',
-                    description: snapshot.error?.toString(),
+                    description:
+                        snapshot.error == null
+                            ? null
+                            : UserMessage.fromError(snapshot.error!),
                     minHeight: 260,
                   ),
                 );

@@ -1,5 +1,7 @@
-import 'package:hooks_riverpod/hooks_riverpod.dart';
+﻿import 'package:hooks_riverpod/hooks_riverpod.dart';
 
+import '../../../core/error/user_message.dart';
+import '../../../core/network/api_exception.dart';
 import '../../../core/storage/secure_storage_service.dart';
 import '../data/auth_repository.dart';
 import '../data/user_model.dart';
@@ -32,6 +34,7 @@ final authProvider = StateNotifierProvider<AuthNotifier, AuthState>((ref) {
   final notifier = AuthNotifier(
     ref.read(authRepositoryProvider),
     ref.read(secureStorageProvider),
+    autoCheckAuth: false,
   );
 
   ref.listen<int>(authSessionVersionProvider, (_, __) {
@@ -42,8 +45,11 @@ final authProvider = StateNotifierProvider<AuthNotifier, AuthState>((ref) {
 });
 
 class AuthNotifier extends StateNotifier<AuthState> {
-  AuthNotifier(this._repository, this._storage) : super(AuthInitial()) {
-    checkAuth();
+  AuthNotifier(this._repository, this._storage, {bool autoCheckAuth = true})
+    : super(AuthInitial()) {
+    if (autoCheckAuth) {
+      checkAuth();
+    }
   }
 
   final AuthRepository _repository;
@@ -67,13 +73,18 @@ class AuthNotifier extends StateNotifier<AuthState> {
       }
 
       state = AuthAuthenticated(user);
-    } catch (_) {
-      await _storage.clearToken();
+    } catch (error) {
       if (!mounted) {
         return;
       }
 
-      state = AuthUnauthenticated();
+      if (error is ApiException && error.statusCode == 401) {
+        state = AuthUnauthenticated();
+        await _clearStoredToken();
+        return;
+      }
+
+      state = AuthError(UserMessage.fromError(error));
     }
   }
 
@@ -96,7 +107,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
         return;
       }
 
-      state = AuthError('Не удалось выполнить вход: ${error.toString()}');
+      state = AuthError(UserMessage.fromError(error));
     }
   }
 
@@ -125,12 +136,12 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   Future<void> logout() async {
-    await _repository.logout();
     if (!mounted) {
       return;
     }
 
     state = AuthUnauthenticated();
+    await _logoutFromStorage();
   }
 
   void handleSessionInvalidation() {
@@ -139,5 +150,25 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
 
     state = AuthUnauthenticated();
+  }
+
+  void clearError() {
+    if (!mounted || state is! AuthError) {
+      return;
+    }
+
+    state = AuthUnauthenticated();
+  }
+
+  Future<void> _clearStoredToken() async {
+    try {
+      await _storage.clearToken();
+    } catch (_) {}
+  }
+
+  Future<void> _logoutFromStorage() async {
+    try {
+      await _repository.logout();
+    } catch (_) {}
   }
 }

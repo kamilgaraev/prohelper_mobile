@@ -1,4 +1,4 @@
-enum SiteRequestsScope {
+﻿enum SiteRequestsScope {
   own('own'),
   approvals('approvals');
 

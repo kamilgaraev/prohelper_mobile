@@ -1,7 +1,8 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../../core/error/user_message.dart';
 import '../../../core/models/user_context.dart';
 import '../../../core/network/api_exception.dart';
 import '../../../core/providers/context_provider.dart';
@@ -96,7 +97,7 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
       _scrollToBottom();
     } catch (error) {
       setState(() {
-        _error = error.toString();
+        _error = UserMessage.fromError(error);
         _isLoading = false;
       });
     }
@@ -252,13 +253,13 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
     if (error is ApiException) {
       return switch (error.statusCode) {
         403 => 'Диалог недоступен или у пользователя нет прав.',
-        422 => error.message,
-        429 => error.message,
-        _ => error.message,
+        422 => UserMessage.fromError(error),
+        429 => UserMessage.fromError(error),
+        _ => UserMessage.fromError(error),
       };
     }
 
-    return error.toString();
+    return UserMessage.fromError(error);
   }
 
   void _scrollToBottom() {

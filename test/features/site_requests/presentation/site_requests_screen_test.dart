@@ -1,7 +1,9 @@
-import 'package:dio/dio.dart';
+﻿import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:prohelpers_mobile/features/knowledge_hub/data/knowledge_hub_repository.dart';
+import 'package:prohelpers_mobile/features/knowledge_hub/domain/knowledge_hub_provider.dart';
 import 'package:prohelpers_mobile/features/projects/data/project_model.dart';
 import 'package:prohelpers_mobile/features/projects/data/projects_repository.dart';
 import 'package:prohelpers_mobile/features/projects/domain/projects_provider.dart';
@@ -19,10 +21,10 @@ class _FakeProjectsRepository extends ProjectsRepository {
 }
 
 class _FakeProjectsNotifier extends ProjectsNotifier {
-  _FakeProjectsNotifier(Project project) : super(_FakeProjectsRepository()) {
+  _FakeProjectsNotifier(Project? project) : super(_FakeProjectsRepository()) {
     state = ProjectsState(
       isLoading: false,
-      projects: [project],
+      projects: project == null ? const [] : [project],
       selectedProject: project,
       error: null,
     );
@@ -136,13 +138,21 @@ void main() {
     List<SiteRequestModel>? requests,
     bool permissionDenied = false,
     String? error,
+    bool hasProject = true,
   }) {
-    final project = buildProject();
+    final project = hasProject ? buildProject() : null;
     final resolvedRequests = requests ?? _requests;
 
     return ProviderScope(
       overrides: [
         projectsProvider.overrideWith((ref) => _FakeProjectsNotifier(project)),
+        knowledgeContextHelpProvider.overrideWith(
+          (ref, params) async => const KnowledgeContextHelpModel(
+            primary: null,
+            suggested: [],
+            context: {},
+          ),
+        ),
         siteRequestsProvider.overrideWith(
           (ref) => _FakeSiteRequestsNotifier(
             requests: resolvedRequests,
@@ -332,6 +342,19 @@ void main() {
       find.text('Недостаточно прав для просмотра заявок.'),
       findsOneWidget,
     );
+    expect(find.byType(FloatingActionButton), findsNothing);
+  });
+
+  testWidgets('не показывает создание заявки, пока объект не выбран', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      createWidget(requests: const [], hasProject: false),
+    );
+    await tester.pump();
+
+    expect(find.text('Объект не выбран'), findsOneWidget);
+    expect(find.byType(FloatingActionButton), findsNothing);
   });
 }
 

@@ -1,4 +1,4 @@
-import 'package:dio/dio.dart';
+﻿import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -23,6 +23,7 @@ class _RecordingTimeTrackingRepository extends TimeTrackingRepository {
   int? correctedEntryId;
   double? correctedHours;
   String? correctionReason;
+  Object? startTimerError;
 
   @override
   Future<DailyTimeSummaryModel> fetchDailySummary({
@@ -67,6 +68,11 @@ class _RecordingTimeTrackingRepository extends TimeTrackingRepository {
     required bool isBillable,
     String? description,
   }) async {
+    final error = startTimerError;
+    if (error != null) {
+      throw error;
+    }
+
     startedTitle = title;
     startedTime = startTime;
     return _entry;
@@ -267,6 +273,50 @@ void main() {
     await pumpUi(tester);
 
     expect(repository.manualHours, 2.5);
+  });
+
+  testWidgets('start timer shows inline errors for required fields', (
+    tester,
+  ) async {
+    final repository = _RecordingTimeTrackingRepository();
+    useLargeSurface(tester);
+
+    await tester.pumpWidget(buildApp(const TimeTrackingScreen(), repository));
+    await pumpUi(tester);
+
+    await tester.tap(find.text('Запустить').first);
+    await pumpUi(tester);
+    await tester.tap(find.text('Запустить').last);
+    await pumpUi(tester);
+
+    expect(find.text('Укажите работу'), findsOneWidget);
+    expect(find.text('Укажите время начала'), findsOneWidget);
+    expect(find.text('Укажите работу и время начала'), findsNothing);
+    expect(find.byType(SnackBar), findsNothing);
+  });
+
+  testWidgets('start timer cleans technical submit errors', (tester) async {
+    final repository =
+        _RecordingTimeTrackingRepository()
+          ..startTimerError = const FormatException('payload missing start');
+    useLargeSurface(tester);
+
+    await tester.pumpWidget(buildApp(const TimeTrackingScreen(), repository));
+    await pumpUi(tester);
+
+    await tester.tap(find.text('Запустить').first);
+    await pumpUi(tester);
+    await tester.enterText(find.byType(TextField).at(0), 'Армирование');
+    await tester.enterText(find.byType(TextField).at(1), '13:00');
+    await tester.tap(find.text('Запустить').last);
+    await pumpUi(tester);
+
+    expect(
+      find.text('Не удалось выполнить действие. Попробуйте еще раз.'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('FormatException'), findsNothing);
+    expect(find.textContaining('payload'), findsNothing);
   });
 
   testWidgets('opens detail and submits correction', (tester) async {

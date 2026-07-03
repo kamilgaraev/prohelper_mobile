@@ -1,19 +1,22 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
+import 'package:prohelpers_mobile/core/design/pro_design_tokens.dart';
+import 'package:prohelpers_mobile/core/design/pro_status.dart';
 import 'package:prohelpers_mobile/core/navigation/mobile_action_recommendation.dart';
 import 'package:prohelpers_mobile/core/navigation/mobile_action_recommendation_provider.dart';
 import 'package:prohelpers_mobile/core/navigation/mobile_destination.dart';
 import 'package:prohelpers_mobile/core/navigation/mobile_navigation_registry.dart';
 import 'package:prohelpers_mobile/core/providers/module_provider.dart';
+import 'package:prohelpers_mobile/core/theme/app_typography.dart';
 import 'package:prohelpers_mobile/core/widgets/app_empty_state.dart';
 import 'package:prohelpers_mobile/core/widgets/app_error_state.dart';
 import 'package:prohelpers_mobile/core/widgets/app_loading_state.dart';
-import 'package:prohelpers_mobile/core/widgets/pro_action_tile.dart';
 import 'package:prohelpers_mobile/core/widgets/pro_page_scaffold.dart';
 import 'package:prohelpers_mobile/core/widgets/pro_search_filter_bar.dart';
 import 'package:prohelpers_mobile/core/widgets/pro_section.dart';
+import 'package:prohelpers_mobile/core/widgets/pro_surface.dart';
 import 'mobile_action_search.dart';
 import 'mobile_recommended_actions_section.dart';
 
@@ -53,6 +56,11 @@ class _MobileActionCenterScreenState
     setState(() => _query = nextQuery);
   }
 
+  void _clearSearch() {
+    _searchController.clear();
+    FocusManager.instance.primaryFocus?.unfocus();
+  }
+
   @override
   Widget build(BuildContext context) {
     final modulesState = ref.watch(modulesProvider);
@@ -77,7 +85,7 @@ class _MobileActionCenterScreenState
         totalDestinations: destinations.length,
         searchController: _searchController,
         query: _query,
-        onClearSearch: _query.isEmpty ? null : () => _searchController.clear(),
+        onClearSearch: _query.isEmpty ? null : _clearSearch,
         onOpenDestination:
             (destination) => _openDestination(context, destination),
         onOpenRecommendation:
@@ -146,6 +154,7 @@ class MobileActionCenterContent extends StatelessWidget {
           selectedValue: 'all',
           onFilterChanged: (_) {},
           onClearSearch: onClearSearch,
+          density: ProSearchFilterDensity.compact,
           resultLabel:
               query.isEmpty
                   ? 'Доступно разделов: $totalDestinations'
@@ -159,27 +168,96 @@ class MobileActionCenterContent extends StatelessWidget {
           ),
           const SizedBox(height: 20),
         ],
-        ProSectionBlock(
-          title: 'Все разделы',
-          subtitle: 'Разделы сгруппированы по рабочим задачам.',
-          children: [
-            for (final group in MobileModuleGroup.values)
-              _ActionGroup(
-                group: group,
-                destinations: allDestinations
-                    .where((destination) => destination.group == group)
-                    .toList(growable: false),
-                onOpen: onOpenDestination,
-              ),
-          ],
+        _ActionCatalogPanel(
+          destinations: allDestinations,
+          onOpen: onOpenDestination,
+          onClearSearch: query.isEmpty ? null : onClearSearch,
         ),
       ],
     );
   }
 }
 
-class _ActionGroup extends StatelessWidget {
-  const _ActionGroup({
+class _ActionCatalogPanel extends StatelessWidget {
+  const _ActionCatalogPanel({
+    required this.destinations,
+    required this.onOpen,
+    this.onClearSearch,
+  });
+
+  final List<MobileModuleDestination> destinations;
+  final ValueChanged<MobileModuleDestination> onOpen;
+  final VoidCallback? onClearSearch;
+
+  @override
+  Widget build(BuildContext context) {
+    final groupedDestinations = [
+      for (final group in MobileModuleGroup.values)
+        (
+          group: group,
+          destinations: destinations
+              .where((destination) => destination.group == group)
+              .toList(growable: false),
+        ),
+    ].where((entry) => entry.destinations.isNotEmpty).toList(growable: false);
+
+    if (groupedDestinations.isEmpty) {
+      return AppEmptyState(
+        icon: Icons.search_off_rounded,
+        title: 'Действия не найдены',
+        description: 'Попробуйте изменить запрос.',
+        action:
+            onClearSearch == null
+                ? null
+                : OutlinedButton.icon(
+                  onPressed: onClearSearch,
+                  icon: const Icon(Icons.close_rounded),
+                  label: const Text('Сбросить поиск'),
+                ),
+        minHeight: 180,
+      );
+    }
+
+    return ProSurface(
+      tone: ProSurfaceTone.elevated,
+      padding: EdgeInsets.zero,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Padding(
+            padding: EdgeInsets.fromLTRB(
+              ProSpacing.md,
+              ProSpacing.md,
+              ProSpacing.md,
+              0,
+            ),
+            child: ProSectionHeader(
+              title: 'Все разделы',
+              subtitle: 'Разделы сгруппированы по рабочим задачам.',
+            ),
+          ),
+          const ProSectionDivider(indent: ProSpacing.md),
+          for (
+            var groupIndex = 0;
+            groupIndex < groupedDestinations.length;
+            groupIndex++
+          ) ...[
+            _ActionGroupSection(
+              group: groupedDestinations[groupIndex].group,
+              destinations: groupedDestinations[groupIndex].destinations,
+              onOpen: onOpen,
+            ),
+            if (groupIndex != groupedDestinations.length - 1)
+              const ProSectionDivider(indent: ProSpacing.md),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _ActionGroupSection extends StatelessWidget {
+  const _ActionGroupSection({
     required this.group,
     required this.destinations,
     required this.onOpen,
@@ -191,24 +269,112 @@ class _ActionGroup extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (destinations.isEmpty) {
-      return const SizedBox.shrink();
-    }
-
-    return ProSectionBlock(
-      title: group.label,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        for (final destination in destinations)
-          ProActionTile(
-            title: destination.shortTitle,
-            subtitle:
-                destination.title == destination.shortTitle
-                    ? destination.recommendedReason
-                    : '${destination.title} · ${destination.recommendedReason}',
-            icon: destination.icon,
-            onTap: () => onOpen(destination),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(
+            ProSpacing.md,
+            ProSpacing.md,
+            ProSpacing.md,
+            ProSpacing.xs,
           ),
+          child: Text(
+            group.label,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: AppTypography.bodyLarge(
+              context,
+            ).copyWith(fontWeight: FontWeight.w900),
+          ),
+        ),
+        for (var index = 0; index < destinations.length; index++) ...[
+          _ActionDestinationRow(
+            destination: destinations[index],
+            onOpen: onOpen,
+          ),
+          if (index != destinations.length - 1)
+            const ProSectionDivider(indent: 72),
+        ],
       ],
+    );
+  }
+}
+
+class _ActionDestinationRow extends StatelessWidget {
+  const _ActionDestinationRow({
+    required this.destination,
+    required this.onOpen,
+  });
+
+  final MobileModuleDestination destination;
+  final ValueChanged<MobileModuleDestination> onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    final status = proStatusStyle(context, ProStatusTone.info);
+    final theme = Theme.of(context);
+    final subtitle =
+        destination.title == destination.shortTitle
+            ? destination.recommendedReason
+            : '${destination.title} · ${destination.recommendedReason}';
+
+    return Semantics(
+      container: true,
+      button: true,
+      enabled: true,
+      child: InkWell(
+        onTap: () => onOpen(destination),
+        child: Padding(
+          padding: const EdgeInsets.all(ProSpacing.md),
+          child: Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: status.background,
+                  borderRadius: BorderRadius.circular(ProRadius.sm),
+                ),
+                child: Icon(
+                  destination.icon,
+                  color: status.foreground,
+                  size: 22,
+                ),
+              ),
+              const SizedBox(width: ProSpacing.sm),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      destination.shortTitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTypography.bodyMedium(
+                        context,
+                      ).copyWith(fontWeight: FontWeight.w800),
+                    ),
+                    const SizedBox(height: ProSpacing.xxs),
+                    Text(
+                      subtitle,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTypography.caption(context),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: ProSpacing.xs),
+              Icon(
+                Icons.chevron_right_rounded,
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

@@ -1,7 +1,9 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:prohelpers_mobile/core/design/pro_status.dart';
+import 'package:prohelpers_mobile/core/error/user_message.dart';
 import 'package:prohelpers_mobile/core/theme/app_colors.dart';
 import 'package:prohelpers_mobile/core/theme/app_typography.dart';
 import 'package:prohelpers_mobile/core/widgets/app_empty_state.dart';
@@ -69,6 +71,12 @@ class SiteRequestFormScreen extends HookConsumerWidget {
     final materialItems = useState<List<_MaterialRequestItemDraft>>(
       _buildInitialMaterialItems(initialRequest),
     );
+    final formKey = useMemoized(GlobalKey<FormState>.new);
+    final titleFocusNode = useFocusNode();
+    final personnelCountFocusNode = useFocusNode();
+    final personnelTypeFocusNode = useFocusNode();
+    final equipmentTypeFocusNode = useFocusNode();
+    final submitAttempted = useState(false);
     final screenTitle = isEditing ? 'Редактирование заявки' : 'Новая заявка';
     final submitButtonLabel =
         isEditing
@@ -80,7 +88,34 @@ class SiteRequestFormScreen extends HookConsumerWidget {
     final selectedProject = ref.watch(projectsProvider).selectedProject;
     final isLoading = useState(false);
 
+    useEffect(() {
+      return () {
+        for (final item in materialItems.value) {
+          item.dispose();
+        }
+      };
+    }, const []);
+
     Future<void> submit() async {
+      submitAttempted.value = true;
+      final isFormValid = formKey.currentState?.validate() ?? false;
+
+      if (!isFormValid) {
+        _focusFirstInvalidField(
+          title: titleController.text,
+          titleFocusNode: titleFocusNode,
+          requestType: requestType.value,
+          materialItems: materialItems.value,
+          personnelType: selectedPersonnelType.value,
+          personnelTypeFocusNode: personnelTypeFocusNode,
+          personnelCount: personnelCountController.text,
+          personnelCountFocusNode: personnelCountFocusNode,
+          equipmentType: selectedEquipmentType.value,
+          equipmentTypeFocusNode: equipmentTypeFocusNode,
+        );
+        return;
+      }
+
       final validationError = _validateForm(
         selectedProjectId: selectedProject?.serverId,
         title: titleController.text,
@@ -218,7 +253,7 @@ class SiteRequestFormScreen extends HookConsumerWidget {
         if (context.mounted) {
           ScaffoldMessenger.of(
             context,
-          ).showSnackBar(SnackBar(content: Text(error.toString())));
+          ).showSnackBar(SnackBar(content: Text(UserMessage.fromError(error))));
         }
       } finally {
         isLoading.value = false;
@@ -233,6 +268,7 @@ class SiteRequestFormScreen extends HookConsumerWidget {
           elevation: 0,
           title: Text(screenTitle, style: AppTypography.h2(context)),
           leading: IconButton(
+            tooltip: 'Закрыть форму',
             icon: Icon(Icons.close_rounded, color: theme.colorScheme.onSurface),
             onPressed: () => Navigator.pop(context),
           ),
@@ -255,91 +291,109 @@ class SiteRequestFormScreen extends HookConsumerWidget {
                     final equipmentTypes =
                         (meta['equipment_types'] as List<dynamic>? ?? const []);
 
-                    return SingleChildScrollView(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _ProjectContextCard(
-                            projectName: selectedProject.name,
-                          ),
-                          const SizedBox(height: 16),
-                          _RequestFlowBanner(
-                            requestType: requestType.value,
-                            priority: selectedPriority.value,
-                            isEditing: isEditing,
-                          ),
-                          const SizedBox(height: 16),
-                          _buildTypeSelector(
-                            context,
-                            requestType,
-                            requestTypes,
-                            enabled: !isEditing,
-                          ),
-                          if (isEditing) ...[
-                            const SizedBox(height: 8),
+                    return Form(
+                      key: formKey,
+                      autovalidateMode:
+                          submitAttempted.value
+                              ? AutovalidateMode.onUserInteraction
+                              : AutovalidateMode.disabled,
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _ProjectContextCard(
+                              projectName: selectedProject.name,
+                            ),
+                            const SizedBox(height: 16),
+                            _RequestFlowBanner(
+                              requestType: requestType.value,
+                              priority: selectedPriority.value,
+                              isEditing: isEditing,
+                            ),
+                            const SizedBox(height: 16),
+                            _buildTypeSelector(
+                              context,
+                              requestType,
+                              requestTypes,
+                              enabled: !isEditing,
+                            ),
+                            if (isEditing) ...[
+                              const SizedBox(height: 8),
+                              Text(
+                                'Тип заявки зафиксирован. Для другой категории создайте новую заявку.',
+                                style: AppTypography.bodySmall(
+                                  context,
+                                ).copyWith(
+                                  color: theme.colorScheme.onSurfaceVariant,
+                                ),
+                              ),
+                            ],
+                            const SizedBox(height: 16),
+                            _buildPrioritySelector(context, selectedPriority),
+                            const SizedBox(height: 24),
                             Text(
-                              'Тип заявки зафиксирован. Для другой категории создайте новую заявку.',
-                              style: AppTypography.bodySmall(context).copyWith(
-                                color: theme.colorScheme.onSurfaceVariant,
+                              'Основная информация',
+                              style: AppTypography.caption(context),
+                            ),
+                            const SizedBox(height: 12),
+                            ProCard(
+                              child: Column(
+                                children: [
+                                  _buildField(
+                                    context,
+                                    'Заголовок заявки',
+                                    titleController,
+                                    focusNode: titleFocusNode,
+                                    validator:
+                                        (value) =>
+                                            (value ?? '').trim().isEmpty
+                                                ? 'Укажите заголовок заявки.'
+                                                : null,
+                                  ),
+                                  const SizedBox(height: 16),
+                                  _buildField(
+                                    context,
+                                    'Описание или комментарий',
+                                    descriptionController,
+                                    maxLines: 3,
+                                  ),
+                                ],
                               ),
                             ),
+                            const SizedBox(height: 24),
+                            if (requestType.value == 'material_request')
+                              _buildMaterialFields(
+                                context,
+                                materialItems,
+                                units,
+                                allowMultipleMaterials,
+                                isEditing: isEditing,
+                                isGroupEditing: isMaterialGroupEditing,
+                              ),
+                            if (requestType.value == 'personnel_request')
+                              _buildPersonnelFields(
+                                context,
+                                personnelCountController,
+                                personnelCountFocusNode,
+                                selectedPersonnelType,
+                                personnelTypeFocusNode,
+                                workStartDate,
+                                workEndDate,
+                                personnelTypes,
+                              ),
+                            if (requestType.value == 'equipment_request')
+                              _buildEquipmentFields(
+                                context,
+                                selectedEquipmentType,
+                                equipmentTypeFocusNode,
+                                rentalStartDate,
+                                rentalEndDate,
+                                equipmentTypes,
+                              ),
+                            const SizedBox(height: 100),
                           ],
-                          const SizedBox(height: 16),
-                          _buildPrioritySelector(context, selectedPriority),
-                          const SizedBox(height: 24),
-                          Text(
-                            'Основная информация',
-                            style: AppTypography.caption(context),
-                          ),
-                          const SizedBox(height: 12),
-                          ProCard(
-                            child: Column(
-                              children: [
-                                _buildField(
-                                  context,
-                                  'Заголовок заявки',
-                                  titleController,
-                                ),
-                                const SizedBox(height: 16),
-                                _buildField(
-                                  context,
-                                  'Описание или комментарий',
-                                  descriptionController,
-                                  maxLines: 3,
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(height: 24),
-                          if (requestType.value == 'material_request')
-                            _buildMaterialFields(
-                              context,
-                              materialItems,
-                              units,
-                              allowMultipleMaterials,
-                              isEditing: isEditing,
-                              isGroupEditing: isMaterialGroupEditing,
-                            ),
-                          if (requestType.value == 'personnel_request')
-                            _buildPersonnelFields(
-                              context,
-                              personnelCountController,
-                              selectedPersonnelType,
-                              workStartDate,
-                              workEndDate,
-                              personnelTypes,
-                            ),
-                          if (requestType.value == 'equipment_request')
-                            _buildEquipmentFields(
-                              context,
-                              selectedEquipmentType,
-                              rentalStartDate,
-                              rentalEndDate,
-                              equipmentTypes,
-                            ),
-                          const SizedBox(height: 100),
-                        ],
+                        ),
                       ),
                     );
                   },
@@ -350,7 +404,7 @@ class SiteRequestFormScreen extends HookConsumerWidget {
                   error:
                       (error, _) => AppErrorState(
                         title: 'Не удалось загрузить справочники',
-                        description: error.toString(),
+                        description: UserMessage.fromError(error),
                       ),
                 ),
         bottomNavigationBar:
@@ -437,6 +491,59 @@ class SiteRequestFormScreen extends HookConsumerWidget {
     return null;
   }
 
+  void _focusFirstInvalidField({
+    required String title,
+    required FocusNode titleFocusNode,
+    required String requestType,
+    required List<_MaterialRequestItemDraft> materialItems,
+    required String? personnelType,
+    required FocusNode personnelTypeFocusNode,
+    required String personnelCount,
+    required FocusNode personnelCountFocusNode,
+    required String? equipmentType,
+    required FocusNode equipmentTypeFocusNode,
+  }) {
+    if (title.trim().isEmpty) {
+      titleFocusNode.requestFocus();
+      return;
+    }
+
+    if (requestType == 'material_request') {
+      for (final item in materialItems) {
+        if (item.nameController.text.trim().isEmpty) {
+          item.nameFocusNode.requestFocus();
+          return;
+        }
+
+        if (!_isPositiveDouble(item.quantityController.text)) {
+          item.quantityFocusNode.requestFocus();
+          return;
+        }
+
+        if ((item.unit ?? '').trim().isEmpty) {
+          item.unitFocusNode.requestFocus();
+          return;
+        }
+      }
+    }
+
+    if (requestType == 'personnel_request') {
+      if (personnelType == null || personnelType.isEmpty) {
+        personnelTypeFocusNode.requestFocus();
+        return;
+      }
+
+      if (!_isPositiveInteger(personnelCount)) {
+        personnelCountFocusNode.requestFocus();
+      }
+    }
+
+    if (requestType == 'equipment_request' &&
+        (equipmentType == null || equipmentType.isEmpty)) {
+      equipmentTypeFocusNode.requestFocus();
+    }
+  }
+
   String? _optionalText(String value) {
     final trimmed = value.trim();
     return trimmed.isEmpty ? null : trimmed;
@@ -520,7 +627,7 @@ class SiteRequestFormScreen extends HookConsumerWidget {
           children:
               priorities.map((entry) {
                 final isSelected = currentPriority.value == entry.$1;
-                final color = _priorityColor(entry.$1);
+                final status = proStatusStyle(context, _priorityTone(entry.$1));
 
                 return ChoiceChip(
                   label: Text(entry.$2),
@@ -530,9 +637,9 @@ class SiteRequestFormScreen extends HookConsumerWidget {
                       currentPriority.value = entry.$1;
                     }
                   },
-                  selectedColor: color.withValues(alpha: 0.18),
+                  selectedColor: status.background,
                   labelStyle: AppTypography.bodySmall(context).copyWith(
-                    color: isSelected ? color : null,
+                    color: isSelected ? status.foreground : null,
                     fontWeight: isSelected ? FontWeight.w700 : null,
                   ),
                 );
@@ -616,7 +723,9 @@ class SiteRequestFormScreen extends HookConsumerWidget {
   Widget _buildPersonnelFields(
     BuildContext context,
     TextEditingController countController,
+    FocusNode countFocusNode,
     ValueNotifier<String?> type,
+    FocusNode typeFocusNode,
     ValueNotifier<DateTime?> start,
     ValueNotifier<DateTime?> end,
     List<dynamic> types,
@@ -631,6 +740,7 @@ class SiteRequestFormScreen extends HookConsumerWidget {
             children: [
               DropdownButtonFormField<String>(
                 isExpanded: true,
+                focusNode: typeFocusNode,
                 value: type.value,
                 items:
                     types
@@ -645,6 +755,11 @@ class SiteRequestFormScreen extends HookConsumerWidget {
                         )
                         .toList(),
                 onChanged: (value) => type.value = value,
+                validator:
+                    (value) =>
+                        value == null || value.isEmpty
+                            ? 'Выберите специальность.'
+                            : null,
                 decoration: InputDecoration(
                   labelText: 'Специальность',
                   labelStyle: AppTypography.caption(context),
@@ -655,7 +770,11 @@ class SiteRequestFormScreen extends HookConsumerWidget {
                 context,
                 'Количество человек',
                 countController,
+                focusNode: countFocusNode,
                 keyboardType: TextInputType.number,
+                validator: _positiveIntegerValidator(
+                  'Количество персонала должно быть больше нуля.',
+                ),
               ),
               const SizedBox(height: 16),
               _buildDatePicker(context, 'Дата начала', start),
@@ -671,6 +790,7 @@ class SiteRequestFormScreen extends HookConsumerWidget {
   Widget _buildEquipmentFields(
     BuildContext context,
     ValueNotifier<String?> type,
+    FocusNode typeFocusNode,
     ValueNotifier<DateTime?> start,
     ValueNotifier<DateTime?> end,
     List<dynamic> types,
@@ -685,6 +805,7 @@ class SiteRequestFormScreen extends HookConsumerWidget {
             children: [
               DropdownButtonFormField<String>(
                 isExpanded: true,
+                focusNode: typeFocusNode,
                 value: type.value,
                 items:
                     types
@@ -699,13 +820,25 @@ class SiteRequestFormScreen extends HookConsumerWidget {
                         )
                         .toList(),
                 onChanged: (value) => type.value = value,
+                validator:
+                    (value) =>
+                        value == null || value.isEmpty
+                            ? 'Выберите тип техники.'
+                            : null,
                 decoration: InputDecoration(
                   labelText: 'Тип техники',
                   labelStyle: AppTypography.caption(context),
                 ),
               ),
               const SizedBox(height: 16),
-              _buildDatePicker(context, 'Дата начала аренды', start),
+              _buildDatePicker(
+                context,
+                'Дата начала аренды',
+                start,
+                validator:
+                    (value) =>
+                        value == null ? 'Укажите дату начала аренды.' : null,
+              ),
               const SizedBox(height: 16),
               _buildDatePicker(context, 'Дата окончания аренды', end),
             ],
@@ -718,33 +851,42 @@ class SiteRequestFormScreen extends HookConsumerWidget {
   Widget _buildDatePicker(
     BuildContext context,
     String label,
-    ValueNotifier<DateTime?> date,
-  ) {
-    return InkWell(
-      onTap: () async {
-        final picked = await showDatePicker(
-          context: context,
-          initialDate: date.value ?? DateTime.now(),
-          firstDate: DateTime.now(),
-          lastDate: DateTime.now().add(const Duration(days: 365)),
-        );
+    ValueNotifier<DateTime?> date, {
+    String? Function(DateTime?)? validator,
+  }) {
+    return FormField<DateTime?>(
+      initialValue: date.value,
+      validator: validator,
+      builder: (field) {
+        return InkWell(
+          onTap: () async {
+            final picked = await showDatePicker(
+              context: context,
+              initialDate: date.value ?? DateTime.now(),
+              firstDate: DateTime.now(),
+              lastDate: DateTime.now().add(const Duration(days: 365)),
+            );
 
-        if (picked != null) {
-          date.value = picked;
-        }
+            if (picked != null) {
+              date.value = picked;
+              field.didChange(picked);
+            }
+          },
+          child: InputDecorator(
+            decoration: InputDecoration(
+              labelText: label,
+              labelStyle: AppTypography.caption(context),
+              errorText: field.errorText,
+            ),
+            child: Text(
+              date.value != null
+                  ? DateFormat('dd.MM.yyyy').format(date.value!)
+                  : 'Выберите дату',
+              style: AppTypography.bodyLarge(context),
+            ),
+          ),
+        );
       },
-      child: InputDecorator(
-        decoration: InputDecoration(
-          labelText: label,
-          labelStyle: AppTypography.caption(context),
-        ),
-        child: Text(
-          date.value != null
-              ? DateFormat('dd.MM.yyyy').format(date.value!)
-              : 'Выберите дату',
-          style: AppTypography.bodyLarge(context),
-        ),
-      ),
     );
   }
 
@@ -752,15 +894,19 @@ class SiteRequestFormScreen extends HookConsumerWidget {
     BuildContext context,
     String label,
     TextEditingController controller, {
+    FocusNode? focusNode,
     TextInputType? keyboardType,
     int maxLines = 1,
+    String? Function(String?)? validator,
   }) {
     final theme = Theme.of(context);
 
-    return TextField(
+    return TextFormField(
       controller: controller,
+      focusNode: focusNode,
       keyboardType: keyboardType,
       maxLines: maxLines,
+      validator: validator,
       style: AppTypography.bodyLarge(context),
       decoration: InputDecoration(
         labelText: label,
@@ -814,6 +960,7 @@ class _MaterialItemCard extends StatelessWidget {
                   ),
                   if (canRemove)
                     IconButton(
+                      tooltip: 'Удалить материал ${index + 1}',
                       onPressed: onRemove,
                       icon: const Icon(Icons.delete_outline_rounded),
                     ),
@@ -823,6 +970,12 @@ class _MaterialItemCard extends StatelessWidget {
               _FormField(
                 label: 'Наименование материала',
                 controller: item.nameController,
+                focusNode: item.nameFocusNode,
+                validator:
+                    (value) =>
+                        (value ?? '').trim().isEmpty
+                            ? 'Укажите материал в позиции ${index + 1}.'
+                            : null,
               ),
               const SizedBox(height: 16),
               Row(
@@ -831,8 +984,12 @@ class _MaterialItemCard extends StatelessWidget {
                     child: _FormField(
                       label: 'Количество',
                       controller: item.quantityController,
+                      focusNode: item.quantityFocusNode,
                       keyboardType: const TextInputType.numberWithOptions(
                         decimal: true,
+                      ),
+                      validator: _positiveDoubleValidator(
+                        'Количество материала в позиции ${index + 1} должно быть больше нуля.',
                       ),
                     ),
                   ),
@@ -840,6 +997,7 @@ class _MaterialItemCard extends StatelessWidget {
                   Expanded(
                     child: DropdownButtonFormField<String>(
                       isExpanded: true,
+                      focusNode: item.unitFocusNode,
                       value: item.unit,
                       items:
                           unitOptions
@@ -854,6 +1012,11 @@ class _MaterialItemCard extends StatelessWidget {
                               )
                               .toList(),
                       onChanged: (value) => setState(() => item.unit = value),
+                      validator:
+                          (value) =>
+                              value == null || value.trim().isEmpty
+                                  ? 'Выберите единицу измерения в позиции ${index + 1}.'
+                                  : null,
                       decoration: InputDecoration(
                         labelText: 'Ед. изм.',
                         labelStyle: AppTypography.caption(context),
@@ -880,23 +1043,29 @@ class _FormField extends StatelessWidget {
   const _FormField({
     required this.label,
     required this.controller,
+    this.focusNode,
     this.keyboardType,
     this.maxLines = 1,
+    this.validator,
   });
 
   final String label;
   final TextEditingController controller;
+  final FocusNode? focusNode;
   final TextInputType? keyboardType;
   final int maxLines;
+  final String? Function(String?)? validator;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return TextField(
+    return TextFormField(
       controller: controller,
+      focusNode: focusNode,
       keyboardType: keyboardType,
       maxLines: maxLines,
+      validator: validator,
       style: AppTypography.bodyLarge(context),
       decoration: InputDecoration(
         labelText: label,
@@ -1058,6 +1227,33 @@ Color _priorityColor(String priority) {
   };
 }
 
+ProStatusTone _priorityTone(String priority) {
+  return switch (priority.trim().toLowerCase()) {
+    'high' || 'urgent' => ProStatusTone.danger,
+    'medium' => ProStatusTone.warning,
+    'low' => ProStatusTone.success,
+    _ => ProStatusTone.neutral,
+  };
+}
+
+String? Function(String?) _positiveDoubleValidator(String message) {
+  return (value) => _isPositiveDouble(value) ? null : message;
+}
+
+String? Function(String?) _positiveIntegerValidator(String message) {
+  return (value) => _isPositiveInteger(value) ? null : message;
+}
+
+bool _isPositiveDouble(String? value) {
+  final parsed = double.tryParse((value ?? '').trim());
+  return parsed != null && parsed > 0;
+}
+
+bool _isPositiveInteger(String? value) {
+  final parsed = int.tryParse((value ?? '').trim());
+  return parsed != null && parsed > 0;
+}
+
 class _MaterialRequestItemDraft {
   _MaterialRequestItemDraft({
     this.requestId,
@@ -1067,18 +1263,27 @@ class _MaterialRequestItemDraft {
     this.unit,
   }) : nameController = TextEditingController(text: name ?? ''),
        quantityController = TextEditingController(text: quantity ?? ''),
-       noteController = TextEditingController(text: note ?? '');
+       noteController = TextEditingController(text: note ?? ''),
+       nameFocusNode = FocusNode(),
+       quantityFocusNode = FocusNode(),
+       unitFocusNode = FocusNode();
 
   final int? requestId;
   final TextEditingController nameController;
   final TextEditingController quantityController;
   final TextEditingController noteController;
+  final FocusNode nameFocusNode;
+  final FocusNode quantityFocusNode;
+  final FocusNode unitFocusNode;
   String? unit;
 
   void dispose() {
     nameController.dispose();
     quantityController.dispose();
     noteController.dispose();
+    nameFocusNode.dispose();
+    quantityFocusNode.dispose();
+    unitFocusNode.dispose();
   }
 }
 

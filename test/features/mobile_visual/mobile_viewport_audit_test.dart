@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:prohelpers_mobile/features/construction_journal/presentation/construction_journal_screen.dart';
 import 'package:prohelpers_mobile/features/dashboard/presentation/dashboard_screen.dart';
@@ -19,7 +19,7 @@ import 'package:prohelpers_mobile/features/workforce/presentation/workforce_atte
 import '../../helpers/mobile_integration_test_helpers.dart';
 
 void main() {
-  final project = ProHelperTestData.project(
+  final project = MostTestData.project(
     name: 'Жилой комплекс с длинным названием',
   );
 
@@ -57,7 +57,10 @@ void main() {
     Size(360, 640),
     Size(390, 844),
     Size(430, 932),
+    Size(640, 360),
+    Size(844, 390),
     Size(768, 1024),
+    Size(1024, 768),
   ];
 
   for (final viewportSize in viewportSizes) {
@@ -66,11 +69,11 @@ void main() {
       tester,
     ) async {
       for (final screen in screens) {
-        await pumpProHelperWidget(
+        await pumpMostWidget(
           tester,
           screen.widget,
           surfaceSize: viewportSize,
-          overrides: proHelperCoreOverrides(selectedProject: project),
+          overrides: mostCoreOverrides(selectedProject: project),
         );
         await _pumpStableFrames(tester);
         _expectNoFlutterException(tester, screen, viewportSize);

@@ -1,6 +1,7 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
+import '../../../core/error/user_message.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../core/widgets/app_empty_state.dart';
@@ -157,7 +158,7 @@ class _WarehouseCustodyScreenState
                 if (snapshot.hasError) {
                   return _InfoBanner(
                     title: 'Не удалось загрузить поставки',
-                    text: snapshot.error.toString(),
+                    text: UserMessage.fromError(snapshot.error!),
                   );
                 }
 
@@ -322,14 +323,7 @@ class _WarehouseCustodyScreenState
                     } catch (error) {
                       if (sheetContext.mounted) {
                         ScaffoldMessenger.of(sheetContext).showSnackBar(
-                          SnackBar(
-                            content: Text(
-                              error.toString().replaceFirst(
-                                'ApiException: ',
-                                '',
-                              ),
-                            ),
-                          ),
+                          SnackBar(content: Text(UserMessage.fromError(error))),
                         );
                       }
                     }

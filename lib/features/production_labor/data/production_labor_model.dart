@@ -1,4 +1,4 @@
-class LaborProblemFlagModel {
+﻿class LaborProblemFlagModel {
   const LaborProblemFlagModel({
     required this.code,
     required this.severity,

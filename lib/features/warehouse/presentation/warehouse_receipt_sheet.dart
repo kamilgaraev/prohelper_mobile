@@ -1,8 +1,9 @@
-import 'dart:async';
+﻿import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
+import '../../../core/error/user_message.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../core/widgets/industrial_card.dart';
 import '../data/warehouse_media_picker.dart';
@@ -29,11 +30,15 @@ class WarehouseReceiptSheet extends ConsumerStatefulWidget {
 class _WarehouseReceiptSheetState extends ConsumerState<WarehouseReceiptSheet> {
   static const int _maxPhotos = 4;
 
+  final _formKey = GlobalKey<FormState>();
   late final TextEditingController _materialController;
   late final TextEditingController _quantityController;
   late final TextEditingController _priceController;
   late final TextEditingController _documentController;
   late final TextEditingController _reasonController;
+  late final FocusNode _materialFocusNode;
+  late final FocusNode _quantityFocusNode;
+  late final FocusNode _priceFocusNode;
 
   Timer? _searchDebounce;
   int? _selectedWarehouseId;
@@ -43,6 +48,7 @@ class _WarehouseReceiptSheetState extends ConsumerState<WarehouseReceiptSheet> {
   List<String> _photoPaths = const <String>[];
   bool _isSearching = false;
   bool _isSubmitting = false;
+  AutovalidateMode _autovalidateMode = AutovalidateMode.disabled;
 
   @override
   void initState() {
@@ -52,6 +58,9 @@ class _WarehouseReceiptSheetState extends ConsumerState<WarehouseReceiptSheet> {
     _priceController = TextEditingController();
     _documentController = TextEditingController();
     _reasonController = TextEditingController();
+    _materialFocusNode = FocusNode();
+    _quantityFocusNode = FocusNode();
+    _priceFocusNode = FocusNode();
     _selectedWarehouseId = widget.initialWarehouseId;
     _selectedMaterial = widget.initialMaterial;
 
@@ -71,6 +80,9 @@ class _WarehouseReceiptSheetState extends ConsumerState<WarehouseReceiptSheet> {
     _priceController.dispose();
     _documentController.dispose();
     _reasonController.dispose();
+    _materialFocusNode.dispose();
+    _quantityFocusNode.dispose();
+    _priceFocusNode.dispose();
     super.dispose();
   }
 
@@ -82,292 +94,315 @@ class _WarehouseReceiptSheetState extends ConsumerState<WarehouseReceiptSheet> {
       heightFactor: 0.95,
       child: Padding(
         padding: EdgeInsets.fromLTRB(16, 12, 16, 16 + bottomInset),
-        child: ListView(
-          children: [
-            Text('Оприходование', style: AppTypography.h2(context)),
-            const SizedBox(height: 8),
-            Text(
-              'Выбери склад, материал и приложи до 4 фотографий.',
-              style: AppTypography.bodyMedium(
-                context,
-              ).copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
-            ),
-            const SizedBox(height: 16),
-            DropdownButtonFormField<int>(
-              value: _selectedWarehouseId,
-              decoration: const InputDecoration(
-                labelText: 'Склад',
-                border: OutlineInputBorder(),
-              ),
-              items:
-                  widget.summary.warehouses
-                      .map(
-                        (warehouse) => DropdownMenuItem<int>(
-                          value: warehouse.id,
-                          child: Text(warehouse.name),
-                        ),
-                      )
-                      .toList(),
-              onChanged: (value) {
-                setState(() {
-                  _selectedWarehouseId = value;
-                });
-              },
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _materialController,
-              decoration: InputDecoration(
-                labelText: 'Материал',
-                hintText: 'Начни вводить название или код',
-                border: const OutlineInputBorder(),
-                suffixIcon:
-                    _isSearching
-                        ? const Padding(
-                          padding: EdgeInsets.all(12),
-                          child: SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          ),
-                        )
-                        : IconButton(
-                          onPressed:
-                              () => _searchMaterials(_materialController.text),
-                          icon: const Icon(Icons.search),
-                        ),
-              ),
-              onChanged: (value) {
-                _selectedMaterial = null;
-                _searchDebounce?.cancel();
-                _searchDebounce = Timer(const Duration(milliseconds: 350), () {
-                  _searchMaterials(value);
-                });
-                setState(() {});
-              },
-            ),
-            if (_selectedMaterial != null) ...[
+        child: Form(
+          key: _formKey,
+          autovalidateMode: _autovalidateMode,
+          child: ListView(
+            children: [
+              Text('Оприходование', style: AppTypography.h2(context)),
               const SizedBox(height: 8),
-              IndustrialCard(
-                child: Row(
-                  children: [
-                    const Icon(Icons.inventory_2_outlined),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            _selectedMaterial!.name,
-                            style: AppTypography.bodyLarge(
-                              context,
-                            ).copyWith(fontWeight: FontWeight.w700),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            [
-                              if ((_selectedMaterial!.code ?? '').isNotEmpty)
-                                _selectedMaterial!.code!,
-                              if (_selectedMaterial!
-                                  .measurementLabel
-                                  .isNotEmpty)
-                                _selectedMaterial!.measurementLabel,
-                            ].join(' • '),
-                            style: AppTypography.caption(context),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
+              Text(
+                'Выбери склад, материал и приложи до 4 фотографий.',
+                style: AppTypography.bodyMedium(context).copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
               ),
-            ],
-            if (_suggestions.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              ..._suggestions.map(
-                (item) => Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: InkWell(
-                    onTap: () {
-                      setState(() {
-                        _selectedMaterial = item;
-                        _materialController.text = item.name;
-                        if (item.defaultPrice > 0) {
-                          _priceController.text = item.defaultPrice.toString();
-                        }
-                        _suggestions = const <WarehouseMaterialOption>[];
-                      });
+              const SizedBox(height: 16),
+              DropdownButtonFormField<int>(
+                value: _selectedWarehouseId,
+                decoration: const InputDecoration(
+                  labelText: 'Склад',
+                  border: OutlineInputBorder(),
+                ),
+                validator: (value) => value == null ? 'Выберите склад' : null,
+                items:
+                    widget.summary.warehouses
+                        .map(
+                          (warehouse) => DropdownMenuItem<int>(
+                            value: warehouse.id,
+                            child: Text(warehouse.name),
+                          ),
+                        )
+                        .toList(),
+                onChanged: (value) {
+                  setState(() {
+                    _selectedWarehouseId = value;
+                  });
+                },
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _materialController,
+                focusNode: _materialFocusNode,
+                decoration: InputDecoration(
+                  labelText: 'Материал',
+                  hintText: 'Начни вводить название или код',
+                  border: const OutlineInputBorder(),
+                  suffixIcon:
+                      _isSearching
+                          ? const Padding(
+                            padding: EdgeInsets.all(12),
+                            child: SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                          )
+                          : IconButton(
+                            tooltip: 'Найти материал',
+                            onPressed:
+                                () =>
+                                    _searchMaterials(_materialController.text),
+                            icon: const Icon(Icons.search),
+                          ),
+                ),
+                onChanged: (value) {
+                  _selectedMaterial = null;
+                  _searchDebounce?.cancel();
+                  _searchDebounce = Timer(
+                    const Duration(milliseconds: 350),
+                    () {
+                      _searchMaterials(value);
                     },
-                    borderRadius: BorderRadius.circular(16),
-                    child: Ink(
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(16),
-                        color: Theme.of(context)
-                            .colorScheme
-                            .surfaceContainerHighest
-                            .withValues(alpha: 0.35),
-                      ),
-                      child: Padding(
-                        padding: const EdgeInsets.all(14),
+                  );
+                  setState(() {});
+                },
+                validator:
+                    (_) =>
+                        _selectedMaterial == null
+                            ? 'Выберите материал из списка'
+                            : null,
+              ),
+              if (_selectedMaterial != null) ...[
+                const SizedBox(height: 8),
+                IndustrialCard(
+                  child: Row(
+                    children: [
+                      const Icon(Icons.inventory_2_outlined),
+                      const SizedBox(width: 12),
+                      Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              item.name,
-                              style: AppTypography.bodyMedium(
+                              _selectedMaterial!.name,
+                              style: AppTypography.bodyLarge(
                                 context,
                               ).copyWith(fontWeight: FontWeight.w700),
                             ),
                             const SizedBox(height: 4),
                             Text(
                               [
-                                if ((item.code ?? '').isNotEmpty) item.code!,
-                                if (item.measurementLabel.isNotEmpty)
-                                  item.measurementLabel,
-                                if (item.defaultPrice > 0)
-                                  'Цена: ${_formatNumber(item.defaultPrice)} ₽',
+                                if ((_selectedMaterial!.code ?? '').isNotEmpty)
+                                  _selectedMaterial!.code!,
+                                if (_selectedMaterial!
+                                    .measurementLabel
+                                    .isNotEmpty)
+                                  _selectedMaterial!.measurementLabel,
                               ].join(' • '),
                               style: AppTypography.caption(context),
                             ),
                           ],
                         ),
                       ),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _quantityController,
-                    keyboardType: const TextInputType.numberWithOptions(
-                      decimal: true,
-                    ),
-                    decoration: const InputDecoration(
-                      labelText: 'Количество',
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: TextField(
-                    controller: _priceController,
-                    keyboardType: const TextInputType.numberWithOptions(
-                      decimal: true,
-                    ),
-                    decoration: const InputDecoration(
-                      labelText: 'Цена',
-                      border: OutlineInputBorder(),
-                    ),
+                    ],
                   ),
                 ),
               ],
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _documentController,
-              decoration: const InputDecoration(
-                labelText: 'Документ',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _reasonController,
-              maxLines: 2,
-              decoration: const InputDecoration(
-                labelText: 'Основание',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Фотографии',
-              style: AppTypography.bodyLarge(
-                context,
-              ).copyWith(fontWeight: FontWeight.w700),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              _photoPaths.isEmpty
-                  ? 'Можно прикрепить до 4 фото.'
-                  : 'Выбрано ${_photoPaths.length} из $_maxPhotos.',
-              style: AppTypography.bodyMedium(
-                context,
-              ).copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: _isSubmitting ? null : _pickFromCamera,
-                    icon: const Icon(Icons.camera_alt_outlined),
-                    label: const Text('Камера'),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: _isSubmitting ? null : _pickFromGallery,
-                    icon: const Icon(Icons.photo_library_outlined),
-                    label: const Text('Галерея'),
-                  ),
-                ),
-              ],
-            ),
-            if (_photoPaths.isNotEmpty) ...[
-              const SizedBox(height: 12),
-              ..._photoPaths.asMap().entries.map(
-                (entry) => Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: IndustrialCard(
-                    child: Row(
-                      children: [
-                        const Icon(Icons.image_outlined),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
-                            _fileName(entry.value),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: AppTypography.bodyMedium(context),
+              if (_suggestions.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                ..._suggestions.map(
+                  (item) => Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: InkWell(
+                      onTap: () {
+                        setState(() {
+                          _selectedMaterial = item;
+                          _materialController.text = item.name;
+                          if (item.defaultPrice > 0) {
+                            _priceController.text =
+                                item.defaultPrice.toString();
+                          }
+                          _suggestions = const <WarehouseMaterialOption>[];
+                        });
+                      },
+                      borderRadius: BorderRadius.circular(16),
+                      child: Ink(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(16),
+                          color: Theme.of(context)
+                              .colorScheme
+                              .surfaceContainerHighest
+                              .withValues(alpha: 0.35),
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.all(14),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                item.name,
+                                style: AppTypography.bodyMedium(
+                                  context,
+                                ).copyWith(fontWeight: FontWeight.w700),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                [
+                                  if ((item.code ?? '').isNotEmpty) item.code!,
+                                  if (item.measurementLabel.isNotEmpty)
+                                    item.measurementLabel,
+                                  if (item.defaultPrice > 0)
+                                    'Цена: ${_formatNumber(item.defaultPrice)} ₽',
+                                ].join(' • '),
+                                style: AppTypography.caption(context),
+                              ),
+                            ],
                           ),
                         ),
-                        IconButton(
-                          onPressed:
-                              _isSubmitting
-                                  ? null
-                                  : () => setState(() {
-                                    _photoPaths = List<String>.from(_photoPaths)
-                                      ..removeAt(entry.key);
-                                  }),
-                          icon: const Icon(Icons.close_rounded),
-                        ),
-                      ],
+                      ),
                     ),
                   ),
                 ),
+              ],
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextFormField(
+                      controller: _quantityController,
+                      focusNode: _quantityFocusNode,
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      decoration: const InputDecoration(
+                        labelText: 'Количество',
+                        border: OutlineInputBorder(),
+                      ),
+                      validator: _validateQuantity,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: TextFormField(
+                      controller: _priceController,
+                      focusNode: _priceFocusNode,
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      decoration: const InputDecoration(
+                        labelText: 'Цена',
+                        border: OutlineInputBorder(),
+                      ),
+                      validator: _validatePrice,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _documentController,
+                decoration: const InputDecoration(
+                  labelText: 'Документ',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _reasonController,
+                maxLines: 2,
+                decoration: const InputDecoration(
+                  labelText: 'Основание',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Фотографии',
+                style: AppTypography.bodyLarge(
+                  context,
+                ).copyWith(fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                _photoPaths.isEmpty
+                    ? 'Можно прикрепить до 4 фото.'
+                    : 'Выбрано ${_photoPaths.length} из $_maxPhotos.',
+                style: AppTypography.bodyMedium(context).copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: _isSubmitting ? null : _pickFromCamera,
+                      icon: const Icon(Icons.camera_alt_outlined),
+                      label: const Text('Камера'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: _isSubmitting ? null : _pickFromGallery,
+                      icon: const Icon(Icons.photo_library_outlined),
+                      label: const Text('Галерея'),
+                    ),
+                  ),
+                ],
+              ),
+              if (_photoPaths.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                ..._photoPaths.asMap().entries.map(
+                  (entry) => Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: IndustrialCard(
+                      child: Row(
+                        children: [
+                          const Icon(Icons.image_outlined),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              _fileName(entry.value),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: AppTypography.bodyMedium(context),
+                            ),
+                          ),
+                          IconButton(
+                            tooltip: 'Удалить фото ${entry.key + 1}',
+                            onPressed:
+                                _isSubmitting
+                                    ? null
+                                    : () => setState(() {
+                                      _photoPaths = List<String>.from(
+                                        _photoPaths,
+                                      )..removeAt(entry.key);
+                                    }),
+                            icon: const Icon(Icons.close_rounded),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+              const SizedBox(height: 20),
+              FilledButton.icon(
+                onPressed: _isSubmitting ? null : _submit,
+                icon:
+                    _isSubmitting
+                        ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                        : const Icon(Icons.check_circle_outline),
+                label: Text(_isSubmitting ? 'Сохраняем...' : 'Провести приход'),
               ),
             ],
-            const SizedBox(height: 20),
-            FilledButton.icon(
-              onPressed: _isSubmitting ? null : _submit,
-              icon:
-                  _isSubmitting
-                      ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                      : const Icon(Icons.check_circle_outline),
-              label: Text(_isSubmitting ? 'Сохраняем...' : 'Провести приход'),
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -411,7 +446,7 @@ class _WarehouseReceiptSheetState extends ConsumerState<WarehouseReceiptSheet> {
         _suggestions = const <WarehouseMaterialOption>[];
         _isSearching = false;
       });
-      _showMessage(error.toString());
+      _showMessage(error);
     }
   }
 
@@ -452,29 +487,19 @@ class _WarehouseReceiptSheetState extends ConsumerState<WarehouseReceiptSheet> {
   }
 
   Future<void> _submit() async {
-    final warehouseId = _selectedWarehouseId;
-    final material = _selectedMaterial;
-    final quantity = double.tryParse(
-      _quantityController.text.replaceAll(',', '.'),
-    );
-    final price = double.tryParse(_priceController.text.replaceAll(',', '.'));
+    final form = _formKey.currentState;
+    if (form == null || !form.validate()) {
+      setState(() {
+        _autovalidateMode = AutovalidateMode.onUserInteraction;
+      });
+      _focusFirstInvalidField();
+      return;
+    }
 
-    if (warehouseId == null) {
-      _showMessage('Выбери склад.');
-      return;
-    }
-    if (material == null) {
-      _showMessage('Выбери материал из списка.');
-      return;
-    }
-    if (quantity == null || quantity <= 0) {
-      _showMessage('Укажи корректное количество.');
-      return;
-    }
-    if (price == null || price < 0) {
-      _showMessage('Укажи корректную цену.');
-      return;
-    }
+    final warehouseId = _selectedWarehouseId!;
+    final material = _selectedMaterial!;
+    final quantity = _parseNumber(_quantityController.text)!;
+    final price = _parseNumber(_priceController.text)!;
 
     setState(() {
       _isSubmitting = true;
@@ -502,7 +527,7 @@ class _WarehouseReceiptSheetState extends ConsumerState<WarehouseReceiptSheet> {
       Navigator.of(context).pop(true);
     } catch (error) {
       if (mounted) {
-        _showMessage(error.toString());
+        _showMessage(error);
       }
     } finally {
       if (mounted) {
@@ -522,9 +547,66 @@ class _WarehouseReceiptSheetState extends ConsumerState<WarehouseReceiptSheet> {
     return value.toStringAsFixed(value.truncateToDouble() == value ? 0 : 2);
   }
 
-  void _showMessage(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message.replaceFirst('ApiException: ', ''))),
-    );
+  String? _validateQuantity(String? value) {
+    final parsed = _parseNumber(value ?? '');
+    if (parsed == null) {
+      return 'Укажите количество';
+    }
+
+    if (parsed <= 0) {
+      return 'Количество должно быть больше нуля';
+    }
+
+    return null;
+  }
+
+  String? _validatePrice(String? value) {
+    final text = value?.trim() ?? '';
+    if (text.isEmpty) {
+      return 'Укажите цену';
+    }
+
+    final parsed = _parseNumber(text);
+    if (parsed == null || parsed < 0) {
+      return 'Укажите корректную цену';
+    }
+
+    return null;
+  }
+
+  double? _parseNumber(String value) {
+    final text = value.trim();
+    if (text.isEmpty) {
+      return null;
+    }
+
+    return double.tryParse(text.replaceAll(',', '.'));
+  }
+
+  void _focusFirstInvalidField() {
+    if (_selectedWarehouseId == null) {
+      FocusScope.of(context).unfocus();
+      return;
+    }
+
+    if (_selectedMaterial == null) {
+      _materialFocusNode.requestFocus();
+      return;
+    }
+
+    if (_validateQuantity(_quantityController.text) != null) {
+      _quantityFocusNode.requestFocus();
+      return;
+    }
+
+    if (_validatePrice(_priceController.text) != null) {
+      _priceFocusNode.requestFocus();
+    }
+  }
+
+  void _showMessage(Object message) {
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(UserMessage.fromError(message))));
   }
 }

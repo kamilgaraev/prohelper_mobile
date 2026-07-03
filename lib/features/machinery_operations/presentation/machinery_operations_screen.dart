@@ -1,6 +1,7 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
+import '../../../core/error/user_message.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../core/widgets/app_action_buttons.dart';
 import '../../../core/widgets/app_empty_state.dart';
@@ -1067,14 +1068,7 @@ int _parseInt(String value) {
 void _showOperationError(BuildContext context, Object error) {
   ScaffoldMessenger.of(
     context,
-  ).showSnackBar(SnackBar(content: Text(_cleanError(error))));
-}
-
-String _cleanError(Object error) {
-  return error
-      .toString()
-      .replaceFirst('ApiException: ', '')
-      .replaceFirst('FormatException: ', '');
+  ).showSnackBar(SnackBar(content: Text(UserMessage.fromError(error))));
 }
 
 String _formatNumber(double value) {

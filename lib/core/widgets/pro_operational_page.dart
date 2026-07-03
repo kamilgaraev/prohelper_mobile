@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 
 import 'package:prohelpers_mobile/core/design/pro_design_tokens.dart';
 import 'package:prohelpers_mobile/core/theme/app_typography.dart';
@@ -14,7 +14,7 @@ class ProOperationalPage extends StatelessWidget {
     this.floatingActionButton,
     this.padding = const EdgeInsets.fromLTRB(
       ProSpacing.pageHorizontal,
-      ProSpacing.sm,
+      ProSpacing.md,
       ProSpacing.pageHorizontal,
       ProSpacing.bottomNavSafe,
     ),
@@ -30,11 +30,21 @@ class ProOperationalPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     final content = ListView(padding: padding, children: children);
 
     return Scaffold(
       appBar: AppBar(
+        backgroundColor: theme.colorScheme.surface,
         centerTitle: false,
+        scrolledUnderElevation: 0,
+        shape: Border(
+          bottom: BorderSide(
+            color: theme.colorScheme.outline.withValues(alpha: 0.22),
+            width: 0.5,
+          ),
+        ),
+        surfaceTintColor: Colors.transparent,
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,

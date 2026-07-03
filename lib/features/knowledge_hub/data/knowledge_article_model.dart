@@ -1,4 +1,4 @@
-class KnowledgeArticleModel {
+﻿class KnowledgeArticleModel {
   const KnowledgeArticleModel({
     required this.id,
     required this.title,

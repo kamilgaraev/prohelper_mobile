@@ -1,5 +1,6 @@
-import 'package:hooks_riverpod/hooks_riverpod.dart';
+﻿import 'package:hooks_riverpod/hooks_riverpod.dart';
 
+import '../../../core/error/user_message.dart';
 import '../../auth/domain/auth_provider.dart';
 import '../data/notification_model.dart';
 import '../data/notifications_repository.dart';
@@ -106,6 +107,9 @@ class NotificationsNotifier extends StateNotifier<NotificationsState> {
         perPage: state.perPage,
         filter: state.filter,
       );
+      if (!mounted) {
+        return;
+      }
 
       state = state.copyWith(
         isLoading: false,
@@ -122,10 +126,14 @@ class NotificationsNotifier extends StateNotifier<NotificationsState> {
       );
       await refreshUnreadCount();
     } catch (error) {
+      if (!mounted) {
+        return;
+      }
+
       state = state.copyWith(
         isLoading: false,
         isRefreshing: false,
-        error: error.toString().replaceFirst('ApiException: ', ''),
+        error: UserMessage.fromError(error),
       );
     }
   }
@@ -133,6 +141,10 @@ class NotificationsNotifier extends StateNotifier<NotificationsState> {
   Future<void> refreshUnreadCount() async {
     try {
       final count = await _repository.fetchUnreadCount();
+      if (!mounted) {
+        return;
+      }
+
       state = state.copyWith(unreadCount: count);
     } catch (_) {}
   }
@@ -154,6 +166,10 @@ class NotificationsNotifier extends StateNotifier<NotificationsState> {
 
     try {
       final updated = await _repository.markAsRead(id);
+      if (!mounted) {
+        return;
+      }
+
       final nextItems = [...state.items];
 
       if (index != -1) {
@@ -170,15 +186,23 @@ class NotificationsNotifier extends StateNotifier<NotificationsState> {
         error: null,
       );
     } catch (error) {
+      if (!mounted) {
+        return;
+      }
+
       state = state.copyWith(
         isActionLoading: false,
-        error: error.toString().replaceFirst('ApiException: ', ''),
+        error: UserMessage.fromError(error),
       );
       rethrow;
     }
   }
 
   void applyRead(NotificationModel notification) {
+    if (!mounted) {
+      return;
+    }
+
     final index = state.items.indexWhere((item) => item.id == notification.id);
     final wasUnread = index != -1 && state.items[index].isUnread;
 
@@ -209,6 +233,10 @@ class NotificationsNotifier extends StateNotifier<NotificationsState> {
 
     try {
       await _repository.markAllAsRead();
+      if (!mounted) {
+        return;
+      }
+
       final nextItems = state.items
           .map(
             (item) =>
@@ -223,9 +251,13 @@ class NotificationsNotifier extends StateNotifier<NotificationsState> {
         error: null,
       );
     } catch (error) {
+      if (!mounted) {
+        return;
+      }
+
       state = state.copyWith(
         isActionLoading: false,
-        error: error.toString().replaceFirst('ApiException: ', ''),
+        error: UserMessage.fromError(error),
       );
       rethrow;
     }
@@ -291,15 +323,23 @@ class NotificationDetailNotifier
 
     try {
       final notification = await _repository.fetchNotification(_id);
+      if (!mounted) {
+        return;
+      }
+
       state = state.copyWith(
         isLoading: false,
         notification: notification,
         error: null,
       );
     } catch (error) {
+      if (!mounted) {
+        return;
+      }
+
       state = state.copyWith(
         isLoading: false,
-        error: error.toString().replaceFirst('ApiException: ', ''),
+        error: UserMessage.fromError(error),
       );
     }
   }
@@ -314,6 +354,10 @@ class NotificationDetailNotifier
 
     try {
       final updated = await _repository.markAsRead(current.id);
+      if (!mounted) {
+        return;
+      }
+
       state = state.copyWith(
         isMarkingRead: false,
         notification: updated,
@@ -321,9 +365,13 @@ class NotificationDetailNotifier
       );
       _listNotifier.applyRead(updated);
     } catch (error) {
+      if (!mounted) {
+        return;
+      }
+
       state = state.copyWith(
         isMarkingRead: false,
-        error: error.toString().replaceFirst('ApiException: ', ''),
+        error: UserMessage.fromError(error),
       );
     }
   }

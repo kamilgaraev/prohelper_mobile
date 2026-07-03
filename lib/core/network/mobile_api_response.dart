@@ -1,4 +1,4 @@
-class MobileApiResponse<T> {
+﻿class MobileApiResponse<T> {
   const MobileApiResponse({
     required this.success,
     required this.data,

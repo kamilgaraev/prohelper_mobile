@@ -1,10 +1,12 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
+import 'package:prohelpers_mobile/core/design/pro_design_tokens.dart';
+import 'package:prohelpers_mobile/core/design/pro_status.dart';
 import 'package:prohelpers_mobile/core/theme/app_typography.dart';
 import 'package:prohelpers_mobile/core/widgets/app_error_state.dart';
 import 'package:prohelpers_mobile/core/widgets/app_loading_state.dart';
-import 'package:prohelpers_mobile/core/widgets/pro_action_tile.dart';
 import 'package:prohelpers_mobile/core/widgets/pro_section.dart';
 import 'package:prohelpers_mobile/core/widgets/pro_surface.dart';
 import 'package:prohelpers_mobile/features/knowledge_hub/data/knowledge_article_model.dart';
@@ -59,7 +61,9 @@ class KnowledgeArticleScreen extends ConsumerWidget {
                     }
 
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Спасибо за оценку статьи.')),
+                      const SnackBar(
+                        content: Text('Спасибо за оценку статьи.'),
+                      ),
                     );
                   } catch (_) {
                     if (!context.mounted) {
@@ -118,10 +122,7 @@ class _ArticleBody extends StatelessWidget {
             children: [
               Text(article.title, style: AppTypography.h1(context)),
               const SizedBox(height: 8),
-              Text(
-                article.preview,
-                style: AppTypography.bodyMedium(context),
-              ),
+              Text(article.preview, style: AppTypography.bodyMedium(context)),
               const SizedBox(height: 12),
               Wrap(
                 spacing: 8,
@@ -148,21 +149,7 @@ class _ArticleBody extends StatelessWidget {
         ),
         if (article.tableOfContents.isNotEmpty) ...[
           const SizedBox(height: 16),
-          ProSectionBlock(
-            title: 'Содержание',
-            children:
-                article.tableOfContents
-                    .map(
-                      (item) => Padding(
-                        padding: EdgeInsets.only(left: (item.level - 2) * 12),
-                        child: Text(
-                          item.title,
-                          style: AppTypography.bodyMedium(context),
-                        ),
-                      ),
-                    )
-                    .toList(growable: false),
-          ),
+          _ArticleTocPanel(items: article.tableOfContents),
         ],
         const SizedBox(height: 16),
         ProSurface(
@@ -238,7 +225,8 @@ class _FeedbackBlock extends StatelessWidget {
                 onPressed:
                     state.isSubmittingFeedback
                         ? null
-                        : () => onFeedback(KnowledgeFeedbackReaction.notHelpful),
+                        : () =>
+                            onFeedback(KnowledgeFeedbackReaction.notHelpful),
                 icon: Icon(
                   isNotHelpful
                       ? Icons.thumb_down_alt_rounded
@@ -247,6 +235,109 @@ class _FeedbackBlock extends StatelessWidget {
                 label: Text(isNotHelpful ? 'Отмечено' : 'Не помогло'),
               ),
             ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ArticlePanel extends StatelessWidget {
+  const _ArticlePanel({required this.title, required this.children});
+
+  final String title;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    if (children.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return ProSurface(
+      tone: ProSurfaceTone.elevated,
+      padding: EdgeInsets.zero,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              ProSpacing.md,
+              ProSpacing.md,
+              ProSpacing.md,
+              0,
+            ),
+            child: ProSectionHeader(title: title),
+          ),
+          const ProSectionDivider(indent: ProSpacing.md),
+          for (var index = 0; index < children.length; index++) ...[
+            children[index],
+            if (index != children.length - 1)
+              const ProSectionDivider(indent: 72),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _ArticleTocPanel extends StatelessWidget {
+  const _ArticleTocPanel({required this.items});
+
+  final List<KnowledgeArticleTocItem> items;
+
+  @override
+  Widget build(BuildContext context) {
+    return _ArticlePanel(
+      title: 'Содержание',
+      children: [for (final item in items) _ArticleTocRow(item: item)],
+    );
+  }
+}
+
+class _ArticleTocRow extends StatelessWidget {
+  const _ArticleTocRow({required this.item});
+
+  final KnowledgeArticleTocItem item;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final levelOffset = (item.level - 2).clamp(0, 4) * 12.0;
+
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        ProSpacing.md + levelOffset,
+        ProSpacing.sm,
+        ProSpacing.md,
+        ProSpacing.sm,
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 44,
+            height: 44,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: theme.colorScheme.primary.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(ProRadius.sm),
+            ),
+            child: Icon(
+              Icons.format_list_bulleted_rounded,
+              color: theme.colorScheme.primary,
+              size: 22,
+            ),
+          ),
+          const SizedBox(width: ProSpacing.sm),
+          Expanded(
+            child: Text(
+              item.title,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: AppTypography.bodyMedium(
+                context,
+              ).copyWith(fontWeight: FontWeight.w700),
+            ),
           ),
         ],
       ),
@@ -267,20 +358,131 @@ class _ArticleLinksSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ProSectionBlock(
+    return _ArticlePanel(
       title: title,
-      children:
-          articles
-              .map(
-                (article) => ProActionTile(
-                  title: article.title,
-                  subtitle: article.preview,
-                  badge: article.readingTimeLabel,
-                  icon: Icons.article_outlined,
-                  onTap: () => onOpenArticle(article),
+      children: [
+        for (final article in articles)
+          _ArticleLinkRow(
+            article: article,
+            onTap: () => onOpenArticle(article),
+          ),
+      ],
+    );
+  }
+}
+
+class _ArticleLinkRow extends StatelessWidget {
+  const _ArticleLinkRow({required this.article, required this.onTap});
+
+  final KnowledgeArticleModel article;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final status = proStatusStyle(context, ProStatusTone.info);
+    final theme = Theme.of(context);
+
+    return Semantics(
+      container: true,
+      button: true,
+      enabled: true,
+      label: 'Открыть статью: ${article.title}',
+      child: InkWell(
+        onTap: () {
+          HapticFeedback.selectionClick();
+          onTap();
+        },
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: ProTouchTarget.min),
+          child: Padding(
+            padding: const EdgeInsets.all(ProSpacing.md),
+            child: Row(
+              children: [
+                Container(
+                  width: 44,
+                  height: 44,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: status.background,
+                    borderRadius: BorderRadius.circular(ProRadius.sm),
+                  ),
+                  child: Icon(
+                    Icons.article_outlined,
+                    color: status.foreground,
+                    size: 22,
+                  ),
                 ),
-              )
-              .toList(growable: false),
+                const SizedBox(width: ProSpacing.sm),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              article.title,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: AppTypography.bodyMedium(
+                                context,
+                              ).copyWith(fontWeight: FontWeight.w800),
+                            ),
+                          ),
+                          const SizedBox(width: ProSpacing.xs),
+                          _ArticleBadge(
+                            label: article.readingTimeLabel,
+                            color: status.foreground,
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: ProSpacing.xxs),
+                      Text(
+                        article.preview,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppTypography.caption(context),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: ProSpacing.xs),
+                Icon(
+                  Icons.chevron_right_rounded,
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ArticleBadge extends StatelessWidget {
+  const _ArticleBadge({required this.label, required this.color});
+
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: ProSpacing.xs,
+        vertical: ProSpacing.xxs,
+      ),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(ProRadius.pill),
+      ),
+      child: Text(
+        label,
+        style: AppTypography.caption(
+          context,
+        ).copyWith(color: color, fontSize: 10, fontWeight: FontWeight.w800),
+      ),
     );
   }
 }

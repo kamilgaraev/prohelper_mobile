@@ -1,4 +1,5 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:prohelpers_mobile/core/theme/app_theme.dart';
 import 'package:prohelpers_mobile/core/widgets/app_action_buttons.dart';
@@ -8,6 +9,7 @@ import 'package:prohelpers_mobile/core/widgets/app_form_section.dart';
 import 'package:prohelpers_mobile/core/widgets/app_loading_state.dart';
 import 'package:prohelpers_mobile/core/widgets/app_permission_state.dart';
 import 'package:prohelpers_mobile/core/widgets/app_success_banner.dart';
+import 'package:prohelpers_mobile/core/widgets/pro_surface.dart';
 
 void main() {
   Widget buildWidget(Widget child) {
@@ -66,6 +68,12 @@ void main() {
     final initialSize = tester.getSize(
       find.byKey(const ValueKey('app-loading-state-layout')),
     );
+    final initialSurfaceSize = tester.getSize(
+      find.descendant(
+        of: find.byType(ProSurface),
+        matching: find.byType(Material),
+      ),
+    );
 
     await tester.pumpWidget(
       buildWidget(
@@ -82,9 +90,81 @@ void main() {
     final updatedSize = tester.getSize(
       find.byKey(const ValueKey('app-loading-state-layout')),
     );
+    final updatedSurfaceSize = tester.getSize(
+      find.descendant(
+        of: find.byType(ProSurface),
+        matching: find.byType(Material),
+      ),
+    );
 
     expect(initialSize.height, 240);
     expect(updatedSize.height, initialSize.height);
+    expect(updatedSize.width, initialSize.width);
+    expect(initialSurfaceSize.width, lessThanOrEqualTo(328));
+    expect(updatedSurfaceSize.width, initialSurfaceSize.width);
+  });
+
+  testWidgets('loading state exposes message once to accessibility', (
+    tester,
+  ) async {
+    final semantics = tester.ensureSemantics();
+    try {
+      await tester.pumpWidget(
+        buildWidget(
+          const SizedBox(
+            width: 360,
+            child: AppLoadingState(message: 'Загружаем заявки', minHeight: 240),
+          ),
+        ),
+      );
+
+      final labels = _collectSemanticsLabels(tester.binding.rootPipelineOwner);
+
+      expect(labels.any((label) => label.contains('Загружаем заявки')), isTrue);
+      expect(
+        labels.where(
+          (label) => _countOccurrences(label, 'Загружаем заявки') > 1,
+        ),
+        isEmpty,
+      );
+    } finally {
+      semantics.dispose();
+    }
+  });
+
+  testWidgets('loading and error states are anchored in card surfaces', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      buildWidget(
+        Column(
+          children: [
+            const AppLoadingState(message: 'Загружаем разделы', minHeight: 180),
+            AppErrorState(
+              title: 'Не удалось загрузить разделы',
+              description: 'Сервер не ответил вовремя.',
+              onRetry: () {},
+              minHeight: 180,
+            ),
+          ],
+        ),
+      ),
+    );
+
+    expect(
+      find.ancestor(
+        of: find.text('Загружаем разделы'),
+        matching: find.byType(ProSurface),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.ancestor(
+        of: find.text('Не удалось загрузить разделы'),
+        matching: find.byType(ProSurface),
+      ),
+      findsOneWidget,
+    );
   });
 
   testWidgets('primary button shows busy state', (tester) async {
@@ -132,4 +212,42 @@ void main() {
     expect(find.text('Материалы'), findsOneWidget);
     expect(find.text('Отменить'), findsOneWidget);
   });
+}
+
+List<String> _collectSemanticsLabels(PipelineOwner owner) {
+  final labels = <String>[];
+  final root = owner.semanticsOwner?.rootSemanticsNode;
+
+  if (root != null) {
+    _visitSemanticsNode(root, labels);
+  }
+
+  owner.visitChildren((child) {
+    labels.addAll(_collectSemanticsLabels(child));
+  });
+
+  return labels.where((label) => label.isNotEmpty).toList(growable: false);
+}
+
+void _visitSemanticsNode(SemanticsNode node, List<String> labels) {
+  labels.add(node.getSemanticsData().label);
+  node.visitChildren((child) {
+    _visitSemanticsNode(child, labels);
+    return true;
+  });
+}
+
+int _countOccurrences(String source, String pattern) {
+  var count = 0;
+  var start = 0;
+
+  while (true) {
+    final index = source.indexOf(pattern, start);
+    if (index == -1) {
+      return count;
+    }
+
+    count += 1;
+    start = index + pattern.length;
+  }
 }

@@ -1,4 +1,4 @@
-sealed class Result<T, E extends Exception> {
+﻿sealed class Result<T, E extends Exception> {
   const Result();
 
   factory Result.success(T data) = Success<T, E>;

@@ -1,4 +1,4 @@
-class AttendanceQrModel {
+﻿class AttendanceQrModel {
   const AttendanceQrModel({
     required this.qrToken,
     required this.expiresAt,

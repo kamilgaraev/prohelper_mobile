@@ -1,5 +1,6 @@
-import 'package:hooks_riverpod/hooks_riverpod.dart';
+﻿import 'package:hooks_riverpod/hooks_riverpod.dart';
 
+import '../../../core/error/user_message.dart';
 import '../../../core/network/api_exception.dart';
 import '../data/safety_model.dart';
 import '../data/safety_repository.dart';
@@ -152,7 +153,7 @@ class SafetyNotifier extends StateNotifier<SafetyState> {
       state = state.copyWith(
         isLoading: false,
         permissionDenied: _isPermissionDenied(error),
-        error: error.toString(),
+        error: UserMessage.fromError(error),
       );
     }
   }

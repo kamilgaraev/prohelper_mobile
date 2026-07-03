@@ -1,8 +1,9 @@
-import 'dart:async';
+﻿import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
+import '../../../core/error/user_message.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../core/widgets/app_empty_state.dart';
@@ -76,6 +77,7 @@ class _WarehouseTasksScreenState extends ConsumerState<WarehouseTasksScreen> {
         title: const Text('Задачи склада'),
         actions: [
           IconButton(
+            tooltip: 'Обновить список',
             onPressed:
                 _isRefreshing ? null : () => _loadTasks(refreshOnly: true),
             icon:
@@ -85,7 +87,10 @@ class _WarehouseTasksScreenState extends ConsumerState<WarehouseTasksScreen> {
                       height: 18,
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
-                    : const Icon(Icons.refresh_rounded),
+                    : const Icon(
+                      Icons.refresh_rounded,
+                      semanticLabel: 'Обновить список',
+                    ),
           ),
         ],
       ),
@@ -167,7 +172,7 @@ class _WarehouseTasksScreenState extends ConsumerState<WarehouseTasksScreen> {
                     else if (_tasks.isEmpty)
                       AppEmptyState(
                         icon: Icons.inventory_2_outlined,
-                        title: 'Задач не найдено',
+                        title: 'Задач пока нет',
                         description: _emptyDescription,
                       )
                     else ...[
@@ -261,7 +266,7 @@ class _WarehouseTasksScreenState extends ConsumerState<WarehouseTasksScreen> {
       }
 
       setState(() {
-        _error = error.toString().replaceFirst('ApiException: ', '');
+        _error = UserMessage.fromError(error);
       });
     } finally {
       if (mounted) {
@@ -308,7 +313,7 @@ class _WarehouseTasksScreenState extends ConsumerState<WarehouseTasksScreen> {
         'Статус задачи "${task.title}" обновлен: ${warehouseTaskActionLabel(task, targetStatus).toLowerCase()}.',
       );
     } catch (error) {
-      _showMessage(error.toString());
+      _showMessage(error);
     }
   }
 
@@ -327,10 +332,10 @@ class _WarehouseTasksScreenState extends ConsumerState<WarehouseTasksScreen> {
     await _changeTaskStatus(task, selectedAction);
   }
 
-  void _showMessage(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message.replaceFirst('ApiException: ', ''))),
-    );
+  void _showMessage(Object message) {
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(UserMessage.fromError(message))));
   }
 }
 
@@ -403,8 +408,12 @@ class _FiltersCard extends StatelessWidget {
                   searchController.text.trim().isEmpty
                       ? null
                       : IconButton(
+                        tooltip: 'Очистить поиск',
                         onPressed: onSearchCleared,
-                        icon: const Icon(Icons.close_rounded),
+                        icon: const Icon(
+                          Icons.close_rounded,
+                          semanticLabel: 'Очистить поиск',
+                        ),
                       ),
             ),
           ),

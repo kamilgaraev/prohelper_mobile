@@ -1,6 +1,8 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 
+import 'package:prohelpers_mobile/core/design/pro_design_tokens.dart';
 import 'package:prohelpers_mobile/core/theme/app_typography.dart';
+import 'package:prohelpers_mobile/core/widgets/pro_surface.dart';
 
 class AppLoadingState extends StatelessWidget {
   const AppLoadingState({
@@ -18,30 +20,33 @@ class AppLoadingState extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final content = Semantics(
+      container: true,
       label: message,
       liveRegion: true,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          SizedBox(
-            width: compact ? 24 : 34,
-            height: compact ? 24 : 34,
-            child: CircularProgressIndicator(
-              strokeWidth: compact ? 2 : 3,
-              color: theme.colorScheme.primary,
+      child: ExcludeSemantics(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(
+              width: compact ? 24 : 34,
+              height: compact ? 24 : 34,
+              child: CircularProgressIndicator(
+                strokeWidth: compact ? 2 : 3,
+                color: theme.colorScheme.primary,
+              ),
             ),
-          ),
-          if (!compact) ...[
-            const SizedBox(height: 14),
-            Text(
-              message,
-              style: AppTypography.bodyMedium(
-                context,
-              ).copyWith(color: theme.colorScheme.onSurfaceVariant),
-              textAlign: TextAlign.center,
-            ),
+            if (!compact) ...[
+              const SizedBox(height: 14),
+              Text(
+                message,
+                style: AppTypography.bodyMedium(
+                  context,
+                ).copyWith(color: theme.colorScheme.onSurfaceVariant),
+                textAlign: TextAlign.center,
+              ),
+            ],
           ],
-        ],
+        ),
       ),
     );
 
@@ -50,10 +55,19 @@ class AppLoadingState extends StatelessWidget {
     }
 
     return Center(
-      child: SizedBox(
-        key: const ValueKey('app-loading-state-layout'),
-        height: minHeight,
-        child: Center(child: content),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: ProSpacing.md),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 420),
+          child: ProSurface(
+            tone: ProSurfaceTone.elevated,
+            child: SizedBox(
+              key: const ValueKey('app-loading-state-layout'),
+              height: minHeight,
+              child: Center(child: content),
+            ),
+          ),
+        ),
       ),
     );
   }

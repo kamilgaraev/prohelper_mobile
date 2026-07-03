@@ -1,4 +1,4 @@
-import 'package:dio/dio.dart';
+﻿import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:prohelpers_mobile/features/construction_journal/data/construction_journal_models.dart';
@@ -33,7 +33,7 @@ import '../test/helpers/mobile_integration_test_helpers.dart';
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
-  configureProHelperIntegrationTestEnvironment();
+  configureMostIntegrationTestEnvironment();
 
   testWidgets('creates a site request through mobile repository contract', (
     tester,
@@ -210,7 +210,7 @@ class _FieldSiteRequestsRepository extends SiteRequestsRepository {
   @override
   Future<SiteRequestModel> createSiteRequest(Map<String, dynamic> data) async {
     createdPayloads.add(Map<String, dynamic>.from(data));
-    return ProHelperTestData.siteRequest(
+    return MostTestData.siteRequest(
       id: 1001,
       title: data['title']?.toString() ?? 'Site request',
     );

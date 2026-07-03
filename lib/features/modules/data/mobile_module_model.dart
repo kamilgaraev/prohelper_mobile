@@ -1,4 +1,4 @@
-class MobileModuleModel {
+﻿class MobileModuleModel {
   const MobileModuleModel({
     required this.slug,
     required this.title,

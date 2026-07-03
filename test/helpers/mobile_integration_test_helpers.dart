@@ -1,7 +1,8 @@
-import 'package:dio/dio.dart';
+﻿import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:prohelpers_mobile/core/localization/most_localizations.dart';
 import 'package:prohelpers_mobile/core/models/user_context.dart';
 import 'package:prohelpers_mobile/core/network/dio_client.dart';
 import 'package:prohelpers_mobile/core/providers/module_provider.dart';
@@ -69,7 +70,7 @@ class MemorySecureStorageService extends SecureStorageService {
   }
 }
 
-void configureProHelperIntegrationTestEnvironment() {}
+void configureMostIntegrationTestEnvironment() {}
 
 class TestDioRequest {
   const TestDioRequest({
@@ -156,7 +157,7 @@ class TestAuthRepository extends AuthRepository {
   final MemorySecureStorageService _storage;
 
   @override
-  Future<User> getMe() async => _user;
+  Future<User> getMe({String? token}) async => _user;
 
   @override
   Future<User> login(String email, String password) async {
@@ -324,7 +325,7 @@ class TestNotificationsRepository extends NotificationsRepository {
   }
 }
 
-List<Override> proHelperCoreOverrides({
+List<Override> mostCoreOverrides({
   MemorySecureStorageService? storage,
   bool authenticated = true,
   User? user,
@@ -342,14 +343,14 @@ List<Override> proHelperCoreOverrides({
         token: authenticated ? 'test-token' : null,
         selectedProjectId: selectedProject?.serverId,
       );
-  final resolvedUser = user ?? ProHelperTestData.user();
-  final resolvedProjects = projects ?? [ProHelperTestData.project()];
+  final resolvedUser = user ?? MostTestData.user();
+  final resolvedProjects = projects ?? [MostTestData.project()];
   final resolvedSelectedProject = selectedProject;
-  final resolvedModules = activeModules ?? ProHelperTestData.allAppModules;
+  final resolvedModules = activeModules ?? MostTestData.allAppModules;
   final resolvedDashboardWidgets =
-      dashboardWidgets ?? ProHelperTestData.dashboardWidgets();
+      dashboardWidgets ?? MostTestData.dashboardWidgets();
   final resolvedNotifications =
-      notifications ?? [ProHelperTestData.siteRequestNotification()];
+      notifications ?? [MostTestData.siteRequestNotification()];
   final resolvedDio = dio ?? TestDioResponseQueue().buildDio();
 
   return [
@@ -371,7 +372,7 @@ List<Override> proHelperCoreOverrides({
     ),
     modulesProvider.overrideWith(
       (ref) =>
-          TestModulesNotifier(ProHelperTestData.mobileModules(resolvedModules)),
+          TestModulesNotifier(MostTestData.mobileModules(resolvedModules)),
     ),
     activeModulesProvider.overrideWith((ref) => resolvedModules),
     permissionServiceProvider.overrideWith(
@@ -389,7 +390,7 @@ List<Override> proHelperCoreOverrides({
   ];
 }
 
-Future<void> pumpProHelperWidget(
+Future<void> pumpMostWidget(
   WidgetTester tester,
   Widget child, {
   List<Override> overrides = const [],
@@ -405,8 +406,11 @@ Future<void> pumpProHelperWidget(
       overrides: overrides,
       child: MaterialApp(
         debugShowCheckedModeBanner: false,
-        theme: ProHelperTheme.lightTheme,
-        darkTheme: ProHelperTheme.darkTheme,
+        theme: MostTheme.lightTheme,
+        darkTheme: MostTheme.darkTheme,
+        locale: MostLocalizations.ru,
+        localizationsDelegates: MostLocalizations.delegates,
+        supportedLocales: MostLocalizations.supportedLocales,
         home: child,
       ),
     ),
@@ -414,7 +418,7 @@ Future<void> pumpProHelperWidget(
   await tester.pump();
 }
 
-class ProHelperTestData {
+class MostTestData {
   static final allAppModules = Set<AppModule>.from(AppModule.values);
 
   static User user() {

@@ -1,4 +1,4 @@
-import 'queued_sync_operation.dart';
+﻿import 'queued_sync_operation.dart';
 
 abstract class SyncQueueStore {
   Future<QueuedSyncOperation> put(QueuedSyncOperation operation);

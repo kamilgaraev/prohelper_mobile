@@ -1,4 +1,4 @@
-class ProjectMaterialDeliveryEventModel {
+﻿class ProjectMaterialDeliveryEventModel {
   const ProjectMaterialDeliveryEventModel({
     required this.id,
     required this.eventType,

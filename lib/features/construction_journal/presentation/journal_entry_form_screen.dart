@@ -1,7 +1,8 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
+import '../../../core/error/user_message.dart';
 import '../data/construction_journal_models.dart';
 import '../data/construction_journal_repository.dart';
 
@@ -561,7 +562,7 @@ class _JournalEntryFormScreenState
       }
     } catch (error) {
       if (mounted) {
-        _showMessage(error.toString());
+        _showMessage(UserMessage.fromError(error));
       }
     } finally {
       if (mounted) {

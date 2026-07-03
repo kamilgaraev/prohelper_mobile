@@ -1,4 +1,4 @@
-class HandoverReference {
+﻿class HandoverReference {
   const HandoverReference({required this.id, required this.name});
 
   final int id;

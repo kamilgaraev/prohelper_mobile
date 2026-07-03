@@ -1,4 +1,4 @@
-class TimeEntryCorrectionModel {
+﻿class TimeEntryCorrectionModel {
   const TimeEntryCorrectionModel({
     required this.id,
     required this.reason,

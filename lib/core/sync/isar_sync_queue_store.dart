@@ -1,4 +1,4 @@
-import 'package:isar/isar.dart';
+﻿import 'package:isar/isar.dart';
 
 import 'queued_sync_operation.dart';
 import 'sync_queue_store.dart';

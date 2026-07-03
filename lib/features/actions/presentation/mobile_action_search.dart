@@ -1,4 +1,4 @@
-import 'package:prohelpers_mobile/core/navigation/mobile_destination.dart';
+﻿import 'package:prohelpers_mobile/core/navigation/mobile_destination.dart';
 
 List<MobileModuleDestination> filterMobileActions(
   List<MobileModuleDestination> destinations,

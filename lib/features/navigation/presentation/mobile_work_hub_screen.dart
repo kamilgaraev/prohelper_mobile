@@ -1,22 +1,22 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
+import 'package:prohelpers_mobile/core/design/pro_design_tokens.dart';
 import 'package:prohelpers_mobile/core/design/pro_status.dart';
 import 'package:prohelpers_mobile/core/navigation/mobile_destination.dart';
 import 'package:prohelpers_mobile/core/navigation/mobile_navigation_registry.dart';
 import 'package:prohelpers_mobile/core/providers/module_provider.dart';
+import 'package:prohelpers_mobile/core/theme/app_typography.dart';
 import 'package:prohelpers_mobile/core/widgets/app_empty_state.dart';
 import 'package:prohelpers_mobile/core/widgets/app_error_state.dart';
 import 'package:prohelpers_mobile/core/widgets/app_loading_state.dart';
-import 'package:prohelpers_mobile/core/widgets/pro_action_tile.dart';
 import 'package:prohelpers_mobile/core/widgets/pro_empty_states.dart';
 import 'package:prohelpers_mobile/core/widgets/pro_page_scaffold.dart';
 import 'package:prohelpers_mobile/core/widgets/pro_search_filter_bar.dart';
 import 'package:prohelpers_mobile/core/widgets/pro_section.dart';
-import 'package:prohelpers_mobile/core/widgets/pro_status_banner.dart';
+import 'package:prohelpers_mobile/core/widgets/pro_surface.dart';
 import 'package:prohelpers_mobile/features/actions/presentation/mobile_action_search.dart';
-import 'package:prohelpers_mobile/features/actions/presentation/mobile_recommended_actions_section.dart';
-import 'package:prohelpers_mobile/core/navigation/mobile_action_recommendation_provider.dart';
 import 'package:prohelpers_mobile/features/projects/domain/projects_provider.dart';
 import 'package:prohelpers_mobile/features/projects/presentation/project_selection_screen.dart';
 
@@ -55,12 +55,16 @@ class _MobileWorkHubScreenState extends ConsumerState<MobileWorkHubScreen> {
     setState(() => _query = nextQuery);
   }
 
+  void _clearSearch() {
+    _searchController.clear();
+    FocusManager.instance.primaryFocus?.unfocus();
+  }
+
   @override
   Widget build(BuildContext context) {
     final modulesState = ref.watch(modulesProvider);
     final modules = ref.watch(supportedMobileModulesProvider);
     final selectedProject = ref.watch(projectsProvider).selectedProject;
-    final recommendations = ref.watch(mobileRecommendedActionsProvider);
     final hasSelectedProject = selectedProject != null;
     final allDestinations = uniqueDestinations(
           modules.map(
@@ -83,13 +87,6 @@ class _MobileWorkHubScreenState extends ConsumerState<MobileWorkHubScreen> {
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const ProStatusBanner(
-            title: 'Задачи на объекте, смены и контроль выполнения',
-            description:
-                'Разделы собраны по рабочим сценариям, чтобы не искать нужный модуль по названию.',
-            tone: ProStatusTone.info,
-          ),
-          const SizedBox(height: 20),
           if (!hasSelectedProject)
             ProNoProjectState(
               action: FilledButton.icon(
@@ -118,31 +115,27 @@ class _MobileWorkHubScreenState extends ConsumerState<MobileWorkHubScreen> {
               options: const [],
               selectedValue: 'all',
               onFilterChanged: (_) {},
-              onClearSearch:
-                  _query.isEmpty ? null : () => _searchController.clear(),
+              onClearSearch: _query.isEmpty ? null : _clearSearch,
+              density: ProSearchFilterDensity.compact,
               resultLabel:
                   _query.isEmpty
                       ? 'Доступно разделов: ${allDestinations.length}'
                       : 'Найдено: ${filteredDestinations.length}',
             ),
-            if (_query.isEmpty && recommendations.isNotEmpty) ...[
-              const SizedBox(height: 20),
-              MobileRecommendedActionsSection(
-                title: 'Следующие в работе',
-                subtitle: 'Действия, которые сейчас полезнее всего.',
-                actions: recommendations,
-                onOpen:
-                    (action) => Navigator.of(context).push(
-                      MaterialPageRoute(builder: action.destination.builder),
-                    ),
-              ),
-            ],
             const SizedBox(height: 20),
             if (filteredDestinations.isEmpty)
-              const AppEmptyState(
+              AppEmptyState(
                 icon: Icons.search_off_rounded,
                 title: 'Разделы не найдены',
                 description: 'Попробуйте изменить запрос.',
+                action:
+                    _query.isEmpty
+                        ? null
+                        : OutlinedButton.icon(
+                          onPressed: _clearSearch,
+                          icon: const Icon(Icons.close_rounded),
+                          label: const Text('Сбросить поиск'),
+                        ),
               )
             else
               for (final group in _workGroups)
@@ -179,23 +172,108 @@ class _WorkGroup extends StatelessWidget {
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 20),
-      child: ProSectionBlock(
-        title: group.label,
-        children: [
-          for (final destination in destinations)
-            ProActionTile(
-              title: destination.shortTitle,
-              subtitle:
-                  destination.title == destination.shortTitle
-                      ? destination.recommendedReason
-                      : '${destination.title} · ${destination.recommendedReason}',
-              icon: destination.icon,
-              onTap:
-                  () => Navigator.of(
-                    context,
-                  ).push(MaterialPageRoute(builder: destination.builder)),
+      child: ProSurface(
+        tone: ProSurfaceTone.elevated,
+        padding: EdgeInsets.zero,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                ProSpacing.md,
+                ProSpacing.md,
+                ProSpacing.md,
+                0,
+              ),
+              child: ProSectionHeader(title: group.label),
             ),
-        ],
+            const ProSectionDivider(indent: ProSpacing.md),
+            for (var index = 0; index < destinations.length; index++) ...[
+              _WorkDestinationRow(destination: destinations[index]),
+              if (index != destinations.length - 1)
+                const ProSectionDivider(indent: 72),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _WorkDestinationRow extends StatelessWidget {
+  const _WorkDestinationRow({required this.destination});
+
+  final MobileModuleDestination destination;
+
+  @override
+  Widget build(BuildContext context) {
+    final status = proStatusStyle(context, ProStatusTone.info);
+    final theme = Theme.of(context);
+    final subtitle =
+        destination.title == destination.shortTitle
+            ? destination.recommendedReason
+            : '${destination.title} · ${destination.recommendedReason}';
+
+    return Semantics(
+      container: true,
+      button: true,
+      enabled: true,
+      child: InkWell(
+        onTap: () {
+          HapticFeedback.selectionClick();
+          Navigator.of(
+            context,
+          ).push(MaterialPageRoute(builder: destination.builder));
+        },
+        child: Padding(
+          padding: const EdgeInsets.all(ProSpacing.md),
+          child: Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: status.background,
+                  borderRadius: BorderRadius.circular(ProRadius.sm),
+                ),
+                child: Icon(
+                  destination.icon,
+                  color: status.foreground,
+                  size: 22,
+                ),
+              ),
+              const SizedBox(width: ProSpacing.sm),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      destination.shortTitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTypography.bodyMedium(
+                        context,
+                      ).copyWith(fontWeight: FontWeight.w800),
+                    ),
+                    const SizedBox(height: ProSpacing.xxs),
+                    Text(
+                      subtitle,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTypography.caption(context),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: ProSpacing.xs),
+              Icon(
+                Icons.chevron_right_rounded,
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

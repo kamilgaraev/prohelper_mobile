@@ -1,4 +1,4 @@
-import 'package:flutter_test/flutter_test.dart';
+﻿import 'package:flutter_test/flutter_test.dart';
 import 'package:prohelpers_mobile/features/module_companions/data/companion_module_model.dart';
 
 import '../companion_module_test_data.dart';

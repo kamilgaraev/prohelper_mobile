@@ -1,8 +1,9 @@
-import 'package:dio/dio.dart';
+﻿import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'app_environment.dart';
 import 'auth_interceptor.dart';
+import 'network_retry_interceptor.dart';
 
 final dioProvider = Provider<Dio>((ref) {
   final dio = Dio(
@@ -18,9 +19,12 @@ final dioProvider = Provider<Dio>((ref) {
   );
 
   dio.interceptors.add(AuthInterceptor(ref));
+  dio.interceptors.add(NetworkRetryInterceptor(dio));
 
   if (kDebugMode) {
-    dio.interceptors.add(LogInterceptor(requestBody: true, responseBody: true));
+    dio.interceptors.add(
+      LogInterceptor(requestHeader: false, responseHeader: false),
+    );
   }
 
   return dio;

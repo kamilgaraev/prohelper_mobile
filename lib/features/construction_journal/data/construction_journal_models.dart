@@ -1,4 +1,4 @@
-abstract final class ConstructionJournalActionKeys {
+﻿abstract final class ConstructionJournalActionKeys {
   static const view = 'view';
   static const create = 'create';
   static const update = 'update';

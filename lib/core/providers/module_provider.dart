@@ -1,5 +1,6 @@
-import 'package:hooks_riverpod/hooks_riverpod.dart';
+﻿import 'package:hooks_riverpod/hooks_riverpod.dart';
 
+import '../error/user_message.dart';
 import '../../features/auth/domain/auth_provider.dart';
 import '../../features/modules/data/mobile_module_model.dart';
 import '../../features/modules/data/modules_repository.dart';
@@ -114,7 +115,7 @@ class ModulesNotifier extends StateNotifier<ModulesState> {
       state = state.copyWith(
         isLoading: false,
         modules: const [],
-        error: error.toString(),
+        error: UserMessage.fromError(error),
       );
     }
   }

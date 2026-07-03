@@ -1,4 +1,4 @@
-class QualityDefectRef {
+﻿class QualityDefectRef {
   const QualityDefectRef({required this.id, required this.name});
 
   final int id;

@@ -1,4 +1,4 @@
-class AppEnvironment {
+﻿class AppEnvironment {
   const AppEnvironment._();
 
   static const apiBaseUrl = String.fromEnvironment(

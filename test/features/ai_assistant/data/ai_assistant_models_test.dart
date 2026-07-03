@@ -1,4 +1,4 @@
-import 'package:flutter_test/flutter_test.dart';
+﻿import 'package:flutter_test/flutter_test.dart';
 import 'package:prohelpers_mobile/features/ai_assistant/data/ai_assistant_models.dart';
 
 void main() {

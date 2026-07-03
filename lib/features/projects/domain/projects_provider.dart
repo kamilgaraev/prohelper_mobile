@@ -1,4 +1,5 @@
-import 'package:hooks_riverpod/hooks_riverpod.dart';
+﻿import 'package:hooks_riverpod/hooks_riverpod.dart';
+import '../../../core/error/user_message.dart';
 import '../../../core/storage/secure_storage_service.dart';
 import '../../auth/domain/auth_provider.dart';
 import '../data/project_model.dart';
@@ -9,12 +10,14 @@ const _projectsSentinel = Object();
 // State
 class ProjectsState {
   final bool isLoading;
+  final bool hasLoaded;
   final List<Project> projects;
   final Project? selectedProject;
   final String? error;
 
   ProjectsState({
     this.isLoading = false,
+    this.hasLoaded = false,
     this.projects = const [],
     this.selectedProject,
     this.error,
@@ -22,12 +25,14 @@ class ProjectsState {
 
   ProjectsState copyWith({
     bool? isLoading,
+    bool? hasLoaded,
     List<Project>? projects,
     Object? selectedProject = _projectsSentinel,
     Object? error = _projectsSentinel,
   }) {
     return ProjectsState(
       isLoading: isLoading ?? this.isLoading,
+      hasLoaded: hasLoaded ?? this.hasLoaded,
       projects: projects ?? this.projects,
       selectedProject:
           identical(selectedProject, _projectsSentinel)
@@ -86,11 +91,16 @@ class ProjectsNotifier extends StateNotifier<ProjectsState> {
 
       state = state.copyWith(
         isLoading: false,
+        hasLoaded: true,
         projects: projects,
         selectedProject: selected,
       );
     } catch (e) {
-      state = state.copyWith(isLoading: false, error: e.toString());
+      state = state.copyWith(
+        isLoading: false,
+        hasLoaded: true,
+        error: UserMessage.fromError(e),
+      );
     }
   }
 

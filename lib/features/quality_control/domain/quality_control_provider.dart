@@ -1,5 +1,6 @@
-import 'package:hooks_riverpod/hooks_riverpod.dart';
+﻿import 'package:hooks_riverpod/hooks_riverpod.dart';
 
+import '../../../core/error/user_message.dart';
 import '../../../core/network/api_exception.dart';
 import '../data/quality_control_repository.dart';
 import '../data/quality_defect_model.dart';
@@ -118,7 +119,7 @@ class QualityControlNotifier extends StateNotifier<QualityControlState> {
       state = state.copyWith(
         isLoading: false,
         permissionDenied: _isPermissionDenied(error),
-        error: error.toString(),
+        error: UserMessage.fromError(error),
       );
     }
   }

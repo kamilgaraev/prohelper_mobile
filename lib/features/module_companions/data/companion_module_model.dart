@@ -1,4 +1,4 @@
-class CompanionModuleInfo {
+﻿class CompanionModuleInfo {
   const CompanionModuleInfo({
     required this.slug,
     required this.title,

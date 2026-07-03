@@ -1,6 +1,7 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
+import '../../../core/error/user_message.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../core/widgets/app_empty_state.dart';
@@ -64,87 +65,92 @@ class _WorkflowManagementScreenState
           title: const Text('Согласования'),
           actions: [
             IconButton(
-              tooltip: 'Обновить',
+              tooltip: 'Обновить согласования',
               onPressed: () => ref.read(workflowProvider.notifier).loadTasks(),
-              icon: const Icon(Icons.refresh_rounded),
+              icon: const Icon(
+                Icons.refresh_rounded,
+                semanticLabel: 'Обновить согласования',
+              ),
             ),
           ],
         ),
-        body:
-            state.isLoading && state.tasks.isEmpty
-                ? const AppLoadingState(message: 'Загружаем согласования')
-                : state.error != null && state.tasks.isEmpty
-                ? AppErrorState(
-                  title:
-                      state.permissionDenied
-                          ? 'Нет доступа к согласованиям'
-                          : state.malformedContract
-                          ? 'Данные согласований требуют проверки'
-                          : 'Не удалось загрузить согласования',
-                  description: state.error,
-                  onRetry:
-                      () => ref.read(workflowProvider.notifier).loadTasks(),
-                )
-                : RefreshIndicator(
-                  onRefresh:
-                      () => ref.read(workflowProvider.notifier).loadTasks(),
-                  child: ListView(
-                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
-                    children: [
-                      _WorkflowSummaryStrip(state: state),
-                      const SizedBox(height: 12),
-                      _WorkflowFilterPanel(
-                        state: state,
-                        searchController: _searchController,
-                        onAssignedChanged: _changeAssignedFilter,
-                        onStatusChanged: _changeStatusFilter,
-                        onSearchSubmitted: _changeSearch,
-                      ),
-                      const SizedBox(height: 12),
-                      if (state.tasks.isEmpty)
-                        const AppEmptyState(
-                          icon: Icons.hub_outlined,
-                          title: 'Согласований нет',
-                          description:
-                              'По текущим фильтрам нет выполненных работ для согласования.',
-                        )
-                      else
-                        ...state.tasks.map(
-                          (task) => Padding(
-                            padding: const EdgeInsets.only(bottom: 12),
-                            child: _WorkflowTaskCard(
-                              task: task,
-                              onOpen: () => _openDetail(task),
-                              onApprove:
-                                  () => _submitAction(
-                                    context,
-                                    task,
-                                    _WorkflowAction.approve,
-                                  ),
-                              onReject:
-                                  () => _submitAction(
-                                    context,
-                                    task,
-                                    _WorkflowAction.reject,
-                                  ),
-                              onRequestChanges:
-                                  () => _submitAction(
-                                    context,
-                                    task,
-                                    _WorkflowAction.requestChanges,
-                                  ),
-                              onComment:
-                                  () => _submitAction(
-                                    context,
-                                    task,
-                                    _WorkflowAction.comment,
-                                  ),
+        body: _WorkflowSafeBody(
+          child:
+              state.isLoading && state.tasks.isEmpty
+                  ? const AppLoadingState(message: 'Загружаем согласования')
+                  : state.error != null && state.tasks.isEmpty
+                  ? AppErrorState(
+                    title:
+                        state.permissionDenied
+                            ? 'Нет доступа к согласованиям'
+                            : state.malformedContract
+                            ? 'Данные согласований требуют проверки'
+                            : 'Не удалось загрузить согласования',
+                    description: state.error,
+                    onRetry:
+                        () => ref.read(workflowProvider.notifier).loadTasks(),
+                  )
+                  : RefreshIndicator(
+                    onRefresh:
+                        () => ref.read(workflowProvider.notifier).loadTasks(),
+                    child: ListView(
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
+                      children: [
+                        _WorkflowSummaryStrip(state: state),
+                        const SizedBox(height: 12),
+                        _WorkflowFilterPanel(
+                          state: state,
+                          searchController: _searchController,
+                          onAssignedChanged: _changeAssignedFilter,
+                          onStatusChanged: _changeStatusFilter,
+                          onSearchSubmitted: _changeSearch,
+                        ),
+                        const SizedBox(height: 12),
+                        if (state.tasks.isEmpty)
+                          const AppEmptyState(
+                            icon: Icons.hub_outlined,
+                            title: 'Согласований нет',
+                            description:
+                                'По текущим фильтрам нет выполненных работ для согласования.',
+                          )
+                        else
+                          ...state.tasks.map(
+                            (task) => Padding(
+                              padding: const EdgeInsets.only(bottom: 12),
+                              child: _WorkflowTaskCard(
+                                task: task,
+                                onOpen: () => _openDetail(task),
+                                onApprove:
+                                    () => _submitAction(
+                                      context,
+                                      task,
+                                      _WorkflowAction.approve,
+                                    ),
+                                onReject:
+                                    () => _submitAction(
+                                      context,
+                                      task,
+                                      _WorkflowAction.reject,
+                                    ),
+                                onRequestChanges:
+                                    () => _submitAction(
+                                      context,
+                                      task,
+                                      _WorkflowAction.requestChanges,
+                                    ),
+                                onComment:
+                                    () => _submitAction(
+                                      context,
+                                      task,
+                                      _WorkflowAction.comment,
+                                    ),
+                              ),
                             ),
                           ),
-                        ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
+        ),
       ),
     );
   }
@@ -189,6 +195,17 @@ class _WorkflowManagementScreenState
   }
 }
 
+class _WorkflowSafeBody extends StatelessWidget {
+  const _WorkflowSafeBody({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(top: false, left: false, right: false, child: child);
+  }
+}
+
 class WorkflowTaskDetailScreen extends ConsumerStatefulWidget {
   const WorkflowTaskDetailScreen({required this.taskId, super.key});
 
@@ -226,75 +243,83 @@ class _WorkflowTaskDetailScreenState
           title: const Text('Детали согласования'),
           actions: [
             IconButton(
-              tooltip: 'Обновить',
+              tooltip: 'Обновить согласование',
               onPressed: _reload,
-              icon: const Icon(Icons.refresh_rounded),
+              icon: const Icon(
+                Icons.refresh_rounded,
+                semanticLabel: 'Обновить согласование',
+              ),
             ),
           ],
         ),
-        body: FutureBuilder<WorkflowTaskModel>(
-          future: _future,
-          builder: (context, snapshot) {
-            if (snapshot.connectionState != ConnectionState.done) {
-              return const AppLoadingState(message: 'Загружаем согласование');
-            }
+        body: _WorkflowSafeBody(
+          child: FutureBuilder<WorkflowTaskModel>(
+            future: _future,
+            builder: (context, snapshot) {
+              if (snapshot.connectionState != ConnectionState.done) {
+                return const AppLoadingState(message: 'Загружаем согласование');
+              }
 
-            if (snapshot.hasError || !snapshot.hasData) {
-              return AppErrorState(
-                title: 'Не удалось загрузить согласование',
-                description: snapshot.error?.toString(),
-                onRetry: _reload,
+              if (snapshot.hasError || !snapshot.hasData) {
+                return AppErrorState(
+                  title: 'Не удалось загрузить согласование',
+                  description:
+                      snapshot.error == null
+                          ? null
+                          : UserMessage.fromError(snapshot.error!),
+                  onRetry: _reload,
+                );
+              }
+
+              final task = snapshot.data!;
+
+              return RefreshIndicator(
+                onRefresh: () async => _reload(),
+                child: ListView(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 96),
+                  children: [
+                    _WorkflowTaskDetail(task: task),
+                    const SizedBox(height: 16),
+                    _WorkflowActionPanel(
+                      task: task,
+                      onApprove:
+                          () => _showWorkflowActionSheet(
+                            context: context,
+                            ref: ref,
+                            task: task,
+                            action: _WorkflowAction.approve,
+                            onDone: _reload,
+                          ),
+                      onReject:
+                          () => _showWorkflowActionSheet(
+                            context: context,
+                            ref: ref,
+                            task: task,
+                            action: _WorkflowAction.reject,
+                            onDone: _reload,
+                          ),
+                      onRequestChanges:
+                          () => _showWorkflowActionSheet(
+                            context: context,
+                            ref: ref,
+                            task: task,
+                            action: _WorkflowAction.requestChanges,
+                            onDone: _reload,
+                          ),
+                      onComment:
+                          () => _showWorkflowActionSheet(
+                            context: context,
+                            ref: ref,
+                            task: task,
+                            action: _WorkflowAction.comment,
+                            onDone: _reload,
+                          ),
+                    ),
+                  ],
+                ),
               );
-            }
-
-            final task = snapshot.data!;
-
-            return RefreshIndicator(
-              onRefresh: () async => _reload(),
-              child: ListView(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 96),
-                children: [
-                  _WorkflowTaskDetail(task: task),
-                  const SizedBox(height: 16),
-                  _WorkflowActionPanel(
-                    task: task,
-                    onApprove:
-                        () => _showWorkflowActionSheet(
-                          context: context,
-                          ref: ref,
-                          task: task,
-                          action: _WorkflowAction.approve,
-                          onDone: _reload,
-                        ),
-                    onReject:
-                        () => _showWorkflowActionSheet(
-                          context: context,
-                          ref: ref,
-                          task: task,
-                          action: _WorkflowAction.reject,
-                          onDone: _reload,
-                        ),
-                    onRequestChanges:
-                        () => _showWorkflowActionSheet(
-                          context: context,
-                          ref: ref,
-                          task: task,
-                          action: _WorkflowAction.requestChanges,
-                          onDone: _reload,
-                        ),
-                    onComment:
-                        () => _showWorkflowActionSheet(
-                          context: context,
-                          ref: ref,
-                          task: task,
-                          action: _WorkflowAction.comment,
-                          onDone: _reload,
-                        ),
-                  ),
-                ],
-              ),
-            );
-          },
+            },
+          ),
         ),
       ),
     );
@@ -441,7 +466,7 @@ class _WorkflowSummaryStrip extends StatelessWidget {
   }
 }
 
-class _WorkflowFilterPanel extends StatelessWidget {
+class _WorkflowFilterPanel extends StatefulWidget {
   const _WorkflowFilterPanel({
     required this.state,
     required this.searchController,
@@ -457,59 +482,162 @@ class _WorkflowFilterPanel extends StatelessWidget {
   final ValueChanged<String?> onSearchSubmitted;
 
   @override
-  Widget build(BuildContext context) {
-    if ((state.search ?? '') != searchController.text.trim()) {
-      searchController.text = state.search ?? '';
+  State<_WorkflowFilterPanel> createState() => _WorkflowFilterPanelState();
+}
+
+class _WorkflowFilterPanelState extends State<_WorkflowFilterPanel> {
+  final FocusNode _searchFocusNode = FocusNode();
+
+  @override
+  void initState() {
+    super.initState();
+    widget.searchController.addListener(_handleSearchChanged);
+    _searchFocusNode.addListener(_handleSearchChanged);
+  }
+
+  @override
+  void didUpdateWidget(covariant _WorkflowFilterPanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.searchController == widget.searchController) {
+      return;
     }
 
-    return ProCard(
-      padding: const EdgeInsets.all(12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          TextField(
-            controller: searchController,
-            decoration: InputDecoration(
-              prefixIcon: const Icon(Icons.search_rounded),
-              labelText: 'Поиск',
-              suffixIcon:
-                  searchController.text.isEmpty
-                      ? null
-                      : IconButton(
-                        tooltip: 'Очистить',
-                        onPressed: () {
-                          searchController.clear();
-                          onSearchSubmitted(null);
-                        },
-                        icon: const Icon(Icons.close_rounded),
-                      ),
-            ),
-            textInputAction: TextInputAction.search,
-            onSubmitted: onSearchSubmitted,
-          ),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              FilterChip(
-                label: const Text('Мне'),
-                selected: state.assignedToMe,
-                onSelected: onAssignedChanged,
-                avatar: const Icon(Icons.person_pin_circle_outlined, size: 16),
-                visualDensity: VisualDensity.compact,
-              ),
-              ..._workflowStatusFilters.map(
-                (option) => ChoiceChip(
-                  label: Text(option.label),
-                  selected: state.statusFilter == option.value,
-                  onSelected: (_) => onStatusChanged(option.value),
-                  visualDensity: VisualDensity.compact,
+    oldWidget.searchController.removeListener(_handleSearchChanged);
+    widget.searchController.addListener(_handleSearchChanged);
+  }
+
+  @override
+  void dispose() {
+    widget.searchController.removeListener(_handleSearchChanged);
+    _searchFocusNode
+      ..removeListener(_handleSearchChanged)
+      ..dispose();
+    super.dispose();
+  }
+
+  void _handleSearchChanged() {
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {});
+  }
+
+  void _setSearchText(String value) {
+    widget.searchController.value = TextEditingValue(
+      text: value,
+      selection: TextSelection.collapsed(offset: value.length),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if ((widget.state.search ?? '') != widget.searchController.text.trim()) {
+      widget.searchController.removeListener(_handleSearchChanged);
+      widget.searchController.text = widget.state.search ?? '';
+      widget.searchController.addListener(_handleSearchChanged);
+    }
+    final hasSearch = widget.searchController.text.isNotEmpty;
+
+    return Semantics(
+      container: true,
+      explicitChildNodes: true,
+      child: ProCard(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Stack(
+              alignment: AlignmentDirectional.centerEnd,
+              children: [
+                Semantics(
+                  container: true,
+                  excludeSemantics: true,
+                  label: 'Поиск по согласованиям',
+                  value: widget.searchController.text,
+                  textField: true,
+                  enabled: true,
+                  focusable: true,
+                  focused: _searchFocusNode.hasFocus,
+                  onTap: _searchFocusNode.requestFocus,
+                  onSetText: _setSearchText,
+                  child: TextField(
+                    focusNode: _searchFocusNode,
+                    controller: widget.searchController,
+                    decoration: InputDecoration(
+                      prefixIcon: const Icon(Icons.search_rounded),
+                      labelText: 'Поиск',
+                      suffixIcon:
+                          hasSearch
+                              ? const SizedBox(width: kMinInteractiveDimension)
+                              : null,
+                    ),
+                    textInputAction: TextInputAction.search,
+                    onSubmitted: widget.onSearchSubmitted,
+                  ),
                 ),
+                if (hasSearch)
+                  PositionedDirectional(
+                    top: 0,
+                    end: 0,
+                    bottom: 0,
+                    child: Center(
+                      child: Semantics(
+                        container: true,
+                        button: true,
+                        enabled: true,
+                        label: 'Очистить поиск',
+                        onTap: () {
+                          widget.searchController.clear();
+                          widget.onSearchSubmitted(null);
+                        },
+                        child: ExcludeSemantics(
+                          child: IconButton(
+                            tooltip: 'Очистить поиск',
+                            onPressed: () {
+                              widget.searchController.clear();
+                              widget.onSearchSubmitted(null);
+                            },
+                            icon: const Icon(Icons.close_rounded),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Semantics(
+              container: true,
+              explicitChildNodes: true,
+              label: 'Фильтры согласований',
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  FilterChip(
+                    label: const Text('Мне'),
+                    selected: widget.state.assignedToMe,
+                    onSelected: widget.onAssignedChanged,
+                    avatar: const Icon(
+                      Icons.person_pin_circle_outlined,
+                      size: 16,
+                    ),
+                    visualDensity: VisualDensity.compact,
+                  ),
+                  ..._workflowStatusFilters.map(
+                    (option) => ChoiceChip(
+                      label: Text(option.label),
+                      selected: widget.state.statusFilter == option.value,
+                      onSelected: (_) => widget.onStatusChanged(option.value),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                  ),
+                ],
               ),
-            ],
-          ),
-        ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -535,6 +663,8 @@ class _WorkflowTaskCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final hasSecondaryActions = task.canRequestChanges || task.canComment;
+    final actionContext = '${task.title}, задача ${task.id}';
 
     return ProCard(
       child: Column(
@@ -591,39 +721,98 @@ class _WorkflowTaskCard extends StatelessWidget {
             runSpacing: 8,
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              TextButton.icon(
-                onPressed: onOpen,
-                icon: const Icon(Icons.open_in_new_rounded),
-                label: const Text('Подробнее'),
+              _WorkflowCardActionButton(
+                semanticsLabel: 'Открыть согласование: $actionContext',
+                onTap: onOpen,
+                child: TextButton.icon(
+                  onPressed: onOpen,
+                  icon: const Icon(Icons.open_in_new_rounded),
+                  label: const Text('Подробнее'),
+                ),
               ),
               if (task.canApprove)
-                FilledButton.icon(
-                  onPressed: onApprove,
-                  icon: const Icon(Icons.check_rounded),
-                  label: const Text('Согласовать'),
+                _WorkflowCardActionButton(
+                  semanticsLabel: 'Согласовать: $actionContext',
+                  onTap: onApprove,
+                  child: FilledButton.icon(
+                    onPressed: onApprove,
+                    icon: const Icon(Icons.check_rounded),
+                    label: const Text('Согласовать'),
+                  ),
                 ),
               if (task.canReject)
-                OutlinedButton.icon(
-                  onPressed: onReject,
-                  icon: const Icon(Icons.close_rounded),
-                  label: const Text('Отклонить'),
+                _WorkflowCardActionButton(
+                  semanticsLabel: 'Отклонить: $actionContext',
+                  onTap: onReject,
+                  child: OutlinedButton.icon(
+                    onPressed: onReject,
+                    icon: const Icon(Icons.close_rounded),
+                    label: const Text('Отклонить'),
+                  ),
                 ),
-              if (task.canRequestChanges)
-                OutlinedButton.icon(
-                  onPressed: onRequestChanges,
-                  icon: const Icon(Icons.edit_note_rounded),
-                  label: const Text('Изменения'),
-                ),
-              if (task.canComment)
-                IconButton(
-                  tooltip: 'Комментарий',
-                  onPressed: onComment,
-                  icon: const Icon(Icons.chat_bubble_outline_rounded),
+              if (hasSecondaryActions)
+                Builder(
+                  builder: (context) {
+                    void showActions() => _showSecondaryActions(context);
+
+                    return _WorkflowCardActionButton(
+                      semanticsLabel:
+                          'Показать дополнительные действия: $actionContext',
+                      onTap: showActions,
+                      child: OutlinedButton.icon(
+                        onPressed: showActions,
+                        icon: const Icon(Icons.more_horiz_rounded),
+                        label: const Text('Ещё'),
+                      ),
+                    );
+                  },
                 ),
             ],
           ),
         ],
       ),
+    );
+  }
+
+  Future<void> _showSecondaryActions(BuildContext context) {
+    return showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) {
+        void closeAndRun(VoidCallback callback) {
+          Navigator.of(sheetContext).pop();
+          callback();
+        }
+
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Дополнительные действия',
+                  style: AppTypography.h2(sheetContext),
+                ),
+                const SizedBox(height: 8),
+                if (task.canRequestChanges)
+                  ListTile(
+                    leading: const Icon(Icons.edit_note_rounded),
+                    title: const Text('Запросить изменения'),
+                    onTap: () => closeAndRun(onRequestChanges),
+                  ),
+                if (task.canComment)
+                  ListTile(
+                    leading: const Icon(Icons.chat_bubble_outline_rounded),
+                    title: const Text('Комментарий'),
+                    onTap: () => closeAndRun(onComment),
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }
@@ -717,6 +906,31 @@ class _WorkflowTaskDetail extends StatelessWidget {
   }
 }
 
+class _WorkflowCardActionButton extends StatelessWidget {
+  const _WorkflowCardActionButton({
+    required this.semanticsLabel,
+    required this.onTap,
+    required this.child,
+  });
+
+  final String semanticsLabel;
+  final VoidCallback onTap;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      container: true,
+      button: true,
+      enabled: true,
+      excludeSemantics: true,
+      label: semanticsLabel,
+      onTap: onTap,
+      child: child,
+    );
+  }
+}
+
 class _WorkflowActionPanel extends StatelessWidget {
   const _WorkflowActionPanel({
     required this.task,
@@ -738,33 +952,51 @@ class _WorkflowActionPanel extends StatelessWidget {
       return const SizedBox.shrink();
     }
 
+    final actionContext = '${task.title}, задача ${task.id}';
+
     return Wrap(
       spacing: 8,
       runSpacing: 8,
       children: [
         if (task.canApprove)
-          FilledButton.icon(
-            onPressed: onApprove,
-            icon: const Icon(Icons.check_rounded),
-            label: const Text('Согласовать'),
+          _WorkflowCardActionButton(
+            semanticsLabel: 'Согласовать: $actionContext',
+            onTap: onApprove,
+            child: FilledButton.icon(
+              onPressed: onApprove,
+              icon: const Icon(Icons.check_rounded),
+              label: const Text('Согласовать'),
+            ),
           ),
         if (task.canReject)
-          OutlinedButton.icon(
-            onPressed: onReject,
-            icon: const Icon(Icons.close_rounded),
-            label: const Text('Отклонить'),
+          _WorkflowCardActionButton(
+            semanticsLabel: 'Отклонить: $actionContext',
+            onTap: onReject,
+            child: OutlinedButton.icon(
+              onPressed: onReject,
+              icon: const Icon(Icons.close_rounded),
+              label: const Text('Отклонить'),
+            ),
           ),
         if (task.canRequestChanges)
-          OutlinedButton.icon(
-            onPressed: onRequestChanges,
-            icon: const Icon(Icons.edit_note_rounded),
-            label: const Text('Запросить изменения'),
+          _WorkflowCardActionButton(
+            semanticsLabel: 'Запросить изменения: $actionContext',
+            onTap: onRequestChanges,
+            child: OutlinedButton.icon(
+              onPressed: onRequestChanges,
+              icon: const Icon(Icons.edit_note_rounded),
+              label: const Text('Запросить изменения'),
+            ),
           ),
         if (task.canComment)
-          OutlinedButton.icon(
-            onPressed: onComment,
-            icon: const Icon(Icons.chat_bubble_outline_rounded),
-            label: const Text('Комментарий'),
+          _WorkflowCardActionButton(
+            semanticsLabel: 'Добавить комментарий: $actionContext',
+            onTap: onComment,
+            child: OutlinedButton.icon(
+              onPressed: onComment,
+              icon: const Icon(Icons.chat_bubble_outline_rounded),
+              label: const Text('Комментарий'),
+            ),
           ),
       ],
     );

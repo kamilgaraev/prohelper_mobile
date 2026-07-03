@@ -1,7 +1,8 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
+import '../../../core/error/user_message.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../core/widgets/app_empty_state.dart';
@@ -1570,7 +1571,9 @@ String _detailErrorDescription(Object? error) {
     return 'Сервер вернул неполные данные для мобильного приложения.';
   }
 
-  return error?.toString() ?? 'Повторите попытку позже.';
+  return error == null
+      ? 'Повторите попытку позже.'
+      : UserMessage.fromError(error);
 }
 
 String _actionErrorMessage(Object error) {
@@ -1578,7 +1581,7 @@ String _actionErrorMessage(Object error) {
     return 'Проверьте заполненные данные и повторите действие.';
   }
 
-  return error.toString();
+  return UserMessage.fromError(error);
 }
 
 void _message(BuildContext context, String message) {

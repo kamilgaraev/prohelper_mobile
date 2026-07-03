@@ -1,15 +1,20 @@
-import 'package:dio/dio.dart';
+﻿import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:prohelpers_mobile/core/theme/pro_theme.dart';
 import 'package:prohelpers_mobile/features/warehouse/data/warehouse_media_picker.dart';
 import 'package:prohelpers_mobile/features/warehouse/data/warehouse_repository.dart';
 import 'package:prohelpers_mobile/features/warehouse/data/warehouse_summary_model.dart';
 import 'package:prohelpers_mobile/features/warehouse/domain/warehouse_provider.dart';
+import 'package:prohelpers_mobile/features/warehouse/presentation/warehouse_receipt_sheet.dart';
 import 'package:prohelpers_mobile/features/warehouse/presentation/warehouse_screen.dart';
 
 class _FakeWarehouseRepository extends WarehouseRepository {
   _FakeWarehouseRepository() : super(Dio());
+
+  WarehouseReceiptPayload? createdReceipt;
+  Object? createReceiptError;
 
   @override
   Future<WarehouseSummaryModel> fetchWarehouseSummary() async => _summary;
@@ -54,7 +59,13 @@ class _FakeWarehouseRepository extends WarehouseRepository {
   }
 
   @override
-  Future<void> createReceipt(WarehouseReceiptPayload payload) async {}
+  Future<void> createReceipt(WarehouseReceiptPayload payload) async {
+    createdReceipt = payload;
+    final error = createReceiptError;
+    if (error != null) {
+      throw error;
+    }
+  }
 }
 
 class _FakeWarehouseNotifier extends WarehouseNotifier {
@@ -127,7 +138,8 @@ void main() {
     );
 
     expect(find.text('Склад'), findsOneWidget);
-    expect(find.byType(FloatingActionButton), findsOneWidget);
+    expect(find.byType(FloatingActionButton), findsNothing);
+    expect(find.text('Оприходовать'), findsOneWidget);
     await _ensureVisible(tester, find.text('Склады'));
     expect(find.text('Склады'), findsOneWidget);
     expect(find.text('Основной склад'), findsWidgets);
@@ -144,7 +156,7 @@ void main() {
       mediaPicker: _FakeMediaPicker(cameraPath: '/tmp/camera-photo.jpg'),
     );
 
-    await tester.tap(find.byType(FloatingActionButton));
+    await tester.tap(find.text('Оприходовать'));
     await tester.pumpAndSettle();
 
     expect(find.text('Оприходование'), findsOneWidget);
@@ -187,6 +199,91 @@ void main() {
     expect(find.text('Цемент М500'), findsWidgets);
     expect(find.text('Галерея (1)'), findsOneWidget);
   });
+
+  testWidgets('форма прихода показывает inline-ошибки обязательных полей', (
+    tester,
+  ) async {
+    await _pumpReceiptSheet(
+      tester,
+      repository: _FakeWarehouseRepository(),
+      mediaPicker: _FakeMediaPicker(),
+    );
+
+    await _ensureVisible(tester, find.text('Провести приход'));
+    await tester.tap(find.text('Провести приход'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Выберите склад'), findsOneWidget);
+    expect(find.text('Выберите материал из списка'), findsOneWidget);
+    expect(find.text('Укажите количество'), findsOneWidget);
+    expect(find.text('Укажите цену'), findsOneWidget);
+    expect(find.byType(SnackBar), findsNothing);
+  });
+
+  testWidgets('форма прихода очищает техническую ошибку отправки', (
+    tester,
+  ) async {
+    final repository =
+        _FakeWarehouseRepository()
+          ..createReceiptError = const FormatException('payload warehouse_id');
+
+    await _pumpReceiptSheet(
+      tester,
+      repository: repository,
+      mediaPicker: _FakeMediaPicker(),
+      initialWarehouseId: 1,
+    );
+
+    await tester.enterText(find.byType(TextField).first, 'Цем');
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Цемент М500').last);
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField && widget.decoration?.labelText == 'Количество',
+      ),
+      '4',
+    );
+    await _ensureVisible(tester, find.text('Провести приход'));
+    await tester.tap(find.text('Провести приход'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('Не удалось выполнить действие. Попробуйте еще раз.'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('FormatException'), findsNothing);
+    expect(find.textContaining('payload'), findsNothing);
+    expect(repository.createdReceipt?.quantity, 4);
+  });
+
+  testWidgets('receipt sheet passes accessibility guidelines', (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final semantics = tester.ensureSemantics();
+
+    try {
+      await _pumpReceiptSheet(
+        tester,
+        repository: _FakeWarehouseRepository(),
+        mediaPicker: _FakeMediaPicker(),
+        initialWarehouseId: 1,
+      );
+
+      await expectLater(tester, meetsGuideline(androidTapTargetGuideline));
+      await expectLater(tester, meetsGuideline(iOSTapTargetGuideline));
+      await expectLater(tester, meetsGuideline(labeledTapTargetGuideline));
+      await expectLater(tester, meetsGuideline(textContrastGuideline));
+    } finally {
+      semantics.dispose();
+    }
+  });
 }
 
 Future<void> _pumpWarehouseScreen(
@@ -203,7 +300,37 @@ Future<void> _pumpWarehouseScreen(
           (ref) => _FakeWarehouseNotifier(repository),
         ),
       ],
-      child: const MaterialApp(home: WarehouseScreen()),
+      child: MaterialApp(
+        theme: MostTheme.lightTheme,
+        home: const WarehouseScreen(),
+      ),
+    ),
+  );
+
+  await tester.pumpAndSettle();
+}
+
+Future<void> _pumpReceiptSheet(
+  WidgetTester tester, {
+  required _FakeWarehouseRepository repository,
+  required _FakeMediaPicker mediaPicker,
+  int? initialWarehouseId,
+}) async {
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [
+        warehouseRepositoryProvider.overrideWithValue(repository),
+        warehouseMediaPickerProvider.overrideWithValue(mediaPicker),
+      ],
+      child: MaterialApp(
+        theme: MostTheme.lightTheme,
+        home: Scaffold(
+          body: WarehouseReceiptSheet(
+            summary: _summary,
+            initialWarehouseId: initialWarehouseId,
+          ),
+        ),
+      ),
     ),
   );
 

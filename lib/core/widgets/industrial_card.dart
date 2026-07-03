@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../theme/pro_theme.dart';
 
@@ -27,42 +27,58 @@ class IndustrialCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final radius = BorderRadius.circular(MostTheme.cardRadius);
+    final decoration = BoxDecoration(
+      color: backgroundColor ?? theme.cardTheme.color,
+      borderRadius: radius,
+      border:
+          border ??
+          Border.all(
+            color: borderColor ?? theme.colorScheme.outline,
+            width: MostTheme.borderWidth,
+          ),
+      boxShadow: [
+        BoxShadow(
+          color:
+              theme.cardTheme.shadowColor ??
+              Colors.black.withValues(
+                alpha: theme.brightness == Brightness.dark ? 0.18 : 0.04,
+              ),
+          blurRadius: 10,
+          offset: const Offset(0, 4),
+        ),
+      ],
+    );
 
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap:
-          onTap != null
-              ? () {
-                HapticFeedback.lightImpact();
-                onTap!();
-              }
-              : null,
-      child: Container(
+    if (onTap == null) {
+      return Container(
         height: height,
         width: width,
         padding: padding,
-        decoration: BoxDecoration(
-          color: backgroundColor ?? theme.cardTheme.color,
-          borderRadius: BorderRadius.circular(ProHelperTheme.cardRadius),
-          border:
-              border ??
-              Border.all(
-                color: borderColor ?? theme.colorScheme.outline,
-                width: ProHelperTheme.borderWidth,
-              ),
-          boxShadow: [
-            BoxShadow(
-              color:
-                  theme.cardTheme.shadowColor ??
-                  Colors.black.withValues(
-                    alpha: theme.brightness == Brightness.dark ? 0.18 : 0.04,
-                  ),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
+        decoration: decoration,
         child: child,
+      );
+    }
+
+    return Semantics(
+      container: true,
+      button: true,
+      enabled: true,
+      child: Material(
+        color: Colors.transparent,
+        child: Ink(
+          height: height,
+          width: width,
+          decoration: decoration,
+          child: InkWell(
+            borderRadius: radius,
+            onTap: () {
+              HapticFeedback.lightImpact();
+              onTap!();
+            },
+            child: Padding(padding: padding, child: child),
+          ),
+        ),
       ),
     );
   }

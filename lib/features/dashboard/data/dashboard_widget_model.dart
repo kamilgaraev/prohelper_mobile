@@ -1,4 +1,4 @@
-enum DashboardWidgetStatus {
+﻿enum DashboardWidgetStatus {
   ok('ok'),
   active('active'),
   attention('attention'),

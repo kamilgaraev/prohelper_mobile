@@ -1,4 +1,4 @@
-class WarehouseCustodyBalanceModel {
+﻿class WarehouseCustodyBalanceModel {
   const WarehouseCustodyBalanceModel({
     required this.id,
     required this.projectId,

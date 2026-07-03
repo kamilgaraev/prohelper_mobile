@@ -1,6 +1,7 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
+import '../../../core/error/user_message.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../core/design/pro_status.dart';
 import '../../../core/widgets/app_empty_state.dart';
@@ -817,7 +818,7 @@ class _SafetyScreenState extends ConsumerState<SafetyScreen> {
       if (context.mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text(error.toString())));
+        ).showSnackBar(SnackBar(content: Text(UserMessage.fromError(error))));
       }
 
       return false;

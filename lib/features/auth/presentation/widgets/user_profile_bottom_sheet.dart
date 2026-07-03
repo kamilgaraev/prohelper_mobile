@@ -1,12 +1,14 @@
 ﻿import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
+import '../../../../core/error/user_message.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_typography.dart';
 import '../../../../core/widgets/industrial_card.dart';
-import '../../../projects/domain/projects_provider.dart';
+import '../../../projects/presentation/project_selection_screen.dart';
 import '../../data/user_model.dart';
 import '../../domain/auth_provider.dart';
+import 'logout_confirmation_dialog.dart';
 
 class UserProfileBottomSheet extends ConsumerWidget {
   const UserProfileBottomSheet({super.key, required this.user});
@@ -41,25 +43,7 @@ class UserProfileBottomSheet extends ConsumerWidget {
           const SizedBox(height: 24),
           Row(
             children: [
-              CircleAvatar(
-                radius: 32,
-                backgroundColor: theme.colorScheme.primary,
-                backgroundImage:
-                    user.avatarUrl != null
-                        ? NetworkImage(user.avatarUrl!)
-                        : null,
-                child:
-                    user.avatarUrl == null
-                        ? Text(
-                          user.name.substring(0, 1).toUpperCase(),
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 24,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        )
-                        : null,
-              ),
+              _ProfileAvatar(user: user),
               const SizedBox(width: 16),
               Expanded(
                 child: Column(
@@ -127,9 +111,9 @@ class UserProfileBottomSheet extends ConsumerWidget {
                       return;
                     }
 
-                    ScaffoldMessenger.of(
-                      context,
-                    ).showSnackBar(SnackBar(content: Text(error.toString())));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text(UserMessage.fromError(error))),
+                    );
                   }
                 },
                 padding: const EdgeInsets.all(16),
@@ -184,8 +168,19 @@ class UserProfileBottomSheet extends ConsumerWidget {
             width: double.infinity,
             child: OutlinedButton.icon(
               onPressed: () {
-                Navigator.pop(context);
-                ref.read(projectsProvider.notifier).clearSelection();
+                final navigator = Navigator.of(context);
+                navigator.pop();
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (!navigator.mounted) {
+                    return;
+                  }
+
+                  navigator.push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const ProjectSelectionScreen(),
+                    ),
+                  );
+                });
               },
               style: OutlinedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 16),
@@ -211,34 +206,14 @@ class UserProfileBottomSheet extends ConsumerWidget {
           SizedBox(
             width: double.infinity,
             child: OutlinedButton.icon(
-              onPressed: () {},
-              style: OutlinedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                side: BorderSide(color: theme.dividerColor),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-              icon: Icon(
-                Icons.settings_outlined,
-                color: theme.colorScheme.onSurface,
-              ),
-              label: Text(
-                'Настройки',
-                style: AppTypography.button.copyWith(
-                  color: theme.colorScheme.onSurface,
-                  fontSize: 14,
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton.icon(
-              onPressed: () {
+              onPressed: () async {
+                final confirmed = await showLogoutConfirmationDialog(context);
+                if (!confirmed || !context.mounted) {
+                  return;
+                }
+
                 Navigator.pop(context);
-                ref.read(authProvider.notifier).logout();
+                await ref.read(authProvider.notifier).logout();
               },
               style: OutlinedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 16),
@@ -263,4 +238,84 @@ class UserProfileBottomSheet extends ConsumerWidget {
       ),
     );
   }
+}
+
+class _ProfileAvatar extends StatefulWidget {
+  const _ProfileAvatar({required this.user});
+
+  final User user;
+
+  @override
+  State<_ProfileAvatar> createState() => _ProfileAvatarState();
+}
+
+class _ProfileAvatarState extends State<_ProfileAvatar> {
+  bool _imageFailed = false;
+
+  @override
+  void didUpdateWidget(covariant _ProfileAvatar oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    if (oldWidget.user.avatarUrl != widget.user.avatarUrl) {
+      _imageFailed = false;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final avatarUrl = _profileAvatarUrl(widget.user.avatarUrl);
+    final avatarImage =
+        avatarUrl != null && !_imageFailed ? NetworkImage(avatarUrl) : null;
+
+    return CircleAvatar(
+      radius: 32,
+      backgroundColor: theme.colorScheme.primary,
+      foregroundColor: theme.colorScheme.onPrimary,
+      backgroundImage: avatarImage,
+      onBackgroundImageError:
+          avatarImage == null
+              ? null
+              : (_, _) {
+                if (mounted) {
+                  setState(() => _imageFailed = true);
+                }
+              },
+      child:
+          avatarImage == null
+              ? Text(
+                _profileInitials(widget.user.name),
+                style: const TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                ),
+              )
+              : null,
+    );
+  }
+}
+
+String? _profileAvatarUrl(String? avatarUrl) {
+  final normalized = avatarUrl?.trim();
+  if (normalized == null || normalized.isEmpty) {
+    return null;
+  }
+
+  if (normalized.toLowerCase().contains('/images/default-avatar')) {
+    return null;
+  }
+
+  return normalized;
+}
+
+String _profileInitials(String name) {
+  final parts = name
+      .trim()
+      .split(RegExp(r'\s+'))
+      .where((part) => part.isNotEmpty);
+  if (parts.isEmpty) {
+    return 'P';
+  }
+
+  return parts.take(2).map((part) => part.substring(0, 1).toUpperCase()).join();
 }

@@ -1,4 +1,4 @@
-class WorkflowTaskEntryModel {
+﻿class WorkflowTaskEntryModel {
   const WorkflowTaskEntryModel({
     required this.id,
     required this.action,

@@ -1,6 +1,7 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
+import '../../../core/error/user_message.dart';
 import '../../../core/widgets/app_empty_state.dart';
 import '../../projects/domain/projects_provider.dart';
 import '../data/construction_journal_models.dart';
@@ -169,7 +170,7 @@ class _JournalFormScreenState extends ConsumerState<JournalFormScreen> {
 
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text(error.toString())));
+      ).showSnackBar(SnackBar(content: Text(UserMessage.fromError(error))));
     } finally {
       if (mounted) {
         setState(() {

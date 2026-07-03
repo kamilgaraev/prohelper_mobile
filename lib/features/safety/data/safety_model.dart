@@ -1,4 +1,4 @@
-class SafetyProblemFlagModel {
+﻿class SafetyProblemFlagModel {
   const SafetyProblemFlagModel({
     required this.code,
     required this.severity,

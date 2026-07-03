@@ -1,6 +1,7 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
+import '../../../core/error/user_message.dart';
 import '../../../core/theme/app_typography.dart';
 import '../data/warehouse_custody_model.dart';
 import '../domain/warehouse_provider.dart';
@@ -16,8 +17,11 @@ class WarehouseReturnSheet extends ConsumerStatefulWidget {
 }
 
 class _WarehouseReturnSheetState extends ConsumerState<WarehouseReturnSheet> {
+  final _formKey = GlobalKey<FormState>();
   late final TextEditingController _quantityController;
   late final TextEditingController _reasonController;
+  late final FocusNode _quantityFocusNode;
+  AutovalidateMode _autovalidateMode = AutovalidateMode.disabled;
   bool _isSubmitting = false;
 
   @override
@@ -25,12 +29,14 @@ class _WarehouseReturnSheetState extends ConsumerState<WarehouseReturnSheet> {
     super.initState();
     _quantityController = TextEditingController();
     _reasonController = TextEditingController();
+    _quantityFocusNode = FocusNode();
   }
 
   @override
   void dispose() {
     _quantityController.dispose();
     _reasonController.dispose();
+    _quantityFocusNode.dispose();
     super.dispose();
   }
 
@@ -40,61 +46,68 @@ class _WarehouseReturnSheetState extends ConsumerState<WarehouseReturnSheet> {
 
     return Padding(
       padding: EdgeInsets.fromLTRB(16, 12, 16, 16 + bottomInset),
-      child: ListView(
-        shrinkWrap: true,
-        children: [
-          Text('Вернуть на объект', style: AppTypography.h2(context)),
-          const SizedBox(height: 8),
-          Text(widget.balance.materialName),
-          const SizedBox(height: 12),
-          Text(
-            'У ответственного: ${_formatQuantity(widget.balance.availableQuantity)} ${widget.balance.unit ?? ''}',
-            style: AppTypography.bodyMedium(context),
-          ),
-          const SizedBox(height: 16),
-          TextField(
-            controller: _quantityController,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            decoration: const InputDecoration(
-              labelText: 'Количество',
-              border: OutlineInputBorder(),
+      child: Form(
+        key: _formKey,
+        autovalidateMode: _autovalidateMode,
+        child: ListView(
+          shrinkWrap: true,
+          children: [
+            Text('Вернуть на объект', style: AppTypography.h2(context)),
+            const SizedBox(height: 8),
+            Text(widget.balance.materialName),
+            const SizedBox(height: 12),
+            Text(
+              'У ответственного: ${_formatQuantity(widget.balance.availableQuantity)} ${widget.balance.unit ?? ''}',
+              style: AppTypography.bodyMedium(context),
             ),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _reasonController,
-            minLines: 2,
-            maxLines: 4,
-            decoration: const InputDecoration(
-              labelText: 'Основание',
-              border: OutlineInputBorder(),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _quantityController,
+              focusNode: _quantityFocusNode,
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
+              decoration: const InputDecoration(
+                labelText: 'Количество',
+                border: OutlineInputBorder(),
+              ),
+              validator: _validateQuantity,
             ),
-          ),
-          const SizedBox(height: 16),
-          FilledButton.icon(
-            onPressed: _isSubmitting ? null : _submit,
-            icon: const Icon(Icons.keyboard_return_outlined),
-            label: Text(_isSubmitting ? 'Возвращаем...' : 'Вернуть на объект'),
-          ),
-        ],
+            const SizedBox(height: 12),
+            TextField(
+              controller: _reasonController,
+              minLines: 2,
+              maxLines: 4,
+              decoration: const InputDecoration(
+                labelText: 'Основание',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 16),
+            FilledButton.icon(
+              onPressed: _isSubmitting ? null : _submit,
+              icon: const Icon(Icons.keyboard_return_outlined),
+              label: Text(
+                _isSubmitting ? 'Возвращаем...' : 'Вернуть на объект',
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 
   Future<void> _submit() async {
-    final quantity = double.tryParse(
-      _quantityController.text.trim().replaceAll(',', '.'),
-    );
-
-    if (quantity == null || quantity <= 0) {
-      _showMessage('Укажите корректное количество.');
+    final form = _formKey.currentState;
+    if (form == null || !form.validate()) {
+      setState(() {
+        _autovalidateMode = AutovalidateMode.onUserInteraction;
+      });
+      _quantityFocusNode.requestFocus();
       return;
     }
 
-    if (quantity > widget.balance.availableQuantity) {
-      _showMessage('Количество не должно превышать остаток у ответственного.');
-      return;
-    }
+    final quantity = _parseQuantity(_quantityController.text)!;
 
     setState(() {
       _isSubmitting = true;
@@ -115,7 +128,9 @@ class _WarehouseReturnSheetState extends ConsumerState<WarehouseReturnSheet> {
         Navigator.of(context).pop(true);
       }
     } catch (error) {
-      _showMessage(error.toString());
+      if (mounted) {
+        _showMessage(error);
+      }
     } finally {
       if (mounted) {
         setState(() {
@@ -125,10 +140,36 @@ class _WarehouseReturnSheetState extends ConsumerState<WarehouseReturnSheet> {
     }
   }
 
-  void _showMessage(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message.replaceFirst('ApiException: ', ''))),
-    );
+  String? _validateQuantity(String? value) {
+    final quantity = _parseQuantity(value ?? '');
+    if (quantity == null) {
+      return 'Укажите количество';
+    }
+
+    if (quantity <= 0) {
+      return 'Количество должно быть больше нуля';
+    }
+
+    if (quantity > widget.balance.availableQuantity) {
+      return 'Количество не должно превышать остаток у ответственного';
+    }
+
+    return null;
+  }
+
+  double? _parseQuantity(String value) {
+    final text = value.trim();
+    if (text.isEmpty) {
+      return null;
+    }
+
+    return double.tryParse(text.replaceAll(',', '.'));
+  }
+
+  void _showMessage(Object message) {
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(UserMessage.fromError(message))));
   }
 }
 

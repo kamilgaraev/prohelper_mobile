@@ -1,4 +1,4 @@
-class WarehouseScanPayload {
+﻿class WarehouseScanPayload {
   const WarehouseScanPayload({
     required this.code,
     this.warehouseId,

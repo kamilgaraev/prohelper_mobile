@@ -1,4 +1,4 @@
-class MachineryProblemFlagModel {
+﻿class MachineryProblemFlagModel {
   const MachineryProblemFlagModel({
     required this.code,
     required this.severity,

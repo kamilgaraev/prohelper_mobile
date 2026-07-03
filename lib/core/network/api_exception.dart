@@ -1,4 +1,4 @@
-import 'package:dio/dio.dart';
+﻿import 'package:dio/dio.dart';
 
 class ApiException implements Exception {
   const ApiException(this.message, {this.statusCode});
@@ -32,6 +32,12 @@ class ApiException implements Exception {
       }
     }
 
+    if (_isCertificateDateError(error)) {
+      return const ApiException(
+        'Проверьте дату и время на устройстве, затем повторите вход.',
+      );
+    }
+
     final message = switch (error.type) {
       DioExceptionType.connectionTimeout ||
       DioExceptionType.sendTimeout ||
@@ -46,6 +52,14 @@ class ApiException implements Exception {
     };
 
     return ApiException(message, statusCode: statusCode);
+  }
+
+  static bool _isCertificateDateError(DioException error) {
+    final normalized = error.error?.toString().toLowerCase() ?? '';
+
+    return normalized.contains('certificate_verify_failed') &&
+        (normalized.contains('not yet valid') ||
+            normalized.contains('expired'));
   }
 
   static String? _extractNestedMessage(dynamic errors) {
@@ -98,10 +112,14 @@ class ApiException implements Exception {
     }
 
     final normalizedLowerCase = normalized.toLowerCase();
+    final normalizedAuthMessage = normalizedLowerCase.replaceAll(
+      RegExp(r'[\s.!?]+$'),
+      '',
+    );
     if (statusCode == 401 &&
-        (normalizedLowerCase == 'unauthorized' ||
-            normalizedLowerCase == 'unauthenticated' ||
-            normalizedLowerCase == 'not authorized')) {
+        (normalizedAuthMessage == 'unauthorized' ||
+            normalizedAuthMessage == 'unauthenticated' ||
+            normalizedAuthMessage == 'not authorized')) {
       return _fallbackByStatus(statusCode, fallbackMessage);
     }
 

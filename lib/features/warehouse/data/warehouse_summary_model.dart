@@ -1,4 +1,4 @@
-class WarehouseSummaryModel {
+﻿class WarehouseSummaryModel {
   const WarehouseSummaryModel({
     required this.summary,
     required this.warehouses,

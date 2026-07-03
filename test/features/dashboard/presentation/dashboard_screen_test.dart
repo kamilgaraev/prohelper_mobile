@@ -1,4 +1,4 @@
-import 'package:dio/dio.dart';
+﻿import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -91,7 +91,9 @@ class _TestDashboardController extends DashboardController {
 }
 
 class _TestNotificationsRepository extends NotificationsRepository {
-  _TestNotificationsRepository() : super(Dio());
+  _TestNotificationsRepository({this.unreadCount = 0}) : super(Dio());
+
+  final int unreadCount;
 
   @override
   Future<NotificationsPageResult> fetchNotifications({
@@ -109,7 +111,7 @@ class _TestNotificationsRepository extends NotificationsRepository {
   }
 
   @override
-  Future<int> fetchUnreadCount() async => 0;
+  Future<int> fetchUnreadCount() async => unreadCount;
 }
 
 void main() {
@@ -173,7 +175,10 @@ void main() {
     ];
   }
 
-  Widget createWidget({NavigatorObserver? navigatorObserver}) {
+  Widget createWidget({
+    NavigatorObserver? navigatorObserver,
+    int unreadCount = 0,
+  }) {
     final user = buildUser();
     final project = buildProject();
     final widgets = buildWidgets();
@@ -186,7 +191,7 @@ void main() {
           (ref) => _TestDashboardController(widgets),
         ),
         notificationsRepositoryProvider.overrideWith(
-          (ref) => _TestNotificationsRepository(),
+          (ref) => _TestNotificationsRepository(unreadCount: unreadCount),
         ),
         activeModulesProvider.overrideWith((ref) {
           return {
@@ -251,5 +256,24 @@ void main() {
 
     expect(observer.pushCount, 1);
     expect(find.byType(ProjectManagementScreen), findsOneWidget);
+  });
+
+  testWidgets('кнопка уведомлений сообщает действие и количество', (
+    tester,
+  ) async {
+    final semantics = tester.ensureSemantics();
+
+    try {
+      await tester.pumpWidget(createWidget(unreadCount: 3));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.bySemanticsLabel('Открыть уведомления, непрочитанных: 3'),
+        findsOneWidget,
+      );
+      expect(find.bySemanticsLabel('3'), findsNothing);
+    } finally {
+      semantics.dispose();
+    }
   });
 }
