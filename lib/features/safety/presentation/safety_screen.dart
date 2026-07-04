@@ -117,6 +117,8 @@ class _SafetyScreenState extends ConsumerState<SafetyScreen> {
                         address: selectedProject.address,
                       ),
                       const SizedBox(height: 12),
+                      _TodaySafetyPanel(state: state),
+                      const SizedBox(height: 12),
                       _SummaryStrip(state: state),
                       const SizedBox(height: 12),
                       _MyAdmissionCard(admission: state.myAdmission),
@@ -969,6 +971,186 @@ class _SafetyScreenState extends ConsumerState<SafetyScreen> {
                   ),
                 ),
           ),
+    );
+  }
+}
+
+class _TodaySafetyPanel extends StatelessWidget {
+  const _TodaySafetyPanel({required this.state});
+
+  final SafetyState state;
+
+  @override
+  Widget build(BuildContext context) {
+    final admission = state.myAdmission;
+    final blockers = admission?.blockers ?? const <SafetyProblemFlagModel>[];
+    final warnings = admission?.warnings ?? const <SafetyProblemFlagModel>[];
+    final myOpenPermits =
+        state.dashboard?.myOpenPermits ??
+        state.permits
+            .where(
+              (permit) =>
+                  permit.status == 'approved' ||
+                  permit.status == 'active' ||
+                  permit.status == 'pending_approval',
+            )
+            .length;
+    final urgentViolations =
+        state.dashboard?.myOpenViolations ??
+        state.violations
+            .where((violation) => violation.status == 'open')
+            .length;
+    final urgentFindings =
+        state.dashboard?.myOpenFindings ??
+        state.inspectionFindings
+            .where((finding) => finding.status == 'open')
+            .length;
+    final openInspections =
+        state.dashboard?.openInspections ??
+        state.inspections
+            .where(
+              (inspection) =>
+                  inspection.status == 'planned' ||
+                  inspection.status == 'in_progress',
+            )
+            .length;
+    final riskFlags = [
+      ...blockers,
+      ...warnings,
+      ...state.permits.expand((permit) => permit.problemFlags),
+      ...state.violations.expand((violation) => violation.problemFlags),
+      ...state.inspectionFindings.expand((finding) => finding.problemFlags),
+    ];
+    final hasBlockers = admission?.blocked == true || blockers.isNotEmpty;
+    final title =
+        admission == null
+            ? 'Допуск на сегодня не найден'
+            : hasBlockers
+            ? 'Работы сегодня заблокированы'
+            : 'Можно выходить на работы';
+    final description =
+        admission == null
+            ? 'Проверьте назначение сотрудника и карточку допуска перед началом смены.'
+            : hasBlockers
+            ? blockers.isNotEmpty
+                ? blockers.first.message
+                : 'Есть блокеры допуска, которые нужно закрыть до начала работ.'
+            : warnings.isNotEmpty
+            ? warnings.first.message
+            : 'Критичных блокеров допуска нет. Проверьте активные наряды и план проверок.';
+
+    return Semantics(
+      container: true,
+      label: 'Сводка охраны труда на сегодня',
+      child: ProCard(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ProStatusBanner(
+              title: title,
+              description: description,
+              tone:
+                  admission == null
+                      ? ProStatusTone.warning
+                      : hasBlockers
+                      ? ProStatusTone.danger
+                      : warnings.isNotEmpty
+                      ? ProStatusTone.warning
+                      : ProStatusTone.success,
+            ),
+            const SizedBox(height: 12),
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final columns = constraints.maxWidth >= 720 ? 4 : 2;
+                final tileWidth = (constraints.maxWidth - (8 * (columns - 1))) / columns;
+
+                return Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    _TodayMetric(
+                      label: 'Мои наряды',
+                      value: myOpenPermits.toString(),
+                      icon: Icons.assignment_turned_in_outlined,
+                      width: tileWidth,
+                    ),
+                    _TodayMetric(
+                      label: 'Проверки',
+                      value: openInspections.toString(),
+                      icon: Icons.fact_check_outlined,
+                      width: tileWidth,
+                    ),
+                    _TodayMetric(
+                      label: 'Нарушения',
+                      value: urgentViolations.toString(),
+                      icon: Icons.gpp_bad_outlined,
+                      width: tileWidth,
+                    ),
+                    _TodayMetric(
+                      label: 'Замечания',
+                      value: urgentFindings.toString(),
+                      icon: Icons.playlist_add_check_circle_outlined,
+                      width: tileWidth,
+                    ),
+                  ],
+                );
+              },
+            ),
+            if (riskFlags.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              _ProblemFlags(flags: riskFlags.take(3).toList()),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TodayMetric extends StatelessWidget {
+  const _TodayMetric({
+    required this.label,
+    required this.value,
+    required this.icon,
+    required this.width,
+  });
+
+  final String label;
+  final String value;
+  final IconData icon;
+  final double width;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Semantics(
+      label: '$label: $value',
+      child: Container(
+        width: width,
+        constraints: const BoxConstraints(minHeight: 64),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.55),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: theme.colorScheme.outlineVariant),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, color: theme.colorScheme.primary),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(label, style: AppTypography.caption(context)),
+                  Text(value, style: AppTypography.h2(context)),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
