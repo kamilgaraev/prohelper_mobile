@@ -285,7 +285,15 @@ class _WorkOrderLineTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final canRecord = workOrder.canRecordFact && line.remainingQuantity > 0;
+    final canRecord =
+        workOrder.canRecordFact &&
+        line.remainingQuantity > 0 &&
+        !line.hasSafetyBlockers;
+    final shouldShowSafetyNotice =
+        line.requiresSafetyPermit ||
+        line.safetyAdmissionStatus != null ||
+        line.safetyBlockers.isNotEmpty ||
+        line.safetyWarnings.isNotEmpty;
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),
@@ -302,6 +310,10 @@ class _WorkOrderLineTile extends StatelessWidget {
             'Осталось ${_formatNumber(line.remainingQuantity)} ${line.unit}',
             style: AppTypography.caption(context),
           ),
+          if (shouldShowSafetyNotice) ...[
+            const SizedBox(height: 8),
+            _SafetyLineNotice(line: line),
+          ],
           const SizedBox(height: 10),
           Wrap(
             spacing: 8,
@@ -328,6 +340,87 @@ class _WorkOrderLineTile extends StatelessWidget {
                 ),
               ),
             ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SafetyLineNotice extends StatelessWidget {
+  const _SafetyLineNotice({required this.line});
+
+  final LaborWorkOrderLineModel line;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final isBlocked = line.hasSafetyBlockers;
+    final accent = isBlocked ? colorScheme.error : colorScheme.primary;
+    final facts = <String>[
+      if (line.workCategory != null) 'Категория: ${line.workCategory}',
+      if (line.safetyAdmissionStatus != null)
+        'Допуск: ${_safetyAdmissionLabel(line.safetyAdmissionStatus!)}',
+    ];
+    final messages = [
+      ...line.safetyBlockers.map((flag) => flag.message),
+      ...line.safetyWarnings.map((flag) => flag.message),
+    ].where((message) => message.isNotEmpty).take(2).toList();
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: accent.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: accent.withOpacity(0.32)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            isBlocked
+                ? Icons.warning_amber_rounded
+                : Icons.health_and_safety_outlined,
+            color: accent,
+            size: 20,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  isBlocked
+                      ? 'Допуск к работам заблокирован'
+                      : 'Требуется контроль допуска',
+                  style: AppTypography.bodyMedium(context).copyWith(
+                    color: accent,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                if (facts.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    facts.join(' • '),
+                    style: AppTypography.caption(context),
+                  ),
+                ],
+                if (messages.isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  ...messages.map(
+                    (message) => Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Text(
+                        message,
+                        style: AppTypography.caption(context),
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
           ),
         ],
       ),
@@ -746,6 +839,16 @@ String _formatNumber(double value) {
   }
 
   return value.toStringAsFixed(1);
+}
+
+String _safetyAdmissionLabel(String status) {
+  return switch (status) {
+    'admitted' => 'допущен',
+    'partial' => 'допущен с ограничениями',
+    'not_admitted' => 'не допущен',
+    'pending' => 'требуется проверка',
+    _ => status,
+  };
 }
 
 String _formatDate(DateTime value) {

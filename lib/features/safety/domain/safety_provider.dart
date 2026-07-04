@@ -8,6 +8,8 @@ import '../data/safety_repository.dart';
 const _errorSentinel = Object();
 const _projectFilterSentinel = Object();
 const _statusFilterSentinel = Object();
+const _dashboardSentinel = Object();
+const _admissionSentinel = Object();
 
 class SafetyState {
   const SafetyState({
@@ -19,6 +21,10 @@ class SafetyState {
     this.permits = const [],
     this.incidents = const [],
     this.violations = const [],
+    this.inspections = const [],
+    this.inspectionFindings = const [],
+    this.dashboard,
+    this.myAdmission,
     this.permissionDenied = false,
     this.error,
   });
@@ -31,6 +37,10 @@ class SafetyState {
   final List<SafetyWorkPermitModel> permits;
   final List<SafetyIncidentModel> incidents;
   final List<SafetyViolationModel> violations;
+  final List<SafetyInspectionModel> inspections;
+  final List<SafetyInspectionFindingModel> inspectionFindings;
+  final SafetyDashboardModel? dashboard;
+  final SafetyAdmissionModel? myAdmission;
   final bool permissionDenied;
   final String? error;
 
@@ -43,6 +53,10 @@ class SafetyState {
     List<SafetyWorkPermitModel>? permits,
     List<SafetyIncidentModel>? incidents,
     List<SafetyViolationModel>? violations,
+    List<SafetyInspectionModel>? inspections,
+    List<SafetyInspectionFindingModel>? inspectionFindings,
+    Object? dashboard = _dashboardSentinel,
+    Object? myAdmission = _admissionSentinel,
     bool? permissionDenied,
     Object? error = _errorSentinel,
   }) {
@@ -67,6 +81,16 @@ class SafetyState {
       permits: permits ?? this.permits,
       incidents: incidents ?? this.incidents,
       violations: violations ?? this.violations,
+      inspections: inspections ?? this.inspections,
+      inspectionFindings: inspectionFindings ?? this.inspectionFindings,
+      dashboard:
+          identical(dashboard, _dashboardSentinel)
+              ? this.dashboard
+              : dashboard as SafetyDashboardModel?,
+      myAdmission:
+          identical(myAdmission, _admissionSentinel)
+              ? this.myAdmission
+              : myAdmission as SafetyAdmissionModel?,
       permissionDenied: permissionDenied ?? this.permissionDenied,
       error: identical(error, _errorSentinel) ? this.error : error as String?,
     );
@@ -88,6 +112,10 @@ class SafetyNotifier extends StateNotifier<SafetyState> {
       permits: const [],
       incidents: const [],
       violations: const [],
+      inspections: const [],
+      inspectionFindings: const [],
+      dashboard: null,
+      myAdmission: null,
       permissionDenied: false,
       error: null,
     );
@@ -128,7 +156,9 @@ class SafetyNotifier extends StateNotifier<SafetyState> {
     );
 
     try {
-      final result = await Future.wait<Object>([
+      final result = await Future.wait<Object?>([
+        _repository.fetchDashboard(projectId: state.projectFilter),
+        _repository.fetchMyAdmission(projectId: state.projectFilter),
         _repository.fetchPermits(
           projectId: state.projectFilter,
           status: state.permitStatusFilter,
@@ -141,13 +171,22 @@ class SafetyNotifier extends StateNotifier<SafetyState> {
           projectId: state.projectFilter,
           status: state.violationStatusFilter,
         ),
+        _repository.fetchInspections(projectId: state.projectFilter),
+        _repository.fetchInspectionFindings(
+          projectId: state.projectFilter,
+          status: 'open',
+        ),
       ]);
 
       state = state.copyWith(
         isLoading: false,
-        permits: result[0] as List<SafetyWorkPermitModel>,
-        incidents: result[1] as List<SafetyIncidentModel>,
-        violations: result[2] as List<SafetyViolationModel>,
+        dashboard: result[0] as SafetyDashboardModel,
+        myAdmission: result[1] as SafetyAdmissionModel?,
+        permits: result[2] as List<SafetyWorkPermitModel>,
+        incidents: result[3] as List<SafetyIncidentModel>,
+        violations: result[4] as List<SafetyViolationModel>,
+        inspections: result[5] as List<SafetyInspectionModel>,
+        inspectionFindings: result[6] as List<SafetyInspectionFindingModel>,
       );
     } catch (error) {
       state = state.copyWith(
@@ -165,6 +204,11 @@ class SafetyNotifier extends StateNotifier<SafetyState> {
 
   Future<void> createViolation(Map<String, dynamic> data) async {
     await _repository.createViolation(data);
+    await load();
+  }
+
+  Future<void> createInspectionFinding(Map<String, dynamic> data) async {
+    await _repository.createInspectionFinding(data);
     await load();
   }
 

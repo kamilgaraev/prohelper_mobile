@@ -89,12 +89,16 @@ class _SafetyScreenState extends ConsumerState<SafetyScreen> {
                 : state.isLoading &&
                     state.permits.isEmpty &&
                     state.incidents.isEmpty &&
-                    state.violations.isEmpty
+                    state.violations.isEmpty &&
+                    state.inspections.isEmpty &&
+                    state.inspectionFindings.isEmpty
                 ? const AppLoadingState(message: 'Загружаем охрану труда')
                 : state.error != null &&
                     state.permits.isEmpty &&
                     state.incidents.isEmpty &&
-                    state.violations.isEmpty
+                    state.violations.isEmpty &&
+                    state.inspections.isEmpty &&
+                    state.inspectionFindings.isEmpty
                 ? AppErrorState(
                   title:
                       state.permissionDenied
@@ -114,6 +118,8 @@ class _SafetyScreenState extends ConsumerState<SafetyScreen> {
                       ),
                       const SizedBox(height: 12),
                       _SummaryStrip(state: state),
+                      const SizedBox(height: 12),
+                      _MyAdmissionCard(admission: state.myAdmission),
                       const SizedBox(height: 12),
                       _SafetyFilterBar(
                         state: state,
@@ -143,6 +149,12 @@ class _SafetyScreenState extends ConsumerState<SafetyScreen> {
                         onResolve:
                             (violation) =>
                                 _showResolveSheet(context, violation),
+                      ),
+                      const SizedBox(height: 12),
+                      _InspectionsSection(inspections: state.inspections),
+                      const SizedBox(height: 12),
+                      _InspectionFindingsSection(
+                        findings: state.inspectionFindings,
                       ),
                     ],
                   ),
@@ -208,6 +220,11 @@ class _SafetyScreenState extends ConsumerState<SafetyScreen> {
                               value: 'violation',
                               label: Text('Нарушение'),
                               icon: Icon(Icons.gpp_bad_outlined),
+                            ),
+                            ButtonSegment(
+                              value: 'finding',
+                              label: Text('Замечание'),
+                              icon: Icon(Icons.fact_check_outlined),
                             ),
                           ],
                           selected: {mode},
@@ -491,7 +508,7 @@ class _SafetyScreenState extends ConsumerState<SafetyScreen> {
                                                           .text
                                                           .trim(),
                                               });
-                                        } else {
+                                        } else if (mode == 'violation') {
                                           await ref
                                               .read(safetyProvider.notifier)
                                               .createViolation({
@@ -508,6 +525,16 @@ class _SafetyScreenState extends ConsumerState<SafetyScreen> {
                                                       correctiveActionController
                                                           .text
                                                           .trim(),
+                                              });
+                                        } else {
+                                          await ref
+                                              .read(safetyProvider.notifier)
+                                              .createInspectionFinding({
+                                                ...data,
+                                                if (dueDate != null)
+                                                  'due_date': _apiDate(
+                                                    dueDate!,
+                                                  ),
                                               });
                                         }
 
@@ -946,6 +973,72 @@ class _SafetyScreenState extends ConsumerState<SafetyScreen> {
   }
 }
 
+class _MyAdmissionCard extends StatelessWidget {
+  const _MyAdmissionCard({required this.admission});
+
+  final SafetyAdmissionModel? admission;
+
+  @override
+  Widget build(BuildContext context) {
+    if (admission == null) {
+      return ProCard(
+        child: Row(
+          children: [
+            const Icon(Icons.badge_outlined),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                'Карточка допуска сотрудника не найдена',
+                style: AppTypography.bodyMedium(context),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final current = admission!;
+    final theme = Theme.of(context);
+    final color =
+        current.status == 'not_admitted'
+            ? theme.colorScheme.error
+            : current.status == 'partial'
+            ? theme.colorScheme.tertiary
+            : theme.colorScheme.primary;
+
+    return ProCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.health_and_safety_outlined, color: color),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Мой допуск',
+                  style: AppTypography.h2(context),
+                ),
+              ),
+              Chip(
+                label: Text(current.statusLabel),
+                visualDensity: VisualDensity.compact,
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(
+            'Требований: ${current.requirements.length}',
+            style: AppTypography.caption(context),
+          ),
+          _ProblemFlags(flags: current.blockers),
+          if (current.blockers.isEmpty) _ProblemFlags(flags: current.warnings),
+        ],
+      ),
+    );
+  }
+}
+
 class _SummaryStrip extends StatelessWidget {
   const _SummaryStrip({required this.state});
 
@@ -954,42 +1047,80 @@ class _SummaryStrip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final openIncidents =
+        state.dashboard?.openIncidents ??
         state.incidents.where((incident) => incident.status != 'closed').length;
     final openViolations =
+        state.dashboard?.openViolations ??
         state.violations
             .where((violation) => violation.status == 'open')
+            .length;
+    final openInspections =
+        state.dashboard?.openInspections ??
+        state.inspections
+            .where(
+              (inspection) =>
+                  inspection.status == 'planned' ||
+                  inspection.status == 'in_progress',
+            )
+            .length;
+    final openFindings =
+        state.dashboard?.openFindings ??
+        state.inspectionFindings
+            .where((finding) => finding.status == 'open')
             .length;
     final riskFlags = [
       ...state.permits.expand((permit) => permit.problemFlags),
       ...state.incidents.expand((incident) => incident.problemFlags),
       ...state.violations.expand((violation) => violation.problemFlags),
+      ...state.inspectionFindings.expand((finding) => finding.problemFlags),
     ];
 
     return Column(
       children: [
-        Row(
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
           children: [
-            Expanded(
+            SizedBox(
+              width: (MediaQuery.sizeOf(context).width - 48) / 2,
               child: _MetricCard(
                 label: 'Допуски',
-                value: state.permits.length.toString(),
+                value:
+                    (state.dashboard?.activePermits ?? state.permits.length)
+                        .toString(),
                 icon: Icons.assignment_turned_in_outlined,
               ),
             ),
-            const SizedBox(width: 8),
-            Expanded(
+            SizedBox(
+              width: (MediaQuery.sizeOf(context).width - 48) / 2,
               child: _MetricCard(
                 label: 'Происшествия',
                 value: openIncidents.toString(),
                 icon: Icons.report_problem_outlined,
               ),
             ),
-            const SizedBox(width: 8),
-            Expanded(
+            SizedBox(
+              width: (MediaQuery.sizeOf(context).width - 48) / 2,
               child: _MetricCard(
                 label: 'Нарушения',
                 value: openViolations.toString(),
                 icon: Icons.gpp_bad_outlined,
+              ),
+            ),
+            SizedBox(
+              width: (MediaQuery.sizeOf(context).width - 48) / 2,
+              child: _MetricCard(
+                label: 'Проверки',
+                value: openInspections.toString(),
+                icon: Icons.fact_check_outlined,
+              ),
+            ),
+            SizedBox(
+              width: (MediaQuery.sizeOf(context).width - 48) / 2,
+              child: _MetricCard(
+                label: 'Замечания',
+                value: openFindings.toString(),
+                icon: Icons.warning_amber_outlined,
               ),
             ),
           ],
@@ -1215,6 +1346,56 @@ class _ViolationsSection extends StatelessWidget {
                 (violation) =>
                     _ViolationCard(violation: violation, onResolve: onResolve),
               )
+              .toList(),
+    );
+  }
+}
+
+class _InspectionsSection extends StatelessWidget {
+  const _InspectionsSection({required this.inspections});
+
+  final List<SafetyInspectionModel> inspections;
+
+  @override
+  Widget build(BuildContext context) {
+    if (inspections.isEmpty) {
+      return const _EmptySection(
+        title: 'Проверки',
+        icon: Icons.fact_check_outlined,
+        message: 'Проверок пока нет',
+      );
+    }
+
+    return _Section(
+      title: 'Проверки',
+      children:
+          inspections
+              .map((inspection) => _InspectionCard(inspection: inspection))
+              .toList(),
+    );
+  }
+}
+
+class _InspectionFindingsSection extends StatelessWidget {
+  const _InspectionFindingsSection({required this.findings});
+
+  final List<SafetyInspectionFindingModel> findings;
+
+  @override
+  Widget build(BuildContext context) {
+    if (findings.isEmpty) {
+      return const _EmptySection(
+        title: 'Замечания проверок',
+        icon: Icons.warning_amber_outlined,
+        message: 'Открытых замечаний нет',
+      );
+    }
+
+    return _Section(
+      title: 'Замечания проверок',
+      children:
+          findings
+              .map((finding) => _InspectionFindingCard(finding: finding))
               .toList(),
     );
   }
@@ -1451,6 +1632,116 @@ class _ViolationCard extends StatelessWidget {
               ),
             ),
           ],
+        ],
+      ),
+    );
+  }
+}
+
+class _InspectionCard extends StatelessWidget {
+  const _InspectionCard({required this.inspection});
+
+  final SafetyInspectionModel inspection;
+
+  @override
+  Widget build(BuildContext context) {
+    return ProCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _CardHeader(
+            title: inspection.title,
+            label: inspection.statusLabel,
+            icon: Icons.fact_check_outlined,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            inspection.inspectionNumber,
+            style: AppTypography.caption(context),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _InfoChip(
+                icon: Icons.playlist_add_check_rounded,
+                label: 'Пунктов: ${inspection.itemsCount}',
+              ),
+              _InfoChip(
+                icon: Icons.warning_amber_outlined,
+                label: 'Замечаний: ${inspection.findingsCount}',
+              ),
+              if (inspection.locationName != null)
+                _InfoChip(
+                  icon: Icons.place_outlined,
+                  label: inspection.locationName!,
+                ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          if (inspection.plannedAt != null)
+            Text(
+              'План: ${_formatDate(inspection.plannedAt!)}',
+              style: AppTypography.bodyMedium(context),
+            ),
+          if (inspection.conductedAt != null)
+            Text(
+              'Проведена: ${_formatDate(inspection.conductedAt!)}',
+              style: AppTypography.bodyMedium(context),
+            ),
+          if (inspection.resultLabel != null)
+            Text(
+              'Результат: ${inspection.resultLabel!}',
+              style: AppTypography.bodyMedium(context),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _InspectionFindingCard extends StatelessWidget {
+  const _InspectionFindingCard({required this.finding});
+
+  final SafetyInspectionFindingModel finding;
+
+  @override
+  Widget build(BuildContext context) {
+    return ProCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _CardHeader(
+            title: finding.title,
+            label: finding.statusLabel,
+            icon: Icons.warning_amber_outlined,
+          ),
+          const SizedBox(height: 8),
+          Text(finding.findingNumber, style: AppTypography.caption(context)),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _InfoChip(
+                icon: Icons.speed_rounded,
+                label: _severityLabel(finding.severity),
+              ),
+              if (finding.dueDate != null)
+                _InfoChip(
+                  icon: Icons.event_outlined,
+                  label: _formatDate(finding.dueDate!),
+                ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          if (finding.description != null)
+            Text(
+              finding.description!,
+              style: AppTypography.bodyMedium(context),
+            ),
+          _ProblemFlags(flags: finding.problemFlags),
         ],
       ),
     );

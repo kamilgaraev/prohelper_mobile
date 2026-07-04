@@ -25,6 +25,42 @@ class SafetyRepository extends SyncQueueAwareRepository {
 
   final Dio _dio;
 
+  Future<SafetyDashboardModel> fetchDashboard({int? projectId}) async {
+    try {
+      final response = await _dio.get(
+        '/safety-management/dashboard',
+        queryParameters: {if (projectId != null) 'project_id': projectId},
+      );
+
+      return SafetyDashboardModel.fromJson(_object(response.data));
+    } on DioException catch (error) {
+      throw ApiException.fromDio(error);
+    }
+  }
+
+  Future<SafetyAdmissionModel?> fetchMyAdmission({
+    int? projectId,
+    String workCategory = 'general',
+  }) async {
+    try {
+      final response = await _dio.get(
+        '/safety-management/my-admission',
+        queryParameters: {
+          if (projectId != null) 'project_id': projectId,
+          'work_category': workCategory,
+        },
+      );
+
+      return SafetyAdmissionModel.fromJson(_object(response.data));
+    } on DioException catch (error) {
+      if (error.response?.statusCode == 404) {
+        return null;
+      }
+
+      throw ApiException.fromDio(error);
+    }
+  }
+
   Future<List<SafetyWorkPermitModel>> fetchPermits({
     int? projectId,
     String? status,
@@ -92,6 +128,46 @@ class SafetyRepository extends SyncQueueAwareRepository {
     }
   }
 
+  Future<List<SafetyInspectionModel>> fetchInspections({
+    int? projectId,
+    String? status,
+  }) async {
+    try {
+      final response = await _dio.get(
+        '/safety-management/inspections',
+        queryParameters: {
+          if (projectId != null) 'project_id': projectId,
+          if (status != null && status.isNotEmpty) 'status': status,
+        },
+      );
+
+      return _list(response.data).map(SafetyInspectionModel.fromJson).toList();
+    } on DioException catch (error) {
+      throw ApiException.fromDio(error);
+    }
+  }
+
+  Future<List<SafetyInspectionFindingModel>> fetchInspectionFindings({
+    int? projectId,
+    String? status,
+  }) async {
+    try {
+      final response = await _dio.get(
+        '/safety-management/inspection-findings',
+        queryParameters: {
+          if (projectId != null) 'project_id': projectId,
+          if (status != null && status.isNotEmpty) 'status': status,
+        },
+      );
+
+      return _list(response.data)
+          .map(SafetyInspectionFindingModel.fromJson)
+          .toList();
+    } on DioException catch (error) {
+      throw ApiException.fromDio(error);
+    }
+  }
+
   Future<SafetyIncidentModel> createIncident(Map<String, dynamic> data) async {
     final payload = Map<String, dynamic>.from(data);
 
@@ -130,6 +206,35 @@ class SafetyRepository extends SyncQueueAwareRepository {
 
       return SafetyViolationModel.fromJson(_object(response.data));
     } on DioException catch (error) {
+      throw ApiException.fromDio(error);
+    }
+  }
+
+  Future<SafetyInspectionFindingModel> createInspectionFinding(
+    Map<String, dynamic> data,
+  ) async {
+    final payload = Map<String, dynamic>.from(data);
+
+    try {
+      final response = await _dio.post(
+        '/safety-management/inspection-findings',
+        data: data,
+      );
+
+      return SafetyInspectionFindingModel.fromJson(_object(response.data));
+    } on DioException catch (error) {
+      if (SyncQueueService.shouldQueueDioException(error)) {
+        await queueAndThrow(
+          SyncQueueDraft(
+            moduleSlug: 'safety',
+            operationType: 'create_inspection_finding',
+            method: 'POST',
+            endpoint: '/safety-management/inspection-findings',
+            payload: payload,
+          ),
+        );
+      }
+
       throw ApiException.fromDio(error);
     }
   }

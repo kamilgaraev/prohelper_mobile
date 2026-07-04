@@ -28,6 +28,11 @@ class LaborWorkOrderLineModel {
     required this.acceptedQuantity,
     required this.remainingQuantity,
     required this.requiresSafetyPermit,
+    this.workCategory,
+    this.safetyAdmissionStatus,
+    this.safetyBlockersCount = 0,
+    this.safetyWarnings = const [],
+    this.safetyBlockers = const [],
   });
 
   final int id;
@@ -38,8 +43,26 @@ class LaborWorkOrderLineModel {
   final double acceptedQuantity;
   final double remainingQuantity;
   final bool requiresSafetyPermit;
+  final String? workCategory;
+  final String? safetyAdmissionStatus;
+  final int safetyBlockersCount;
+  final List<LaborProblemFlagModel> safetyWarnings;
+  final List<LaborProblemFlagModel> safetyBlockers;
+
+  bool get hasSafetyBlockers =>
+      safetyBlockersCount > 0 || safetyAdmissionStatus == 'not_admitted';
 
   factory LaborWorkOrderLineModel.fromJson(Map<String, dynamic> json) {
+    final safetySummary = json['safety_requirements_summary'];
+    final safetySummaryMap =
+        safetySummary is Map
+            ? safetySummary.map((key, value) => MapEntry(key.toString(), value))
+            : const <String, dynamic>{};
+    final blockers =
+        _mapList(
+          safetySummaryMap['blockers'],
+        ).map(LaborProblemFlagModel.fromJson).toList();
+
     return LaborWorkOrderLineModel(
       id: _asInt(json['id']),
       workOrderId: _asInt(json['work_order_id']),
@@ -49,6 +72,17 @@ class LaborWorkOrderLineModel {
       acceptedQuantity: _asDouble(json['accepted_quantity']),
       remainingQuantity: _asDouble(json['remaining_quantity']),
       requiresSafetyPermit: _asBool(json['requires_safety_permit']),
+      workCategory: _asNullableString(json['work_category']),
+      safetyAdmissionStatus: _asNullableString(json['safety_admission_status']),
+      safetyBlockersCount:
+          blockers.isNotEmpty
+              ? blockers.length
+              : _asInt(json['safety_blockers_count']),
+      safetyBlockers: blockers,
+      safetyWarnings:
+          _mapList(
+            safetySummaryMap['warnings'],
+          ).map(LaborProblemFlagModel.fromJson).toList(),
     );
   }
 }
