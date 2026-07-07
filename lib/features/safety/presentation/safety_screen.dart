@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/error/user_message.dart';
@@ -90,6 +90,7 @@ class _SafetyScreenState extends ConsumerState<SafetyScreen> {
                     state.permits.isEmpty &&
                     state.incidents.isEmpty &&
                     state.violations.isEmpty &&
+                    state.briefings.isEmpty &&
                     state.inspections.isEmpty &&
                     state.inspectionFindings.isEmpty
                 ? const AppLoadingState(message: 'Загружаем охрану труда')
@@ -97,6 +98,7 @@ class _SafetyScreenState extends ConsumerState<SafetyScreen> {
                     state.permits.isEmpty &&
                     state.incidents.isEmpty &&
                     state.violations.isEmpty &&
+                    state.briefings.isEmpty &&
                     state.inspections.isEmpty &&
                     state.inspectionFindings.isEmpty
                 ? AppErrorState(
@@ -122,6 +124,16 @@ class _SafetyScreenState extends ConsumerState<SafetyScreen> {
                       _SummaryStrip(state: state),
                       const SizedBox(height: 12),
                       _MyAdmissionCard(admission: state.myAdmission),
+                      const SizedBox(height: 12),
+                      _BriefingsSection(
+                        briefings: state.briefings,
+                        onSign:
+                            (briefing, participant) => _signBriefingParticipant(
+                              context,
+                              briefing,
+                              participant,
+                            ),
+                      ),
                       const SizedBox(height: 12),
                       _SafetyFilterBar(
                         state: state,
@@ -876,6 +888,33 @@ class _SafetyScreenState extends ConsumerState<SafetyScreen> {
     };
   }
 
+  Future<void> _signBriefingParticipant(
+    BuildContext context,
+    SafetyBriefingModel briefing,
+    SafetyBriefingParticipantModel participant,
+  ) async {
+    try {
+      await ref
+          .read(safetyProvider.notifier)
+          .signBriefingParticipant(
+            briefingId: briefing.id,
+            participantId: participant.id,
+          );
+
+      if (context.mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Подпись сохранена')));
+      }
+    } catch (error) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(UserMessage.fromError(error))));
+      }
+    }
+  }
+
   Future<void> _showResolveSheet(
     BuildContext context,
     SafetyViolationModel violation,
@@ -1005,6 +1044,9 @@ class _TodaySafetyPanel extends StatelessWidget {
         state.inspectionFindings
             .where((finding) => finding.status == 'open')
             .length;
+    final briefingsToSign =
+        state.dashboard?.myBriefingsToSign ??
+        state.briefings.where((briefing) => briefing.needsMySignature).length;
     final openInspections =
         state.dashboard?.openInspections ??
         state.inspections
@@ -1018,6 +1060,7 @@ class _TodaySafetyPanel extends StatelessWidget {
       ...blockers,
       ...warnings,
       ...state.permits.expand((permit) => permit.problemFlags),
+      ...state.briefings.expand((briefing) => briefing.problemFlags),
       ...state.violations.expand((violation) => violation.problemFlags),
       ...state.inspectionFindings.expand((finding) => finding.problemFlags),
     ];
@@ -1062,7 +1105,8 @@ class _TodaySafetyPanel extends StatelessWidget {
             LayoutBuilder(
               builder: (context, constraints) {
                 final columns = constraints.maxWidth >= 720 ? 4 : 2;
-                final tileWidth = (constraints.maxWidth - (8 * (columns - 1))) / columns;
+                final tileWidth =
+                    (constraints.maxWidth - (8 * (columns - 1))) / columns;
 
                 return Wrap(
                   spacing: 8,
@@ -1072,6 +1116,12 @@ class _TodaySafetyPanel extends StatelessWidget {
                       label: 'Мои наряды',
                       value: myOpenPermits.toString(),
                       icon: Icons.assignment_turned_in_outlined,
+                      width: tileWidth,
+                    ),
+                    _TodayMetric(
+                      label: 'Подписи',
+                      value: briefingsToSign.toString(),
+                      icon: Icons.draw_outlined,
                       width: tileWidth,
                     ),
                     _TodayMetric(
@@ -1131,7 +1181,9 @@ class _TodayMetric extends StatelessWidget {
         constraints: const BoxConstraints(minHeight: 64),
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.55),
+          color: theme.colorScheme.surfaceContainerHighest.withValues(
+            alpha: 0.55,
+          ),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(color: theme.colorScheme.outlineVariant),
         ),
@@ -1197,10 +1249,7 @@ class _MyAdmissionCard extends StatelessWidget {
               Icon(Icons.health_and_safety_outlined, color: color),
               const SizedBox(width: 10),
               Expanded(
-                child: Text(
-                  'Мой допуск',
-                  style: AppTypography.h2(context),
-                ),
+                child: Text('Мой допуск', style: AppTypography.h2(context)),
               ),
               Chip(
                 label: Text(current.statusLabel),
@@ -1250,8 +1299,12 @@ class _SummaryStrip extends StatelessWidget {
         state.inspectionFindings
             .where((finding) => finding.status == 'open')
             .length;
+    final briefingsToSign =
+        state.dashboard?.myBriefingsToSign ??
+        state.briefings.where((briefing) => briefing.needsMySignature).length;
     final riskFlags = [
       ...state.permits.expand((permit) => permit.problemFlags),
+      ...state.briefings.expand((briefing) => briefing.problemFlags),
       ...state.incidents.expand((incident) => incident.problemFlags),
       ...state.violations.expand((violation) => violation.problemFlags),
       ...state.inspectionFindings.expand((finding) => finding.problemFlags),
@@ -1287,6 +1340,14 @@ class _SummaryStrip extends StatelessWidget {
                 label: 'Нарушения',
                 value: openViolations.toString(),
                 icon: Icons.gpp_bad_outlined,
+              ),
+            ),
+            SizedBox(
+              width: (MediaQuery.sizeOf(context).width - 48) / 2,
+              child: _MetricCard(
+                label: 'Подписи',
+                value: briefingsToSign.toString(),
+                icon: Icons.draw_outlined,
               ),
             ),
             SizedBox(
@@ -1475,6 +1536,181 @@ class _PermitsSection extends StatelessWidget {
           permits
               .map((permit) => _PermitCard(permit: permit, onOpen: onOpen))
               .toList(),
+    );
+  }
+}
+
+class _BriefingsSection extends StatelessWidget {
+  const _BriefingsSection({required this.briefings, required this.onSign});
+
+  final List<SafetyBriefingModel> briefings;
+  final Future<void> Function(
+    SafetyBriefingModel briefing,
+    SafetyBriefingParticipantModel participant,
+  )
+  onSign;
+
+  @override
+  Widget build(BuildContext context) {
+    if (briefings.isEmpty) {
+      return const _EmptySection(
+        title: 'Инструктажи',
+        icon: Icons.draw_outlined,
+        message: 'Инструктажей к подписи нет',
+      );
+    }
+
+    final ordered = [...briefings]..sort((left, right) {
+      if (left.needsMySignature != right.needsMySignature) {
+        return left.needsMySignature ? -1 : 1;
+      }
+
+      return right.conductedAt.compareTo(left.conductedAt);
+    });
+
+    return _Section(
+      title: 'Инструктажи',
+      children:
+          ordered
+              .map(
+                (briefing) => _BriefingCard(briefing: briefing, onSign: onSign),
+              )
+              .toList(),
+    );
+  }
+}
+
+class _BriefingCard extends StatelessWidget {
+  const _BriefingCard({required this.briefing, required this.onSign});
+
+  final SafetyBriefingModel briefing;
+  final Future<void> Function(
+    SafetyBriefingModel briefing,
+    SafetyBriefingParticipantModel participant,
+  )
+  onSign;
+
+  @override
+  Widget build(BuildContext context) {
+    final summary = briefing.signatureSummary;
+    final progress = (summary.completionPercent.clamp(0, 100) / 100).toDouble();
+
+    return ProCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _CardHeader(
+            title: briefing.title,
+            label: briefing.statusLabel,
+            icon: Icons.draw_outlined,
+          ),
+          const SizedBox(height: 8),
+          Text(briefing.briefingNumber, style: AppTypography.caption(context)),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _InfoChip(
+                icon: Icons.event_outlined,
+                label: _formatDate(briefing.conductedAt),
+              ),
+              _InfoChip(
+                icon: Icons.how_to_reg_outlined,
+                label: 'Подписано: ${summary.signed}/${summary.total}',
+              ),
+              if (summary.pending > 0)
+                _InfoChip(
+                  icon: Icons.pending_actions_outlined,
+                  label: 'Ожидает: ${summary.pending}',
+                ),
+              if (briefing.locationName != null)
+                _InfoChip(
+                  icon: Icons.place_outlined,
+                  label: briefing.locationName!,
+                ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          LinearProgressIndicator(value: progress),
+          if (briefing.topics.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Text(
+              briefing.topics.join(', '),
+              style: AppTypography.bodyMedium(context),
+            ),
+          ],
+          _ProblemFlags(flags: briefing.problemFlags),
+          if (briefing.participants.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            ...briefing.participants.map(
+              (participant) => _BriefingParticipantRow(
+                briefing: briefing,
+                participant: participant,
+                onSign: onSign,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _BriefingParticipantRow extends StatelessWidget {
+  const _BriefingParticipantRow({
+    required this.briefing,
+    required this.participant,
+    required this.onSign,
+  });
+
+  final SafetyBriefingModel briefing;
+  final SafetyBriefingParticipantModel participant;
+  final Future<void> Function(
+    SafetyBriefingModel briefing,
+    SafetyBriefingParticipantModel participant,
+  )
+  onSign;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.person_outline_rounded, size: 20),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  participant.displayName,
+                  style: AppTypography.bodyMedium(context),
+                ),
+                if (participant.roleName != null)
+                  Text(
+                    participant.roleName!,
+                    style: AppTypography.caption(context),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          if (participant.canSign)
+            FilledButton.icon(
+              onPressed: () => onSign(briefing, participant),
+              icon: const Icon(Icons.draw_outlined),
+              label: const Text('Подписать'),
+            )
+          else
+            Chip(
+              label: Text(participant.signatureStatusLabel),
+              visualDensity: VisualDensity.compact,
+            ),
+        ],
+      ),
     );
   }
 }

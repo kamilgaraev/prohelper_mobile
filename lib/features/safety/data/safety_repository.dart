@@ -1,4 +1,4 @@
-﻿import 'package:dio/dio.dart';
+import 'package:dio/dio.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/network/api_exception.dart';
@@ -90,6 +90,35 @@ class SafetyRepository extends SyncQueueAwareRepository {
     }
   }
 
+  Future<List<SafetyBriefingModel>> fetchBriefings({
+    int? projectId,
+    String? status,
+  }) async {
+    try {
+      final response = await _dio.get(
+        '/safety-management/briefings',
+        queryParameters: {
+          if (projectId != null) 'project_id': projectId,
+          if (status != null && status.isNotEmpty) 'status': status,
+        },
+      );
+
+      return _list(response.data).map(SafetyBriefingModel.fromJson).toList();
+    } on DioException catch (error) {
+      throw ApiException.fromDio(error);
+    }
+  }
+
+  Future<SafetyBriefingModel> fetchBriefing(int id) async {
+    try {
+      final response = await _dio.get('/safety-management/briefings/$id');
+
+      return SafetyBriefingModel.fromJson(_object(response.data));
+    } on DioException catch (error) {
+      throw ApiException.fromDio(error);
+    }
+  }
+
   Future<List<SafetyIncidentModel>> fetchIncidents({
     int? projectId,
     String? status,
@@ -160,9 +189,9 @@ class SafetyRepository extends SyncQueueAwareRepository {
         },
       );
 
-      return _list(response.data)
-          .map(SafetyInspectionFindingModel.fromJson)
-          .toList();
+      return _list(
+        response.data,
+      ).map(SafetyInspectionFindingModel.fromJson).toList();
     } on DioException catch (error) {
       throw ApiException.fromDio(error);
     }
@@ -247,6 +276,21 @@ class SafetyRepository extends SyncQueueAwareRepository {
       );
 
       return SafetyViolationModel.fromJson(_object(response.data));
+    } on DioException catch (error) {
+      throw ApiException.fromDio(error);
+    }
+  }
+
+  Future<SafetyBriefingModel> signBriefingParticipant({
+    required int briefingId,
+    required int participantId,
+  }) async {
+    try {
+      final response = await _dio.post(
+        '/safety-management/briefings/$briefingId/participants/$participantId/sign',
+      );
+
+      return SafetyBriefingModel.fromJson(_object(response.data));
     } on DioException catch (error) {
       throw ApiException.fromDio(error);
     }

@@ -1,4 +1,4 @@
-﻿class SafetyProblemFlagModel {
+class SafetyProblemFlagModel {
   const SafetyProblemFlagModel({
     required this.code,
     required this.severity,
@@ -151,6 +151,185 @@ class SafetyPermitParticipantModel {
   }
 }
 
+class SafetyBriefingSignatureSummaryModel {
+  const SafetyBriefingSignatureSummaryModel({
+    required this.total,
+    required this.signed,
+    required this.pending,
+    required this.absent,
+    required this.refused,
+    required this.resolved,
+    required this.completionPercent,
+    required this.allResolved,
+  });
+
+  final int total;
+  final int signed;
+  final int pending;
+  final int absent;
+  final int refused;
+  final int resolved;
+  final double completionPercent;
+  final bool allResolved;
+
+  factory SafetyBriefingSignatureSummaryModel.fromJson(
+    Map<String, dynamic> json,
+  ) {
+    return SafetyBriefingSignatureSummaryModel(
+      total: _asInt(json['total']),
+      signed: _asInt(json['signed']),
+      pending: _asInt(json['pending']),
+      absent: _asInt(json['absent']),
+      refused: _asInt(json['refused']),
+      resolved: _asInt(json['resolved']),
+      completionPercent: _asDouble(json['completion_percent']),
+      allResolved: json['all_resolved'] == true,
+    );
+  }
+}
+
+class SafetyBriefingParticipantModel {
+  const SafetyBriefingParticipantModel({
+    required this.id,
+    required this.signatureStatus,
+    required this.signatureStatusLabel,
+    required this.canSign,
+    this.employeeId,
+    this.userId,
+    this.externalName,
+    this.companyName,
+    this.roleName,
+    this.employeeName,
+    this.signedAt,
+    this.signatureMethod,
+    this.refusalReason,
+    this.absenceReason,
+  });
+
+  final int id;
+  final int? employeeId;
+  final int? userId;
+  final String? externalName;
+  final String? companyName;
+  final String? roleName;
+  final String? employeeName;
+  final String signatureStatus;
+  final String signatureStatusLabel;
+  final String? signedAt;
+  final String? signatureMethod;
+  final String? refusalReason;
+  final String? absenceReason;
+  final bool canSign;
+
+  String get displayName =>
+      employeeName ?? externalName ?? companyName ?? 'Участник инструктажа';
+
+  factory SafetyBriefingParticipantModel.fromJson(Map<String, dynamic> json) {
+    return SafetyBriefingParticipantModel(
+      id: _requiredInt(json, 'id'),
+      employeeId: _asNullableInt(json['employee_id']),
+      userId: _asNullableInt(json['user_id']),
+      externalName: _asNullableString(json['external_name']),
+      companyName: _asNullableString(json['company_name']),
+      roleName: _asNullableString(json['role_name']),
+      employeeName: _nestedFullName(json['employee']),
+      signatureStatus: json['signature_status']?.toString() ?? 'pending',
+      signatureStatusLabel:
+          json['signature_status_label']?.toString() ?? 'Ожидает подписи',
+      signedAt: _asNullableString(json['signed_at']),
+      signatureMethod: _asNullableString(json['signature_method']),
+      refusalReason: _asNullableString(json['refusal_reason']),
+      absenceReason: _asNullableString(json['absence_reason']),
+      canSign: json['can_sign'] == true,
+    );
+  }
+}
+
+class SafetyBriefingModel {
+  const SafetyBriefingModel({
+    required this.id,
+    required this.projectId,
+    required this.briefingNumber,
+    required this.title,
+    required this.briefingType,
+    required this.status,
+    required this.statusLabel,
+    required this.conductedAt,
+    required this.signatureSummary,
+    required this.availableActions,
+    this.locationName,
+    this.projectName,
+    this.signatureDeadlineAt,
+    this.completedAt,
+    this.topics = const [],
+    this.participants = const [],
+    this.problemFlags = const [],
+  });
+
+  final int id;
+  final int projectId;
+  final String briefingNumber;
+  final String title;
+  final String briefingType;
+  final String status;
+  final String statusLabel;
+  final String conductedAt;
+  final SafetyBriefingSignatureSummaryModel signatureSummary;
+  final List<String> availableActions;
+  final String? locationName;
+  final String? projectName;
+  final String? signatureDeadlineAt;
+  final String? completedAt;
+  final List<String> topics;
+  final List<SafetyBriefingParticipantModel> participants;
+  final List<SafetyProblemFlagModel> problemFlags;
+
+  List<SafetyBriefingParticipantModel> get signableParticipants =>
+      participants.where((participant) => participant.canSign).toList();
+
+  bool get needsMySignature => signableParticipants.isNotEmpty;
+
+  factory SafetyBriefingModel.fromJson(Map<String, dynamic> json) {
+    return SafetyBriefingModel(
+      id: _requiredInt(json, 'id'),
+      projectId: _requiredInt(json, 'project_id'),
+      briefingNumber: _requiredString(json, 'briefing_number'),
+      title: _requiredString(json, 'title'),
+      briefingType: _requiredString(json, 'briefing_type'),
+      status: _requiredString(json, 'status'),
+      statusLabel: _requiredString(json, 'status_label'),
+      conductedAt: _requiredString(json, 'conducted_at'),
+      locationName: _asNullableString(json['location_name']),
+      projectName: _nestedName(json['project']),
+      signatureDeadlineAt: _asNullableString(json['signature_deadline_at']),
+      completedAt: _asNullableString(json['completed_at']),
+      signatureSummary: SafetyBriefingSignatureSummaryModel.fromJson(
+        _map(json['signature_summary']),
+      ),
+      availableActions: (json['available_actions'] as List<dynamic>? ??
+              const [])
+          .map((item) => item.toString())
+          .toList(growable: false),
+      topics: (json['topics'] as List<dynamic>? ?? const [])
+          .map((item) => item.toString())
+          .where((item) => item.trim().isNotEmpty)
+          .toList(growable: false),
+      participants:
+          (json['participants'] as List<dynamic>? ?? const [])
+              .whereType<Map>()
+              .map(
+                (participant) => SafetyBriefingParticipantModel.fromJson(
+                  participant.map(
+                    (key, value) => MapEntry(key.toString(), value),
+                  ),
+                ),
+              )
+              .toList(),
+      problemFlags: _flags(json['problem_flags']),
+    );
+  }
+}
+
 class SafetyAdmissionSummaryModel {
   const SafetyAdmissionSummaryModel({
     required this.total,
@@ -188,6 +367,7 @@ class SafetyDashboardModel {
     required this.myOpenPermits,
     required this.myOpenViolations,
     required this.myOpenFindings,
+    required this.myBriefingsToSign,
     this.employeeId,
   });
 
@@ -200,6 +380,7 @@ class SafetyDashboardModel {
   final int myOpenPermits;
   final int myOpenViolations;
   final int myOpenFindings;
+  final int myBriefingsToSign;
   final int? employeeId;
 
   factory SafetyDashboardModel.fromJson(Map<String, dynamic> json) {
@@ -216,6 +397,7 @@ class SafetyDashboardModel {
       myOpenPermits: _asInt(mine['open_permits']),
       myOpenViolations: _asInt(mine['open_violations']),
       myOpenFindings: _asInt(mine['open_findings']),
+      myBriefingsToSign: _asInt(mine['briefings_to_sign']),
       employeeId: _asNullableInt(mine['employee_id']),
     );
   }
@@ -250,9 +432,9 @@ class SafetyAdmissionModel {
       blocked: json['blocked'] == true,
       expiresSoon: json['expires_soon'] == true,
       requirements:
-          _list(json['requirements'])
-              .map(SafetyAdmissionRequirementModel.fromJson)
-              .toList(),
+          _list(
+            json['requirements'],
+          ).map(SafetyAdmissionRequirementModel.fromJson).toList(),
       blockers: _flags(json['blockers']),
       warnings: _flags(json['warnings']),
     );
@@ -547,6 +729,14 @@ int _asInt(dynamic value) {
   }
 
   return int.tryParse(value?.toString() ?? '') ?? 0;
+}
+
+double _asDouble(dynamic value) {
+  if (value is num) {
+    return value.toDouble();
+  }
+
+  return double.tryParse(value?.toString() ?? '') ?? 0;
 }
 
 int? _asNullableInt(dynamic value) {

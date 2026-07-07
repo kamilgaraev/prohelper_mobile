@@ -21,6 +21,7 @@ class SafetyState {
     this.permits = const [],
     this.incidents = const [],
     this.violations = const [],
+    this.briefings = const [],
     this.inspections = const [],
     this.inspectionFindings = const [],
     this.dashboard,
@@ -37,6 +38,7 @@ class SafetyState {
   final List<SafetyWorkPermitModel> permits;
   final List<SafetyIncidentModel> incidents;
   final List<SafetyViolationModel> violations;
+  final List<SafetyBriefingModel> briefings;
   final List<SafetyInspectionModel> inspections;
   final List<SafetyInspectionFindingModel> inspectionFindings;
   final SafetyDashboardModel? dashboard;
@@ -53,6 +55,7 @@ class SafetyState {
     List<SafetyWorkPermitModel>? permits,
     List<SafetyIncidentModel>? incidents,
     List<SafetyViolationModel>? violations,
+    List<SafetyBriefingModel>? briefings,
     List<SafetyInspectionModel>? inspections,
     List<SafetyInspectionFindingModel>? inspectionFindings,
     Object? dashboard = _dashboardSentinel,
@@ -81,6 +84,7 @@ class SafetyState {
       permits: permits ?? this.permits,
       incidents: incidents ?? this.incidents,
       violations: violations ?? this.violations,
+      briefings: briefings ?? this.briefings,
       inspections: inspections ?? this.inspections,
       inspectionFindings: inspectionFindings ?? this.inspectionFindings,
       dashboard:
@@ -112,6 +116,7 @@ class SafetyNotifier extends StateNotifier<SafetyState> {
       permits: const [],
       incidents: const [],
       violations: const [],
+      briefings: const [],
       inspections: const [],
       inspectionFindings: const [],
       dashboard: null,
@@ -171,6 +176,7 @@ class SafetyNotifier extends StateNotifier<SafetyState> {
           projectId: state.projectFilter,
           status: state.violationStatusFilter,
         ),
+        _repository.fetchBriefings(projectId: state.projectFilter),
         _repository.fetchInspections(projectId: state.projectFilter),
         _repository.fetchInspectionFindings(
           projectId: state.projectFilter,
@@ -185,8 +191,9 @@ class SafetyNotifier extends StateNotifier<SafetyState> {
         permits: result[2] as List<SafetyWorkPermitModel>,
         incidents: result[3] as List<SafetyIncidentModel>,
         violations: result[4] as List<SafetyViolationModel>,
-        inspections: result[5] as List<SafetyInspectionModel>,
-        inspectionFindings: result[6] as List<SafetyInspectionFindingModel>,
+        briefings: result[5] as List<SafetyBriefingModel>,
+        inspections: result[6] as List<SafetyInspectionModel>,
+        inspectionFindings: result[7] as List<SafetyInspectionFindingModel>,
       );
     } catch (error) {
       state = state.copyWith(
@@ -214,6 +221,17 @@ class SafetyNotifier extends StateNotifier<SafetyState> {
 
   Future<void> resolveViolation(int id, String comment) async {
     await _repository.resolveViolation(id, comment);
+    await load();
+  }
+
+  Future<void> signBriefingParticipant({
+    required int briefingId,
+    required int participantId,
+  }) async {
+    await _repository.signBriefingParticipant(
+      briefingId: briefingId,
+      participantId: participantId,
+    );
     await load();
   }
 
