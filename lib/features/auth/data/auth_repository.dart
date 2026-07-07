@@ -152,10 +152,7 @@ class AuthRepository {
               tokenSnapshot == null
                   ? null
                   : <String, dynamic>{'Authorization': 'Bearer $tokenSnapshot'},
-          extra:
-              tokenSnapshot == null
-                  ? <String, dynamic>{'skip_auth': true}
-                  : const <String, dynamic>{},
+          extra: const <String, dynamic>{'skip_auth': true},
         ),
       );
     } catch (error) {

@@ -51,6 +51,11 @@ class AuthInterceptor extends Interceptor {
     }
 
     final requestOptions = err.requestOptions;
+    if (requestOptions.extra['skip_auth'] == true) {
+      handler.next(err);
+      return;
+    }
+
     final isLoginRequest = requestOptions.path.endsWith('/auth/login');
     final isRefreshRequest = requestOptions.path.endsWith('/auth/refresh');
     final isRetried = requestOptions.extra['auth_retry'] == true;

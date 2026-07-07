@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'dart:collection';
 import 'dart:typed_data';
 
@@ -99,6 +99,40 @@ void main() {
 
     expect(adapter.requests.single.headers.containsKey('Authorization'), false);
   });
+
+  test(
+    'does not refresh skipped auth requests after unauthorized response',
+    () async {
+      final adapter =
+          _AuthHttpAdapter()
+            ..responses.add(_AdapterResponse(statusCode: 401, body: '{}'))
+            ..responses.add(
+              _AdapterResponse(
+                statusCode: 200,
+                body: '{"data":{"token":"fresh-token"}}',
+              ),
+            );
+      final storage = _MemorySecureStorage()..token = 'current-token';
+      final container = _container(adapter, storage);
+      addTearDown(container.dispose);
+      final dio = container.read(dioProvider)..httpClientAdapter = adapter;
+
+      await expectLater(
+        dio.post<dynamic>(
+          '/auth/logout',
+          options: Options(
+            headers: {'Authorization': 'Bearer snapshot-token'},
+            extra: {'skip_auth': true},
+          ),
+        ),
+        throwsA(isA<DioException>()),
+      );
+
+      expect(adapter.requests.map((request) => request.path), ['/auth/logout']);
+      expect(await storage.getToken(), 'current-token');
+      expect(container.read(authSessionVersionProvider), 0);
+    },
+  );
 }
 
 ProviderContainer _container(
