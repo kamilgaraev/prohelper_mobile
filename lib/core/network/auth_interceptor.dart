@@ -23,6 +23,16 @@ class AuthInterceptor extends Interceptor {
     RequestOptions options,
     RequestInterceptorHandler handler,
   ) async {
+    if (options.extra['skip_auth'] == true) {
+      handler.next(options);
+      return;
+    }
+
+    if (_hasAuthorizationHeader(options.headers)) {
+      handler.next(options);
+      return;
+    }
+
     final token = await _ref.read(secureStorageProvider).getToken();
     if (token != null && token.isNotEmpty) {
       options.headers['Authorization'] = 'Bearer $token';
@@ -135,5 +145,9 @@ class AuthInterceptor extends Interceptor {
   Future<void> _invalidateSession() async {
     await _ref.read(secureStorageProvider).clearToken();
     _ref.read(authSessionVersionProvider.notifier).state++;
+  }
+
+  bool _hasAuthorizationHeader(Map<String, dynamic> headers) {
+    return headers.keys.any((key) => key.toLowerCase() == 'authorization');
   }
 }

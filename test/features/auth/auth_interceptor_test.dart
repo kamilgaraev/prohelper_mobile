@@ -62,6 +62,43 @@ void main() {
     expect(await storage.getToken(), isNull);
     expect(container.read(authSessionVersionProvider), 1);
   });
+
+  test('does not replace explicit authorization header', () async {
+    final adapter =
+        _AuthHttpAdapter()
+          ..responses.add(_AdapterResponse(statusCode: 200, body: '{}'));
+    final storage = _MemorySecureStorage()..token = 'current-token';
+    final container = _container(adapter, storage);
+    addTearDown(container.dispose);
+    final dio = container.read(dioProvider)..httpClientAdapter = adapter;
+
+    await dio.post<dynamic>(
+      '/auth/logout',
+      options: Options(headers: {'Authorization': 'Bearer snapshot-token'}),
+    );
+
+    expect(
+      adapter.requests.single.headers['Authorization'],
+      'Bearer snapshot-token',
+    );
+  });
+
+  test('does not attach token when auth is explicitly skipped', () async {
+    final adapter =
+        _AuthHttpAdapter()
+          ..responses.add(_AdapterResponse(statusCode: 200, body: '{}'));
+    final storage = _MemorySecureStorage()..token = 'current-token';
+    final container = _container(adapter, storage);
+    addTearDown(container.dispose);
+    final dio = container.read(dioProvider)..httpClientAdapter = adapter;
+
+    await dio.post<dynamic>(
+      '/auth/logout',
+      options: Options(extra: {'skip_auth': true}),
+    );
+
+    expect(adapter.requests.single.headers.containsKey('Authorization'), false);
+  });
 }
 
 ProviderContainer _container(

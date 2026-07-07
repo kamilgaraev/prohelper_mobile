@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'dart:collection';
 import 'dart:typed_data';
 
@@ -116,6 +116,110 @@ void main() {
     );
     expect(await storage.getToken(), 'token-1');
   });
+
+  test(
+    'switch organization stores returned token and reloads profile',
+    () async {
+      final adapter =
+          _AuthHttpAdapter()
+            ..responses.add(
+              _AdapterResponse(
+                statusCode: 200,
+                body: '{"data":{"token":"organization-token"}}',
+              ),
+            )
+            ..responses.add(
+              _AdapterResponse(
+                statusCode: 200,
+                body: '{"data":${_userJson()}}',
+              ),
+            );
+      final storage = _MemorySecureStorage()..token = 'old-token';
+      final repository = AuthRepository(_dio(adapter), storage);
+
+      final user = await repository.switchOrganization(3);
+
+      expect(user.serverId, 7);
+      expect(await storage.getToken(), 'organization-token');
+      expect(adapter.requests.map((request) => request.path), [
+        '/auth/switch-organization',
+        '/auth/me',
+      ]);
+    },
+  );
+
+  test('switch organization requires a replacement token', () async {
+    final adapter =
+        _AuthHttpAdapter()
+          ..responses.add(
+            _AdapterResponse(statusCode: 200, body: '{"data":{}}'),
+          );
+    final storage = _MemorySecureStorage()..token = 'old-token';
+    final repository = AuthRepository(_dio(adapter), storage);
+
+    await expectLater(
+      repository.switchOrganization(3),
+      throwsA(
+        isA<ApiException>().having(
+          (error) => error.message,
+          'message',
+          'Не удалось переключить организацию.',
+        ),
+      ),
+    );
+    expect(await storage.getToken(), 'old-token');
+  });
+
+  test('logout calls backend with snapshot token and clears storage', () async {
+    final adapter =
+        _AuthHttpAdapter()
+          ..responses.add(_AdapterResponse(statusCode: 200, body: '{}'));
+    final storage = _MemorySecureStorage()..token = 'logout-token';
+    final repository = AuthRepository(_dio(adapter), storage);
+
+    await repository.logout();
+
+    expect(await storage.getToken(), isNull);
+    expect(adapter.requests.single.path, '/auth/logout');
+    expect(
+      adapter.requests.single.headers['Authorization'],
+      'Bearer logout-token',
+    );
+  });
+
+  test('logout clears storage even when backend request fails', () async {
+    final adapter =
+        _AuthHttpAdapter()
+          ..responses.add(_AdapterResponse(statusCode: 500, body: '{}'));
+    final storage = _MemorySecureStorage()..token = 'logout-token';
+    final repository = AuthRepository(_dio(adapter), storage);
+
+    await repository.logout();
+
+    expect(await storage.getToken(), isNull);
+  });
+
+  test(
+    'logout does not clear a newer token saved while request is pending',
+    () async {
+      final storage = _MemorySecureStorage()..token = 'old-token';
+      final adapter =
+          _AuthHttpAdapter()
+            ..onFetch = (_) async {
+              await storage.saveToken('new-token');
+            }
+            ..responses.add(_AdapterResponse(statusCode: 200, body: '{}'));
+      final repository = AuthRepository(_dio(adapter), storage);
+
+      await repository.logout();
+
+      expect(await storage.getToken(), 'new-token');
+      expect(
+        adapter.requests.single.headers['Authorization'],
+        'Bearer old-token',
+      );
+    },
+  );
 }
 
 Dio _dio(_AuthHttpAdapter adapter) {
@@ -165,6 +269,7 @@ class _MemorySecureStorage extends SecureStorageService {
 class _AuthHttpAdapter implements HttpClientAdapter {
   final responses = Queue<_AdapterResponse>();
   final requests = <RequestOptions>[];
+  Future<void> Function(RequestOptions options)? onFetch;
 
   @override
   Future<ResponseBody> fetch(
@@ -174,6 +279,7 @@ class _AuthHttpAdapter implements HttpClientAdapter {
   ) async {
     requests.add(options);
     await requestStream?.drain<void>();
+    await onFetch?.call(options);
     final response = responses.removeFirst();
 
     return ResponseBody.fromString(

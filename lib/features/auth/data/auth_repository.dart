@@ -1,4 +1,4 @@
-﻿import 'dart:convert';
+import 'dart:convert';
 
 import 'package:dio/dio.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -59,11 +59,8 @@ class AuthRepository {
       );
 
       final data = MobileApiResponse.dataMap(response.data);
-      final token = data['token'] as String?;
-
-      if (token != null) {
-        await _storage.saveToken(token);
-      }
+      final token = _requiredString(data, 'token');
+      await _storage.saveToken(token);
 
       return await getMe();
     } on DioException catch (error) {
@@ -145,7 +142,39 @@ class AuthRepository {
   }
 
   Future<void> logout() async {
-    await _storage.clearToken();
+    final tokenSnapshot = _normalizeToken(await _storage.getToken());
+
+    try {
+      await _dio.post(
+        '/auth/logout',
+        options: Options(
+          headers:
+              tokenSnapshot == null
+                  ? null
+                  : <String, dynamic>{'Authorization': 'Bearer $tokenSnapshot'},
+          extra:
+              tokenSnapshot == null
+                  ? <String, dynamic>{'skip_auth': true}
+                  : const <String, dynamic>{},
+        ),
+      );
+    } catch (error) {
+      if (error is! DioException) {
+        rethrow;
+      }
+    } finally {
+      final currentToken = _normalizeToken(await _storage.getToken());
+
+      if (currentToken == tokenSnapshot) {
+        await _storage.clearToken();
+      }
+    }
+  }
+
+  String? _normalizeToken(String? token) {
+    final normalized = token?.trim() ?? '';
+
+    return normalized.isEmpty ? null : normalized;
   }
 
   String _requiredString(Map<String, dynamic> json, String key) {
