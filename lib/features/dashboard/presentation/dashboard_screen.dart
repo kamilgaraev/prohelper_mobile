@@ -109,7 +109,7 @@ class DashboardScreen extends ConsumerWidget {
                   ),
                 ),
               Text(
-                (selectedProject?.name ?? 'MOST').toUpperCase(),
+                (selectedProject?.name ?? 'МОСТ').toUpperCase(),
                 style: AppTypography.h2(context).copyWith(
                   letterSpacing: 0,
                   fontWeight: FontWeight.w900,

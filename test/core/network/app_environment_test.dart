@@ -5,7 +5,7 @@ void main() {
   test('uses production mobile api by default', () {
     expect(
       AppEnvironment.apiBaseUrl,
-      'https://api.1мост.рф/api/v1/mobile',
+      'https://api.xn--1-xtbgmf.xn--p1ai/api/v1/mobile',
     );
   });
 }

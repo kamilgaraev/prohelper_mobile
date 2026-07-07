@@ -327,6 +327,7 @@ class ProcurementPurchaseOrderModel {
     this.sentAt,
     this.confirmedAt,
     this.notes,
+    this.pricingBreakdown,
     this.purchaseRequest,
     this.createdAt,
     this.updatedAt,
@@ -340,6 +341,7 @@ class ProcurementPurchaseOrderModel {
   final String status;
   final String statusLabel;
   final double totalAmount;
+  final ProcurementOrderPricingBreakdownModel? pricingBreakdown;
   final String? currency;
   final String? deliveryDate;
   final String? sentAt;
@@ -365,6 +367,12 @@ class ProcurementPurchaseOrderModel {
       status: _requiredString(json, 'status'),
       statusLabel: _requiredString(json, 'status_label'),
       totalAmount: _requiredDouble(json, 'total_amount'),
+      pricingBreakdown:
+          _optionalMap(json, 'pricing_breakdown') == null
+              ? null
+              : ProcurementOrderPricingBreakdownModel.fromJson(
+                _requiredMap(json, 'pricing_breakdown'),
+              ),
       currency: _optionalString(json, 'currency'),
       deliveryDate: _optionalString(json, 'delivery_date'),
       sentAt: _optionalString(json, 'sent_at'),
@@ -406,6 +414,46 @@ class ProcurementPurchaseOrderModel {
 
   double get remainingQuantity {
     return items.fold<double>(0, (sum, item) => sum + item.remainingQuantity);
+  }
+}
+
+class ProcurementOrderPricingBreakdownModel {
+  const ProcurementOrderPricingBreakdownModel({
+    required this.subtotalAmount,
+    required this.deliveryAmount,
+    required this.vatAmount,
+    required this.totalAmount,
+    this.currency,
+    this.vatMode,
+    this.vatRate,
+  });
+
+  final double subtotalAmount;
+  final double deliveryAmount;
+  final double vatAmount;
+  final double totalAmount;
+  final String? currency;
+  final String? vatMode;
+  final double? vatRate;
+
+  factory ProcurementOrderPricingBreakdownModel.fromJson(
+    Map<String, dynamic> json,
+  ) {
+    return ProcurementOrderPricingBreakdownModel(
+      subtotalAmount: _requiredDouble(json, 'subtotal_amount'),
+      deliveryAmount: _requiredDouble(json, 'delivery_amount'),
+      vatAmount: _requiredDouble(json, 'vat_amount'),
+      totalAmount: _requiredDouble(json, 'total_amount'),
+      currency: _optionalString(json, 'currency'),
+      vatMode: _optionalString(json, 'vat_mode'),
+      vatRate: _optionalDouble(json, 'vat_rate'),
+    );
+  }
+
+  bool get hasVisibleAdjustments {
+    return deliveryAmount.abs() >= 0.01 ||
+        vatAmount.abs() >= 0.01 ||
+        (totalAmount - subtotalAmount).abs() >= 0.01;
   }
 }
 

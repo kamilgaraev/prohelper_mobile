@@ -14,6 +14,7 @@ void main() {
     expect(summary.purchaseOrders.single.canReceiveMaterials, isTrue);
     expect(summary.purchaseOrders.single.canComment, isTrue);
     expect(summary.purchaseOrders.single.remainingQuantity, 3);
+    expect(summary.purchaseOrders.single.pricingBreakdown?.totalAmount, 400000);
     expect(summary.assignedApprovals.single.canApprove, isTrue);
     expect(summary.assignedApprovals.single.contextSummary.deltaAmount, 50000);
     expect(summary.warehouses.single.name, 'Основной склад');
@@ -32,6 +33,20 @@ void main() {
       'Поставка ожидается до обеда.',
     );
     expect(detail.warehouses.single.id, 44);
+  });
+
+  test('parses order pricing breakdown with delivery amount', () {
+    final order = ProcurementPurchaseOrderModel.fromJson(
+      procurementPurchaseOrderJson(
+        subtotalAmount: 162500,
+        deliveryAmount: 3,
+      ),
+    );
+
+    expect(order.totalAmount, 162503);
+    expect(order.pricingBreakdown?.subtotalAmount, 162500);
+    expect(order.pricingBreakdown?.deliveryAmount, 3);
+    expect(order.pricingBreakdown?.hasVisibleAdjustments, isTrue);
   });
 
   test('rejects malformed summary contract', () {

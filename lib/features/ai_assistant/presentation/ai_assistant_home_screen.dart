@@ -41,7 +41,7 @@ class AiAssistantHomeScreen extends ConsumerWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'MOST AI',
+                        'МОСТ AI',
                         style: AppTypography.caption(context).copyWith(
                           letterSpacing: 0,
                           fontWeight: FontWeight.w900,

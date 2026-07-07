@@ -240,23 +240,10 @@ class _LoginBrandHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        Container(
-          width: 86,
-          height: 86,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: theme.colorScheme.primary,
-            borderRadius: BorderRadius.circular(ProRadius.sm),
-          ),
-          child: Icon(
-            Icons.construction_rounded,
-            size: 42,
-            color: theme.colorScheme.onPrimary,
-          ),
-        ),
+        const _MostLogoMark(size: 86),
         const SizedBox(height: 18),
         Text(
-          'MOST',
+          'МОСТ',
           textAlign: TextAlign.center,
           style: AppTypography.h1(context).copyWith(fontSize: 32),
         ),
@@ -269,6 +256,78 @@ class _LoginBrandHeader extends StatelessWidget {
       ],
     );
   }
+}
+
+class _MostLogoMark extends StatelessWidget {
+  const _MostLogoMark({required this.size});
+
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      label: 'Логотип МОСТ',
+      image: true,
+      child: Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          color: const Color(0xFF0B0F14),
+          borderRadius: BorderRadius.circular(ProRadius.sm),
+        ),
+        child: CustomPaint(painter: _MostLogoPainter()),
+      ),
+    );
+  }
+}
+
+class _MostLogoPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final scale = size.shortestSide / 100;
+    final whitePaint =
+        Paint()
+          ..color = Colors.white
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 12 * scale
+          ..strokeCap = StrokeCap.square
+          ..strokeJoin = StrokeJoin.miter;
+    final orangePaint =
+        Paint()
+          ..color = const Color(0xFFFF8A00)
+          ..style = PaintingStyle.fill;
+    final orangeLinePaint =
+        Paint()
+          ..color = const Color(0xFFFF8A00)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 5 * scale
+          ..strokeCap = StrokeCap.square;
+
+    Offset point(double x, double y) => Offset(x * scale, y * scale);
+    Rect rect(double left, double top, double right, double bottom) =>
+        Rect.fromLTRB(
+          left * scale,
+          top * scale,
+          right * scale,
+          bottom * scale,
+        );
+
+    final mark =
+        Path()
+          ..moveTo(20 * scale, 69 * scale)
+          ..lineTo(20 * scale, 28 * scale)
+          ..lineTo(50 * scale, 50 * scale)
+          ..lineTo(80 * scale, 28 * scale)
+          ..lineTo(80 * scale, 69 * scale);
+
+    canvas.drawPath(mark, whitePaint);
+    canvas.drawRect(rect(13, 74, 27, 88), orangePaint);
+    canvas.drawRect(rect(73, 74, 87, 88), orangePaint);
+    canvas.drawLine(point(20, 81), point(80, 81), orangeLinePaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
 class _LoginTextField extends StatelessWidget {

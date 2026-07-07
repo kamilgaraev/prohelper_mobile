@@ -3,6 +3,6 @@ class AppEnvironment {
 
   static const apiBaseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'https://api.1мост.рф/api/v1/mobile',
+    defaultValue: 'https://api.xn--1-xtbgmf.xn--p1ai/api/v1/mobile',
   );
 }

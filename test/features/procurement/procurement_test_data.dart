@@ -87,7 +87,12 @@ Map<String, dynamic> procurementPurchaseOrderJson({
   List<String> actions = const ['receive_materials', 'comment'],
   double receivedQuantity = 2,
   double remainingQuantity = 3,
+  double subtotalAmount = 400000,
+  double deliveryAmount = 0,
+  double vatAmount = 0,
 }) {
+  final totalAmount = subtotalAmount + deliveryAmount + vatAmount;
+
   return {
     'id': 61,
     'organization_id': 4,
@@ -96,7 +101,16 @@ Map<String, dynamic> procurementPurchaseOrderJson({
     'order_date': '2026-05-21',
     'status': status,
     'status_label': status == 'delivered' ? 'Поставлен' : 'Подтвержден',
-    'total_amount': 400000,
+    'total_amount': totalAmount,
+    'pricing_breakdown': {
+      'subtotal_amount': subtotalAmount,
+      'delivery_amount': deliveryAmount,
+      'vat_amount': vatAmount,
+      'total_amount': totalAmount,
+      'currency': 'RUB',
+      'vat_mode': 'included',
+      'vat_rate': 20,
+    },
     'currency': 'RUB',
     'delivery_date': '2026-05-29',
     'sent_at': '2026-05-21T08:00:00Z',
@@ -126,7 +140,7 @@ Map<String, dynamic> procurementPurchaseOrderJson({
         'quantity': 5,
         'unit': 'м3',
         'unit_price': 80000,
-        'total_price': 400000,
+        'total_price': subtotalAmount,
         'received_quantity': receivedQuantity,
         'remaining_quantity': remainingQuantity,
         'notes': 'Без добавок',

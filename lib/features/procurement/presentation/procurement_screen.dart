@@ -633,6 +633,7 @@ class _PurchaseOrderCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final supplierLabel = order.supplier.label ?? 'Поставщик не указан';
+    final pricingBreakdown = order.pricingBreakdown;
 
     return ProCard(
       onTap: onTap,
@@ -687,6 +688,80 @@ class _PurchaseOrderCard extends StatelessWidget {
                 ),
               ),
             ],
+          ),
+          if (pricingBreakdown != null &&
+              pricingBreakdown.hasVisibleAdjustments) ...[
+            const SizedBox(height: 10),
+            Divider(
+              height: 1,
+              color: theme.colorScheme.outline.withValues(alpha: 0.12),
+            ),
+            const SizedBox(height: 8),
+            _OrderPriceBreakdown(breakdown: pricingBreakdown),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _OrderPriceBreakdown extends StatelessWidget {
+  const _OrderPriceBreakdown({required this.breakdown});
+
+  final ProcurementOrderPricingBreakdownModel breakdown;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        _PriceBreakdownRow(
+          label: 'Материалы',
+          value: _formatMoney(breakdown.subtotalAmount),
+        ),
+        if (_isMoneyVisible(breakdown.deliveryAmount))
+          _PriceBreakdownRow(
+            label: 'Доставка',
+            value: _formatMoney(breakdown.deliveryAmount),
+          ),
+        if (_isMoneyVisible(breakdown.vatAmount))
+          _PriceBreakdownRow(
+            label: 'НДС',
+            value: _formatMoney(breakdown.vatAmount),
+          ),
+      ],
+    );
+  }
+}
+
+class _PriceBreakdownRow extends StatelessWidget {
+  const _PriceBreakdownRow({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              style: AppTypography.caption(
+                context,
+              ).copyWith(color: theme.colorScheme.onSurfaceVariant),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Text(
+            value,
+            style: AppTypography.caption(context).copyWith(
+              color: theme.colorScheme.onSurface,
+              fontWeight: FontWeight.w800,
+            ),
           ),
         ],
       ),
@@ -1528,6 +1603,10 @@ String _formatMoney(double? value) {
 
 String _formatQuantity(double value) {
   return value.toStringAsFixed(value.truncateToDouble() == value ? 0 : 3);
+}
+
+bool _isMoneyVisible(double value) {
+  return value.abs() >= 0.01;
 }
 
 double? _parseDecimal(String value) {
