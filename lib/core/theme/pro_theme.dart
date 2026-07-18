@@ -69,7 +69,7 @@ class MostTheme {
         systemOverlayStyle: darkSystemOverlayStyle,
         titleTextStyle: _buildTextTheme(base.textTheme, true).titleLarge,
       ),
-      cardTheme: CardTheme(
+      cardTheme: CardThemeData(
         color: AppColors.surface,
         shadowColor: Colors.black.withValues(alpha: 0.18),
         shape: RoundedRectangleBorder(
@@ -130,7 +130,7 @@ class MostTheme {
         systemOverlayStyle: lightSystemOverlayStyle,
         titleTextStyle: _buildTextTheme(base.textTheme, false).titleLarge,
       ),
-      cardTheme: CardTheme(
+      cardTheme: CardThemeData(
         color: AppColors.surfaceLightMode,
         shadowColor: Colors.black.withValues(alpha: 0.06),
         shape: RoundedRectangleBorder(
