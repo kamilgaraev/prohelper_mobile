@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/error/user_message.dart';
@@ -59,6 +60,8 @@ class LegalDocumentNotifier extends StateNotifier<LegalDocumentState> {
     required DateTime signedAt,
     required int documentLockVersion,
     required String idempotencyKey,
+    CancelToken? cancelToken,
+    ProgressCallback? onSendProgress,
   }) async {
     await _repository.uploadPaperOriginal(
       signatureRequestId: signatureRequestId,
@@ -66,6 +69,8 @@ class LegalDocumentNotifier extends StateNotifier<LegalDocumentState> {
       signedAt: signedAt,
       documentLockVersion: documentLockVersion,
       idempotencyKey: idempotencyKey,
+      cancelToken: cancelToken,
+      onSendProgress: onSendProgress,
     );
     await load();
   }
