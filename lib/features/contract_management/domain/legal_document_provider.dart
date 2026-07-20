@@ -26,6 +26,9 @@ class LegalDocumentNotifier extends StateNotifier<LegalDocumentState> {
       }
       state = state.copyWith(isLoading: false, documents: documents);
     } catch (error) {
+      if (state.projectId != projectId) {
+        return;
+      }
       state = state.copyWith(isLoading: false, error: UserMessage.fromError(error));
     }
   }
