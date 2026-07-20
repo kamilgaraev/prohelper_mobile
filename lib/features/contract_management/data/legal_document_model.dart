@@ -4,6 +4,9 @@ class LegalDocumentAction {
     required this.label,
     required this.enabled,
     required this.blockers,
+    this.targetStepId,
+    this.expectedInstanceLockVersion,
+    this.expectedStepLockVersion,
     this.requiresComment = false,
     this.requiresReason = false,
   });
@@ -12,6 +15,9 @@ class LegalDocumentAction {
   final String label;
   final bool enabled;
   final List<String> blockers;
+  final int? targetStepId;
+  final int? expectedInstanceLockVersion;
+  final int? expectedStepLockVersion;
   final bool requiresComment;
   final bool requiresReason;
 
@@ -21,6 +27,9 @@ class LegalDocumentAction {
       label: _string(json['label'], fallback: _string(json['action'])),
       enabled: json['enabled'] == true,
       blockers: _strings(json['blockers']),
+      targetStepId: _nullableInt(json['target_step_id']),
+      expectedInstanceLockVersion: _nullableInt(json['expected_instance_lock_version']),
+      expectedStepLockVersion: _nullableInt(json['expected_step_lock_version']),
       requiresComment: json['requires_comment'] == true,
       requiresReason: json['requires_reason'] == true,
     );
@@ -46,7 +55,7 @@ class LegalDocumentVersion {
     return LegalDocumentVersion(
       id: _int(json['id']),
       versionNumber: _int(json['version_number'], fallback: 1),
-      fileName: _nullableString(json['file_name']),
+      fileName: _nullableString(json['file_name']) ?? _nullableString(json['original_filename']),
       contentHash: _nullableString(json['content_hash']),
       createdAt: _date(json['created_at']),
     );
@@ -149,4 +158,5 @@ List<String> _strings(Object? value) => value is List
 String _string(Object? value, {String fallback = ''}) => value is String && value.trim().isNotEmpty ? value : fallback;
 String? _nullableString(Object? value) => value is String && value.trim().isNotEmpty ? value : null;
 int _int(Object? value, {int fallback = 0}) => value is num ? value.toInt() : int.tryParse('$value') ?? fallback;
+int? _nullableInt(Object? value) => value == null ? null : _int(value);
 DateTime? _date(Object? value) => value is String ? DateTime.tryParse(value) : null;

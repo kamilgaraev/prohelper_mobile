@@ -21,6 +21,9 @@ class LegalDocumentNotifier extends StateNotifier<LegalDocumentState> {
     state = state.copyWith(isLoading: true, error: null);
     try {
       final documents = await _repository.fetchDocuments(projectId: projectId);
+      if (state.projectId != projectId) {
+        return;
+      }
       state = state.copyWith(isLoading: false, documents: documents);
     } catch (error) {
       state = state.copyWith(isLoading: false, error: UserMessage.fromError(error));
@@ -29,7 +32,7 @@ class LegalDocumentNotifier extends StateNotifier<LegalDocumentState> {
 
   Future<LegalDocumentModel> detail(int id) => _repository.fetchDocument(id);
 
-  Future<LegalDocumentModel> action({required int id, required String action, String? comment, String? reason}) async {
+  Future<LegalDocumentModel> action({required int id, required LegalDocumentAction action, String? comment, String? reason}) async {
     final document = await _repository.performAction(documentId: id, action: action, comment: comment, reason: reason);
     await load();
     return document;
