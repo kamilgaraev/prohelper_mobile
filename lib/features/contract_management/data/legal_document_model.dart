@@ -85,6 +85,16 @@ class LegalDocumentWorkflow {
   }
 }
 
+class LegalDocumentObligation {
+  const LegalDocumentObligation({required this.title, required this.status, this.dueAt});
+  final String title;
+  final String status;
+  final DateTime? dueAt;
+  factory LegalDocumentObligation.fromJson(Map<String, dynamic> json) => LegalDocumentObligation(
+    title: _string(json['title'], fallback: 'Обязательство'), status: _string(json['status'], fallback: 'open'), dueAt: _date(json['due_at']),
+  );
+}
+
 class LegalDocumentModel {
   const LegalDocumentModel({
     required this.id,
@@ -95,6 +105,7 @@ class LegalDocumentModel {
     required this.workflow,
     required this.versions,
     required this.signatureStatus,
+    required this.obligations,
     this.documentNumber,
     this.projectName,
     this.counterpartyName,
@@ -110,6 +121,7 @@ class LegalDocumentModel {
   final LegalDocumentWorkflow workflow;
   final List<LegalDocumentVersion> versions;
   final String signatureStatus;
+  final List<LegalDocumentObligation> obligations;
   final String? documentNumber;
   final String? projectName;
   final String? counterpartyName;
@@ -133,6 +145,7 @@ class LegalDocumentModel {
         _mapOrNull(json['signature_summary'])?['status'],
         fallback: 'not_signed',
       ),
+      obligations: _maps(json['obligations']).map(LegalDocumentObligation.fromJson).toList(growable: false),
       documentNumber: _nullableString(json['document_number']),
       projectName: _nullableString(_mapOrNull(json['project'])?['name']),
       counterpartyName: _nullableString(json['counterparty_name']),

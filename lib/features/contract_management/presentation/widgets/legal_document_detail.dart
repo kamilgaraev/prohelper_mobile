@@ -29,6 +29,15 @@ class LegalDocumentDetail extends StatelessWidget {
         const SizedBox(height: 12),
         LegalDocumentActions(actions: document.workflow.actions, onAction: onAction),
       ],
+      if (document.obligations.isNotEmpty) ...[
+        const SizedBox(height: 16),
+        Text('Обязательства', style: AppTypography.bodyLarge(context).copyWith(fontWeight: FontWeight.w800)),
+        const SizedBox(height: 8),
+        ...document.obligations.map((obligation) => ProCard(child: ListTile(
+          title: Text(obligation.title),
+          subtitle: Text(obligation.dueAt == null ? obligation.status : '${obligation.status} · до ${obligation.dueAt!.day.toString().padLeft(2, '0')}.${obligation.dueAt!.month.toString().padLeft(2, '0')}.${obligation.dueAt!.year}'),
+        ))),
+      ],
       const SizedBox(height: 16),
       Text('Версии', style: AppTypography.bodyLarge(context).copyWith(fontWeight: FontWeight.w800)),
       const SizedBox(height: 8),
