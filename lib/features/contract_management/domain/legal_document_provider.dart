@@ -40,6 +40,35 @@ class LegalDocumentNotifier extends StateNotifier<LegalDocumentState> {
     await load();
     return document;
   }
+
+  Future<Uri> versionUrl({
+    required int documentId,
+    required int versionId,
+    required String purpose,
+  }) {
+    return _repository.fetchVersionUrl(
+      documentId: documentId,
+      versionId: versionId,
+      purpose: purpose,
+    );
+  }
+
+  Future<void> uploadPaperOriginal({
+    required int signatureRequestId,
+    required String filePath,
+    required DateTime signedAt,
+    required int documentLockVersion,
+    required String idempotencyKey,
+  }) async {
+    await _repository.uploadPaperOriginal(
+      signatureRequestId: signatureRequestId,
+      filePath: filePath,
+      signedAt: signedAt,
+      documentLockVersion: documentLockVersion,
+      idempotencyKey: idempotencyKey,
+    );
+    await load();
+  }
 }
 
 final legalDocumentProvider = StateNotifierProvider<LegalDocumentNotifier, LegalDocumentState>((ref) {
