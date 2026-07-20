@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -107,8 +108,7 @@ class _LegalDocumentDetailScreen extends ConsumerStatefulWidget {
 
 class _LegalDocumentDetailScreenState extends ConsumerState<_LegalDocumentDetailScreen> {
   late Future<LegalDocumentModel> _future;
-  final Map<int, String> _originalUploadKeys = <int, String>{};
-  final Set<int> _uploadingOriginals = <int>{};
+  final Map<int, _PaperOriginalUploadAttempt> _originalUploads = <int, _PaperOriginalUploadAttempt>{};
 
   @override
   void initState() {
@@ -139,6 +139,11 @@ class _LegalDocumentDetailScreenState extends ConsumerState<_LegalDocumentDetail
           onAction: _action,
           onVersionOpen: (version, purpose) => _openVersion(document, version, purpose),
           onPaperOriginalUpload: (request) => _uploadPaperOriginal(document, request),
+          paperOriginalUploads: Map<int, PaperOriginalUploadState>.unmodifiable({
+            for (final entry in _originalUploads.entries) entry.key: entry.value.state,
+          }),
+          onPaperOriginalUploadCancel: _cancelPaperOriginalUpload,
+          onPaperOriginalUploadRetry: (request) => _retryPaperOriginalUpload(document, request),
         );
       },
     ),
@@ -192,34 +197,78 @@ class _LegalDocumentDetailScreenState extends ConsumerState<_LegalDocumentDetail
   }
 
   Future<void> _uploadPaperOriginal(LegalDocumentModel document, LegalDocumentSignatureRequest request) async {
-    if (_uploadingOriginals.contains(request.id)) {
+    final existing = _originalUploads[request.id];
+    if (existing?.state.isUploading == true) {
       return;
     }
     final path = await ref.read(legalDocumentOriginalPickerProvider).pickFromCamera();
     if (!mounted || path == null || path.isEmpty) {
       return;
     }
-    setState(() => _uploadingOriginals.add(request.id));
+    final attempt = _PaperOriginalUploadAttempt(
+      filePath: path,
+      signedAt: DateTime.now(),
+      documentLockVersion: document.lockVersion,
+      idempotencyKey: existing?.idempotencyKey ?? _idempotencyKey(),
+    );
+    setState(() => _originalUploads[request.id] = attempt);
+    await _sendPaperOriginal(document, request, attempt);
+  }
+
+  Future<void> _retryPaperOriginalUpload(LegalDocumentModel document, LegalDocumentSignatureRequest request) async {
+    final attempt = _originalUploads[request.id];
+    if (attempt == null || attempt.state.isUploading) {
+      return;
+    }
+    attempt.restart();
+    setState(() {});
+    await _sendPaperOriginal(document, request, attempt);
+  }
+
+  void _cancelPaperOriginalUpload(LegalDocumentSignatureRequest request) {
+    final attempt = _originalUploads[request.id];
+    if (attempt == null || !attempt.state.isUploading) {
+      return;
+    }
+    attempt.cancel();
+    setState(() {});
+  }
+
+  Future<void> _sendPaperOriginal(
+    LegalDocumentModel document,
+    LegalDocumentSignatureRequest request,
+    _PaperOriginalUploadAttempt attempt,
+  ) async {
     try {
-      final key = _originalUploadKeys.putIfAbsent(request.id, _idempotencyKey);
       await ref.read(legalDocumentProvider.notifier).uploadPaperOriginal(
         signatureRequestId: request.id,
-        filePath: path,
-        signedAt: DateTime.now(),
-        documentLockVersion: document.lockVersion,
-        idempotencyKey: key,
+        filePath: attempt.filePath,
+        signedAt: attempt.signedAt,
+        documentLockVersion: attempt.documentLockVersion,
+        idempotencyKey: attempt.idempotencyKey,
+        cancelToken: attempt.cancelToken,
+        onSendProgress: (sent, total) {
+          if (!mounted || total <= 0 || !identical(_originalUploads[request.id], attempt)) {
+            return;
+          }
+          attempt.updateProgress(sent / total);
+          setState(() {});
+        },
       );
       if (mounted) {
+        _originalUploads.remove(request.id);
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Скан оригинала зарегистрирован')));
         _reload();
       }
     } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Не удалось загрузить скан оригинала')));
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _uploadingOriginals.remove(request.id));
+        if (attempt.wasCancelled) {
+          attempt.markCancelled();
+        } else {
+          attempt.markFailed();
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Не удалось загрузить скан оригинала')));
+        }
+        setState(() {});
       }
     }
   }
@@ -254,4 +303,45 @@ String _idempotencyKey() {
   final suffix = DateTime.now().microsecondsSinceEpoch.toString();
 
   return '00000000-0000-4000-8000-${suffix.substring(suffix.length - 12)}';
+}
+
+class _PaperOriginalUploadAttempt {
+  _PaperOriginalUploadAttempt({
+    required this.filePath,
+    required this.signedAt,
+    required this.documentLockVersion,
+    required this.idempotencyKey,
+  }) : cancelToken = CancelToken(),
+       state = const PaperOriginalUploadState.uploading(0);
+
+  final String filePath;
+  final DateTime signedAt;
+  final int documentLockVersion;
+  final String idempotencyKey;
+  CancelToken cancelToken;
+  PaperOriginalUploadState state;
+  bool wasCancelled = false;
+
+  void updateProgress(double value) {
+    state = PaperOriginalUploadState.uploading(value.clamp(0, 1).toDouble());
+  }
+
+  void cancel() {
+    wasCancelled = true;
+    cancelToken.cancel('paper_original_upload_cancelled');
+  }
+
+  void restart() {
+    wasCancelled = false;
+    cancelToken = CancelToken();
+    state = const PaperOriginalUploadState.uploading(0);
+  }
+
+  void markFailed() {
+    state = const PaperOriginalUploadState.failed();
+  }
+
+  void markCancelled() {
+    state = const PaperOriginalUploadState.cancelled();
+  }
 }

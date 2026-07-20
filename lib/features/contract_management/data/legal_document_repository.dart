@@ -95,6 +95,8 @@ class LegalDocumentRepository {
     required DateTime signedAt,
     required int documentLockVersion,
     required String idempotencyKey,
+    CancelToken? cancelToken,
+    ProgressCallback? onSendProgress,
   }) async {
     try {
       await _dio.post(
@@ -108,6 +110,8 @@ class LegalDocumentRepository {
           'lock_version': documentLockVersion,
           'idempotency_key': idempotencyKey,
         }),
+        cancelToken: cancelToken,
+        onSendProgress: onSendProgress,
       );
     } on DioException catch (error) {
       throw ApiException.fromDio(error);
