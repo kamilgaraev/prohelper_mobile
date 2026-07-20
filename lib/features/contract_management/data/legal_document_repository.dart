@@ -43,14 +43,18 @@ class LegalDocumentRepository {
 
   Future<LegalDocumentModel> performAction({
     required int documentId,
-    required String action,
+    required LegalDocumentAction action,
     String? comment,
     String? reason,
   }) async {
     try {
       final response = await _dio.post(
-        '/legal-archive/documents/$documentId/actions/$action',
+        '/legal-archive/documents/$documentId/actions/${action.action}',
         data: {
+          'idempotency_key': _idempotencyKey(),
+          'target_step_id': action.targetStepId,
+          'instance_lock_version': action.expectedInstanceLockVersion,
+          'step_lock_version': action.expectedStepLockVersion,
           if (comment?.trim().isNotEmpty == true) 'comment': comment!.trim(),
           if (reason?.trim().isNotEmpty == true) 'reason': reason!.trim(),
         },
@@ -60,4 +64,9 @@ class LegalDocumentRepository {
       throw ApiException.fromDio(error);
     }
   }
+}
+
+String _idempotencyKey() {
+  final suffix = DateTime.now().microsecondsSinceEpoch.toString();
+  return '00000000-0000-4000-8000-${suffix.substring(suffix.length - 12)}';
 }

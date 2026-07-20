@@ -89,7 +89,7 @@ class _LegalDocumentDetailScreenState extends ConsumerState<_LegalDocumentDetail
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Укажите комментарий к действию')));
       return;
     }
-    try { await ref.read(legalDocumentProvider.notifier).action(id: widget.id, action: action.action, comment: action.requiresComment ? comment : null, reason: action.requiresReason ? comment : null); _reload(); }
+    try { await ref.read(legalDocumentProvider.notifier).action(id: widget.id, action: action, comment: action.requiresComment ? comment : null, reason: action.requiresReason ? comment : null); _reload(); }
     catch (_) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Не удалось выполнить действие'))); }
   }
   Future<String?> _comment(LegalDocumentAction action) async {
