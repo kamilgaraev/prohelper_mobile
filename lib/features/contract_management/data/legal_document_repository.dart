@@ -64,9 +64,65 @@ class LegalDocumentRepository {
       throw ApiException.fromDio(error);
     }
   }
+
+  Future<Uri> fetchVersionUrl({
+    required int documentId,
+    required int versionId,
+    required String purpose,
+  }) async {
+    if (purpose != 'preview' && purpose != 'download') {
+      throw ArgumentError.value(purpose, 'purpose');
+    }
+    try {
+      final response = await _dio.get(
+        '/legal-archive/documents/$documentId/versions/$versionId/$purpose',
+      );
+      final url = MobileApiResponse.dataMap(response.data)['url'];
+      final uri = url is String ? Uri.tryParse(url) : null;
+      if (uri == null || uri.scheme != 'https' || uri.host.isEmpty) {
+        throw const FormatException('legal_document_temporary_url_invalid');
+      }
+
+      return uri;
+    } on DioException catch (error) {
+      throw ApiException.fromDio(error);
+    }
+  }
+
+  Future<void> uploadPaperOriginal({
+    required int signatureRequestId,
+    required String filePath,
+    required DateTime signedAt,
+    required int documentLockVersion,
+    required String idempotencyKey,
+  }) async {
+    try {
+      await _dio.post(
+        '/legal-archive/signature-requests/$signatureRequestId/upload-original',
+        data: FormData.fromMap({
+          'file': await MultipartFile.fromFile(
+            filePath,
+            filename: _fileName(filePath),
+          ),
+          'signed_at': signedAt.toUtc().toIso8601String(),
+          'lock_version': documentLockVersion,
+          'idempotency_key': idempotencyKey,
+        }),
+      );
+    } on DioException catch (error) {
+      throw ApiException.fromDio(error);
+    }
+  }
 }
 
 String _idempotencyKey() {
   final suffix = DateTime.now().microsecondsSinceEpoch.toString();
   return '00000000-0000-4000-8000-${suffix.substring(suffix.length - 12)}';
+}
+
+String _fileName(String path) {
+  final normalized = path.replaceAll('\\', '/');
+  final segments = normalized.split('/');
+
+  return segments.isEmpty || segments.last.isEmpty ? 'paper-original.jpg' : segments.last;
 }

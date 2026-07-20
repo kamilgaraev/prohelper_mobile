@@ -43,6 +43,10 @@ class LegalDocumentVersion {
     this.fileName,
     this.contentHash,
     this.createdAt,
+    this.mimeType,
+    this.sizeBytes,
+    this.processingStatus = 'ready',
+    this.previewAvailable = false,
   });
 
   final int id;
@@ -50,6 +54,10 @@ class LegalDocumentVersion {
   final String? fileName;
   final String? contentHash;
   final DateTime? createdAt;
+  final String? mimeType;
+  final int? sizeBytes;
+  final String processingStatus;
+  final bool previewAvailable;
 
   factory LegalDocumentVersion.fromJson(Map<String, dynamic> json) {
     return LegalDocumentVersion(
@@ -58,6 +66,29 @@ class LegalDocumentVersion {
       fileName: _nullableString(json['file_name']) ?? _nullableString(json['original_filename']),
       contentHash: _nullableString(json['content_hash']),
       createdAt: _date(json['created_at']),
+      mimeType: _nullableString(json['mime_type']),
+      sizeBytes: _nullableInt(json['size_bytes']),
+      processingStatus: _string(json['processing_status'], fallback: 'ready'),
+      previewAvailable: json['preview_available'] == true,
+    );
+  }
+}
+
+class LegalDocumentSignatureRequest {
+  const LegalDocumentSignatureRequest({
+    required this.id,
+    required this.method,
+  });
+
+  final int id;
+  final String method;
+
+  bool get supportsPaperOriginal => method == 'paper';
+
+  factory LegalDocumentSignatureRequest.fromJson(Map<String, dynamic> json) {
+    return LegalDocumentSignatureRequest(
+      id: _int(json['id']),
+      method: _string(json['method']),
     );
   }
 }
@@ -106,11 +137,13 @@ class LegalDocumentModel {
     required this.versions,
     required this.signatureStatus,
     required this.obligations,
+    required this.signatureRequests,
     this.documentNumber,
     this.projectName,
     this.counterpartyName,
     this.currentVersion,
     this.updatedAt,
+    this.lockVersion = 0,
   });
 
   final int id;
@@ -122,11 +155,13 @@ class LegalDocumentModel {
   final List<LegalDocumentVersion> versions;
   final String signatureStatus;
   final List<LegalDocumentObligation> obligations;
+  final List<LegalDocumentSignatureRequest> signatureRequests;
   final String? documentNumber;
   final String? projectName;
   final String? counterpartyName;
   final LegalDocumentVersion? currentVersion;
   final DateTime? updatedAt;
+  final int lockVersion;
 
   factory LegalDocumentModel.fromJson(Map<String, dynamic> json) {
     final currentVersion = _mapOrNull(json['current_version']);
@@ -146,12 +181,17 @@ class LegalDocumentModel {
         fallback: 'not_signed',
       ),
       obligations: _maps(json['obligations']).map(LegalDocumentObligation.fromJson).toList(growable: false),
+      signatureRequests: _maps(json['signature_requests'])
+          .map(LegalDocumentSignatureRequest.fromJson)
+          .where((request) => request.id > 0)
+          .toList(growable: false),
       documentNumber: _nullableString(json['document_number']),
       projectName: _nullableString(_mapOrNull(json['project'])?['name']),
       counterpartyName: _nullableString(json['counterparty_name']),
       currentVersion:
           currentVersion == null ? (versions.isEmpty ? null : versions.first) : LegalDocumentVersion.fromJson(currentVersion),
       updatedAt: _date(json['updated_at']),
+      lockVersion: _int(json['lock_version']),
     );
   }
 }
