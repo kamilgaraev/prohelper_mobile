@@ -1,6 +1,5 @@
 ﻿import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:prohelpers_mobile/core/storage/secure_storage_service.dart';
@@ -298,15 +297,13 @@ void main() {
     await tester.pumpAndSettle();
 
     final node = tester.getSemantics(find.bySemanticsLabel(expectedLabel));
-    final data = node.getSemanticsData();
-
-    expect(data.hasFlag(SemanticsFlag.isSelected), isTrue);
     expect(
       node,
       matchesSemantics(
         label: expectedLabel,
         hasEnabledState: true,
         isEnabled: true,
+        hasSelectedState: true,
         isSelected: true,
         isButton: true,
         hasTapAction: true,

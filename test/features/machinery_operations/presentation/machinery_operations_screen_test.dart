@@ -249,6 +249,7 @@ void main() {
     expect(repository.fuelPayload?['quantity'], 73.5);
     expect(repository.fuelPayload?['fuel_type'], 'Дизель');
     expect(repository.fuelPayload?['unit'], 'л');
+    expect(repository.fuelPayload?['issued_at'], endsWith('Z'));
   });
 
   testWidgets('submits downtime with reason and duration', (tester) async {
@@ -264,6 +265,7 @@ void main() {
 
     expect(repository.downtimePayload?['reason'], 'Ожидание фронта');
     expect(repository.downtimePayload?['duration_minutes'], 45);
+    expect(repository.downtimePayload?['started_at'], endsWith('Z'));
   });
 
   testWidgets('submits production quantity entered by user', (tester) async {
@@ -278,6 +280,7 @@ void main() {
     await submitSheet(tester);
 
     expect(repository.productionPayload?['quantity'], 128.25);
+    expect(repository.productionPayload?['recorded_at'], endsWith('Z'));
     expect(repository.productionPayload?['unit'], 'м3');
   });
 }

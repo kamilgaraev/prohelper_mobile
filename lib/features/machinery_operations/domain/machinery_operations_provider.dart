@@ -119,7 +119,7 @@ class MachineryOperationsNotifier
       projectId: projectId,
       shiftReportId: shiftReportId,
       reason: reason,
-      startedAt: startedAt.toIso8601String(),
+      startedAt: startedAt.toUtc().toIso8601String(),
       durationMinutes: durationMinutes,
       comment: comment,
     );
@@ -142,7 +142,7 @@ class MachineryOperationsNotifier
     await _repository.createFuelIssue(
       assetId: asset.id,
       projectId: projectId,
-      issuedAt: issuedAt.toIso8601String(),
+      issuedAt: issuedAt.toUtc().toIso8601String(),
       fuelType: fuelType,
       quantity: quantity,
       unit: unit,
@@ -168,7 +168,7 @@ class MachineryOperationsNotifier
       assetId: asset.id,
       projectId: projectId,
       shiftReportId: shiftReportId,
-      recordedAt: recordedAt.toIso8601String(),
+      recordedAt: recordedAt.toUtc().toIso8601String(),
       quantity: quantity,
       unit: unit,
       comment: comment,

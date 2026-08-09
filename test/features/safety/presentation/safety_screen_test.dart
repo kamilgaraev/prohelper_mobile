@@ -216,6 +216,11 @@ void main() {
     await tester.pumpWidget(buildScreen(repository));
     await pumpUi(tester);
 
+    await tester.scrollUntilVisible(
+      find.text('Подробнее'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
     await tester.tap(find.text('Подробнее').first);
     await pumpUi(tester);
     expect(find.text('Наряд-допуск'), findsOneWidget);
@@ -248,6 +253,11 @@ void main() {
     await tester.pumpWidget(buildScreen(repository));
     await pumpUi(tester);
 
+    await tester.scrollUntilVisible(
+      find.text('Активные'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
     await tester.tap(find.text('Активные').first);
     await pumpUi(tester);
     await tester.tap(find.text('Зарегистрированы').first);

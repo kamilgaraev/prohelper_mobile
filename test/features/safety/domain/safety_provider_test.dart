@@ -30,6 +30,43 @@ class _FakeSafetyRepository extends SafetyRepository {
   Map<String, dynamic>? violationData;
 
   @override
+  Future<SafetyDashboardModel> fetchDashboard({int? projectId}) async {
+    return _dashboard;
+  }
+
+  @override
+  Future<SafetyAdmissionModel?> fetchMyAdmission({
+    int? projectId,
+    String workCategory = 'general',
+  }) async {
+    return null;
+  }
+
+  @override
+  Future<List<SafetyBriefingModel>> fetchBriefings({
+    int? projectId,
+    String? status,
+  }) async {
+    return const [];
+  }
+
+  @override
+  Future<List<SafetyInspectionModel>> fetchInspections({
+    int? projectId,
+    String? status,
+  }) async {
+    return const [];
+  }
+
+  @override
+  Future<List<SafetyInspectionFindingModel>> fetchInspectionFindings({
+    int? projectId,
+    String? status,
+  }) async {
+    return const [];
+  }
+
+  @override
   Future<List<SafetyWorkPermitModel>> fetchPermits({
     int? projectId,
     String? status,
@@ -179,6 +216,19 @@ const _violation = SafetyViolationModel(
   status: 'open',
   statusLabel: 'Открыто',
   availableActions: ['resolve'],
+);
+
+const _dashboard = SafetyDashboardModel(
+  activePermits: 1,
+  openIncidents: 1,
+  openViolations: 1,
+  openCorrectiveActions: 0,
+  openInspections: 0,
+  openFindings: 0,
+  myOpenPermits: 1,
+  myOpenViolations: 1,
+  myOpenFindings: 0,
+  myBriefingsToSign: 0,
 );
 
 void main() {

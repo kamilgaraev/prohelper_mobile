@@ -28,7 +28,9 @@ class LegalDocumentAction {
       enabled: json['enabled'] == true,
       blockers: _strings(json['blockers']),
       targetStepId: _nullableInt(json['target_step_id']),
-      expectedInstanceLockVersion: _nullableInt(json['expected_instance_lock_version']),
+      expectedInstanceLockVersion: _nullableInt(
+        json['expected_instance_lock_version'],
+      ),
       expectedStepLockVersion: _nullableInt(json['expected_step_lock_version']),
       requiresComment: json['requires_comment'] == true,
       requiresReason: json['requires_reason'] == true,
@@ -63,7 +65,9 @@ class LegalDocumentVersion {
     return LegalDocumentVersion(
       id: _int(json['id']),
       versionNumber: _int(json['version_number'], fallback: 1),
-      fileName: _nullableString(json['file_name']) ?? _nullableString(json['original_filename']),
+      fileName:
+          _nullableString(json['file_name']) ??
+          _nullableString(json['original_filename']),
       contentHash: _nullableString(json['content_hash']),
       createdAt: _date(json['created_at']),
       mimeType: _nullableString(json['mime_type']),
@@ -75,10 +79,7 @@ class LegalDocumentVersion {
 }
 
 class LegalDocumentSignatureRequest {
-  const LegalDocumentSignatureRequest({
-    required this.id,
-    required this.method,
-  });
+  const LegalDocumentSignatureRequest({required this.id, required this.method});
 
   final int id;
   final String method;
@@ -108,22 +109,29 @@ class LegalDocumentWorkflow {
     final data = json ?? const <String, dynamic>{};
     return LegalDocumentWorkflow(
       status: _string(data['status'], fallback: 'not_started'),
-      actions: _maps(data['available_action_details'])
-          .map(LegalDocumentAction.fromJson)
-          .toList(growable: false),
+      actions: _maps(
+        data['available_action_details'],
+      ).map(LegalDocumentAction.fromJson).toList(growable: false),
       problemFlags: _strings(data['problem_flags']),
     );
   }
 }
 
 class LegalDocumentObligation {
-  const LegalDocumentObligation({required this.title, required this.status, this.dueAt});
+  const LegalDocumentObligation({
+    required this.title,
+    required this.status,
+    this.dueAt,
+  });
   final String title;
   final String status;
   final DateTime? dueAt;
-  factory LegalDocumentObligation.fromJson(Map<String, dynamic> json) => LegalDocumentObligation(
-    title: _string(json['title'], fallback: 'Обязательство'), status: _string(json['status'], fallback: 'open'), dueAt: _date(json['due_at']),
-  );
+  factory LegalDocumentObligation.fromJson(Map<String, dynamic> json) =>
+      LegalDocumentObligation(
+        title: _string(json['title'], fallback: 'Обязательство'),
+        status: _string(json['status'], fallback: 'open'),
+        dueAt: _date(json['due_at']),
+      );
 }
 
 class LegalDocumentModel {
@@ -165,22 +173,39 @@ class LegalDocumentModel {
 
   factory LegalDocumentModel.fromJson(Map<String, dynamic> json) {
     final currentVersion = _mapOrNull(json['current_version']);
-    final versions = _maps(json['versions'])
-        .map(LegalDocumentVersion.fromJson)
-        .toList(growable: false);
+    final versions = _maps(
+      json['versions'],
+    ).map(LegalDocumentVersion.fromJson).toList(growable: false);
+    final currentVersionId = _nullableInt(currentVersion?['id']);
+    final matchingCurrentVersion =
+        currentVersionId == null
+            ? null
+            : versions
+                .where((version) => version.id == currentVersionId)
+                .firstOrNull;
     return LegalDocumentModel(
       id: _int(json['id']),
       title: _string(json['title'], fallback: 'Юридический документ'),
-      documentTypeLabel: _string(json['document_type_label'], fallback: 'Документ'),
+      documentTypeLabel: _string(
+        json['document_type_label'],
+        fallback: 'Документ',
+      ),
       status: _string(json['status']),
-      statusLabel: _string(json['status_label'], fallback: _string(json['status'])),
-      workflow: LegalDocumentWorkflow.fromJson(_mapOrNull(json['workflow_summary'])),
+      statusLabel: _string(
+        json['status_label'],
+        fallback: _string(json['status']),
+      ),
+      workflow: LegalDocumentWorkflow.fromJson(
+        _mapOrNull(json['workflow_summary']),
+      ),
       versions: versions,
       signatureStatus: _string(
         _mapOrNull(json['signature_summary'])?['status'],
         fallback: 'not_signed',
       ),
-      obligations: _maps(json['obligations']).map(LegalDocumentObligation.fromJson).toList(growable: false),
+      obligations: _maps(
+        json['obligations'],
+      ).map(LegalDocumentObligation.fromJson).toList(growable: false),
       signatureRequests: _maps(json['signature_requests'])
           .map(LegalDocumentSignatureRequest.fromJson)
           .where((request) => request.id > 0)
@@ -189,27 +214,41 @@ class LegalDocumentModel {
       projectName: _nullableString(_mapOrNull(json['project'])?['name']),
       counterpartyName: _nullableString(json['counterparty_name']),
       currentVersion:
-          currentVersion == null ? (versions.isEmpty ? null : versions.first) : LegalDocumentVersion.fromJson(currentVersion),
+          matchingCurrentVersion ??
+          (currentVersion == null
+              ? (versions.isEmpty ? null : versions.first)
+              : LegalDocumentVersion.fromJson(currentVersion)),
       updatedAt: _date(json['updated_at']),
       lockVersion: _int(json['lock_version']),
     );
   }
 }
 
-Map<String, dynamic>? _mapOrNull(Object? value) => value is Map
-    ? Map<String, dynamic>.from(value)
-    : null;
+Map<String, dynamic>? _mapOrNull(Object? value) =>
+    value is Map ? Map<String, dynamic>.from(value) : null;
 
-List<Map<String, dynamic>> _maps(Object? value) => value is List
-    ? value.map(_mapOrNull).whereType<Map<String, dynamic>>().toList(growable: false)
-    : const [];
+List<Map<String, dynamic>> _maps(Object? value) =>
+    value is List
+        ? value
+            .map(_mapOrNull)
+            .whereType<Map<String, dynamic>>()
+            .toList(growable: false)
+        : const [];
 
-List<String> _strings(Object? value) => value is List
-    ? value.map((item) => _string(item)).where((item) => item.isNotEmpty).toList(growable: false)
-    : const [];
+List<String> _strings(Object? value) =>
+    value is List
+        ? value
+            .map((item) => _string(item))
+            .where((item) => item.isNotEmpty)
+            .toList(growable: false)
+        : const [];
 
-String _string(Object? value, {String fallback = ''}) => value is String && value.trim().isNotEmpty ? value : fallback;
-String? _nullableString(Object? value) => value is String && value.trim().isNotEmpty ? value : null;
-int _int(Object? value, {int fallback = 0}) => value is num ? value.toInt() : int.tryParse('$value') ?? fallback;
+String _string(Object? value, {String fallback = ''}) =>
+    value is String && value.trim().isNotEmpty ? value : fallback;
+String? _nullableString(Object? value) =>
+    value is String && value.trim().isNotEmpty ? value : null;
+int _int(Object? value, {int fallback = 0}) =>
+    value is num ? value.toInt() : int.tryParse('$value') ?? fallback;
 int? _nullableInt(Object? value) => value == null ? null : _int(value);
-DateTime? _date(Object? value) => value is String ? DateTime.tryParse(value) : null;
+DateTime? _date(Object? value) =>
+    value is String ? DateTime.tryParse(value) : null;
