@@ -283,11 +283,15 @@ def submit_release(args: argparse.Namespace) -> None:
     version = parse_release_tag(args.tag)
     client = create_client()
     client.authenticate()
-    version_id = client.create_draft(
-        build_draft_payload(args.whats_new, args.min_android_version)
-    )
+    version_id = args.version_id
+    if version_id is None:
+        version_id = client.create_draft(
+            build_draft_payload(args.whats_new, args.min_android_version)
+        )
+        print(f"Создана версия RuStore: {version_id}")
+    else:
+        print(f"Продолжается существующая версия RuStore: {version_id}")
     write_github_output("version_id", str(version_id))
-    print(f"Создана версия RuStore: {version_id}")
     client.upload_aab(version_id, args.aab)
     client.commit_draft(version_id, args.priority_update)
     print(
@@ -318,6 +322,7 @@ def build_parser() -> argparse.ArgumentParser:
     submit.add_argument("--whats-new", required=True)
     submit.add_argument("--min-android-version", type=int, default=5)
     submit.add_argument("--priority-update", type=int, choices=range(0, 6), default=0)
+    submit.add_argument("--version-id", type=int)
     submit.set_defaults(handler=submit_release)
 
     publish = commands.add_parser("publish")

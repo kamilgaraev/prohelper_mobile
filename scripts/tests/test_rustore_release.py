@@ -2,6 +2,8 @@ import base64
 import sys
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import MagicMock, patch
 
 
 SCRIPTS_DIR = Path(__file__).resolve().parents[1]
@@ -89,6 +91,25 @@ class ApiContractTest(unittest.TestCase):
         with self.assertRaisesRegex(rustore_release.RuStoreError, "MODERATION"):
             rustore_release.publication_action("MODERATION")
 
+    @patch("rustore_release.create_client")
+    def test_resumes_existing_draft_without_creating_another(self, create_client):
+        client = MagicMock()
+        create_client.return_value = client
+        args = SimpleNamespace(
+            tag="android-v1.0.1+5",
+            aab=Path("app-release.aab"),
+            whats_new="Исправили ошибки",
+            min_android_version=5,
+            priority_update=0,
+            version_id=2064757837,
+        )
+
+        rustore_release.submit_release(args)
+
+        client.create_draft.assert_not_called()
+        client.upload_aab.assert_called_once_with(2064757837, args.aab)
+        client.commit_draft.assert_called_once_with(2064757837, 0)
+
 
 class WorkflowContractTest(unittest.TestCase):
     def test_submit_workflow_runs_only_for_android_tags_with_production_secrets(self):
@@ -117,6 +138,18 @@ class WorkflowContractTest(unittest.TestCase):
         self.assertIn("actions/upload-artifact@", workflow)
         self.assertIn("actions/download-artifact@", workflow)
         self.assertIn("cache: gradle", workflow)
+
+    def test_submit_workflow_can_resume_existing_draft_from_saved_artifact(self):
+        workflow = (
+            REPOSITORY_ROOT / ".github" / "workflows" / "rustore-submit.yml"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("workflow_dispatch:", workflow)
+        self.assertIn("artifact_run_id:", workflow)
+        self.assertIn("version_id:", workflow)
+        self.assertIn("release_tag:", workflow)
+        self.assertIn("run-id: ${{ inputs.artifact_run_id }}", workflow)
+        self.assertIn("--version-id \"${{ inputs.version_id }}\"", workflow)
 
     def test_publish_workflow_requires_manual_dispatch_and_production_environment(self):
         workflow = (

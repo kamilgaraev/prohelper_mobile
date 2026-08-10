@@ -4,9 +4,24 @@ on:
   push:
     tags:
       - "android-v*"
+  workflow_dispatch:
+    inputs:
+      artifact_run_id:
+        description: Идентификатор запуска с готовым AAB
+        required: true
+        type: string
+      version_id:
+        description: Идентификатор существующего черновика RuStore
+        required: true
+        type: string
+      release_tag:
+        description: Тег версии Android
+        required: true
+        type: string
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: rustore-submit-${{ github.ref }}
@@ -15,6 +30,7 @@ concurrency:
 jobs:
   validate:
     name: Проверки приложения
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
@@ -48,6 +64,7 @@ jobs:
 
   build:
     name: Сборка подписанного AAB
+    if: github.event_name == 'push'
     needs: validate
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -136,6 +153,7 @@ jobs:
 
   submit:
     name: Отправка на модерацию
+    if: github.event_name == 'push'
     needs: build
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -191,6 +209,58 @@ jobs:
             echo "## Версия отправлена в RuStore"
             echo ""
             echo "- Версия: $BUILD_NAME ($BUILD_NUMBER)"
+            echo "- RuStore versionId: ${{ steps.rustore.outputs.version_id }}"
+            echo "- Следующий этап: модерация RuStore"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  resume:
+    name: Продолжение существующего черновика
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: rustore-production
+    env:
+      RUSTORE_KEY_ID: ${{ secrets.RUSTORE_KEY_ID }}
+      RUSTORE_PRIVATE_KEY: ${{ secrets.RUSTORE_PRIVATE_KEY }}
+      RUSTORE_PACKAGE_NAME: ${{ vars.RUSTORE_PACKAGE_NAME }}
+      RUSTORE_WHATS_NEW: ${{ vars.RUSTORE_WHATS_NEW || 'Повысили стабильность и исправили ошибки.' }}
+
+    steps:
+      - name: Получение исходного кода
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+
+      - name: Установка Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: "3.13"
+
+      - name: Загрузка ранее собранного AAB
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: rustore-aab-${{ inputs.artifact_run_id }}
+          path: release-artifact
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.artifact_run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Продолжение отправки в RuStore
+        id: rustore
+        run: >-
+          python scripts/rustore_release.py submit
+          --tag "${{ inputs.release_tag }}"
+          --aab release-artifact/app-release.aab
+          --whats-new "$RUSTORE_WHATS_NEW"
+          --min-android-version 5
+          --priority-update 0
+          --version-id "${{ inputs.version_id }}"
+
+      - name: Итог отправки
+        shell: bash
+        run: |
+          {
+            echo "## Существующая версия отправлена в RuStore"
+            echo ""
+            echo "- Тег: ${{ inputs.release_tag }}"
             echo "- RuStore versionId: ${{ steps.rustore.outputs.version_id }}"
             echo "- Следующий этап: модерация RuStore"
           } >> "$GITHUB_STEP_SUMMARY"
