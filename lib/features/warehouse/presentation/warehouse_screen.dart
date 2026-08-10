@@ -6,6 +6,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/design/pro_status.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../core/widgets/app_empty_state.dart';
+import '../../../core/widgets/app_error_notice.dart';
 import '../../../core/widgets/app_error_state.dart';
 import '../../../core/widgets/app_loading_state.dart';
 import '../../../core/widgets/industrial_card.dart';
@@ -1481,7 +1482,7 @@ class _WarehousePhotoGallerySheetState
       }
     } catch (error) {
       if (mounted) {
-        _showMessage(error);
+        AppErrorNotice.show(context, error);
       }
     } finally {
       if (mounted) {
@@ -1506,7 +1507,7 @@ class _WarehousePhotoGallerySheetState
       }
     } catch (error) {
       if (mounted) {
-        _showMessage(error);
+        AppErrorNotice.show(context, error);
       }
     } finally {
       if (mounted) {
@@ -1549,10 +1550,10 @@ class _WarehousePhotoGallerySheetState
     );
   }
 
-  void _showMessage(Object message) {
+  void _showMessage(String message) {
     ScaffoldMessenger.of(
       context,
-    ).showSnackBar(SnackBar(content: Text(UserMessage.fromError(message))));
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 }
 

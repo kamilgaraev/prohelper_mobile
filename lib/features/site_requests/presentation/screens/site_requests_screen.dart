@@ -5,6 +5,7 @@ import 'package:prohelpers_mobile/core/design/pro_status.dart';
 import 'package:prohelpers_mobile/core/theme/app_typography.dart';
 import 'package:prohelpers_mobile/core/widgets/app_empty_state.dart';
 import 'package:prohelpers_mobile/core/widgets/app_error_state.dart';
+import 'package:prohelpers_mobile/core/widgets/app_error_notice.dart';
 import 'package:prohelpers_mobile/core/widgets/app_loading_state.dart';
 import 'package:prohelpers_mobile/core/widgets/mesh_background.dart';
 import 'package:prohelpers_mobile/core/widgets/pro_search_filter_bar.dart';
@@ -108,9 +109,7 @@ class _SiteRequestsScreenState extends ConsumerState<SiteRequestsScreen> {
         return;
       }
 
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(UserMessage.fromError(error))));
+      AppErrorNotice.show(context, error);
     }
   }
 
@@ -198,9 +197,7 @@ class _SiteRequestsScreenState extends ConsumerState<SiteRequestsScreen> {
         return;
       }
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(UserMessage.fromError(next.error!))),
-      );
+      AppErrorNotice.show(context, next.error!);
     });
 
     if (state.scope != widget.scope && !state.isLoading) {

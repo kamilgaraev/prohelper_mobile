@@ -3,8 +3,8 @@
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
-import '../../../core/error/user_message.dart';
 import '../../../core/theme/app_typography.dart';
+import '../../../core/widgets/app_error_notice.dart';
 import '../../../core/widgets/industrial_card.dart';
 import '../data/warehouse_media_picker.dart';
 import '../data/warehouse_repository.dart';
@@ -446,7 +446,7 @@ class _WarehouseReceiptSheetState extends ConsumerState<WarehouseReceiptSheet> {
         _suggestions = const <WarehouseMaterialOption>[];
         _isSearching = false;
       });
-      _showMessage(error);
+      AppErrorNotice.show(context, error);
     }
   }
 
@@ -527,7 +527,7 @@ class _WarehouseReceiptSheetState extends ConsumerState<WarehouseReceiptSheet> {
       Navigator.of(context).pop(true);
     } catch (error) {
       if (mounted) {
-        _showMessage(error);
+        AppErrorNotice.show(context, error);
       }
     } finally {
       if (mounted) {
@@ -604,9 +604,9 @@ class _WarehouseReceiptSheetState extends ConsumerState<WarehouseReceiptSheet> {
     }
   }
 
-  void _showMessage(Object message) {
+  void _showMessage(String message) {
     ScaffoldMessenger.of(
       context,
-    ).showSnackBar(SnackBar(content: Text(UserMessage.fromError(message))));
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 }

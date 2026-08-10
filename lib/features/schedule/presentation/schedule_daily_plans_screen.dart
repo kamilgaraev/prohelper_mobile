@@ -4,6 +4,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import '../../../core/error/user_message.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../core/widgets/app_empty_state.dart';
+import '../../../core/widgets/app_error_notice.dart';
 import '../../../core/widgets/app_error_state.dart';
 import '../../../core/widgets/app_loading_state.dart';
 import '../../../core/widgets/industrial_card.dart';
@@ -393,9 +394,7 @@ class _DailyAssignmentTile extends ConsumerWidget {
       }
     } catch (error) {
       if (context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(UserMessage.fromError(error))));
+        AppErrorNotice.show(context, error);
       }
     }
   }
@@ -489,9 +488,7 @@ class _SubmitDailyPlanSheetState extends State<_SubmitDailyPlanSheet> {
       );
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(UserMessage.fromError(error))));
+        AppErrorNotice.show(context, error);
       }
     } finally {
       if (mounted) {
@@ -721,9 +718,7 @@ class _DailyFactSheetState extends State<_DailyFactSheet> {
       );
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(UserMessage.fromError(error))));
+        AppErrorNotice.show(context, error);
       }
     } finally {
       if (mounted) {

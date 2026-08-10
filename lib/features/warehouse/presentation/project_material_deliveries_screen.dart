@@ -5,6 +5,7 @@ import '../../../core/error/user_message.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../core/widgets/app_empty_state.dart';
+import '../../../core/widgets/app_error_notice.dart';
 import '../../../core/widgets/app_error_state.dart';
 import '../../../core/widgets/app_loading_state.dart';
 import '../../../core/widgets/industrial_card.dart';
@@ -222,11 +223,7 @@ class _ProjectMaterialDeliveriesScreenState
                         }
                       } catch (error) {
                         if (sheetContext.mounted) {
-                          ScaffoldMessenger.of(sheetContext).showSnackBar(
-                            SnackBar(
-                              content: Text(UserMessage.fromError(error)),
-                            ),
-                          );
+                          AppErrorNotice.show(sheetContext, error);
                         }
                       }
                     },

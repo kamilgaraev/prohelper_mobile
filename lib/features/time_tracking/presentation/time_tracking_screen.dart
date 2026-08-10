@@ -5,6 +5,7 @@ import '../../../core/error/user_message.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../core/widgets/app_empty_state.dart';
+import '../../../core/widgets/app_error_notice.dart';
 import '../../../core/widgets/app_error_state.dart';
 import '../../../core/widgets/app_loading_state.dart';
 import '../../../core/widgets/mesh_background.dart';
@@ -1351,5 +1352,5 @@ void _message(BuildContext context, String message) {
 }
 
 void _errorMessage(BuildContext context, Object error) {
-  _message(context, UserMessage.fromError(error));
+  AppErrorNotice.show(context, error);
 }

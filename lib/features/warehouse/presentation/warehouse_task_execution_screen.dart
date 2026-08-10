@@ -1,9 +1,9 @@
 ﻿import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
-import '../../../core/error/user_message.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_typography.dart';
+import '../../../core/widgets/app_error_notice.dart';
 import '../../../core/widgets/industrial_card.dart';
 import '../data/warehouse_repository.dart';
 import '../data/warehouse_scan_model.dart';
@@ -366,7 +366,7 @@ class _WarehouseTaskExecutionScreenState
         );
       }
     } catch (error) {
-      _showMessage(error);
+      AppErrorNotice.show(context, error);
     } finally {
       if (mounted) {
         setState(() => _isResolving = false);
@@ -411,7 +411,7 @@ class _WarehouseTaskExecutionScreenState
       }
       Navigator.of(context).pop(updatedTask);
     } catch (error) {
-      _showMessage(error);
+      AppErrorNotice.show(context, error);
     } finally {
       if (mounted) {
         setState(() => _isSubmitting = false);
@@ -664,10 +664,10 @@ class _WarehouseTaskExecutionScreenState
     return parts.isEmpty ? null : parts.join('\n');
   }
 
-  void _showMessage(Object message) {
+  void _showMessage(String message) {
     ScaffoldMessenger.of(
       context,
-    ).showSnackBar(SnackBar(content: Text(UserMessage.fromError(message))));
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 }
 

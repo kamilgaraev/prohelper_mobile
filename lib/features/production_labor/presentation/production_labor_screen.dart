@@ -1,10 +1,10 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
-import '../../../core/error/user_message.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../core/widgets/app_action_buttons.dart';
 import '../../../core/widgets/app_empty_state.dart';
+import '../../../core/widgets/app_error_notice.dart';
 import '../../../core/widgets/app_error_state.dart';
 import '../../../core/widgets/app_form_section.dart';
 import '../../../core/widgets/app_loading_state.dart';
@@ -828,9 +828,7 @@ double? _parseOptionalDouble(String? value) {
 }
 
 void _showLaborError(BuildContext context, Object error) {
-  ScaffoldMessenger.of(
-    context,
-  ).showSnackBar(SnackBar(content: Text(UserMessage.fromError(error))));
+  AppErrorNotice.show(context, error);
 }
 
 String _formatNumber(double value) {

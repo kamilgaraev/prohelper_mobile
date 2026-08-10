@@ -1,7 +1,8 @@
-﻿import 'package:dio/dio.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:prohelpers_mobile/core/network/api_exception.dart';
 import 'package:prohelpers_mobile/features/machinery_operations/data/machinery_operations_model.dart';
 import 'package:prohelpers_mobile/features/machinery_operations/data/machinery_operations_repository.dart';
 import 'package:prohelpers_mobile/features/machinery_operations/domain/machinery_operations_provider.dart';
@@ -25,6 +26,7 @@ class _RecordingMachineryOperationsRepository
   );
 
   Map<String, dynamic>? shiftPayload;
+  Object? shiftFailure;
   Map<String, dynamic>? fuelPayload;
   Map<String, dynamic>? downtimePayload;
   Map<String, dynamic>? productionPayload;
@@ -51,6 +53,11 @@ class _RecordingMachineryOperationsRepository
     required double fuelConsumed,
     String? workDescription,
   }) async {
+    final failure = shiftFailure;
+    if (failure != null) {
+      throw failure;
+    }
+
     shiftPayload = {
       'asset_id': assetId,
       'project_id': projectId,
@@ -232,6 +239,35 @@ void main() {
 
     expect(find.text('Укажите фактические часы.'), findsOneWidget);
     expect(repository.shiftPayload, isNull);
+  });
+
+  testWidgets('shows server error above the open shift report sheet', (
+    tester,
+  ) async {
+    final repository =
+        _RecordingMachineryOperationsRepository()
+          ..shiftFailure = const ApiException(
+            'Фактические часы не могут превышать плановые.',
+            statusCode: 422,
+          );
+
+    await tester.pumpWidget(buildScreen(repository));
+    await pumpUi(tester);
+    await tester.tap(find.text('Рапорт'));
+    await pumpUi(tester);
+    await tester.enterText(find.byType(TextFormField).at(0), '20');
+    await tester.enterText(find.byType(TextFormField).at(1), '233');
+    await tester.enterText(find.byType(TextFormField).at(2), '23');
+    await submitSheet(tester);
+
+    expect(
+      find.text('Фактические часы не могут превышать плановые.').hitTestable(),
+      findsOneWidget,
+    );
+    expect(find.text('Сменный рапорт'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Закрыть сообщение'));
+    await tester.pump();
   });
 
   testWidgets('submits user-entered fuel value', (tester) async {

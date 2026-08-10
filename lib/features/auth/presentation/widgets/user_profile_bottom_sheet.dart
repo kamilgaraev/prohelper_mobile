@@ -1,9 +1,9 @@
 ﻿import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
-import '../../../../core/error/user_message.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_typography.dart';
+import '../../../../core/widgets/app_error_notice.dart';
 import '../../../../core/widgets/industrial_card.dart';
 import '../../../projects/presentation/project_selection_screen.dart';
 import '../../data/user_model.dart';
@@ -111,9 +111,7 @@ class UserProfileBottomSheet extends ConsumerWidget {
                       return;
                     }
 
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text(UserMessage.fromError(error))),
-                    );
+                    AppErrorNotice.show(context, error);
                   }
                 },
                 padding: const EdgeInsets.all(16),

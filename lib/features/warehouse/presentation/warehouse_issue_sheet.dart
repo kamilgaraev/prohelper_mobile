@@ -1,8 +1,8 @@
 ﻿import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
-import '../../../core/error/user_message.dart';
 import '../../../core/theme/app_typography.dart';
+import '../../../core/widgets/app_error_notice.dart';
 import '../data/project_material_delivery_model.dart';
 import '../domain/warehouse_provider.dart';
 
@@ -163,7 +163,7 @@ class _WarehouseIssueSheetState extends ConsumerState<WarehouseIssueSheet> {
       }
     } catch (error) {
       if (mounted) {
-        _showMessage(error);
+        AppErrorNotice.show(context, error);
       }
     } finally {
       if (mounted) {
@@ -200,10 +200,10 @@ class _WarehouseIssueSheetState extends ConsumerState<WarehouseIssueSheet> {
     return double.tryParse(text.replaceAll(',', '.'));
   }
 
-  void _showMessage(Object message) {
+  void _showMessage(String message) {
     ScaffoldMessenger.of(
       context,
-    ).showSnackBar(SnackBar(content: Text(UserMessage.fromError(message))));
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 }
 

@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
-import '../../../core/error/user_message.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../core/design/pro_status.dart';
 import '../../../core/widgets/app_empty_state.dart';
+import '../../../core/widgets/app_error_notice.dart';
 import '../../../core/widgets/app_error_state.dart';
 import '../../../core/widgets/app_loading_state.dart';
 import '../../../core/widgets/mesh_background.dart';
@@ -857,9 +857,7 @@ class _SafetyScreenState extends ConsumerState<SafetyScreen> {
       return true;
     } catch (error) {
       if (context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(UserMessage.fromError(error))));
+        AppErrorNotice.show(context, error);
       }
 
       return false;
@@ -908,9 +906,7 @@ class _SafetyScreenState extends ConsumerState<SafetyScreen> {
       }
     } catch (error) {
       if (context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(UserMessage.fromError(error))));
+        AppErrorNotice.show(context, error);
       }
     }
   }
