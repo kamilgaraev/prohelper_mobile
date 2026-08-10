@@ -104,6 +104,20 @@ class WorkflowContractTest(unittest.TestCase):
         self.assertNotIn("pull_request:", workflow)
         self.assertRegex(workflow, r"actions/checkout@[0-9a-f]{40}")
 
+    def test_submit_workflow_keeps_validation_build_and_delivery_separate(self):
+        workflow = (
+            REPOSITORY_ROOT / ".github" / "workflows" / "rustore-submit.yml"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("validate:", workflow)
+        self.assertIn("build:", workflow)
+        self.assertIn("submit:", workflow)
+        self.assertIn("needs: validate", workflow)
+        self.assertIn("needs: build", workflow)
+        self.assertIn("actions/upload-artifact@", workflow)
+        self.assertIn("actions/download-artifact@", workflow)
+        self.assertIn("cache: gradle", workflow)
+
     def test_publish_workflow_requires_manual_dispatch_and_production_environment(self):
         workflow = (
             REPOSITORY_ROOT / ".github" / "workflows" / "rustore-publish.yml"
