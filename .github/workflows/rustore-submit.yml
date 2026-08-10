@@ -13,16 +13,46 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  submit:
-    name: Сборка и отправка на модерацию
+  validate:
+    name: Проверки приложения
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 30
+
+    steps:
+      - name: Получение исходного кода
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+
+      - name: Установка Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: "3.13"
+
+      - name: Установка Flutter
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2
+        with:
+          flutter-version: "3.44.8"
+          channel: stable
+          cache: true
+
+      - name: Установка зависимостей
+        run: flutter pub get
+
+      - name: Проверка клиента RuStore
+        run: python -m unittest discover -s scripts/tests -p "test_*.py" -v
+
+      - name: Статический анализ
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings
+
+      - name: Тесты приложения
+        run: flutter test
+
+  build:
+    name: Сборка подписанного AAB
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
     environment: rustore-production
     env:
-      RUSTORE_KEY_ID: ${{ secrets.RUSTORE_KEY_ID }}
-      RUSTORE_PRIVATE_KEY: ${{ secrets.RUSTORE_PRIVATE_KEY }}
-      RUSTORE_PACKAGE_NAME: ${{ vars.RUSTORE_PACKAGE_NAME }}
-      RUSTORE_WHATS_NEW: ${{ vars.RUSTORE_WHATS_NEW || 'Повысили стабильность и исправили ошибки.' }}
       ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
       ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
       ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
@@ -42,6 +72,10 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
+          cache: gradle
+          cache-dependency-path: |
+            android/*.gradle*
+            android/gradle/wrapper/gradle-wrapper.properties
 
       - name: Установка Flutter
         uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2
@@ -66,15 +100,6 @@ jobs:
       - name: Установка зависимостей
         run: flutter pub get
 
-      - name: Проверка клиента RuStore
-        run: python -m unittest discover -s scripts/tests -p "test_*.py" -v
-
-      - name: Статический анализ
-        run: flutter analyze --no-fatal-infos --no-fatal-warnings
-
-      - name: Тесты приложения
-        run: flutter test
-
       - name: Подготовка подписи Android
         shell: bash
         run: |
@@ -94,12 +119,67 @@ jobs:
           --build-name "$BUILD_NAME"
           --build-number "$BUILD_NUMBER"
 
+      - name: Сохранение AAB
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: rustore-aab-${{ github.run_id }}
+          path: build/app/outputs/bundle/release/app-release.aab
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 3
+          overwrite: true
+
+      - name: Удаление файлов подписи
+        if: always()
+        shell: bash
+        run: rm -f android/app/release.jks android/key.properties
+
+  submit:
+    name: Отправка на модерацию
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: rustore-production
+    env:
+      RUSTORE_KEY_ID: ${{ secrets.RUSTORE_KEY_ID }}
+      RUSTORE_PRIVATE_KEY: ${{ secrets.RUSTORE_PRIVATE_KEY }}
+      RUSTORE_PACKAGE_NAME: ${{ vars.RUSTORE_PACKAGE_NAME }}
+      RUSTORE_WHATS_NEW: ${{ vars.RUSTORE_WHATS_NEW || 'Повысили стабильность и исправили ошибки.' }}
+
+    steps:
+      - name: Получение исходного кода
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+
+      - name: Установка Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: "3.13"
+
+      - name: Загрузка собранного AAB
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: rustore-aab-${{ github.run_id }}
+          path: release-artifact
+
+      - name: Проверка номера версии
+        shell: bash
+        run: |
+          python - <<'PY'
+          import os
+          from scripts.rustore_release import parse_release_tag
+
+          version = parse_release_tag(os.environ["GITHUB_REF_NAME"])
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as output:
+              output.write(f"BUILD_NAME={version.name}\n")
+              output.write(f"BUILD_NUMBER={version.code}\n")
+          PY
+
       - name: Отправка в RuStore
         id: rustore
         run: >-
           python scripts/rustore_release.py submit
           --tag "$GITHUB_REF_NAME"
-          --aab build/app/outputs/bundle/release/app-release.aab
+          --aab release-artifact/app-release.aab
           --whats-new "$RUSTORE_WHATS_NEW"
           --min-android-version 5
           --priority-update 0
@@ -114,8 +194,3 @@ jobs:
             echo "- RuStore versionId: ${{ steps.rustore.outputs.version_id }}"
             echo "- Следующий этап: модерация RuStore"
           } >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Удаление файлов подписи
-        if: always()
-        shell: bash
-        run: rm -f android/app/release.jks android/key.properties
