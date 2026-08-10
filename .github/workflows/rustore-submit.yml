@@ -1,0 +1,121 @@
+name: Отправка версии в RuStore
+
+on:
+  push:
+    tags:
+      - "android-v*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rustore-submit-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  submit:
+    name: Сборка и отправка на модерацию
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    environment: rustore-production
+    env:
+      RUSTORE_KEY_ID: ${{ secrets.RUSTORE_KEY_ID }}
+      RUSTORE_PRIVATE_KEY: ${{ secrets.RUSTORE_PRIVATE_KEY }}
+      RUSTORE_PACKAGE_NAME: ${{ vars.RUSTORE_PACKAGE_NAME }}
+      RUSTORE_WHATS_NEW: ${{ vars.RUSTORE_WHATS_NEW || 'Повысили стабильность и исправили ошибки.' }}
+      ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+      ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+      ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+
+    steps:
+      - name: Получение исходного кода
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+
+      - name: Установка Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: "3.13"
+
+      - name: Установка Java
+        uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Установка Flutter
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2
+        with:
+          flutter-version: "3.44.8"
+          channel: stable
+          cache: true
+
+      - name: Проверка номера версии
+        shell: bash
+        run: |
+          python - <<'PY'
+          import os
+          from scripts.rustore_release import parse_release_tag
+
+          version = parse_release_tag(os.environ["GITHUB_REF_NAME"])
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as output:
+              output.write(f"BUILD_NAME={version.name}\n")
+              output.write(f"BUILD_NUMBER={version.code}\n")
+          PY
+
+      - name: Установка зависимостей
+        run: flutter pub get
+
+      - name: Проверка клиента RuStore
+        run: python -m unittest discover -s scripts/tests -p "test_*.py" -v
+
+      - name: Статический анализ
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings
+
+      - name: Тесты приложения
+        run: flutter test
+
+      - name: Подготовка подписи Android
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > android/app/release.jks
+          {
+            printf 'storeFile=release.jks\n'
+            printf 'storePassword=%s\n' "$ANDROID_STORE_PASSWORD"
+            printf 'keyAlias=%s\n' "$ANDROID_KEY_ALIAS"
+            printf 'keyPassword=%s\n' "$ANDROID_KEY_PASSWORD"
+          } > android/key.properties
+
+      - name: Сборка Android App Bundle
+        run: >-
+          flutter build appbundle --release
+          --build-name "$BUILD_NAME"
+          --build-number "$BUILD_NUMBER"
+
+      - name: Отправка в RuStore
+        id: rustore
+        run: >-
+          python scripts/rustore_release.py submit
+          --tag "$GITHUB_REF_NAME"
+          --aab build/app/outputs/bundle/release/app-release.aab
+          --whats-new "$RUSTORE_WHATS_NEW"
+          --min-android-version 5
+          --priority-update 0
+
+      - name: Итог отправки
+        shell: bash
+        run: |
+          {
+            echo "## Версия отправлена в RuStore"
+            echo ""
+            echo "- Версия: $BUILD_NAME ($BUILD_NUMBER)"
+            echo "- RuStore versionId: ${{ steps.rustore.outputs.version_id }}"
+            echo "- Следующий этап: модерация RuStore"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Удаление файлов подписи
+        if: always()
+        shell: bash
+        run: rm -f android/app/release.jks android/key.properties
