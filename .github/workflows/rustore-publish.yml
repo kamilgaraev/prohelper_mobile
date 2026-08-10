@@ -1,0 +1,65 @@
+name: Публикация версии в RuStore
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_id:
+        description: Идентификатор версии RuStore после модерации
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rustore-publish-${{ inputs.version_id }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Проверка и публикация
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: rustore-production
+    env:
+      RUSTORE_KEY_ID: ${{ secrets.RUSTORE_KEY_ID }}
+      RUSTORE_PRIVATE_KEY: ${{ secrets.RUSTORE_PRIVATE_KEY }}
+      RUSTORE_PACKAGE_NAME: ${{ vars.RUSTORE_PACKAGE_NAME }}
+
+    steps:
+      - name: Получение исходного кода
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+
+      - name: Установка Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: "3.13"
+
+      - name: Проверка идентификатора версии
+        shell: bash
+        env:
+          VERSION_ID: ${{ inputs.version_id }}
+        run: |
+          if [[ ! "$VERSION_ID" =~ ^[1-9][0-9]*$ ]]; then
+            echo "Идентификатор версии должен быть положительным целым числом" >&2
+            exit 1
+          fi
+
+      - name: Проверка клиента RuStore
+        run: python -m unittest discover -s scripts/tests -p "test_*.py" -v
+
+      - name: Публикация версии
+        env:
+          VERSION_ID: ${{ inputs.version_id }}
+        run: python scripts/rustore_release.py publish --version-id "$VERSION_ID"
+
+      - name: Итог публикации
+        shell: bash
+        env:
+          VERSION_ID: ${{ inputs.version_id }}
+        run: |
+          {
+            echo "## Версия опубликована в RuStore"
+            echo ""
+            echo "- RuStore versionId: $VERSION_ID"
+          } >> "$GITHUB_STEP_SUMMARY"
