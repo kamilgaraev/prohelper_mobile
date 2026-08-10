@@ -100,6 +100,7 @@ class WorkflowContractTest(unittest.TestCase):
         self.assertIn("environment: rustore-production", workflow)
         self.assertIn("contents: read", workflow)
         self.assertIn("flutter analyze --no-fatal-infos --no-fatal-warnings", workflow)
+        self.assertIn("tr -d '\\r\\n\\t '", workflow)
         self.assertNotIn("pull_request:", workflow)
         self.assertRegex(workflow, r"actions/checkout@[0-9a-f]{40}")
 
