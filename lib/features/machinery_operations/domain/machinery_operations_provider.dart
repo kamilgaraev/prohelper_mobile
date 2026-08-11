@@ -89,6 +89,7 @@ class MachineryOperationsNotifier
       state = state.copyWith(
         isLoading: false,
         error: UserMessage.fromError(error),
+        syncOperations: await _loadSyncOperations(),
       );
     }
   }
@@ -96,9 +97,14 @@ class MachineryOperationsNotifier
   Future<void> execute(MachineryAction action) async {
     try {
       await _repository.executeAction(action);
-    } finally {
+    } on SyncQueuedException {
       await load();
+      return;
+    } catch (error) {
+      state = state.copyWith(error: UserMessage.fromError(error));
+      rethrow;
     }
+    await load();
   }
 
   Future<void> retryQueuedOperations() async {
