@@ -1,4 +1,4 @@
-﻿class MachineryProblemFlagModel {
+class MachineryProblemFlagModel {
   const MachineryProblemFlagModel({
     required this.code,
     required this.severity,
@@ -28,6 +28,11 @@ class MachineryAssetModel {
     required this.availableActions,
     this.projectId,
     this.projectName,
+    this.assignmentId,
+    this.organizationAssetId,
+    this.inventoryNumber,
+    this.qrCode,
+    this.meterHours = 0,
     this.problemFlags = const [],
   });
 
@@ -39,6 +44,11 @@ class MachineryAssetModel {
   final List<String> availableActions;
   final int? projectId;
   final String? projectName;
+  final int? assignmentId;
+  final int? organizationAssetId;
+  final String? inventoryNumber;
+  final String? qrCode;
+  final double meterHours;
   final List<MachineryProblemFlagModel> problemFlags;
 
   factory MachineryAssetModel.fromJson(Map<String, dynamic> json) {
@@ -49,8 +59,16 @@ class MachineryAssetModel {
       status: _asString(json['status']),
       statusLabel: _asString(json['status_label']),
       availableActions: _stringList(json['available_actions']),
-      projectId: _asNullableInt(json['project_id']),
-      projectName: _nestedName(json['project']),
+      projectId: _asNullableInt(
+        json['current_project_id'] ??
+            _nestedInt(json['linked_entities'], 'project_id'),
+      ),
+      projectName: _nestedName(json['current_project'] ?? json['project']),
+      assignmentId: _nestedInt(json['current_assignment'], 'id'),
+      organizationAssetId: _asNullableInt(json['organization_asset_id']),
+      inventoryNumber: _asNullableString(json['inventory_number']),
+      qrCode: _asNullableString(json['qr_code']),
+      meterHours: _asDouble(json['meter_hours']),
       problemFlags:
           _mapList(
             json['problem_flags'],
@@ -71,6 +89,9 @@ class MachineryShiftReportModel {
     required this.fuelConsumed,
     required this.availableActions,
     this.assetName,
+    this.assignmentId,
+    this.meterStart,
+    this.meterEnd,
   });
 
   final int id;
@@ -83,6 +104,9 @@ class MachineryShiftReportModel {
   final double fuelConsumed;
   final List<String> availableActions;
   final String? assetName;
+  final int? assignmentId;
+  final double? meterStart;
+  final double? meterEnd;
 
   factory MachineryShiftReportModel.fromJson(Map<String, dynamic> json) {
     return MachineryShiftReportModel(
@@ -96,6 +120,50 @@ class MachineryShiftReportModel {
       fuelConsumed: _asDouble(json['fuel_consumed']),
       availableActions: _stringList(json['available_actions']),
       assetName: _nestedName(json['asset']),
+      assignmentId: _asNullableInt(json['assignment_id']),
+      meterStart: _asNullableDouble(json['meter_start']),
+      meterEnd: _asNullableDouble(json['meter_end']),
+    );
+  }
+}
+
+class MachineryMaintenanceOrderModel {
+  const MachineryMaintenanceOrderModel({
+    required this.id,
+    required this.assetId,
+    required this.title,
+    required this.status,
+    required this.statusLabel,
+    required this.priority,
+    required this.availableActions,
+    this.projectId,
+    this.plannedAt,
+    this.description,
+  });
+
+  final int id;
+  final int assetId;
+  final int? projectId;
+  final String title;
+  final String status;
+  final String statusLabel;
+  final String priority;
+  final DateTime? plannedAt;
+  final String? description;
+  final List<String> availableActions;
+
+  factory MachineryMaintenanceOrderModel.fromJson(Map<String, dynamic> json) {
+    return MachineryMaintenanceOrderModel(
+      id: _asInt(json['id']),
+      assetId: _asInt(json['asset_id']),
+      projectId: _asNullableInt(json['project_id']),
+      title: _asString(json['title']),
+      status: _asString(json['status']),
+      statusLabel: _asString(json['status_label']),
+      priority: _asString(json['priority']),
+      plannedAt: DateTime.tryParse(_asString(json['planned_at'])),
+      description: _asNullableString(json['description']),
+      availableActions: _stringList(json['available_actions']),
     );
   }
 }
@@ -125,6 +193,13 @@ String? _nestedName(dynamic value) {
   return null;
 }
 
+int? _nestedInt(dynamic value, String key) {
+  if (value is Map) {
+    return _asNullableInt(value[key]);
+  }
+  return null;
+}
+
 int _asInt(dynamic value) {
   if (value is int) {
     return value;
@@ -148,6 +223,13 @@ double _asDouble(dynamic value) {
   }
 
   return double.tryParse(value?.toString() ?? '') ?? 0;
+}
+
+double? _asNullableDouble(dynamic value) {
+  if (value == null || value.toString().trim().isEmpty) {
+    return null;
+  }
+  return _asDouble(value);
 }
 
 String _asString(dynamic value) => value?.toString() ?? '';

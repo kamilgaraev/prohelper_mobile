@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'dart:collection';
 import 'dart:io';
 import 'dart:typed_data';
@@ -57,6 +57,39 @@ void main() {
     expect(await store.all(), isEmpty);
     expect(adapter.requests.single.path, '/site-requests');
     expect(adapter.requests.single.method, 'POST');
+  });
+
+  test('reuses queued machinery idempotency key as request header', () async {
+    final store = _MemorySyncQueueStore();
+    final adapter =
+        _QueueHttpAdapter()
+          ..responses.add(
+            _AdapterResponse(statusCode: 200, body: '{"ok":true}'),
+          );
+    final service = SyncQueueService(
+      store: store,
+      dio: _dio(adapter),
+      now: () => DateTime(2026, 8, 11, 10),
+    );
+    await service.enqueue(
+      const SyncQueueDraft(
+        moduleSlug: 'machinery_operations',
+        operationType: 'finish_shift',
+        method: 'POST',
+        endpoint: '/machinery-operations/shift-reports/42/finish',
+        payload: <String, dynamic>{
+          'meter_end': 108,
+          'idempotency_key': 'offline-shift-42',
+        },
+      ),
+    );
+
+    await service.retryDueOperations();
+
+    expect(
+      adapter.requests.single.headers['Idempotency-Key'],
+      'offline-shift-42',
+    );
   });
 
   test('does not retry validation error until user edits draft', () async {

@@ -134,10 +134,17 @@ class SyncQueueService {
     await _store.put(operation);
 
     try {
+      final idempotencyKey = operation.payload['idempotency_key']?.toString();
       await _dio.request<dynamic>(
         operation.endpoint,
         data: await _requestData(operation),
-        options: Options(method: operation.method),
+        options: Options(
+          method: operation.method,
+          headers: {
+            if (idempotencyKey != null && idempotencyKey.isNotEmpty)
+              'Idempotency-Key': idempotencyKey,
+          },
+        ),
       );
       await _store.delete(operation.id);
       return _RetryOutcome.success;
