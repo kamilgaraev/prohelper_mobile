@@ -391,6 +391,13 @@ class _FieldMachineryOperationsRepository
   }
 
   @override
+  Future<List<MachineryMaintenanceOrderModel>> fetchMaintenanceOrders({
+    int? projectId,
+  }) async {
+    return const [];
+  }
+
+  @override
   Future<MachineryShiftReportModel> createShiftReport({
     required int assetId,
     required int projectId,
