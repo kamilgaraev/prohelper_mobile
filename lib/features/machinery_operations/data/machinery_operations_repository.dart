@@ -1,4 +1,4 @@
-﻿import 'package:dio/dio.dart';
+import 'package:dio/dio.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/network/api_exception.dart';
@@ -8,6 +8,7 @@ import '../../../core/sync/sync_queue_draft.dart';
 import '../../../core/sync/sync_queue_provider.dart';
 import '../../../core/sync/sync_queue_repository.dart';
 import '../../../core/sync/sync_queue_service.dart';
+import '../domain/machinery_action.dart';
 import 'machinery_operations_model.dart';
 
 final machineryOperationsRepositoryProvider =
@@ -57,6 +58,59 @@ class MachineryOperationsRepository extends SyncQueueAwareRepository {
       throw ApiException.fromDio(error);
     } catch (_) {
       throw const ApiException('Не удалось загрузить сменные рапорты.');
+    }
+  }
+
+  Future<List<MachineryMaintenanceOrderModel>> fetchMaintenanceOrders({
+    int? projectId,
+  }) async {
+    try {
+      final response = await _dio.get(
+        '/machinery-operations/maintenance-orders',
+        queryParameters: {if (projectId != null) 'project_id': projectId},
+      );
+      return _list(
+        response.data,
+      ).map(MachineryMaintenanceOrderModel.fromJson).toList();
+    } on DioException catch (error) {
+      throw ApiException.fromDio(error);
+    } catch (_) {
+      throw const ApiException('Не удалось загрузить задания на ТО.');
+    }
+  }
+
+  Future<Map<String, dynamic>?> executeAction(MachineryAction action) async {
+    final payload = <String, dynamic>{
+      ...action.payload,
+      'idempotency_key': action.idempotencyKey,
+    };
+
+    try {
+      final response = await _dio.request<dynamic>(
+        action.endpoint,
+        data: payload,
+        options: Options(
+          method: action.method,
+          headers: {'Idempotency-Key': action.idempotencyKey},
+        ),
+      );
+      final data = MobileApiResponse.dataMap(response.data);
+      return data.isEmpty ? null : data;
+    } on DioException catch (error) {
+      if (SyncQueueService.shouldQueueDioException(error)) {
+        await queueAndThrow(
+          SyncQueueDraft(
+            moduleSlug: 'machinery_operations',
+            operationType: action.operationType,
+            method: action.method,
+            endpoint: action.endpoint,
+            payload: payload,
+          ),
+        );
+      }
+      throw ApiException.fromDio(error);
+    } catch (_) {
+      throw const ApiException('Не удалось выполнить действие с техникой.');
     }
   }
 
