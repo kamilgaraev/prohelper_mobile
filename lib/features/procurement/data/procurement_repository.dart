@@ -1,17 +1,29 @@
-﻿import 'package:dio/dio.dart';
+import 'package:dio/dio.dart';
+import 'dart:math';
+
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/network/api_exception.dart';
 import '../../../core/network/dio_client.dart';
 import '../../../core/network/mobile_api_response.dart';
+import '../../../core/sync/sync_queue_draft.dart';
+import '../../../core/sync/sync_queue_provider.dart';
+import '../../../core/sync/sync_queue_repository.dart';
+import '../../../core/sync/sync_queue_service.dart';
 import 'procurement_model.dart';
 
 final procurementRepositoryProvider = Provider<ProcurementRepository>((ref) {
-  return ProcurementRepository(ref.read(dioProvider));
+  return ProcurementRepository(
+    ref.read(dioProvider),
+    syncQueueServiceFuture: ref.read(syncQueueServiceProvider.future),
+  );
 });
 
-class ProcurementRepository {
-  ProcurementRepository(this._dio);
+class ProcurementRepository extends SyncQueueAwareRepository {
+  ProcurementRepository(
+    this._dio, {
+    Future<SyncQueueService>? syncQueueServiceFuture,
+  }) : super(syncQueueServiceFuture);
 
   final Dio _dio;
 
@@ -69,25 +81,38 @@ class ProcurementRepository {
     }
 
     final trimmedNotes = notes?.trim();
+    final endpoint = '/procurement/purchase-orders/$orderId/receive-materials';
+    final idempotencyKey = _newIdempotencyKey();
+    final payload = <String, dynamic>{
+      'warehouse_id': warehouseId,
+      'items': items.map((item) => item.toJson()).toList(growable: false),
+      'receipt_date': trimmedReceiptDate,
+      if (trimmedNotes != null && trimmedNotes.isNotEmpty)
+        'notes': trimmedNotes,
+      'idempotency_key': idempotencyKey,
+    };
 
-    try {
-      final response = await _dio.post(
-        '/procurement/purchase-orders/$orderId/receive-materials',
-        data: {
-          'warehouse_id': warehouseId,
-          'items': items.map((item) => item.toJson()).toList(growable: false),
-          'receipt_date': trimmedReceiptDate,
-          if (trimmedNotes != null && trimmedNotes.isNotEmpty)
-            'notes': trimmedNotes,
-        },
-      );
+    return executeOrQueue(
+      request: () async {
+        final response = await _dio.post(
+          endpoint,
+          data: payload,
+          options: Options(headers: {'Idempotency-Key': idempotencyKey}),
+        );
 
-      return ProcurementPurchaseOrderModel.fromJson(
-        MobileApiResponse.dataMap(response.data),
-      );
-    } on DioException catch (error) {
-      throw ApiException.fromDio(error);
-    }
+        return ProcurementPurchaseOrderModel.fromJson(
+          MobileApiResponse.dataMap(response.data),
+        );
+      },
+      draft: SyncQueueDraft(
+        moduleSlug: 'procurement',
+        operationType: 'receive_materials',
+        method: 'POST',
+        endpoint: endpoint,
+        payload: payload,
+      ),
+      businessMessage: 'Не удалось принять материалы.',
+    );
   }
 
   Future<ProcurementPurchaseOrderModel> addOrderComment({
@@ -158,4 +183,18 @@ class ProcurementRepository {
       throw ApiException.fromDio(error);
     }
   }
+}
+
+final Random _secureRandom = Random.secure();
+
+String _newIdempotencyKey() {
+  final bytes = List<int>.generate(16, (_) => _secureRandom.nextInt(256));
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  final hex =
+      bytes.map((byte) => byte.toRadixString(16).padLeft(2, '0')).join();
+
+  return '${hex.substring(0, 8)}-${hex.substring(8, 12)}-'
+      '${hex.substring(12, 16)}-${hex.substring(16, 20)}-'
+      '${hex.substring(20)}';
 }
