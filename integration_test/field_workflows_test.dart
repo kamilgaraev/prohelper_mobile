@@ -289,8 +289,12 @@ class _FieldConstructionJournalRepository
     String? safetyNotes,
     String? visitorsNotes,
     String? qualityNotes,
+    ConstructionJournalWeatherModel? weatherConditions,
     List<ConstructionJournalWorkVolumeModel> workVolumes = const [],
+    List<ConstructionJournalWorkerModel> workers = const [],
+    List<ConstructionJournalEquipmentModel> equipment = const [],
     List<ConstructionJournalMaterialUsageModel> materials = const [],
+    bool submitAfterCreate = false,
   }) async {
     createdJournalId = journalId;
     return _journalEntry(
