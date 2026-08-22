@@ -1,4 +1,4 @@
-﻿import 'package:dio/dio.dart';
+import 'package:dio/dio.dart';
 
 import '../network/api_exception.dart';
 import 'queued_sync_operation.dart';
@@ -115,6 +115,10 @@ class SyncQueueService {
           retryCount++;
         case _RetryOutcome.blocked:
           blockedCount++;
+      }
+
+      if (outcome != _RetryOutcome.success) {
+        break;
       }
     }
 

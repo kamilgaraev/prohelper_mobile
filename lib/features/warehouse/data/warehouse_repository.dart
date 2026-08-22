@@ -1,5 +1,6 @@
-﻿import 'dart:convert';
+import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 
 import 'package:dio/dio.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -165,26 +166,36 @@ class WarehouseRepository extends SyncQueueAwareRepository {
     String? documentNumber,
     String? reason,
   }) async {
-    try {
-      await _dio.post(
-        '/warehouse/custody/issue',
-        data: <String, dynamic>{
-          'project_id': projectId,
-          'project_warehouse_id': projectWarehouseId,
-          'material_id': materialId,
-          'responsible_user_id': responsibleUserId,
-          'quantity': quantity,
-          if ((documentNumber ?? '').trim().isNotEmpty)
-            'document_number': documentNumber!.trim(),
-          if ((reason ?? '').trim().isNotEmpty) 'reason': reason!.trim(),
-        },
-      );
-    } on DioException catch (error) {
-      throw ApiException.fromDio(
-        error,
-        fallbackMessage: 'Не удалось выдать материал ответственному.',
-      );
-    }
+    const endpoint = '/warehouse/custody/issue';
+    final idempotencyKey = _newWarehouseIdempotencyKey();
+    final payload = <String, dynamic>{
+      'project_id': projectId,
+      'project_warehouse_id': projectWarehouseId,
+      'material_id': materialId,
+      'responsible_user_id': responsibleUserId,
+      'quantity': quantity,
+      if ((documentNumber ?? '').trim().isNotEmpty)
+        'document_number': documentNumber!.trim(),
+      if ((reason ?? '').trim().isNotEmpty) 'reason': reason!.trim(),
+      'idempotency_key': idempotencyKey,
+    };
+
+    return executeOrQueue(
+      request:
+          () => _dio.post<void>(
+            endpoint,
+            data: payload,
+            options: Options(headers: {'Idempotency-Key': idempotencyKey}),
+          ),
+      draft: SyncQueueDraft(
+        moduleSlug: 'warehouse',
+        operationType: 'custody_issue',
+        method: 'POST',
+        endpoint: endpoint,
+        payload: payload,
+      ),
+      businessMessage: 'Не удалось выдать материал ответственному.',
+    );
   }
 
   Future<void> returnFromResponsible({
@@ -195,25 +206,35 @@ class WarehouseRepository extends SyncQueueAwareRepository {
     String? documentNumber,
     String? reason,
   }) async {
-    try {
-      await _dio.post(
-        '/warehouse/custody/return',
-        data: <String, dynamic>{
-          'project_id': projectId,
-          'custody_warehouse_id': custodyWarehouseId,
-          'material_id': materialId,
-          'quantity': quantity,
-          if ((documentNumber ?? '').trim().isNotEmpty)
-            'document_number': documentNumber!.trim(),
-          if ((reason ?? '').trim().isNotEmpty) 'reason': reason!.trim(),
-        },
-      );
-    } on DioException catch (error) {
-      throw ApiException.fromDio(
-        error,
-        fallbackMessage: 'Не удалось вернуть материал на объект.',
-      );
-    }
+    const endpoint = '/warehouse/custody/return';
+    final idempotencyKey = _newWarehouseIdempotencyKey();
+    final payload = <String, dynamic>{
+      'project_id': projectId,
+      'custody_warehouse_id': custodyWarehouseId,
+      'material_id': materialId,
+      'quantity': quantity,
+      if ((documentNumber ?? '').trim().isNotEmpty)
+        'document_number': documentNumber!.trim(),
+      if ((reason ?? '').trim().isNotEmpty) 'reason': reason!.trim(),
+      'idempotency_key': idempotencyKey,
+    };
+
+    return executeOrQueue(
+      request:
+          () => _dio.post<void>(
+            endpoint,
+            data: payload,
+            options: Options(headers: {'Idempotency-Key': idempotencyKey}),
+          ),
+      draft: SyncQueueDraft(
+        moduleSlug: 'warehouse',
+        operationType: 'custody_return',
+        method: 'POST',
+        endpoint: endpoint,
+        payload: payload,
+      ),
+      businessMessage: 'Не удалось вернуть материал на объект.',
+    );
   }
 
   Future<ProjectMaterialDeliveryModel> fetchProjectMaterialDelivery(
@@ -238,26 +259,38 @@ class WarehouseRepository extends SyncQueueAwareRepository {
     required double quantity,
     String? notes,
   }) async {
-    try {
-      final response = await _dio.post(
-        '/warehouse/project-material-deliveries/$deliveryId/receive',
-        data: <String, dynamic>{
-          'quantity': quantity,
-          if ((notes ?? '').trim().isNotEmpty) 'notes': notes!.trim(),
-        },
-      );
+    final endpoint =
+        '/warehouse/project-material-deliveries/$deliveryId/receive';
+    final idempotencyKey = _newWarehouseIdempotencyKey();
+    final payload = <String, dynamic>{
+      'idempotency_key': idempotencyKey,
+      'quantity': quantity,
+      if ((notes ?? '').trim().isNotEmpty) 'notes': notes!.trim(),
+    };
+    final response = await executeOrQueue(
+      request:
+          () => _dio.post(
+            endpoint,
+            data: payload,
+            options: Options(headers: {'Idempotency-Key': idempotencyKey}),
+          ),
+      draft: SyncQueueDraft(
+        moduleSlug: 'warehouse',
+        operationType: 'receive_project_delivery',
+        method: 'POST',
+        endpoint: endpoint,
+        payload: payload,
+      ),
+      businessMessage: 'Не удалось подтвердить приемку материала.',
+    );
 
-      return ProjectMaterialDeliveryModel.fromJson(_extractData(response.data));
-    } on DioException catch (error) {
-      throw ApiException.fromDio(
-        error,
-        fallbackMessage: 'Не удалось подтвердить приемку материала.',
-      );
-    }
+    return ProjectMaterialDeliveryModel.fromJson(_extractData(response.data));
   }
 
   Future<void> createReceipt(WarehouseReceiptPayload payload) async {
+    final idempotencyKey = _newWarehouseIdempotencyKey();
     final receiptPayload = <String, dynamic>{
+      'idempotency_key': idempotencyKey,
       'warehouse_id': payload.warehouseId.toString(),
       'material_id': payload.materialId.toString(),
       'quantity': payload.quantity.toString(),
@@ -294,6 +327,7 @@ class WarehouseRepository extends SyncQueueAwareRepository {
       final response = await _dio.post(
         '/warehouse/operations/receipt',
         data: formData,
+        options: Options(headers: {'Idempotency-Key': idempotencyKey}),
       );
       final data = _extractData(response.data);
 
@@ -409,19 +443,31 @@ class WarehouseRepository extends SyncQueueAwareRepository {
   Future<WarehouseTransferResultModel> createTransfer(
     WarehouseTransferPayload payload,
   ) async {
-    try {
-      final response = await _dio.post(
-        '/warehouse/operations/transfer',
-        data: payload.toJson(),
-      );
+    const endpoint = '/warehouse/operations/transfer';
+    final idempotencyKey = _newWarehouseIdempotencyKey();
+    final requestPayload = <String, dynamic>{
+      ...payload.toJson(),
+      'idempotency_key': idempotencyKey,
+    };
 
-      return WarehouseTransferResultModel.fromJson(_extractData(response.data));
-    } on DioException catch (error) {
-      throw ApiException.fromDio(
-        error,
-        fallbackMessage: 'Не удалось выполнить перемещение по складу.',
-      );
-    }
+    final response = await executeOrQueue(
+      request:
+          () => _dio.post(
+            endpoint,
+            data: requestPayload,
+            options: Options(headers: {'Idempotency-Key': idempotencyKey}),
+          ),
+      draft: SyncQueueDraft(
+        moduleSlug: 'warehouse',
+        operationType: 'create_transfer',
+        method: 'POST',
+        endpoint: endpoint,
+        payload: requestPayload,
+      ),
+      businessMessage: 'Не удалось выполнить перемещение по складу.',
+    );
+
+    return WarehouseTransferResultModel.fromJson(_extractData(response.data));
   }
 
   Future<List<WarehousePhotoModel>> getMovementPhotos(int movementId) async {
@@ -572,4 +618,21 @@ class WarehouseRepository extends SyncQueueAwareRepository {
       throw FormatException('Warehouse receipt field "$key" is required.');
     }
   }
+}
+
+final Random _warehouseSecureRandom = Random.secure();
+
+String _newWarehouseIdempotencyKey() {
+  final bytes = List<int>.generate(
+    16,
+    (_) => _warehouseSecureRandom.nextInt(256),
+  );
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  final hex =
+      bytes.map((byte) => byte.toRadixString(16).padLeft(2, '0')).join();
+
+  return '${hex.substring(0, 8)}-${hex.substring(8, 12)}-'
+      '${hex.substring(12, 16)}-${hex.substring(16, 20)}-'
+      '${hex.substring(20)}';
 }

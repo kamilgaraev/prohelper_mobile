@@ -59,6 +59,44 @@ void main() {
     expect(adapter.requests.single.method, 'POST');
   });
 
+  test(
+    'stops after an earlier operation retries to preserve dependency order',
+    () async {
+      final store = _MemorySyncQueueStore();
+      final adapter =
+          _QueueHttpAdapter()
+            ..responses.add(_AdapterResponse.networkError())
+            ..responses.add(
+              _AdapterResponse(statusCode: 200, body: '{"ok":true}'),
+            );
+      final service = SyncQueueService(
+        store: store,
+        dio: _dio(adapter),
+        now: () => DateTime(2026, 8, 23, 10),
+      );
+      await service.enqueue(_siteRequestDraft());
+      await service.enqueue(
+        const SyncQueueDraft(
+          moduleSlug: 'warehouse',
+          operationType: 'receive_project_delivery',
+          method: 'POST',
+          endpoint: '/warehouse/project-material-deliveries/10/receive',
+          payload: <String, dynamic>{
+            'quantity': 1,
+            'idempotency_key': 'dependent-operation',
+          },
+        ),
+      );
+
+      final result = await service.retryDueOperations();
+
+      expect(result.retryCount, 1);
+      expect(result.successCount, 0);
+      expect(adapter.requests, hasLength(1));
+      expect(await store.all(), hasLength(2));
+    },
+  );
+
   test('reuses queued machinery idempotency key as request header', () async {
     final store = _MemorySyncQueueStore();
     final adapter =

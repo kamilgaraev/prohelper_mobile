@@ -1,9 +1,13 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:isar/isar.dart';
+import 'package:prohelpers_mobile/core/sync/queued_sync_operation.dart';
+import 'package:prohelpers_mobile/core/sync/sync_queue_service.dart';
+import 'package:prohelpers_mobile/core/sync/sync_queue_store.dart';
 import 'package:prohelpers_mobile/features/procurement/data/procurement_model.dart';
 import 'package:prohelpers_mobile/features/procurement/data/procurement_repository.dart';
 
@@ -82,6 +86,15 @@ void main() {
       expect(payload['receipt_date'], '2026-05-22');
       expect(payload['notes'], 'Принята первая часть');
       expect((payload['items'] as List).single['item_id'], 701);
+      expect(
+        payload['idempotency_key'],
+        matches(
+          RegExp(
+            r'^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$',
+          ),
+        ),
+      );
+      expect(request.headers['Idempotency-Key'], payload['idempotency_key']);
       expect(order.remainingQuantity, 0);
     },
   );
@@ -153,6 +166,45 @@ void main() {
     );
     expect(calls, 0);
   });
+
+  test(
+    'queues receipt with the same idempotency key after network error',
+    () async {
+      final store = _MemorySyncQueueStore();
+      final dio = Dio(BaseOptions(baseUrl: 'https://api.example.test'));
+      dio.httpClientAdapter = _NetworkErrorAdapter();
+      final service = SyncQueueService(store: store, dio: dio);
+      final repository = ProcurementRepository(
+        dio,
+        syncQueueServiceFuture: Future.value(service),
+      );
+
+      await expectLater(
+        repository.receiveMaterials(
+          orderId: 61,
+          warehouseId: 44,
+          receiptDate: '2026-05-22',
+          items: const [
+            ProcurementReceiveItemPayload(
+              itemId: 701,
+              quantityReceived: 3,
+              price: 80000,
+            ),
+          ],
+        ),
+        throwsA(isA<SyncQueuedException>()),
+      );
+
+      final queued = (await store.all()).single;
+      expect(queued.moduleSlug, 'procurement');
+      expect(queued.operationType, 'receive_materials');
+      expect(
+        queued.endpoint,
+        '/procurement/purchase-orders/61/receive-materials',
+      );
+      expect(queued.payload['idempotency_key'], isNotEmpty);
+    },
+  );
 }
 
 class _JsonAdapter implements HttpClientAdapter {
@@ -176,6 +228,55 @@ class _JsonAdapter implements HttpClientAdapter {
         Headers.contentTypeHeader: [Headers.jsonContentType],
       },
     );
+  }
+}
+
+class _NetworkErrorAdapter implements HttpClientAdapter {
+  @override
+  void close({bool force = false}) {}
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) {
+    throw DioException(
+      requestOptions: options,
+      type: DioExceptionType.connectionError,
+    );
+  }
+}
+
+class _MemorySyncQueueStore implements SyncQueueStore {
+  final _operations = <int, QueuedSyncOperation>{};
+  var _nextId = 1;
+
+  @override
+  Future<QueuedSyncOperation> put(QueuedSyncOperation operation) async {
+    if (operation.id == Isar.autoIncrement) {
+      operation.id = _nextId++;
+    }
+    _operations[operation.id] = operation;
+    return operation;
+  }
+
+  @override
+  Future<List<QueuedSyncOperation>> all() async {
+    final operations = _operations.values.toList();
+    operations.sort((left, right) => left.createdAt.compareTo(right.createdAt));
+    return operations;
+  }
+
+  @override
+  Future<List<QueuedSyncOperation>> due(DateTime now) async => all();
+
+  @override
+  Future<QueuedSyncOperation?> get(int id) async => _operations[id];
+
+  @override
+  Future<void> delete(int id) async {
+    _operations.remove(id);
   }
 }
 
