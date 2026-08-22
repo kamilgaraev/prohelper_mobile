@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
@@ -28,8 +28,13 @@ class _JournalEntryFormScreenState
   late final TextEditingController _safetyController;
   late final TextEditingController _visitorsController;
   late final TextEditingController _qualityController;
+  late final TextEditingController _temperatureController;
+  late final TextEditingController _precipitationController;
+  late final TextEditingController _windSpeedController;
   final List<_WorkVolumeInput> _workVolumes = [];
   final List<_MaterialUsageInput> _materials = [];
+  final List<_WorkerInput> _workers = [];
+  final List<_EquipmentInput> _equipment = [];
   DateTime? _entryDate;
   ConstructionJournalEntryFormOptions? _options;
   int? _selectedEstimateId;
@@ -81,6 +86,16 @@ class _JournalEntryFormScreenState
     _qualityController = TextEditingController(
       text: widget.initialEntry?.qualityNotes ?? '',
     );
+    _temperatureController = TextEditingController(
+      text:
+          widget.initialEntry?.weatherConditions?.temperature?.toString() ?? '',
+    );
+    _precipitationController = TextEditingController(
+      text: widget.initialEntry?.weatherConditions?.precipitation ?? '',
+    );
+    _windSpeedController = TextEditingController(
+      text: widget.initialEntry?.weatherConditions?.windSpeed?.toString() ?? '',
+    );
     _entryDate =
         widget.initialEntry == null
             ? null
@@ -89,6 +104,19 @@ class _JournalEntryFormScreenState
     _workVolumes.addAll(
       (widget.initialEntry?.workVolumes ?? const []).map(
         _WorkVolumeInput.fromModel,
+      ),
+    );
+    _materials.addAll(
+      (widget.initialEntry?.materials ?? const []).map(
+        _MaterialUsageInput.fromModel,
+      ),
+    );
+    _workers.addAll(
+      (widget.initialEntry?.workers ?? const []).map(_WorkerInput.fromModel),
+    );
+    _equipment.addAll(
+      (widget.initialEntry?.equipment ?? const []).map(
+        _EquipmentInput.fromModel,
       ),
     );
 
@@ -104,11 +132,20 @@ class _JournalEntryFormScreenState
     _safetyController.dispose();
     _visitorsController.dispose();
     _qualityController.dispose();
+    _temperatureController.dispose();
+    _precipitationController.dispose();
+    _windSpeedController.dispose();
     for (final volume in _workVolumes) {
       volume.dispose();
     }
     for (final material in _materials) {
       material.dispose();
+    }
+    for (final worker in _workers) {
+      worker.dispose();
+    }
+    for (final item in _equipment) {
+      item.dispose();
     }
     super.dispose();
   }
@@ -140,7 +177,13 @@ class _JournalEntryFormScreenState
             maxLines: 4,
           ),
           const SizedBox(height: 16),
+          _buildWeather(),
+          const SizedBox(height: 16),
           _buildWorkVolumes(),
+          const SizedBox(height: 16),
+          _buildWorkers(),
+          const SizedBox(height: 16),
+          _buildEquipment(),
           const SizedBox(height: 16),
           _buildMaterials(),
           const SizedBox(height: 16),
@@ -249,7 +292,7 @@ class _JournalEntryFormScreenState
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 8),
             child: Text(
-              'Список работ пуст. Добавьте строку вручную или выберите позицию из сметы.',
+              'Список работ пуст. Выберите позицию из утвержденной сметы.',
             ),
           ),
         ..._workVolumes.asMap().entries.map(
@@ -267,15 +310,121 @@ class _JournalEntryFormScreenState
             ),
           ),
         ),
+      ],
+    );
+  }
+
+  Widget _buildWeather() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Погодные условия',
+          style: Theme.of(context).textTheme.titleMedium,
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: _numberField(_temperatureController, 'Температура, °C'),
+            ),
+            const SizedBox(width: 8),
+            Expanded(child: _numberField(_windSpeedController, 'Ветер, м/с')),
+          ],
+        ),
+        const SizedBox(height: 8),
+        _buildField(
+          controller: _precipitationController,
+          label: 'Осадки и состояние погоды',
+          maxLines: 2,
+        ),
+      ],
+    );
+  }
+
+  Widget _numberField(TextEditingController controller, String label) {
+    return TextField(
+      controller: controller,
+      keyboardType: const TextInputType.numberWithOptions(
+        decimal: true,
+        signed: true,
+      ),
+      inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[-0-9,.]'))],
+      decoration: InputDecoration(
+        labelText: label,
+        border: const OutlineInputBorder(),
+      ),
+    );
+  }
+
+  Widget _buildWorkers() {
+    return _buildResourceSection(
+      title: 'Работники',
+      emptyText: 'Работники не указаны.',
+      addLabel: 'Добавить работников',
+      onAdd: () => setState(() => _workers.add(_WorkerInput())),
+      children:
+          _workers
+              .asMap()
+              .entries
+              .map(
+                (entry) => _WorkerCard(
+                  input: entry.value,
+                  onRemove:
+                      () => setState(
+                        () => _workers.removeAt(entry.key).dispose(),
+                      ),
+                ),
+              )
+              .toList(),
+    );
+  }
+
+  Widget _buildEquipment() {
+    return _buildResourceSection(
+      title: 'Техника',
+      emptyText: 'Техника не указана.',
+      addLabel: 'Добавить технику',
+      onAdd: () => setState(() => _equipment.add(_EquipmentInput())),
+      children:
+          _equipment
+              .asMap()
+              .entries
+              .map(
+                (entry) => _EquipmentCard(
+                  input: entry.value,
+                  onRemove:
+                      () => setState(
+                        () => _equipment.removeAt(entry.key).dispose(),
+                      ),
+                ),
+              )
+              .toList(),
+    );
+  }
+
+  Widget _buildResourceSection({
+    required String title,
+    required String emptyText,
+    required String addLabel,
+    required VoidCallback onAdd,
+    required List<Widget> children,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(title, style: Theme.of(context).textTheme.titleMedium),
+        if (children.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Text(emptyText),
+          ),
+        ...children,
         const SizedBox(height: 8),
         OutlinedButton.icon(
-          onPressed: () {
-            setState(() {
-              _workVolumes.add(_WorkVolumeInput());
-            });
-          },
+          onPressed: onAdd,
           icon: const Icon(Icons.add_rounded),
-          label: const Text('Добавить вручную'),
+          label: Text(addLabel),
         ),
       ],
     );
@@ -503,6 +652,8 @@ class _JournalEntryFormScreenState
 
     final workVolumes = _normalizedWorkVolumes();
     final materials = _normalizedMaterials();
+    final workers = _normalizedWorkers();
+    final equipment = _normalizedEquipment();
     if (workVolumes.length != _workVolumes.length) {
       _showMessage(
         'Заполните вид работ, количество и единицу измерения для каждой строки.',
@@ -514,6 +665,16 @@ class _JournalEntryFormScreenState
       _showMessage('Укажите количество для каждого выбранного материала.');
       return;
     }
+    if (workers.length != _workers.length) {
+      _showMessage('Заполните специальность, количество и часы работников.');
+      return;
+    }
+    if (equipment.length != _equipment.length) {
+      _showMessage('Заполните название, количество и часы работы техники.');
+      return;
+    }
+
+    final weather = _normalizedWeather();
 
     if (!isDraft && workVolumes.isEmpty) {
       _showMessage('Добавьте хотя бы один объем выполненных работ.');
@@ -526,35 +687,42 @@ class _JournalEntryFormScreenState
 
     try {
       final repository = ref.read(constructionJournalRepositoryProvider);
-      final entry =
-          _isEdit
-              ? await repository.updateEntry(
-                entryId: widget.initialEntry!.id,
-                entryDate: _entryDate!.toIso8601String().split('T').first,
-                workDescription: _descriptionController.text.trim(),
-                estimateId: _selectedEstimateId,
-                problemsDescription: _problemsController.text.trim(),
-                safetyNotes: _safetyController.text.trim(),
-                visitorsNotes: _visitorsController.text.trim(),
-                qualityNotes: _qualityController.text.trim(),
-                workVolumes: workVolumes,
-                materials: materials,
-              )
-              : await repository.createEntry(
-                journalId: widget.journalId,
-                entryDate: _entryDate!.toIso8601String().split('T').first,
-                workDescription: _descriptionController.text.trim(),
-                estimateId: _selectedEstimateId,
-                problemsDescription: _problemsController.text.trim(),
-                safetyNotes: _safetyController.text.trim(),
-                visitorsNotes: _visitorsController.text.trim(),
-                qualityNotes: _qualityController.text.trim(),
-                workVolumes: workVolumes,
-                materials: materials,
-              );
-
-      if (!isDraft) {
-        await repository.submitEntry(entry.id);
+      if (_isEdit) {
+        final updatedEntry = await repository.updateEntry(
+          entryId: widget.initialEntry!.id,
+          entryDate: _entryDate!.toIso8601String().split('T').first,
+          workDescription: _descriptionController.text.trim(),
+          estimateId: _selectedEstimateId,
+          problemsDescription: _problemsController.text.trim(),
+          safetyNotes: _safetyController.text.trim(),
+          visitorsNotes: _visitorsController.text.trim(),
+          qualityNotes: _qualityController.text.trim(),
+          weatherConditions: weather,
+          workVolumes: workVolumes,
+          workers: workers,
+          equipment: equipment,
+          materials: materials,
+        );
+        if (!isDraft) {
+          await repository.submitEntry(updatedEntry.id);
+        }
+      } else {
+        await repository.createEntry(
+          journalId: widget.journalId,
+          entryDate: _entryDate!.toIso8601String().split('T').first,
+          workDescription: _descriptionController.text.trim(),
+          estimateId: _selectedEstimateId,
+          problemsDescription: _problemsController.text.trim(),
+          safetyNotes: _safetyController.text.trim(),
+          visitorsNotes: _visitorsController.text.trim(),
+          qualityNotes: _qualityController.text.trim(),
+          weatherConditions: weather,
+          workVolumes: workVolumes,
+          workers: workers,
+          equipment: equipment,
+          materials: materials,
+          submitAfterCreate: !isDraft,
+        );
       }
 
       if (mounted) {
@@ -619,6 +787,7 @@ class _JournalEntryFormScreenState
 
           return ConstructionJournalMaterialUsageModel(
             materialId: material.materialId,
+            estimateItemId: material.estimateItemId,
             projectMaterialDeliveryId: material.projectMaterialDeliveryId,
             custodyWarehouseId: material.custodyWarehouseId,
             materialName: material.materialName,
@@ -630,6 +799,70 @@ class _JournalEntryFormScreenState
         .whereType<ConstructionJournalMaterialUsageModel>()
         .toList();
   }
+
+  ConstructionJournalWeatherModel? _normalizedWeather() {
+    final temperature = _parseDecimal(_temperatureController.text);
+    final windSpeed = _parseDecimal(_windSpeedController.text);
+    final precipitation = _precipitationController.text.trim();
+    if (temperature == null && windSpeed == null && precipitation.isEmpty) {
+      return null;
+    }
+    return ConstructionJournalWeatherModel(
+      temperature: temperature,
+      windSpeed: windSpeed,
+      precipitation: precipitation,
+    );
+  }
+
+  List<ConstructionJournalWorkerModel> _normalizedWorkers() =>
+      _workers
+          .map((worker) {
+            final count = int.tryParse(worker.countController.text.trim());
+            final hours = _parseDecimal(worker.hoursController.text);
+            if (worker.specialtyController.text.trim().isEmpty ||
+                count == null ||
+                count < 1 ||
+                hours == null ||
+                hours < 0) {
+              return null;
+            }
+            return ConstructionJournalWorkerModel(
+              id: worker.id,
+              estimateItemId: worker.estimateItemId,
+              specialty: worker.specialtyController.text.trim(),
+              workersCount: count,
+              hoursWorked: hours,
+            );
+          })
+          .whereType<ConstructionJournalWorkerModel>()
+          .toList();
+
+  List<ConstructionJournalEquipmentModel> _normalizedEquipment() =>
+      _equipment
+          .map((item) {
+            final quantity = int.tryParse(item.quantityController.text.trim());
+            final hours = _parseDecimal(item.hoursController.text);
+            if (item.nameController.text.trim().isEmpty ||
+                quantity == null ||
+                quantity < 1 ||
+                hours == null ||
+                hours < 0) {
+              return null;
+            }
+            return ConstructionJournalEquipmentModel(
+              id: item.id,
+              estimateItemId: item.estimateItemId,
+              name: item.nameController.text.trim(),
+              type: item.typeController.text.trim(),
+              quantity: quantity,
+              hoursUsed: hours,
+            );
+          })
+          .whereType<ConstructionJournalEquipmentModel>()
+          .toList();
+
+  double? _parseDecimal(String value) =>
+      double.tryParse(value.trim().replaceAll(',', '.'));
 
   void _showMessage(String message) {
     ScaffoldMessenger.of(
@@ -897,9 +1130,206 @@ class _MaterialUsageCard extends StatelessWidget {
   }
 }
 
+class _WorkerCard extends StatelessWidget {
+  const _WorkerCard({required this.input, required this.onRemove});
+
+  final _WorkerInput input;
+  final VoidCallback onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: const EdgeInsets.only(top: 8),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: input.specialtyController,
+                    decoration: const InputDecoration(
+                      labelText: 'Специальность',
+                    ),
+                  ),
+                ),
+                IconButton(
+                  onPressed: onRemove,
+                  icon: const Icon(Icons.delete_outline),
+                ),
+              ],
+            ),
+            Row(
+              children: [
+                Expanded(
+                  child: _compactNumberField(
+                    input.countController,
+                    'Количество',
+                    decimal: false,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _compactNumberField(input.hoursController, 'Часы'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _EquipmentCard extends StatelessWidget {
+  const _EquipmentCard({required this.input, required this.onRemove});
+
+  final _EquipmentInput input;
+  final VoidCallback onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: const EdgeInsets.only(top: 8),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: input.nameController,
+                    decoration: const InputDecoration(
+                      labelText: 'Наименование',
+                    ),
+                  ),
+                ),
+                IconButton(
+                  onPressed: onRemove,
+                  icon: const Icon(Icons.delete_outline),
+                ),
+              ],
+            ),
+            TextField(
+              controller: input.typeController,
+              decoration: const InputDecoration(labelText: 'Тип техники'),
+            ),
+            Row(
+              children: [
+                Expanded(
+                  child: _compactNumberField(
+                    input.quantityController,
+                    'Количество',
+                    decimal: false,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _compactNumberField(input.hoursController, 'Моточасы'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+Widget _compactNumberField(
+  TextEditingController controller,
+  String label, {
+  bool decimal = true,
+}) {
+  return TextField(
+    controller: controller,
+    keyboardType: TextInputType.numberWithOptions(decimal: decimal),
+    inputFormatters: [
+      FilteringTextInputFormatter.allow(
+        decimal ? RegExp(r'[0-9,.]') : RegExp(r'[0-9]'),
+      ),
+    ],
+    decoration: InputDecoration(labelText: label),
+  );
+}
+
+class _WorkerInput {
+  _WorkerInput({
+    this.id,
+    this.estimateItemId,
+    String specialty = '',
+    String count = '1',
+    String hours = '',
+  }) : specialtyController = TextEditingController(text: specialty),
+       countController = TextEditingController(text: count),
+       hoursController = TextEditingController(text: hours);
+
+  final int? id;
+  final int? estimateItemId;
+  final TextEditingController specialtyController;
+  final TextEditingController countController;
+  final TextEditingController hoursController;
+
+  factory _WorkerInput.fromModel(ConstructionJournalWorkerModel model) =>
+      _WorkerInput(
+        id: model.id,
+        estimateItemId: model.estimateItemId,
+        specialty: model.specialty,
+        count: model.workersCount.toString(),
+        hours: model.hoursWorked?.toString() ?? '',
+      );
+
+  void dispose() {
+    specialtyController.dispose();
+    countController.dispose();
+    hoursController.dispose();
+  }
+}
+
+class _EquipmentInput {
+  _EquipmentInput({
+    this.id,
+    this.estimateItemId,
+    String name = '',
+    String type = '',
+    String quantity = '1',
+    String hours = '',
+  }) : nameController = TextEditingController(text: name),
+       typeController = TextEditingController(text: type),
+       quantityController = TextEditingController(text: quantity),
+       hoursController = TextEditingController(text: hours);
+
+  final int? id;
+  final int? estimateItemId;
+  final TextEditingController nameController;
+  final TextEditingController typeController;
+  final TextEditingController quantityController;
+  final TextEditingController hoursController;
+
+  factory _EquipmentInput.fromModel(ConstructionJournalEquipmentModel model) =>
+      _EquipmentInput(
+        id: model.id,
+        estimateItemId: model.estimateItemId,
+        name: model.name,
+        type: model.type ?? '',
+        quantity: model.quantity.toString(),
+        hours: model.hoursUsed?.toString() ?? '',
+      );
+
+  void dispose() {
+    nameController.dispose();
+    typeController.dispose();
+    quantityController.dispose();
+    hoursController.dispose();
+  }
+}
+
 class _MaterialUsageInput {
   _MaterialUsageInput({
     required this.materialId,
+    this.estimateItemId,
     required this.projectMaterialDeliveryId,
     required this.custodyWarehouseId,
     required this.materialName,
@@ -910,6 +1340,7 @@ class _MaterialUsageInput {
        notesController = TextEditingController(text: notes);
 
   final int? materialId;
+  final int? estimateItemId;
   final int? projectMaterialDeliveryId;
   final int? custodyWarehouseId;
   final String materialName;
@@ -932,6 +1363,21 @@ class _MaterialUsageInput {
           (material.custodyWarehouseId == null
               ? 'Материал принят на объект по поставке #${material.deliveryId}'
               : 'Материал списан со склада ответственного'),
+    );
+  }
+
+  factory _MaterialUsageInput.fromModel(
+    ConstructionJournalMaterialUsageModel material,
+  ) {
+    return _MaterialUsageInput(
+      materialId: material.materialId,
+      estimateItemId: material.estimateItemId,
+      projectMaterialDeliveryId: material.projectMaterialDeliveryId,
+      custodyWarehouseId: material.custodyWarehouseId,
+      materialName: material.materialName,
+      measurementUnit: material.measurementUnit,
+      quantity: material.quantity.toString(),
+      notes: material.notes ?? '',
     );
   }
 

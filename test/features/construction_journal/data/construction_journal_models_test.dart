@@ -1,4 +1,4 @@
-﻿import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_test/flutter_test.dart';
 import 'package:prohelpers_mobile/features/construction_journal/data/construction_journal_models.dart';
 
 void main() {
@@ -196,6 +196,32 @@ void main() {
       );
     },
   );
+
+  test('resource payload round-trip preserves estimate item links', () {
+    final worker = ConstructionJournalWorkerModel.fromJson({
+      'estimate_item_id': 81,
+      'specialty': 'Монтажник',
+      'workers_count': 2,
+    });
+    final equipment = ConstructionJournalEquipmentModel.fromJson({
+      'estimate_item_id': 82,
+      'equipment_name': 'Кран',
+      'quantity': 1,
+    });
+    final material = ConstructionJournalMaterialUsageModel.fromJson({
+      'estimate_item_id': 83,
+      'material_id': 11,
+      'custody_warehouse_id': 50,
+      'material_name': 'Арматура',
+      'quantity': 2.5,
+      'measurement_unit': 'т',
+    });
+
+    expect(worker.toJson()['estimate_item_id'], 81);
+    expect(equipment.toJson()['estimate_item_id'], 82);
+    expect(material.toJson()['estimate_item_id'], 83);
+    expect(material.toJson()['custody_warehouse_id'], 50);
+  });
 }
 
 Map<String, dynamic> _journalPayload() {

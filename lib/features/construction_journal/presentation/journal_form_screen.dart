@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/widgets/app_empty_state.dart';
@@ -20,6 +20,8 @@ class _JournalFormScreenState extends ConsumerState<JournalFormScreen> {
   late final TextEditingController _nameController;
   late final TextEditingController _numberController;
   DateTime? _startDate;
+  int? _contractId;
+  Future<List<ConstructionJournalContractOption>>? _contractsFuture;
   bool _isSaving = false;
 
   bool get _isEdit => widget.initialJournal != null;
@@ -37,6 +39,15 @@ class _JournalFormScreenState extends ConsumerState<JournalFormScreen> {
         widget.initialJournal == null
             ? null
             : DateTime.tryParse(widget.initialJournal!.startDate);
+    _contractId = widget.initialJournal?.contractId;
+    final projectId =
+        widget.initialJournal?.projectId ??
+        ref.read(projectsProvider).selectedProject?.serverId;
+    if (projectId != null) {
+      _contractsFuture = ref
+          .read(constructionJournalRepositoryProvider)
+          .fetchJournalFormOptions(projectId: projectId);
+    }
   }
 
   @override
@@ -81,6 +92,40 @@ class _JournalFormScreenState extends ConsumerState<JournalFormScreen> {
               labelText: 'Номер журнала',
               border: OutlineInputBorder(),
             ),
+          ),
+          const SizedBox(height: 16),
+          FutureBuilder<List<ConstructionJournalContractOption>>(
+            future: _contractsFuture,
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const LinearProgressIndicator();
+              }
+              if (snapshot.hasError) {
+                return const Text('Не удалось загрузить договоры проекта.');
+              }
+
+              final contracts = snapshot.data ?? const [];
+              return DropdownButtonFormField<int>(
+                value:
+                    contracts.any((contract) => contract.id == _contractId)
+                        ? _contractId
+                        : null,
+                decoration: const InputDecoration(
+                  labelText: 'Договор проекта',
+                  border: OutlineInputBorder(),
+                ),
+                items:
+                    contracts
+                        .map(
+                          (contract) => DropdownMenuItem<int>(
+                            value: contract.id,
+                            child: Text(contract.label),
+                          ),
+                        )
+                        .toList(),
+                onChanged: (value) => setState(() => _contractId = value),
+              );
+            },
           ),
           const SizedBox(height: 16),
           ListTile(
@@ -131,6 +176,13 @@ class _JournalFormScreenState extends ConsumerState<JournalFormScreen> {
       return;
     }
 
+    if (_contractId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Выберите договор проекта.')),
+      );
+      return;
+    }
+
     if (!_isEdit && projectId == null) {
       ScaffoldMessenger.of(
         context,
@@ -147,6 +199,7 @@ class _JournalFormScreenState extends ConsumerState<JournalFormScreen> {
       if (_isEdit) {
         await repository.updateJournal(
           journalId: widget.initialJournal!.id,
+          contractId: _contractId!,
           name: _nameController.text.trim(),
           journalNumber: _numberController.text.trim(),
           startDate: _startDate!.toIso8601String().split('T').first,
@@ -154,6 +207,7 @@ class _JournalFormScreenState extends ConsumerState<JournalFormScreen> {
       } else {
         await repository.createJournal(
           projectId: projectId!,
+          contractId: _contractId!,
           name: _nameController.text.trim(),
           journalNumber: _numberController.text.trim(),
           startDate: _startDate!.toIso8601String().split('T').first,

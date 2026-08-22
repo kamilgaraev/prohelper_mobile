@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
@@ -145,6 +145,59 @@ class JournalEntryDetailScreen extends ConsumerWidget {
             ],
             const SizedBox(height: 16),
             _WorkVolumesReadOnlyCard(volumes: entry.workVolumes),
+            if (entry.weatherConditions != null) ...[
+              const SizedBox(height: 16),
+              _FieldResourcesCard(
+                title: 'Погодные условия',
+                lines: [
+                  if (entry.weatherConditions!.temperature != null)
+                    'Температура: ${entry.weatherConditions!.temperature} °C',
+                  if (entry.weatherConditions!.windSpeed != null)
+                    'Ветер: ${entry.weatherConditions!.windSpeed} м/с',
+                  if ((entry.weatherConditions!.precipitation ?? '').isNotEmpty)
+                    'Погода: ${entry.weatherConditions!.precipitation}',
+                ],
+              ),
+            ],
+            if (entry.workers.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              _FieldResourcesCard(
+                title: 'Работники',
+                lines:
+                    entry.workers
+                        .map(
+                          (worker) =>
+                              '${worker.specialty}: ${worker.workersCount} чел.${worker.hoursWorked == null ? '' : ', ${worker.hoursWorked} ч'}',
+                        )
+                        .toList(),
+              ),
+            ],
+            if (entry.equipment.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              _FieldResourcesCard(
+                title: 'Техника',
+                lines:
+                    entry.equipment
+                        .map(
+                          (item) =>
+                              '${item.name}: ${item.quantity} ед.${item.hoursUsed == null ? '' : ', ${item.hoursUsed} моточ.'}',
+                        )
+                        .toList(),
+              ),
+            ],
+            if (entry.materials.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              _FieldResourcesCard(
+                title: 'Материалы',
+                lines:
+                    entry.materials
+                        .map(
+                          (material) =>
+                              '${material.materialName}: ${material.quantity} ${material.measurementUnit}',
+                        )
+                        .toList(),
+              ),
+            ],
             const SizedBox(height: 16),
             Wrap(
               spacing: 8,
@@ -239,6 +292,32 @@ class JournalEntryDetailScreen extends ConsumerWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _FieldResourcesCard extends StatelessWidget {
+  const _FieldResourcesCard({required this.title, required this.lines});
+
+  final String title;
+  final List<String> lines;
+
+  @override
+  Widget build(BuildContext context) {
+    return IndustrialCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: AppTypography.h2(context)),
+          const SizedBox(height: 8),
+          ...lines.map(
+            (line) => Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Text(line, style: AppTypography.bodyMedium(context)),
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -1,4 +1,6 @@
-﻿import 'package:dio/dio.dart';
+import 'dart:math';
+
+import 'package:dio/dio.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/network/api_exception.dart';
@@ -157,6 +159,7 @@ class ConstructionJournalRepository extends SyncQueueAwareRepository {
 
   Future<ConstructionJournalModel> createJournal({
     required int projectId,
+    required int contractId,
     required String name,
     required String journalNumber,
     required String startDate,
@@ -166,10 +169,10 @@ class ConstructionJournalRepository extends SyncQueueAwareRepository {
         '/construction-journals',
         data: {
           'project_id': projectId,
+          'contract_id': contractId,
           'name': name,
           'journal_number': journalNumber,
           'start_date': startDate,
-          'status': 'active',
         },
       );
 
@@ -186,6 +189,7 @@ class ConstructionJournalRepository extends SyncQueueAwareRepository {
 
   Future<ConstructionJournalModel> updateJournal({
     required int journalId,
+    required int contractId,
     required String name,
     required String journalNumber,
     required String startDate,
@@ -195,6 +199,7 @@ class ConstructionJournalRepository extends SyncQueueAwareRepository {
         '/construction-journals/$journalId',
         data: {
           'name': name,
+          'contract_id': contractId,
           'journal_number': journalNumber,
           'start_date': startDate,
         },
@@ -211,6 +216,27 @@ class ConstructionJournalRepository extends SyncQueueAwareRepository {
     }
   }
 
+  Future<List<ConstructionJournalContractOption>> fetchJournalFormOptions({
+    required int projectId,
+  }) async {
+    try {
+      final response = await _dio.get(
+        '/construction-journals/form-options',
+        queryParameters: {'project_id': projectId},
+      );
+      final payload = _extractMap(MobileApiResponse.payload(response.data));
+
+      return _extractList(
+        payload['contracts'],
+      ).map(ConstructionJournalContractOption.fromJson).toList();
+    } on DioException catch (error) {
+      throw ApiException.fromDio(
+        error,
+        fallbackMessage: 'Не удалось загрузить договоры проекта.',
+      );
+    }
+  }
+
   Future<ConstructionJournalEntryModel> createEntry({
     required int journalId,
     required String entryDate,
@@ -221,20 +247,29 @@ class ConstructionJournalRepository extends SyncQueueAwareRepository {
     String? safetyNotes,
     String? visitorsNotes,
     String? qualityNotes,
+    ConstructionJournalWeatherModel? weatherConditions,
     List<ConstructionJournalWorkVolumeModel> workVolumes = const [],
+    List<ConstructionJournalWorkerModel> workers = const [],
+    List<ConstructionJournalEquipmentModel> equipment = const [],
     List<ConstructionJournalMaterialUsageModel> materials = const [],
+    bool submitAfterCreate = false,
   }) async {
+    final idempotencyKey = _newIdempotencyKey();
     final payload = <String, dynamic>{
+      'idempotency_key': idempotencyKey,
+      'submit_after_create': submitAfterCreate,
       if (scheduleTaskId != null) 'schedule_task_id': scheduleTaskId,
       if (estimateId != null) 'estimate_id': estimateId,
       'entry_date': entryDate,
       'work_description': workDescription,
-      'status': 'draft',
       'problems_description': problemsDescription,
       'safety_notes': safetyNotes,
       'visitors_notes': visitorsNotes,
       'quality_notes': qualityNotes,
+      'weather_conditions': weatherConditions?.toJson(),
       'work_volumes': workVolumes.map((volume) => volume.toJson()).toList(),
+      'workers': workers.map((worker) => worker.toJson()).toList(),
+      'equipment': equipment.map((item) => item.toJson()).toList(),
       'materials': materials.map((material) => material.toJson()).toList(),
     };
 
@@ -252,7 +287,8 @@ class ConstructionJournalRepository extends SyncQueueAwareRepository {
         await queueAndThrow(
           SyncQueueDraft(
             moduleSlug: 'construction_journal',
-            operationType: 'create_entry',
+            operationType:
+                submitAfterCreate ? 'create_and_submit_entry' : 'create_entry',
             method: 'POST',
             endpoint: '/construction-journals/$journalId/entries',
             payload: payload,
@@ -277,7 +313,10 @@ class ConstructionJournalRepository extends SyncQueueAwareRepository {
     String? safetyNotes,
     String? visitorsNotes,
     String? qualityNotes,
+    ConstructionJournalWeatherModel? weatherConditions,
     List<ConstructionJournalWorkVolumeModel> workVolumes = const [],
+    List<ConstructionJournalWorkerModel> workers = const [],
+    List<ConstructionJournalEquipmentModel> equipment = const [],
     List<ConstructionJournalMaterialUsageModel> materials = const [],
   }) async {
     try {
@@ -292,7 +331,10 @@ class ConstructionJournalRepository extends SyncQueueAwareRepository {
           'safety_notes': safetyNotes,
           'visitors_notes': visitorsNotes,
           'quality_notes': qualityNotes,
+          'weather_conditions': weatherConditions?.toJson(),
           'work_volumes': workVolumes.map((volume) => volume.toJson()).toList(),
+          'workers': workers.map((worker) => worker.toJson()).toList(),
+          'equipment': equipment.map((item) => item.toJson()).toList(),
           'materials': materials.map((material) => material.toJson()).toList(),
         },
       );
@@ -319,6 +361,25 @@ class ConstructionJournalRepository extends SyncQueueAwareRepository {
     }
   }
 
+  Future<ConstructionJournalModel> transitionJournal(
+    int journalId,
+    String action,
+  ) async {
+    try {
+      final response = await _dio.post(
+        '/construction-journals/$journalId/$action',
+      );
+      return ConstructionJournalModel.fromJson(
+        _extractMap(MobileApiResponse.payload(response.data)),
+      );
+    } on DioException catch (error) {
+      throw ApiException.fromDio(
+        error,
+        fallbackMessage: 'Не удалось изменить состояние журнала.',
+      );
+    }
+  }
+
   Future<ConstructionJournalEntryModel> submitEntry(int entryId) async {
     return _entryAction('/journal-entries/$entryId/submit', const {});
   }
@@ -340,13 +401,10 @@ class ConstructionJournalRepository extends SyncQueueAwareRepository {
     required String dateTo,
   }) async {
     try {
-      final response = await _dio.post(
+      return await _requestExport(
         '/construction-journals/$journalId/export/ks6',
-        data: {'format': 'pdf', 'date_from': dateFrom, 'date_to': dateTo},
+        {'format': 'pdf', 'date_from': dateFrom, 'date_to': dateTo},
       );
-
-      final data = _extractMap(MobileApiResponse.payload(response.data));
-      return _requiredString(data, 'url');
     } on DioException catch (error) {
       throw ApiException.fromDio(
         error,
@@ -357,17 +415,59 @@ class ConstructionJournalRepository extends SyncQueueAwareRepository {
 
   Future<String> exportDailyReport(int entryId) async {
     try {
-      final response = await _dio.post(
+      return await _requestExport(
         '/journal-entries/$entryId/export/daily-report',
+        const {},
       );
-      final data = _extractMap(MobileApiResponse.payload(response.data));
-      return _requiredString(data, 'url');
     } on DioException catch (error) {
       throw ApiException.fromDio(
         error,
         fallbackMessage: 'Не удалось сформировать дневной отчет.',
       );
     }
+  }
+
+  Future<String> _requestExport(
+    String endpoint,
+    Map<String, dynamic> payload,
+  ) async {
+    final response = await _dio.post(
+      endpoint,
+      data: payload,
+      options: Options(headers: {'Idempotency-Key': _newIdempotencyKey()}),
+    );
+    var state = _extractMap(MobileApiResponse.payload(response.data));
+    final exportId = _requiredString(state, 'id');
+
+    for (
+      var attempt = 0;
+      attempt < 150 &&
+          state['status'] != 'completed' &&
+          state['status'] != 'failed';
+      attempt++
+    ) {
+      final statusResponse = await _dio.get(
+        '/construction-journal-exports/$exportId',
+      );
+      state = _extractMap(MobileApiResponse.payload(statusResponse.data));
+      if (state['status'] != 'completed' && state['status'] != 'failed') {
+        await Future<void>.delayed(const Duration(seconds: 2));
+      }
+    }
+
+    if (state['status'] == 'completed') {
+      return _requiredString(state, 'url');
+    }
+    if (state['status'] == 'failed') {
+      throw ApiException(
+        state['error_code'] == 'export_too_large'
+            ? 'Для выбранного периода слишком много записей. Сократите период выгрузки.'
+            : 'Не удалось подготовить файл.',
+      );
+    }
+    throw const ApiException(
+      'Подготовка файла заняла слишком много времени. Повторите проверку позже.',
+    );
   }
 
   Future<ConstructionJournalEntryModel> _entryAction(
@@ -432,6 +532,17 @@ class ConstructionJournalRepository extends SyncQueueAwareRepository {
     }
 
     return value;
+  }
+
+  String _newIdempotencyKey() {
+    final random = Random.secure();
+    final entropy =
+        List<int>.generate(
+          4,
+          (_) => random.nextInt(1 << 32),
+        ).map((value) => value.toRadixString(16).padLeft(8, '0')).join();
+
+    return 'journal-${DateTime.now().microsecondsSinceEpoch}-$entropy';
   }
 
   void _rethrowKnown(Object error) {

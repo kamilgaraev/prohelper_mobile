@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
@@ -26,6 +26,12 @@ class ConstructionJournalDetailScreen extends ConsumerWidget {
     final notifier = ref.read(
       constructionJournalDetailProvider(journalId).notifier,
     );
+    Future<void> transition(String action) async {
+      await ref
+          .read(constructionJournalRepositoryProvider)
+          .transitionJournal(journalId, action);
+      await notifier.load();
+    }
 
     return Scaffold(
       appBar: AppBar(
@@ -171,6 +177,39 @@ class ConstructionJournalDetailScreen extends ConsumerWidget {
                                 },
                                 icon: const Icon(Icons.download_rounded),
                                 label: const Text('Экспорт КС-6'),
+                              ),
+                            if (state.availableActions.hasAction(
+                              ConstructionJournalActionKeys.close,
+                            ))
+                              OutlinedButton.icon(
+                                onPressed:
+                                    () => transition(
+                                      ConstructionJournalActionKeys.close,
+                                    ),
+                                icon: const Icon(Icons.lock_outline_rounded),
+                                label: const Text('Закрыть журнал'),
+                              ),
+                            if (state.availableActions.hasAction(
+                              ConstructionJournalActionKeys.archive,
+                            ))
+                              OutlinedButton.icon(
+                                onPressed:
+                                    () => transition(
+                                      ConstructionJournalActionKeys.archive,
+                                    ),
+                                icon: const Icon(Icons.archive_outlined),
+                                label: const Text('В архив'),
+                              ),
+                            if (state.availableActions.hasAction(
+                              ConstructionJournalActionKeys.reopen,
+                            ))
+                              OutlinedButton.icon(
+                                onPressed:
+                                    () => transition(
+                                      ConstructionJournalActionKeys.reopen,
+                                    ),
+                                icon: const Icon(Icons.lock_open_rounded),
+                                label: const Text('Открыть снова'),
                               ),
                           ],
                         ),
