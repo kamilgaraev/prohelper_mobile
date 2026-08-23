@@ -90,8 +90,12 @@ class MachineryShiftReportModel {
     required this.availableActions,
     this.assetName,
     this.assignmentId,
+    this.scheduleTaskId,
+    this.constructionJournalEntryId,
     this.meterStart,
     this.meterEnd,
+    this.cancelledAt,
+    this.cancellationReason,
   });
 
   final int id;
@@ -105,8 +109,12 @@ class MachineryShiftReportModel {
   final List<String> availableActions;
   final String? assetName;
   final int? assignmentId;
+  final int? scheduleTaskId;
+  final int? constructionJournalEntryId;
   final double? meterStart;
   final double? meterEnd;
+  final String? cancelledAt;
+  final String? cancellationReason;
 
   factory MachineryShiftReportModel.fromJson(Map<String, dynamic> json) {
     return MachineryShiftReportModel(
@@ -121,8 +129,14 @@ class MachineryShiftReportModel {
       availableActions: _stringList(json['available_actions']),
       assetName: _nestedName(json['asset']),
       assignmentId: _asNullableInt(json['assignment_id']),
+      scheduleTaskId: _asNullableInt(json['schedule_task_id']),
+      constructionJournalEntryId: _asNullableInt(
+        json['construction_journal_entry_id'],
+      ),
       meterStart: _asNullableDouble(json['meter_start']),
       meterEnd: _asNullableDouble(json['meter_end']),
+      cancelledAt: _asNullableString(json['cancelled_at']),
+      cancellationReason: _asNullableString(json['cancellation_reason']),
     );
   }
 }

@@ -8,6 +8,7 @@ void main() {
       assignmentId: 20,
       projectId: 30,
       meterStart: 125.5,
+      preShiftInspection: const <String, dynamic>{'result': 'serviceable'},
       idempotencyKey: 'stable-key',
     );
 
@@ -15,5 +16,8 @@ void main() {
     expect(action.endpoint, '/machinery-operations/shift-reports');
     expect(action.payload['assignment_id'], 20);
     expect(action.payload['meter_start'], 125.5);
+    expect(action.payload['pre_shift_inspection'], <String, dynamic>{
+      'result': 'serviceable',
+    });
   });
 }

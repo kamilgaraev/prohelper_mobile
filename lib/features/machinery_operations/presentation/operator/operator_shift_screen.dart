@@ -21,6 +21,15 @@ class OperatorShiftScreen extends ConsumerWidget {
                   (item) => item.assetId == asset.id && item.status == 'draft',
                 )
                 .firstOrNull;
+    final blockedShift =
+        asset == null
+            ? null
+            : state.shiftReports
+                .where(
+                  (item) =>
+                      item.assetId == asset.id && item.status == 'blocked',
+                )
+                .firstOrNull;
 
     return _RoleScaffold(
       title: 'Смена оператора',
@@ -39,7 +48,13 @@ class OperatorShiftScreen extends ConsumerWidget {
         else ...[
           _AssetHeader(asset: asset),
           const SizedBox(height: 12),
-          if (shift == null)
+          if (blockedShift != null)
+            const _MessageCard(
+              icon: Icons.block_rounded,
+              text:
+                  'Предсменный осмотр запретил эксплуатацию. Передайте технику механику или диспетчеру.',
+            )
+          else if (shift == null)
             _StartShiftCard(asset: asset)
           else if (shift.meterEnd == null)
             _ActiveShiftCard(asset: asset, shift: shift)
@@ -63,10 +78,13 @@ class _StartShiftCardState extends ConsumerState<_StartShiftCard> {
   late final TextEditingController meter = TextEditingController(
     text: widget.asset.meterHours.toStringAsFixed(1),
   );
+  final TextEditingController inspectionNotes = TextEditingController();
+  String inspectionResult = 'serviceable';
 
   @override
   void dispose() {
     meter.dispose();
+    inspectionNotes.dispose();
     super.dispose();
   }
 
@@ -96,6 +114,36 @@ class _StartShiftCardState extends ConsumerState<_StartShiftCard> {
               ),
             ),
             const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              initialValue: inspectionResult,
+              decoration: const InputDecoration(
+                labelText: 'Результат предсменного осмотра',
+                border: OutlineInputBorder(),
+              ),
+              items: const [
+                DropdownMenuItem(value: 'serviceable', child: Text('Исправна')),
+                DropdownMenuItem(
+                  value: 'restricted',
+                  child: Text('С ограничениями'),
+                ),
+                DropdownMenuItem(
+                  value: 'unavailable',
+                  child: Text('Эксплуатация запрещена'),
+                ),
+              ],
+              onChanged:
+                  (value) =>
+                      setState(() => inspectionResult = value ?? 'serviceable'),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: inspectionNotes,
+              decoration: const InputDecoration(
+                labelText: 'Комментарий к осмотру',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 12),
             SizedBox(
               width: double.infinity,
               child: FilledButton.icon(
@@ -115,6 +163,12 @@ class _StartShiftCardState extends ConsumerState<_StartShiftCard> {
                                       meter.text.replaceAll(',', '.'),
                                     ) ??
                                     0,
+                                preShiftInspection: <String, dynamic>{
+                                  'result': inspectionResult,
+                                  if (inspectionNotes.text.trim().isNotEmpty)
+                                    'notes': inspectionNotes.text.trim(),
+                                  'defects': const <Map<String, dynamic>>[],
+                                },
                               ),
                             ),
                 icon: const Icon(Icons.play_arrow_rounded),
@@ -197,44 +251,82 @@ class _ActiveShiftCard extends ConsumerWidget {
     final meter = TextEditingController();
     final hours = TextEditingController(text: '8');
     final fuel = TextEditingController(text: '0');
+    final inspectionNotes = TextEditingController();
+    var inspectionResult = 'serviceable';
     final accepted = await showDialog<bool>(
       context: context,
       builder:
-          (context) => AlertDialog(
-            title: const Text('Завершение смены'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: meter,
-                  decoration: const InputDecoration(
-                    labelText: 'Конечный счётчик',
+          (context) => StatefulBuilder(
+            builder:
+                (context, setDialogState) => AlertDialog(
+                  title: const Text('Завершение смены'),
+                  content: SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        TextField(
+                          controller: meter,
+                          decoration: const InputDecoration(
+                            labelText: 'Конечный счётчик',
+                          ),
+                        ),
+                        TextField(
+                          controller: hours,
+                          decoration: const InputDecoration(
+                            labelText: 'Фактические часы',
+                          ),
+                        ),
+                        TextField(
+                          controller: fuel,
+                          decoration: const InputDecoration(
+                            labelText: 'Расход топлива',
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        DropdownButtonFormField<String>(
+                          initialValue: inspectionResult,
+                          decoration: const InputDecoration(
+                            labelText: 'Результат послесменного осмотра',
+                          ),
+                          items: const [
+                            DropdownMenuItem(
+                              value: 'serviceable',
+                              child: Text('Исправна'),
+                            ),
+                            DropdownMenuItem(
+                              value: 'restricted',
+                              child: Text('С ограничениями'),
+                            ),
+                            DropdownMenuItem(
+                              value: 'unavailable',
+                              child: Text('Эксплуатация запрещена'),
+                            ),
+                          ],
+                          onChanged:
+                              (value) => setDialogState(
+                                () => inspectionResult = value ?? 'serviceable',
+                              ),
+                        ),
+                        TextField(
+                          controller: inspectionNotes,
+                          decoration: const InputDecoration(
+                            labelText: 'Комментарий к осмотру',
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context, false),
+                      child: const Text('Отмена'),
+                    ),
+                    FilledButton(
+                      onPressed: () => Navigator.pop(context, true),
+                      child: const Text('Завершить'),
+                    ),
+                  ],
                 ),
-                TextField(
-                  controller: hours,
-                  decoration: const InputDecoration(
-                    labelText: 'Фактические часы',
-                  ),
-                ),
-                TextField(
-                  controller: fuel,
-                  decoration: const InputDecoration(
-                    labelText: 'Расход топлива',
-                  ),
-                ),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context, false),
-                child: const Text('Отмена'),
-              ),
-              FilledButton(
-                onPressed: () => Navigator.pop(context, true),
-                child: const Text('Завершить'),
-              ),
-            ],
           ),
     );
     if (accepted == true) {
@@ -249,12 +341,19 @@ class _ActiveShiftCard extends ConsumerWidget {
               fuelConsumed:
                   double.tryParse(fuel.text.replaceAll(',', '.')) ?? 0,
               meterEnd: double.tryParse(meter.text.replaceAll(',', '.')) ?? 0,
+              postShiftInspection: <String, dynamic>{
+                'result': inspectionResult,
+                if (inspectionNotes.text.trim().isNotEmpty)
+                  'notes': inspectionNotes.text.trim(),
+                'defects': const <Map<String, dynamic>>[],
+              },
             ),
           );
     }
     meter.dispose();
     hours.dispose();
     fuel.dispose();
+    inspectionNotes.dispose();
   }
 }
 

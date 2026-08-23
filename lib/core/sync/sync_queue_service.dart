@@ -100,12 +100,20 @@ class SyncQueueService {
 
   Future<SyncQueueProcessResult> retryDueOperations() async {
     final now = _now();
-    final operations = await _store.due(now);
+    final operations = await _store.all();
     var successCount = 0;
     var retryCount = 0;
     var blockedCount = 0;
 
     for (final operation in operations) {
+      if (operation.status != SyncOperationStatuses.queued) {
+        blockedCount++;
+        break;
+      }
+      if (operation.nextAttemptAt?.isAfter(now) ?? false) {
+        retryCount++;
+        break;
+      }
       final outcome = await _retryOperation(operation);
 
       switch (outcome) {
@@ -182,6 +190,15 @@ class SyncQueueService {
         ..status = SyncOperationStatuses.permissionDenied
         ..nextAttemptAt = null
         ..lastBusinessError = SyncQueueMessages.permissionDenied;
+      await _store.put(operation);
+      return;
+    }
+
+    if (statusCode == 409) {
+      operation
+        ..status = SyncOperationStatuses.conflict
+        ..nextAttemptAt = null
+        ..lastBusinessError = ApiException.fromDio(error).message;
       await _store.put(operation);
       return;
     }
