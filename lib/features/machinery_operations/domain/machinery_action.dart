@@ -25,6 +25,7 @@ final class StartShiftAction extends MachineryAction {
     required this.assignmentId,
     required this.projectId,
     required this.meterStart,
+    required this.preShiftInspection,
     this.plannedHours,
     super.idempotencyKey,
   });
@@ -32,6 +33,7 @@ final class StartShiftAction extends MachineryAction {
   final int assignmentId;
   final int projectId;
   final double meterStart;
+  final Map<String, dynamic> preShiftInspection;
   final double? plannedHours;
 
   @override
@@ -50,6 +52,7 @@ final class StartShiftAction extends MachineryAction {
     'actual_hours': 0,
     'fuel_consumed': 0,
     'meter_start': meterStart,
+    'pre_shift_inspection': preShiftInspection,
   };
 }
 
@@ -60,6 +63,7 @@ final class FinishShiftAction extends MachineryAction {
     required this.actualHours,
     required this.fuelConsumed,
     required this.meterEnd,
+    required this.postShiftInspection,
     this.workDescription,
     super.idempotencyKey,
   });
@@ -68,6 +72,7 @@ final class FinishShiftAction extends MachineryAction {
   final double actualHours;
   final double fuelConsumed;
   final double meterEnd;
+  final Map<String, dynamic> postShiftInspection;
   final String? workDescription;
 
   @override
@@ -81,6 +86,7 @@ final class FinishShiftAction extends MachineryAction {
     'actual_hours': actualHours,
     'fuel_consumed': fuelConsumed,
     'meter_end': meterEnd,
+    'post_shift_inspection': postShiftInspection,
     if (workDescription?.trim().isNotEmpty ?? false)
       'work_description': workDescription!.trim(),
   };
@@ -138,6 +144,52 @@ final class RecordDowntimeAction extends MachineryAction {
     'reason': reasonCode,
     'started_at': startedAt.toUtc().toIso8601String(),
     'duration_minutes': durationMinutes,
+    if (comment?.trim().isNotEmpty ?? false) 'comment': comment!.trim(),
+  };
+}
+
+final class RecordFuelAction extends MachineryAction {
+  RecordFuelAction(
+    super.assetId, {
+    required this.projectId,
+    required this.shiftId,
+    required this.warehouseId,
+    required this.materialId,
+    required this.fuelType,
+    required this.quantity,
+    required this.unit,
+    required this.issuedAt,
+    this.comment,
+    super.idempotencyKey,
+  });
+
+  final int projectId;
+  final int shiftId;
+  final int warehouseId;
+  final int materialId;
+  final String fuelType;
+  final double quantity;
+  final String unit;
+  final DateTime issuedAt;
+  final String? comment;
+
+  @override
+  String get operationType => 'record_fuel';
+
+  @override
+  String get endpoint => '/machinery-operations/fuel-issues';
+
+  @override
+  Map<String, dynamic> get payload => {
+    'asset_id': assetId,
+    'project_id': projectId,
+    'shift_report_id': shiftId,
+    'warehouse_id': warehouseId,
+    'material_id': materialId,
+    'fuel_type': fuelType.trim(),
+    'quantity': quantity,
+    'unit': unit.trim(),
+    'issued_at': issuedAt.toUtc().toIso8601String(),
     if (comment?.trim().isNotEmpty ?? false) 'comment': comment!.trim(),
   };
 }

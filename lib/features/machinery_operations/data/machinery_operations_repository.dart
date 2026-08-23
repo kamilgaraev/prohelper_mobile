@@ -193,31 +193,29 @@ class MachineryOperationsRepository extends SyncQueueAwareRepository {
   Future<void> createFuelIssue({
     required int assetId,
     required int projectId,
+    required int shiftReportId,
+    required int warehouseId,
+    required int materialId,
     required String issuedAt,
     required String fuelType,
     required double quantity,
     required String unit,
     String? comment,
   }) async {
-    try {
-      await _dio.post(
-        '/machinery-operations/fuel-issues',
-        data: {
-          'asset_id': assetId,
-          'project_id': projectId,
-          'issued_at': issuedAt,
-          'fuel_type': fuelType.trim(),
-          'quantity': quantity,
-          'unit': unit.trim(),
-          if (comment != null && comment.trim().isNotEmpty)
-            'comment': comment.trim(),
-        },
-      );
-    } on DioException catch (error) {
-      throw ApiException.fromDio(error);
-    } catch (_) {
-      throw const ApiException('Не удалось зафиксировать ГСМ.');
-    }
+    await executeAction(
+      RecordFuelAction(
+        assetId,
+        projectId: projectId,
+        shiftId: shiftReportId,
+        warehouseId: warehouseId,
+        materialId: materialId,
+        issuedAt: DateTime.parse(issuedAt),
+        fuelType: fuelType,
+        quantity: quantity,
+        unit: unit,
+        comment: comment,
+      ),
+    );
   }
 
   Future<void> createProductionRecord({

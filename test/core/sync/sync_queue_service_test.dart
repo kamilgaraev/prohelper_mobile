@@ -177,51 +177,107 @@ void main() {
     expect(adapter.requests, hasLength(2));
   });
 
-  test('marks conflict for editing and preserves dependent operation order', () async {
-    final store = _MemorySyncQueueStore();
-    final adapter =
-        _QueueHttpAdapter()
-          ..responses.add(
-            _AdapterResponse(
-              statusCode: 409,
-              body: '{"message":"Операция конфликтует с текущими данными"}',
-            ),
-          )
-          ..responses.add(
-            _AdapterResponse(statusCode: 200, body: '{"ok":true}'),
-          );
-    final service = SyncQueueService(
-      store: store,
-      dio: _dio(adapter),
-      now: () => DateTime(2026, 8, 23, 10),
-    );
-    final conflicted = await service.enqueue(_siteRequestDraft());
-    await service.enqueue(
-      const SyncQueueDraft(
-        moduleSlug: 'warehouse',
-        operationType: 'receive_project_delivery',
-        method: 'POST',
-        endpoint: '/warehouse/project-material-deliveries/10/receive',
-        payload: <String, dynamic>{
-          'quantity': 1,
-          'idempotency_key': 'dependent-operation',
-        },
-      ),
-    );
+  test(
+    'marks conflict for editing and preserves dependent operation order',
+    () async {
+      final store = _MemorySyncQueueStore();
+      final adapter =
+          _QueueHttpAdapter()
+            ..responses.add(
+              _AdapterResponse(
+                statusCode: 409,
+                body: '{"message":"Операция конфликтует с текущими данными"}',
+              ),
+            )
+            ..responses.add(
+              _AdapterResponse(statusCode: 200, body: '{"ok":true}'),
+            );
+      final service = SyncQueueService(
+        store: store,
+        dio: _dio(adapter),
+        now: () => DateTime(2026, 8, 23, 10),
+      );
+      final conflicted = await service.enqueue(_siteRequestDraft());
+      await service.enqueue(
+        const SyncQueueDraft(
+          moduleSlug: 'warehouse',
+          operationType: 'receive_project_delivery',
+          method: 'POST',
+          endpoint: '/warehouse/project-material-deliveries/10/receive',
+          payload: <String, dynamic>{
+            'quantity': 1,
+            'idempotency_key': 'dependent-operation',
+          },
+        ),
+      );
 
-    final result = await service.retryDueOperations();
+      final result = await service.retryDueOperations();
 
-    expect(result.blockedCount, 1);
-    expect(result.successCount, 0);
-    expect(adapter.requests, hasLength(1));
-    final blocked = await store.get(conflicted.id);
-    expect(blocked?.status, SyncOperationStatuses.needsEdit);
-    expect(
-      blocked?.lastBusinessError,
-      'Операция конфликтует с текущими данными',
-    );
-    expect(await store.all(), hasLength(2));
-  });
+      expect(result.blockedCount, 1);
+      expect(result.successCount, 0);
+      expect(adapter.requests, hasLength(1));
+      final blocked = await store.get(conflicted.id);
+      expect(blocked?.status, SyncOperationStatuses.conflict);
+      expect(
+        blocked?.lastBusinessError,
+        'Операция конфликтует с текущими данными',
+      );
+      expect(await store.all(), hasLength(2));
+    },
+  );
+
+  test(
+    'blocked predecessor fences later operations across retry runs',
+    () async {
+      final store = _MemorySyncQueueStore();
+      final adapter =
+          _QueueHttpAdapter()
+            ..responses.add(
+              _AdapterResponse(
+                statusCode: 409,
+                body: '{"message":"Смена уже открыта на другом устройстве"}',
+              ),
+            )
+            ..responses.add(
+              _AdapterResponse(statusCode: 200, body: '{"ok":true}'),
+            );
+      final service = SyncQueueService(
+        store: store,
+        dio: _dio(adapter),
+        now: () => DateTime(2026, 8, 23, 10),
+      );
+      final start = await service.enqueue(
+        const SyncQueueDraft(
+          moduleSlug: 'machinery_operations',
+          operationType: 'start_shift',
+          method: 'POST',
+          endpoint: '/machinery-operations/shift-reports',
+          payload: <String, dynamic>{'idempotency_key': 'offline-start'},
+        ),
+      );
+      await service.enqueue(
+        const SyncQueueDraft(
+          moduleSlug: 'machinery_operations',
+          operationType: 'finish_shift',
+          method: 'POST',
+          endpoint: '/machinery-operations/shift-reports/42/finish',
+          payload: <String, dynamic>{'idempotency_key': 'offline-finish'},
+        ),
+      );
+
+      await service.retryDueOperations();
+      final secondRun = await service.retryDueOperations();
+
+      expect(secondRun.blockedCount, 1);
+      expect(secondRun.successCount, 0);
+      expect(adapter.requests, hasLength(1));
+      expect(
+        (await store.get(start.id))?.status,
+        SyncOperationStatuses.conflict,
+      );
+      expect(await store.all(), hasLength(2));
+    },
+  );
 
   test('removes queued item after successful submit', () async {
     final store = _MemorySyncQueueStore();

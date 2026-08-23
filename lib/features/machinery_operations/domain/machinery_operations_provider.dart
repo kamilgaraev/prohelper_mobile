@@ -1,4 +1,4 @@
-﻿import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/error/user_message.dart';
 import '../../../core/sync/queued_sync_operation.dart';
@@ -182,6 +182,9 @@ class MachineryOperationsNotifier
 
   Future<void> createFuelIssue(
     MachineryAssetModel asset, {
+    required int shiftReportId,
+    required int warehouseId,
+    required int materialId,
     required DateTime issuedAt,
     required String fuelType,
     required double quantity,
@@ -196,6 +199,9 @@ class MachineryOperationsNotifier
     await _repository.createFuelIssue(
       assetId: asset.id,
       projectId: projectId,
+      shiftReportId: shiftReportId,
+      warehouseId: warehouseId,
+      materialId: materialId,
       issuedAt: issuedAt.toUtc().toIso8601String(),
       fuelType: fuelType,
       quantity: quantity,

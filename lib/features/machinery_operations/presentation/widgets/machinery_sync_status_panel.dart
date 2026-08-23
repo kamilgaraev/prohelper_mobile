@@ -57,7 +57,8 @@ class MachinerySyncStatusPanel extends ConsumerWidget {
               ),
             if (operations.any(
               (operation) =>
-                  operation.status == SyncOperationStatuses.needsEdit,
+                  operation.status == SyncOperationStatuses.needsEdit ||
+                  operation.status == SyncOperationStatuses.conflict,
             ))
               const Text(
                 'Отклонённые сервером операции не повторяются автоматически. Исправьте данные и отправьте заново.',
@@ -70,6 +71,7 @@ class MachinerySyncStatusPanel extends ConsumerWidget {
 
   static String _label(String status) => switch (status) {
     SyncOperationStatuses.sending => 'Отправляется',
+    SyncOperationStatuses.conflict => 'Конфликт состояния',
     SyncOperationStatuses.needsEdit => 'Отклонено сервером',
     SyncOperationStatuses.permissionDenied => 'Недостаточно прав',
     _ => 'Ожидает отправки',
@@ -77,6 +79,7 @@ class MachinerySyncStatusPanel extends ConsumerWidget {
 
   static IconData _icon(String status) => switch (status) {
     SyncOperationStatuses.sending => Icons.sync_rounded,
+    SyncOperationStatuses.conflict => Icons.compare_arrows_rounded,
     SyncOperationStatuses.needsEdit => Icons.error_outline_rounded,
     SyncOperationStatuses.permissionDenied => Icons.lock_outline_rounded,
     _ => Icons.cloud_upload_outlined,
@@ -88,6 +91,7 @@ class MachinerySyncStatusPanel extends ConsumerWidget {
         'finish_shift' => 'Завершение смены',
         'submit_shift' => 'Отправка рапорта',
         'record_downtime' => 'Простой',
+        'record_fuel' => 'Заправка',
         'complete_maintenance' => 'Завершение ТО',
         _ => 'Операция с техникой',
       };

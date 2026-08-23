@@ -10,6 +10,7 @@ class SyncOperationStatuses {
   static const queued = 'queued';
   static const sending = 'sending';
   static const needsEdit = 'needs_edit';
+  static const conflict = 'conflict';
   static const permissionDenied = 'permission_denied';
 }
 
