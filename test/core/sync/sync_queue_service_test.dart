@@ -177,6 +177,52 @@ void main() {
     expect(adapter.requests, hasLength(2));
   });
 
+  test('marks conflict for editing and preserves dependent operation order', () async {
+    final store = _MemorySyncQueueStore();
+    final adapter =
+        _QueueHttpAdapter()
+          ..responses.add(
+            _AdapterResponse(
+              statusCode: 409,
+              body: '{"message":"Операция конфликтует с текущими данными"}',
+            ),
+          )
+          ..responses.add(
+            _AdapterResponse(statusCode: 200, body: '{"ok":true}'),
+          );
+    final service = SyncQueueService(
+      store: store,
+      dio: _dio(adapter),
+      now: () => DateTime(2026, 8, 23, 10),
+    );
+    final conflicted = await service.enqueue(_siteRequestDraft());
+    await service.enqueue(
+      const SyncQueueDraft(
+        moduleSlug: 'warehouse',
+        operationType: 'receive_project_delivery',
+        method: 'POST',
+        endpoint: '/warehouse/project-material-deliveries/10/receive',
+        payload: <String, dynamic>{
+          'quantity': 1,
+          'idempotency_key': 'dependent-operation',
+        },
+      ),
+    );
+
+    final result = await service.retryDueOperations();
+
+    expect(result.blockedCount, 1);
+    expect(result.successCount, 0);
+    expect(adapter.requests, hasLength(1));
+    final blocked = await store.get(conflicted.id);
+    expect(blocked?.status, SyncOperationStatuses.needsEdit);
+    expect(
+      blocked?.lastBusinessError,
+      'Операция конфликтует с текущими данными',
+    );
+    expect(await store.all(), hasLength(2));
+  });
+
   test('removes queued item after successful submit', () async {
     final store = _MemorySyncQueueStore();
     final service = SyncQueueService(
