@@ -63,6 +63,54 @@ void main() {
     expect(container.read(authSessionVersionProvider), 1);
   });
 
+  test('inactive organization membership clears the local session', () async {
+    final adapter =
+        _AuthHttpAdapter()
+          ..responses.add(
+            _AdapterResponse(
+              statusCode: 403,
+              body:
+                  '{"success":false,"code":"organization_membership_inactive"}',
+            ),
+          );
+    final storage = _MemorySecureStorage()..token = 'member-token';
+    final container = _container(adapter, storage);
+    addTearDown(container.dispose);
+    final dio = container.read(dioProvider)..httpClientAdapter = adapter;
+
+    await expectLater(
+      dio.get<dynamic>('/protected'),
+      throwsA(isA<DioException>()),
+    );
+
+    expect(await storage.getToken(), isNull);
+    expect(container.read(authSessionVersionProvider), 1);
+    expect(adapter.requests.map((request) => request.path), ['/protected']);
+  });
+
+  test('ordinary forbidden response preserves the authenticated session', () async {
+    final adapter =
+        _AuthHttpAdapter()
+          ..responses.add(
+            _AdapterResponse(
+              statusCode: 403,
+              body: '{"success":false,"code":"http_403"}',
+            ),
+          );
+    final storage = _MemorySecureStorage()..token = 'member-token';
+    final container = _container(adapter, storage);
+    addTearDown(container.dispose);
+    final dio = container.read(dioProvider)..httpClientAdapter = adapter;
+
+    await expectLater(
+      dio.get<dynamic>('/protected'),
+      throwsA(isA<DioException>()),
+    );
+
+    expect(await storage.getToken(), 'member-token');
+    expect(container.read(authSessionVersionProvider), 0);
+  });
+
   test('does not replace explicit authorization header', () async {
     final adapter =
         _AuthHttpAdapter()
