@@ -45,6 +45,18 @@ class AuthInterceptor extends Interceptor {
     DioException err,
     ErrorInterceptorHandler handler,
   ) async {
+    final responseData = err.response?.data;
+    final isInactiveMembership =
+        err.response?.statusCode == 403 &&
+        responseData is Map<String, dynamic> &&
+        responseData['code'] == 'organization_membership_inactive';
+
+    if (isInactiveMembership) {
+      await _invalidateSession();
+      handler.next(err);
+      return;
+    }
+
     if (err.response?.statusCode != 401) {
       handler.next(err);
       return;
