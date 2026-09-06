@@ -111,11 +111,11 @@ class MobileMoreScreen extends ConsumerWidget {
           _MoreActionPanel(
             title: 'Помощь',
             subtitle:
-                'Быстрый доступ к инструкциям по модулям и рабочим сценариям.',
+                'Подсказки по работе в системе.',
             items: [
               _MoreActionItem(
-                title: 'База знаний',
-                subtitle: 'Статьи, вложенные разделы и поиск по инструкциям',
+                title: 'Помощник МОСТ',
+                subtitle: 'Задайте вопрос и получите короткий ответ',
                 icon: Icons.menu_book_outlined,
                 onTap:
                     () => Navigator.of(context).push(
