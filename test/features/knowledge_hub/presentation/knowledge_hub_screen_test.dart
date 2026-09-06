@@ -1,263 +1,115 @@
-﻿import 'package:dio/dio.dart';
+import 'dart:async';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:prohelpers_mobile/core/theme/pro_theme.dart';
-import 'package:prohelpers_mobile/core/widgets/pro_surface.dart';
-import 'package:prohelpers_mobile/features/knowledge_hub/data/knowledge_article_model.dart';
-import 'package:prohelpers_mobile/features/knowledge_hub/data/knowledge_hub_repository.dart';
+import 'package:prohelpers_mobile/features/knowledge_hub/data/knowledge_assistant_repository.dart';
 import 'package:prohelpers_mobile/features/knowledge_hub/presentation/knowledge_hub_screen.dart';
 
-class _FakeKnowledgeHubRepository extends KnowledgeHubRepository {
-  _FakeKnowledgeHubRepository() : super(Dio());
-
-  static const tree = [
-    KnowledgeArticleModel(
-      id: 1,
-      title: 'Заявки объекта',
-      slug: 'site-requests',
-      excerpt: 'Разделы и вложенные инструкции',
-      children: [
-        KnowledgeArticleModel(
-          id: 2,
-          title: 'Создание заявки',
-          slug: 'site-request-create',
-          excerpt: 'Как создать заявку с объекта',
-        ),
-      ],
-    ),
-  ];
-
-  static const articles = [
-    KnowledgeArticleModel(
-      id: 3,
-      title: 'Проверка складских остатков',
-      slug: 'warehouse-stock',
-      excerpt: 'Как проверить доступные материалы',
-      readingTime: 4,
-      isPinned: true,
-    ),
-    KnowledgeArticleModel(
-      id: 4,
-      title: 'Согласование заявки',
-      slug: 'request-approval',
-      excerpt: 'Как принять решение по заявке',
-      readingTime: 2,
-    ),
-  ];
+class _Repository extends KnowledgeAssistantRepository {
+  _Repository() : super(Dio());
+  Completer<KnowledgeAssistantAnswer> response = Completer();
+  int calls = 0;
+  String? context;
+  CancelToken? token;
 
   @override
-  Future<List<KnowledgeArticleModel>> fetchTree({
-    String? moduleSlug,
-    String? contextKey,
-  }) async {
-    return tree;
-  }
-
-  @override
-  Future<KnowledgeArticlePage> fetchArticles({
-    int page = 1,
-    int perPage = 20,
-    String? query,
-    String? moduleSlug,
-    String? contextKey,
-    String? permissionKey,
-  }) async {
-    return KnowledgeArticlePage(
-      items: articles,
-      currentPage: 1,
-      lastPage: 1,
-      perPage: 20,
-      total: articles.length,
-    );
+  Future<KnowledgeAssistantAnswer> ask(String question, {String? contextKey, required CancelToken cancelToken}) {
+    calls++;
+    context = contextKey;
+    token = cancelToken;
+    return response.future;
   }
 }
 
 void main() {
-  void usePhoneViewport(WidgetTester tester) {
+  Future<void> open(WidgetTester tester, _Repository repository) async {
     tester.view.physicalSize = const Size(390, 844);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(ProviderScope(
+      overrides: [knowledgeAssistantRepositoryProvider.overrideWithValue(repository)],
+      child: MaterialApp(theme: MostTheme.lightTheme, home: const KnowledgeHubScreen(contextKey: 'site_requests')),
+    ));
+    await tester.pumpAndSettle();
   }
 
-  testWidgets(
-    'кнопка обновления базы знаний имеет понятную accessibility-метку',
-    (tester) async {
-      usePhoneViewport(tester);
+  Future<void> ask(WidgetTester tester) async {
+    await tester.enterText(find.byType(TextField), 'Как создать заявку?');
+    await tester.pump();
+    await tester.tap(find.text('Спросить'));
+    await tester.pump();
+  }
 
-      await tester.pumpWidget(
-        ProviderScope(
-          overrides: [
-            knowledgeHubRepositoryProvider.overrideWithValue(
-              _FakeKnowledgeHubRepository(),
-            ),
-          ],
-          child: MaterialApp(
-            theme: MostTheme.lightTheme,
-            home: const KnowledgeHubScreen(),
-          ),
-        ),
-      );
-
-      await tester.pumpAndSettle();
-
-      final refreshButton = find.widgetWithIcon(
-        IconButton,
-        Icons.refresh_rounded,
-      );
-
-      expect(refreshButton, findsOneWidget);
-      expect(find.byTooltip('Обновить базу знаний'), findsOneWidget);
-
-      final refreshIcon = tester.widget<Icon>(
-        find.descendant(of: refreshButton, matching: find.byType(Icon)),
-      );
-
-      expect(refreshIcon.semanticLabel, 'Обновить базу знаний');
-    },
-  );
-
-  testWidgets('закрепляет структуру и статьи внутри карточных поверхностей', (
-    tester,
-  ) async {
-    usePhoneViewport(tester);
-
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          knowledgeHubRepositoryProvider.overrideWithValue(
-            _FakeKnowledgeHubRepository(),
-          ),
-        ],
-        child: MaterialApp(
-          theme: MostTheme.lightTheme,
-          home: const KnowledgeHubScreen(),
-        ),
-      ),
-    );
-
+  testWidgets('передаёт контекст, исключает повтор и показывает ответ', (tester) async {
+    final repository = _Repository();
+    await open(tester, repository);
+    expect(repository.calls, 0);
+    await ask(tester);
+    expect(repository.context, 'site_requests');
+    await tester.tap(find.text('Готовим ответ…'));
+    expect(repository.calls, 1);
+    repository.response.complete(const KnowledgeAssistantAnswer(answer: 'Откройте заявки.', answered: true, sources: []));
     await tester.pumpAndSettle();
-
-    expect(
-      find.ancestor(
-        of: find.text('Структура'),
-        matching: find.byType(ProSurface),
-      ),
-      findsOneWidget,
-    );
-    expect(
-      find.ancestor(of: find.text('Статьи'), matching: find.byType(ProSurface)),
-      findsOneWidget,
-    );
+    expect(find.text('Откройте заявки.'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
-  testWidgets('поиск базы знаний отделяет поле ввода от кнопки поиска', (
-    tester,
-  ) async {
-    usePhoneViewport(tester);
-    final semantics = tester.ensureSemantics();
-
-    try {
-      await tester.pumpWidget(
-        ProviderScope(
-          overrides: [
-            knowledgeHubRepositoryProvider.overrideWithValue(
-              _FakeKnowledgeHubRepository(),
-            ),
-          ],
-          child: MaterialApp(
-            theme: MostTheme.lightTheme,
-            home: const KnowledgeHubScreen(),
-          ),
-        ),
-      );
-
-      await tester.pumpAndSettle();
-
-      final nodes = _collectSemanticsNodes(tester.binding.rootPipelineOwner);
-      final textFieldNodes = nodes
-          .toSet()
-          .where((node) => node.hasFlag(SemanticsFlag.isTextField))
-          .toList(growable: false);
-
-      expect(textFieldNodes, hasLength(1));
-      expect(find.bySemanticsLabel('Искать по базе знаний'), findsOneWidget);
-
-      final nestedSearchButtons = _collectSemanticsSubtree(
-            textFieldNodes.single,
-          )
-          .skip(1)
-          .where((node) => node.hasFlag(SemanticsFlag.isButton))
-          .where(
-            (node) =>
-                node.getSemanticsData().label == 'Искать по базе знаний' ||
-                node.getSemanticsData().label == 'Искать',
-          )
-          .toList(growable: false);
-
-      expect(nestedSearchButtons, isEmpty);
-    } finally {
-      semantics.dispose();
-    }
+  testWidgets('сохраняет вопрос и позволяет повторить после ошибки', (tester) async {
+    final repository = _Repository();
+    await open(tester, repository);
+    await ask(tester);
+    repository.response.completeError(Exception('offline'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Не удалось получить ответ'), findsOneWidget);
+    expect(tester.widget<TextField>(find.byType(TextField)).controller!.text, 'Как создать заявку?');
+    repository.response = Completer();
+    await tester.tap(find.text('Спросить'));
+    await tester.pump();
+    repository.response.complete(const KnowledgeAssistantAnswer(answer: 'Уточните вопрос.', answered: false, sources: []));
+    await tester.pumpAndSettle();
+    expect(repository.calls, 2);
+    expect(find.text('Уточните вопрос.'), findsOneWidget);
   });
 
-  testWidgets('экран базы знаний проходит базовые accessibility guidelines', (
-    tester,
-  ) async {
-    usePhoneViewport(tester);
+  testWidgets('отменяет запрос при закрытии экрана', (tester) async {
+    final repository = _Repository();
+    await open(tester, repository);
+    await ask(tester);
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump();
+    expect(repository.token!.isCancelled, isTrue);
+    repository.response.complete(const KnowledgeAssistantAnswer(answer: 'Поздний ответ', answered: true, sources: []));
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('сообщает о лимите без совета проверить сеть', (tester) async {
+    final repository = _Repository();
+    await open(tester, repository);
+    await ask(tester);
+    final options = RequestOptions(path: '/knowledge-hub/assistant');
+    repository.response.completeError(DioException(
+      requestOptions: options,
+      response: Response(requestOptions: options, statusCode: 429),
+      type: DioExceptionType.badResponse,
+    ));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Лимит обращений'), findsOneWidget);
+    expect(find.textContaining('Проверьте подключение'), findsNothing);
+  });
+
+  testWidgets('экран доступен на телефоне', (tester) async {
     final semantics = tester.ensureSemantics();
-
     try {
-      await tester.pumpWidget(
-        ProviderScope(
-          overrides: [
-            knowledgeHubRepositoryProvider.overrideWithValue(
-              _FakeKnowledgeHubRepository(),
-            ),
-          ],
-          child: MaterialApp(
-            theme: MostTheme.lightTheme,
-            home: const KnowledgeHubScreen(),
-          ),
-        ),
-      );
-
-      await tester.pumpAndSettle();
-
+      await open(tester, _Repository());
       await expectLater(tester, meetsGuideline(androidTapTargetGuideline));
-      await expectLater(tester, meetsGuideline(iOSTapTargetGuideline));
       await expectLater(tester, meetsGuideline(labeledTapTargetGuideline));
       await expectLater(tester, meetsGuideline(textContrastGuideline));
     } finally {
       semantics.dispose();
     }
   });
-}
-
-List<SemanticsNode> _collectSemanticsNodes(PipelineOwner owner) {
-  final roots = <SemanticsNode>[];
-  final root = owner.semanticsOwner?.rootSemanticsNode;
-  if (root != null) {
-    roots.add(root);
-  }
-  owner.visitChildren((child) {
-    roots.addAll(_collectSemanticsNodes(child));
-  });
-
-  final nodes = <SemanticsNode>[];
-  for (final root in roots) {
-    nodes.addAll(_collectSemanticsSubtree(root));
-  }
-  return nodes;
-}
-
-List<SemanticsNode> _collectSemanticsSubtree(SemanticsNode root) {
-  final nodes = <SemanticsNode>[root];
-  root.visitChildren((child) {
-    nodes.addAll(_collectSemanticsSubtree(child));
-    return true;
-  });
-  return nodes;
 }
