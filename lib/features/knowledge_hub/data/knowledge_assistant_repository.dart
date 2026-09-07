@@ -15,10 +15,11 @@ class KnowledgeAssistantSource {
 }
 
 class KnowledgeAssistantAnswer {
-  const KnowledgeAssistantAnswer({required this.answer, required this.answered, required this.sources});
+  const KnowledgeAssistantAnswer({required this.answer, required this.answered, required this.sources, this.needsClarification = false});
 
   final String answer;
   final bool answered;
+  final bool needsClarification;
   final List<KnowledgeAssistantSource> sources;
 
   factory KnowledgeAssistantAnswer.fromJson(Map<String, dynamic> json) {
@@ -35,7 +36,7 @@ class KnowledgeAssistantAnswer {
       }
       references.add(KnowledgeAssistantSource(id: source['id'] as int, title: source['title'] as String));
     }
-    return KnowledgeAssistantAnswer(answer: answer, answered: status == 'answered', sources: List.unmodifiable(references));
+    return KnowledgeAssistantAnswer(answer: answer, answered: status == 'answered', needsClarification: json['needs_clarification'] == true, sources: List.unmodifiable(references));
   }
 }
 
@@ -44,10 +45,10 @@ class KnowledgeAssistantRepository {
 
   final Dio _dio;
 
-  Future<KnowledgeAssistantAnswer> ask(String question, {String? contextKey, required CancelToken cancelToken}) async {
+  Future<KnowledgeAssistantAnswer> ask(String question, {String? contextKey, List<Map<String, String>> history = const [], required CancelToken cancelToken}) async {
     final response = await _dio.post(
       '/knowledge-hub/assistant',
-      data: {'question': question.trim(), if (contextKey != null) 'context_key': contextKey},
+      data: {'question': question.trim(), 'history': history, if (contextKey != null) 'context_key': contextKey},
       cancelToken: cancelToken,
       options: Options(receiveTimeout: const Duration(seconds: 60), sendTimeout: const Duration(seconds: 20)),
     );

@@ -23,10 +23,15 @@ class _KnowledgeHubScreenState extends ConsumerState<KnowledgeHubScreen> {
   }
 
   @override
+  void didUpdateWidget(covariant KnowledgeHubScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.contextKey != widget.contextKey) _question.clear();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final provider = knowledgeAssistantProvider(widget.contextKey);
     final state = ref.watch(provider);
-    final result = state.result;
     final theme = Theme.of(context);
 
     return ProPageScaffold(
@@ -54,12 +59,26 @@ class _KnowledgeHubScreenState extends ConsumerState<KnowledgeHubScreen> {
                 ),
                 const SizedBox(height: 12),
                 FilledButton.icon(
-                  onPressed: state.loading || _question.text.trim().length < 3
+                  onPressed: state.loading || _question.text.trim().isEmpty
                       ? null
-                      : () => ref.read(provider.notifier).ask(_question.text),
+                      : () async {
+                          final requestContext = widget.contextKey;
+                          await ref.read(provider.notifier).ask(_question.text);
+                          if (mounted && widget.contextKey == requestContext && ref.read(provider).error == null) {
+                            setState(_question.clear);
+                          }
+                        },
                   icon: const Icon(Icons.send_rounded),
                   label: Text(state.loading ? 'Готовим ответ…' : 'Спросить'),
                 ),
+                if (state.turns.isNotEmpty)
+                  TextButton(
+                    onPressed: state.loading ? null : () {
+                      ref.read(provider.notifier).reset();
+                      setState(_question.clear);
+                    },
+                    child: const Text('Новый разговор'),
+                  ),
                 if (state.loading) ...[
                   const SizedBox(height: 16),
                   const LinearProgressIndicator(semanticsLabel: 'Ищем подходящие инструкции'),
@@ -68,7 +87,7 @@ class _KnowledgeHubScreenState extends ConsumerState<KnowledgeHubScreen> {
                   const SizedBox(height: 16),
                   Semantics(liveRegion: true, child: Text(state.error!, style: TextStyle(color: theme.colorScheme.error))),
                 ],
-                if (!state.loading && result == null) ...[
+                if (!state.loading && state.turns.isEmpty) ...[
                   const SizedBox(height: 16),
                   Wrap(
                     spacing: 8,
@@ -82,7 +101,7 @@ class _KnowledgeHubScreenState extends ConsumerState<KnowledgeHubScreen> {
               ],
             ),
           ),
-          if (result != null) ...[
+          for (final turn in state.turns) ...[
             const SizedBox(height: 20),
             ProSurface(
               child: Semantics(
@@ -90,12 +109,14 @@ class _KnowledgeHubScreenState extends ConsumerState<KnowledgeHubScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(result.answered ? 'Что нужно сделать' : 'Нужно уточнение', style: theme.textTheme.titleMedium),
+                    Text(turn.question, style: theme.textTheme.bodySmall),
+                    const SizedBox(height: 8),
+                    Text(turn.result.answered ? 'Что нужно сделать' : turn.result.needsClarification ? 'Уточните, пожалуйста' : 'Ответ не найден', style: theme.textTheme.titleMedium),
                     const SizedBox(height: 12),
-                    SelectableText(result.answer, style: theme.textTheme.bodyLarge),
-                    if (result.sources.isNotEmpty) ...[
+                    SelectableText(turn.result.answer, style: theme.textTheme.bodyLarge),
+                    if (turn.result.sources.isNotEmpty) ...[
                       const SizedBox(height: 16),
-                      Text('По материалам: ${result.sources.map((source) => source.title).join(', ')}', style: theme.textTheme.bodySmall),
+                      Text('По материалам: ${turn.result.sources.map((source) => source.title).join(', ')}', style: theme.textTheme.bodySmall),
                     ],
                   ],
                 ),
