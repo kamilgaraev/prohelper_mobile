@@ -12,11 +12,13 @@ class _Repository extends KnowledgeAssistantRepository {
   Completer<KnowledgeAssistantAnswer> response = Completer();
   int calls = 0;
   String? context;
+  List<Map<String, String>> lastHistory = [];
   CancelToken? token;
 
   @override
-  Future<KnowledgeAssistantAnswer> ask(String question, {String? contextKey, required CancelToken cancelToken}) {
+  Future<KnowledgeAssistantAnswer> ask(String question, {String? contextKey, List<Map<String, String>> history = const [], required CancelToken cancelToken}) {
     calls++;
+    lastHistory = history;
     context = contextKey;
     token = cancelToken;
     return response.future;
@@ -101,6 +103,25 @@ void main() {
     expect(find.textContaining('Проверьте подключение'), findsNothing);
   });
 
+  testWidgets('поздний ответ старого раздела не очищает новый вопрос', (tester) async {
+    final repository = _Repository();
+    await open(tester, repository);
+    await ask(tester);
+    final oldToken = repository.token;
+    await tester.pumpWidget(ProviderScope(
+      overrides: [knowledgeAssistantRepositoryProvider.overrideWithValue(repository)],
+      child: MaterialApp(theme: MostTheme.lightTheme, home: const KnowledgeHubScreen(contextKey: 'other')),
+    ));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), 'Новый вопрос');
+    repository.response.complete(const KnowledgeAssistantAnswer(answer: 'Старый ответ.', answered: true, sources: []));
+    await tester.pumpAndSettle();
+    expect(oldToken!.isCancelled, isTrue);
+    expect(tester.widget<TextField>(find.byType(TextField)).controller!.text, 'Новый вопрос');
+    expect(find.text('Старый ответ.'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('экран доступен на телефоне', (tester) async {
     final semantics = tester.ensureSemantics();
     try {
@@ -111,5 +132,37 @@ void main() {
     } finally {
       semantics.dispose();
     }
+  });
+
+  testWidgets('передаёт короткое уточнение и сбрасывает разговор', (tester) async {
+    final repository = _Repository();
+    await open(tester, repository);
+    await ask(tester);
+    repository.response.complete(const KnowledgeAssistantAnswer(
+      answer: 'Вы создаёте заявку на объекте?', answered: false, sources: [], needsClarification: true,
+    ));
+    await tester.pumpAndSettle();
+    expect(tester.widget<TextField>(find.byType(TextField)).controller!.text, '');
+    repository.response = Completer();
+    await tester.enterText(find.byType(TextField), 'Да');
+    await tester.pump();
+    await tester.tap(find.text('Спросить'));
+    await tester.pump();
+    expect(repository.lastHistory, [
+      {'role': 'user', 'content': 'Как создать заявку?'},
+      {'role': 'assistant', 'content': 'Вы создаёте заявку на объекте?'},
+    ]);
+    repository.response.complete(const KnowledgeAssistantAnswer(answer: 'Откройте заявки.', answered: true, sources: []));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Новый разговор'));
+    await tester.tap(find.text('Новый разговор'));
+    await tester.pumpAndSettle();
+    expect(find.text('Вы создаёте заявку на объекте?'), findsNothing);
+    repository.response = Completer();
+    await ask(tester);
+    expect(repository.lastHistory, isEmpty);
+    repository.response.complete(const KnowledgeAssistantAnswer(answer: 'Готово.', answered: true, sources: []));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
   });
 }
