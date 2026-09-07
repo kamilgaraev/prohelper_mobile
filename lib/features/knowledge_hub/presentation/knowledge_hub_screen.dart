@@ -3,6 +3,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:prohelpers_mobile/core/widgets/pro_page_scaffold.dart';
 import 'package:prohelpers_mobile/core/widgets/pro_surface.dart';
 import '../domain/knowledge_assistant_provider.dart';
+import 'knowledge_assistant_actions.dart';
 
 class KnowledgeHubScreen extends ConsumerStatefulWidget {
   const KnowledgeHubScreen({super.key, this.contextKey});
@@ -114,6 +115,7 @@ class _KnowledgeHubScreenState extends ConsumerState<KnowledgeHubScreen> {
                     Text(turn.result.answered ? 'Что нужно сделать' : turn.result.needsClarification ? 'Уточните, пожалуйста' : 'Ответ не найден', style: theme.textTheme.titleMedium),
                     const SizedBox(height: 12),
                     SelectableText(turn.result.answer, style: theme.textTheme.bodyLarge),
+                    KnowledgeAssistantActions(answer: turn.result),
                     if (turn.result.sources.isNotEmpty) ...[
                       const SizedBox(height: 16),
                       Text('По материалам: ${turn.result.sources.map((source) => source.title).join(', ')}', style: theme.textTheme.bodySmall),
