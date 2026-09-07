@@ -8,10 +8,11 @@ final knowledgeAssistantRepositoryProvider = Provider<KnowledgeAssistantReposito
 });
 
 class KnowledgeAssistantSource {
-  const KnowledgeAssistantSource({required this.id, required this.title});
+  const KnowledgeAssistantSource({required this.id, required this.title, this.slug});
 
   final int id;
   final String title;
+  final String? slug;
 }
 
 class KnowledgeAssistantAnswer {
@@ -34,7 +35,7 @@ class KnowledgeAssistantAnswer {
       if (source is! Map || source['id'] is! int || source['title'] is! String) {
         throw const FormatException('knowledge_assistant_source');
       }
-      references.add(KnowledgeAssistantSource(id: source['id'] as int, title: source['title'] as String));
+      references.add(KnowledgeAssistantSource(id: source['id'] as int, title: source['title'] as String, slug: source['slug'] is String ? source['slug'] as String : null));
     }
     return KnowledgeAssistantAnswer(answer: answer, answered: status == 'answered', needsClarification: json['needs_clarification'] == true, sources: List.unmodifiable(references));
   }
