@@ -11,6 +11,299 @@ import 'package:prohelpers_mobile/core/storage/secure_storage_service.dart';
 import 'package:prohelpers_mobile/features/auth/domain/auth_session_provider.dart';
 
 void main() {
+  for (final refreshStatus in [200, 503]) {
+    test(
+      'concurrent unauthorized requests share refresh with status $refreshStatus',
+      () async {
+        final bothStarted = Completer<void>();
+        var unauthorizedCount = 0;
+        var refreshCount = 0;
+        final adapter = _AuthHttpAdapter();
+        adapter.respond = (options) async {
+          if (options.path == '/auth/refresh') {
+            refreshCount++;
+            await bothStarted.future;
+            await Future<void>.delayed(Duration.zero);
+            return _AdapterResponse(
+              statusCode: refreshStatus,
+              body: '{"data":{"token":"fresh-token"}}',
+            );
+          }
+          if (options.headers['Authorization'] == 'Bearer expired-token') {
+            if (++unauthorizedCount == 2) {
+              bothStarted.complete();
+            }
+            return _AdapterResponse(statusCode: 401, body: '{}');
+          }
+          return _AdapterResponse(statusCode: 200, body: '{}');
+        };
+        final storage = _MemorySecureStorage()..token = 'expired-token';
+        final container = _container(adapter, storage);
+        addTearDown(container.dispose);
+        final dio = container.read(dioProvider)..httpClientAdapter = adapter;
+
+        Future<void> request(String path) async {
+          if (refreshStatus == 200) {
+            expect((await dio.post<dynamic>(path)).statusCode, 200);
+          } else {
+            await expectLater(
+              dio.post<dynamic>(path),
+              throwsA(
+                isA<DioException>().having(
+                  (error) => error.response?.statusCode,
+                  'status',
+                  refreshStatus,
+                ),
+              ),
+            );
+          }
+        }
+
+        await Future.wait([request('/first'), request('/second')]);
+        expect(refreshCount, 1);
+        expect(
+          storage.token,
+          refreshStatus == 200 ? 'fresh-token' : 'expired-token',
+        );
+        expect(container.read(authSessionVersionProvider), 0);
+      },
+    );
+  }
+
+  test(
+    'late 401 uses already refreshed token without another refresh',
+    () async {
+      final firstRetried = Completer<void>();
+      var refreshCount = 0;
+      final adapter = _AuthHttpAdapter();
+      adapter.respond = (options) async {
+        if (options.path == '/auth/refresh') {
+          refreshCount++;
+          return _AdapterResponse(
+            statusCode: 200,
+            body: '{"data":{"token":"fresh-token"}}',
+          );
+        }
+        if (options.headers['Authorization'] == 'Bearer expired-token') {
+          if (options.path == '/slow') {
+            await firstRetried.future;
+          }
+          return _AdapterResponse(statusCode: 401, body: '{}');
+        }
+        if (options.path == '/fast') {
+          firstRetried.complete();
+        }
+        return _AdapterResponse(statusCode: 200, body: '{}');
+      };
+      final storage = _MemorySecureStorage()..token = 'expired-token';
+      final container = _container(adapter, storage);
+      addTearDown(container.dispose);
+      final dio = container.read(dioProvider)..httpClientAdapter = adapter;
+      final responses = await Future.wait([
+        dio.post<dynamic>('/slow'),
+        dio.post<dynamic>('/fast'),
+      ]);
+      expect(responses.map((response) => response.statusCode), [200, 200]);
+      expect(refreshCount, 1);
+      expect(storage.token, 'fresh-token');
+    },
+  );
+
+  test('refresh result cannot restore session after logout', () async {
+    final storage = _MemorySecureStorage()..token = 'expired-token';
+    final adapter = _AuthHttpAdapter();
+    adapter.respond = (options) async {
+      if (options.path == '/auth/refresh') {
+        await storage.clearToken();
+        return _AdapterResponse(
+          statusCode: 200,
+          body: '{"data":{"token":"fresh-token"}}',
+        );
+      }
+      return _AdapterResponse(statusCode: 401, body: '{}');
+    };
+    final container = _container(adapter, storage);
+    addTearDown(container.dispose);
+    final dio = container.read(dioProvider)..httpClientAdapter = adapter;
+    await expectLater(
+      dio.post<dynamic>('/protected'),
+      throwsA(
+        isA<DioException>().having(
+          (error) => error.type,
+          'type',
+          DioExceptionType.cancel,
+        ),
+      ),
+    );
+    expect(storage.token, isNull);
+    expect(adapter.requests.length, 2);
+  });
+
+  for (final duringRefresh in [true, false]) {
+    for (final status in [401, 403]) {
+      test(
+        'confirmed session rejection $status during ${duringRefresh ? 'refresh' : 'retry'} logs out',
+        () async {
+          final adapter =
+              _AuthHttpAdapter()
+                ..responses.add(_AdapterResponse(statusCode: 401, body: '{}'));
+          if (!duringRefresh) {
+            adapter.responses.add(
+              _AdapterResponse(
+                statusCode: 200,
+                body: '{"data":{"token":"fresh-token"}}',
+              ),
+            );
+          }
+          adapter.responses.add(
+            _AdapterResponse(
+              statusCode: status,
+              body: '{"code":"organization_membership_inactive"}',
+            ),
+          );
+          final storage = _MemorySecureStorage()..token = 'expired-token';
+          final container = _container(adapter, storage);
+          addTearDown(container.dispose);
+          final dio = container.read(dioProvider)..httpClientAdapter = adapter;
+          await expectLater(
+            dio.post<dynamic>('/protected'),
+            throwsA(isA<DioException>()),
+          );
+          expect(storage.token, isNull);
+          expect(container.read(authSessionVersionProvider), 1);
+        },
+      );
+    }
+  }
+
+  for (final status in [403, 429, 500, 503]) {
+    test(
+      'refresh failure $status preserves token and reports real error',
+      () async {
+        final adapter =
+            _AuthHttpAdapter()
+              ..responses.add(_AdapterResponse(statusCode: 401, body: '{}'))
+              ..responses.add(_AdapterResponse(statusCode: status, body: '{}'));
+        final storage = _MemorySecureStorage()..token = 'expired-token';
+        final container = _container(adapter, storage);
+        addTearDown(container.dispose);
+        final dio = container.read(dioProvider)..httpClientAdapter = adapter;
+
+        await expectLater(
+          dio.post<dynamic>('/protected'),
+          throwsA(
+            isA<DioException>().having(
+              (error) => error.response?.statusCode,
+              'status',
+              status,
+            ),
+          ),
+        );
+
+        expect(storage.token, 'expired-token');
+        expect(container.read(authSessionVersionProvider), 0);
+      },
+    );
+  }
+
+  for (final status in [403, 422, 429, 500, 503]) {
+    test('retry failure $status preserves refreshed token', () async {
+      final adapter =
+          _AuthHttpAdapter()
+            ..responses.add(_AdapterResponse(statusCode: 401, body: '{}'))
+            ..responses.add(
+              _AdapterResponse(
+                statusCode: 200,
+                body: '{"data":{"token":"fresh-token"}}',
+              ),
+            )
+            ..responses.add(_AdapterResponse(statusCode: status, body: '{}'));
+      final storage = _MemorySecureStorage()..token = 'expired-token';
+      final container = _container(adapter, storage);
+      addTearDown(container.dispose);
+      final dio = container.read(dioProvider)..httpClientAdapter = adapter;
+
+      await expectLater(
+        dio.post<dynamic>('/protected'),
+        throwsA(isA<DioException>()),
+      );
+
+      expect(storage.token, 'fresh-token');
+      expect(container.read(authSessionVersionProvider), 0);
+    });
+  }
+
+  for (final duringRefresh in [true, false]) {
+    test(
+      'timeout during ${duringRefresh ? 'refresh' : 'retry'} preserves session',
+      () async {
+        final adapter =
+            _AuthHttpAdapter()
+              ..responses.add(_AdapterResponse(statusCode: 401, body: '{}'));
+        if (!duringRefresh) {
+          adapter.responses.add(
+            _AdapterResponse(
+              statusCode: 200,
+              body: '{"data":{"token":"fresh-token"}}',
+            ),
+          );
+        }
+        adapter.responses.add(
+          _AdapterResponse(
+            statusCode: 0,
+            body: '',
+            errorType: DioExceptionType.receiveTimeout,
+          ),
+        );
+        final storage = _MemorySecureStorage()..token = 'expired-token';
+        final container = _container(adapter, storage);
+        addTearDown(container.dispose);
+        final dio = container.read(dioProvider)..httpClientAdapter = adapter;
+
+        await expectLater(
+          dio.post<dynamic>('/protected'),
+          throwsA(
+            isA<DioException>().having(
+              (error) => error.type,
+              'type',
+              DioExceptionType.receiveTimeout,
+            ),
+          ),
+        );
+
+        expect(storage.token, duringRefresh ? 'expired-token' : 'fresh-token');
+        expect(container.read(authSessionVersionProvider), 0);
+      },
+    );
+  }
+
+  test(
+    'malformed refresh response preserves session without exposing original 401',
+    () async {
+      final adapter =
+          _AuthHttpAdapter()
+            ..responses.add(_AdapterResponse(statusCode: 401, body: '{}'))
+            ..responses.add(_AdapterResponse(statusCode: 200, body: '{}'));
+      final storage = _MemorySecureStorage()..token = 'expired-token';
+      final container = _container(adapter, storage);
+      addTearDown(container.dispose);
+      final dio = container.read(dioProvider)..httpClientAdapter = adapter;
+
+      await expectLater(
+        dio.post<dynamic>('/protected'),
+        throwsA(
+          isA<DioException>().having(
+            (error) => error.response?.statusCode,
+            'status',
+            isNot(401),
+          ),
+        ),
+      );
+      expect(storage.token, 'expired-token');
+      expect(container.read(authSessionVersionProvider), 0);
+    },
+  );
+
   test('token refresh saves new token and retries original request', () async {
     final adapter =
         _AuthHttpAdapter()
@@ -88,28 +381,31 @@ void main() {
     expect(adapter.requests.map((request) => request.path), ['/protected']);
   });
 
-  test('ordinary forbidden response preserves the authenticated session', () async {
-    final adapter =
-        _AuthHttpAdapter()
-          ..responses.add(
-            _AdapterResponse(
-              statusCode: 403,
-              body: '{"success":false,"code":"http_403"}',
-            ),
-          );
-    final storage = _MemorySecureStorage()..token = 'member-token';
-    final container = _container(adapter, storage);
-    addTearDown(container.dispose);
-    final dio = container.read(dioProvider)..httpClientAdapter = adapter;
+  test(
+    'ordinary forbidden response preserves the authenticated session',
+    () async {
+      final adapter =
+          _AuthHttpAdapter()
+            ..responses.add(
+              _AdapterResponse(
+                statusCode: 403,
+                body: '{"success":false,"code":"http_403"}',
+              ),
+            );
+      final storage = _MemorySecureStorage()..token = 'member-token';
+      final container = _container(adapter, storage);
+      addTearDown(container.dispose);
+      final dio = container.read(dioProvider)..httpClientAdapter = adapter;
 
-    await expectLater(
-      dio.get<dynamic>('/protected'),
-      throwsA(isA<DioException>()),
-    );
+      await expectLater(
+        dio.get<dynamic>('/protected'),
+        throwsA(isA<DioException>()),
+      );
 
-    expect(await storage.getToken(), 'member-token');
-    expect(container.read(authSessionVersionProvider), 0);
-  });
+      expect(await storage.getToken(), 'member-token');
+      expect(container.read(authSessionVersionProvider), 0);
+    },
+  );
 
   test('does not replace explicit authorization header', () async {
     final adapter =
@@ -220,6 +516,7 @@ class _MemorySecureStorage extends SecureStorageService {
 class _AuthHttpAdapter implements HttpClientAdapter {
   final responses = Queue<_AdapterResponse>();
   final requests = <RequestOptions>[];
+  Future<_AdapterResponse> Function(RequestOptions)? respond;
 
   @override
   Future<ResponseBody> fetch(
@@ -229,7 +526,12 @@ class _AuthHttpAdapter implements HttpClientAdapter {
   ) async {
     requests.add(options);
     await requestStream?.drain<void>();
-    final response = responses.removeFirst();
+    final response =
+        respond == null ? responses.removeFirst() : await respond!(options);
+
+    if (response.errorType != null) {
+      throw DioException(requestOptions: options, type: response.errorType!);
+    }
 
     return ResponseBody.fromString(
       response.body,
@@ -245,8 +547,13 @@ class _AuthHttpAdapter implements HttpClientAdapter {
 }
 
 class _AdapterResponse {
-  const _AdapterResponse({required this.statusCode, required this.body});
+  const _AdapterResponse({
+    required this.statusCode,
+    required this.body,
+    this.errorType,
+  });
 
   final int statusCode;
   final String body;
+  final DioExceptionType? errorType;
 }

@@ -1,4 +1,3 @@
-﻿import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import '../storage/secure_storage_service.dart';
@@ -13,7 +12,7 @@ final authRetryClientFactoryProvider = Provider<Dio Function()>(
 );
 
 class AuthInterceptor extends Interceptor {
-  static Future<String?>? _refreshFuture;
+  Future<String?>? _refreshFuture;
   final Ref _ref;
 
   AuthInterceptor(this._ref);
@@ -45,25 +44,19 @@ class AuthInterceptor extends Interceptor {
     DioException err,
     ErrorInterceptorHandler handler,
   ) async {
-    final responseData = err.response?.data;
-    final isInactiveMembership =
-        err.response?.statusCode == 403 &&
-        responseData is Map<String, dynamic> &&
-        responseData['code'] == 'organization_membership_inactive';
+    final requestOptions = err.requestOptions;
+    if (requestOptions.extra['skip_auth'] == true) {
+      handler.next(err);
+      return;
+    }
 
-    if (isInactiveMembership) {
-      await _invalidateSession();
+    if (_isInactiveMembership(err)) {
+      await _invalidateSession(requestOptions);
       handler.next(err);
       return;
     }
 
     if (err.response?.statusCode != 401) {
-      handler.next(err);
-      return;
-    }
-
-    final requestOptions = err.requestOptions;
-    if (requestOptions.extra['skip_auth'] == true) {
       handler.next(err);
       return;
     }
@@ -78,14 +71,31 @@ class AuthInterceptor extends Interceptor {
     }
 
     if (isRefreshRequest || isRetried) {
-      await _invalidateSession();
+      await _invalidateSession(requestOptions);
       handler.next(err);
       return;
     }
 
-    final refreshedToken = await _refreshToken(requestOptions);
+    final String? refreshedToken;
+    try {
+      refreshedToken = await _refreshToken(requestOptions);
+    } on DioException catch (refreshError) {
+      if (_isSessionRejected(refreshError)) {
+        await _invalidateSession(refreshError.requestOptions);
+      }
+      handler.next(refreshError.copyWith(requestOptions: requestOptions));
+      return;
+    } catch (error, stackTrace) {
+      handler.next(
+        DioException(
+          requestOptions: requestOptions,
+          error: error,
+          stackTrace: stackTrace,
+        ),
+      );
+      return;
+    }
     if (refreshedToken == null) {
-      await _invalidateSession();
       handler.next(err);
       return;
     }
@@ -98,7 +108,9 @@ class AuthInterceptor extends Interceptor {
       final response = await retryClient.fetch<dynamic>(requestOptions);
       handler.resolve(response);
     } on DioException catch (retryError) {
-      await _invalidateSession();
+      if (_isSessionRejected(retryError)) {
+        await _invalidateSession(requestOptions);
+      }
       handler.next(retryError);
     }
   }
@@ -109,59 +121,95 @@ class AuthInterceptor extends Interceptor {
       return activeRefresh;
     }
 
-    final completer = Completer<String?>();
-    _refreshFuture = completer.future;
-    final storage = _ref.read(secureStorageProvider);
-
+    final refresh = _performRefresh(requestOptions);
+    _refreshFuture = refresh;
     try {
-      final currentToken = await storage.getToken();
-      if (currentToken == null || currentToken.isEmpty) {
-        completer.complete(null);
-        return completer.future;
-      }
-
-      final refreshClient = _ref.read(authRefreshClientFactoryProvider)(
-        BaseOptions(
-          baseUrl: requestOptions.baseUrl,
-          connectTimeout: requestOptions.connectTimeout,
-          receiveTimeout: requestOptions.receiveTimeout,
-          headers: {
-            'Accept': 'application/json',
-            'Content-Type': 'application/json',
-            'Authorization': 'Bearer $currentToken',
-          },
-        ),
-      );
-
-      final response = await refreshClient.post('/auth/refresh');
-      final responseData = response.data;
-      final payload =
-          responseData is Map<String, dynamic>
-              ? responseData['data'] as Map<String, dynamic>?
-              : null;
-      final refreshedToken = payload != null ? payload['token'] : null;
-
-      if (refreshedToken is String && refreshedToken.isNotEmpty) {
-        await storage.saveToken(refreshedToken);
-        completer.complete(refreshedToken);
-        return completer.future;
-      }
-
-      await storage.clearToken();
-      completer.complete(null);
-      return completer.future;
-    } catch (_) {
-      await storage.clearToken();
-      completer.complete(null);
-      return completer.future;
+      return await refresh;
     } finally {
       _refreshFuture = null;
     }
   }
 
-  Future<void> _invalidateSession() async {
-    await _ref.read(secureStorageProvider).clearToken();
+  Future<String?> _performRefresh(RequestOptions requestOptions) async {
+    final storage = _ref.read(secureStorageProvider);
+    final currentToken = await storage.getToken();
+    if (currentToken == null || currentToken.isEmpty) {
+      return null;
+    }
+    final sentAuthorization = _authorizationHeader(requestOptions);
+    if (sentAuthorization != null &&
+        sentAuthorization != 'Bearer $currentToken') {
+      return currentToken;
+    }
+
+    final refreshClient = _ref.read(authRefreshClientFactoryProvider)(
+      BaseOptions(
+        baseUrl: requestOptions.baseUrl,
+        connectTimeout: requestOptions.connectTimeout,
+        receiveTimeout: requestOptions.receiveTimeout,
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $currentToken',
+        },
+      ),
+    );
+
+    final response = await refreshClient.post('/auth/refresh');
+    final responseData = response.data;
+    final payload =
+        responseData is Map<String, dynamic> ? responseData['data'] : null;
+    final refreshedToken =
+        payload is Map<String, dynamic> ? payload['token'] : null;
+
+    if (refreshedToken is String && refreshedToken.isNotEmpty) {
+      if (await storage.getToken() != currentToken) {
+        throw DioException(
+          requestOptions: requestOptions,
+          type: DioExceptionType.cancel,
+        );
+      }
+      await storage.saveToken(refreshedToken);
+      return refreshedToken;
+    }
+
+    throw DioException(
+      requestOptions: requestOptions,
+      response: response,
+      error: const FormatException('Missing token in refresh response'),
+    );
+  }
+
+  Future<void> _invalidateSession(RequestOptions requestOptions) async {
+    final storage = _ref.read(secureStorageProvider);
+    final currentToken = await storage.getToken();
+    final authorization = _authorizationHeader(requestOptions);
+    if (currentToken == null ||
+        (authorization != null && authorization != 'Bearer $currentToken')) {
+      return;
+    }
+    await storage.clearToken();
     _ref.read(authSessionVersionProvider.notifier).state++;
+  }
+
+  bool _isSessionRejected(DioException error) {
+    return error.response?.statusCode == 401 || _isInactiveMembership(error);
+  }
+
+  bool _isInactiveMembership(DioException error) {
+    final data = error.response?.data;
+    return error.response?.statusCode == 403 &&
+        data is Map<String, dynamic> &&
+        data['code'] == 'organization_membership_inactive';
+  }
+
+  String? _authorizationHeader(RequestOptions options) {
+    for (final header in options.headers.entries) {
+      if (header.key.toLowerCase() == 'authorization') {
+        return header.value?.toString();
+      }
+    }
+    return null;
   }
 
   bool _hasAuthorizationHeader(Map<String, dynamic> headers) {
