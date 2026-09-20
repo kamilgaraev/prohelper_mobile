@@ -13,6 +13,134 @@ import 'package:prohelpers_mobile/core/sync/sync_queue_service.dart';
 import 'package:prohelpers_mobile/core/sync/sync_queue_store.dart';
 
 void main() {
+  test(
+    'journal worker persists created ID before submit and resumes after restart',
+    () async {
+      final store = _MemorySyncQueueStore();
+      final adapter =
+          _QueueHttpAdapter()
+            ..responses.add(
+              const _AdapterResponse(
+                statusCode: 200,
+                body: '{"data":{"id":42,"journal_id":7,"status":"draft"}}',
+              ),
+            )
+            ..responses.add(_AdapterResponse.networkError());
+      final service = SyncQueueService(
+        store: store,
+        dio: _dio(adapter),
+        now: () => DateTime(2026, 9, 20, 10),
+        currentScope: () => '9:3',
+      );
+      await service.enqueue(
+        const SyncQueueDraft(
+          moduleSlug: 'construction_journal',
+          operationType: 'create_entry',
+          method: 'POST',
+          endpoint: '/construction-journals/7/entries',
+          payload: {
+            'idempotency_key': 'journal-1',
+            'queue_scope': '9:3',
+            'journal_id': 7,
+            'submit_intent': true,
+            'submit_after_create': false,
+            'work_description': 'Монтаж',
+          },
+        ),
+      );
+      final first = await service.retryDueOperations();
+      expect(first.retryCount, 1);
+      final saved = (await store.all()).single;
+      expect(saved.payload['created_entry_id'], 42);
+      expect(saved.endpoint, '/journal-entries/42/submit');
+      expect(adapter.requests.map((r) => r.path), [
+        '/construction-journals/7/entries',
+        '/journal-entries/42/submit',
+      ]);
+      adapter.responses.add(
+        const _AdapterResponse(
+          statusCode: 200,
+          body: '{"data":{"id":42,"journal_id":7,"status":"submitted"}}',
+        ),
+      );
+      final restarted = SyncQueueService(
+        store: store,
+        dio: _dio(adapter),
+        now: () => DateTime(2026, 9, 20, 11),
+        currentScope: () => '9:3',
+      );
+      expect((await restarted.retryDueOperations()).successCount, 1);
+      expect(adapter.requests.last.path, '/journal-entries/42/submit');
+      expect(await store.all(), isEmpty);
+    },
+  );
+
+  test(
+    'journal worker recovers interrupted sending with known ID without create',
+    () async {
+      final store = _MemorySyncQueueStore();
+      final adapter =
+          _QueueHttpAdapter()
+            ..responses.add(
+              const _AdapterResponse(
+                statusCode: 200,
+                body: '{"data":{"id":42,"status":"submitted"}}',
+              ),
+            );
+      final service = SyncQueueService(
+        store: store,
+        dio: _dio(adapter),
+        currentScope: () => '9:3',
+      );
+      final operation = await service.enqueue(
+        const SyncQueueDraft(
+          moduleSlug: 'construction_journal',
+          operationType: 'create_entry',
+          method: 'POST',
+          endpoint: '/construction-journals/7/entries',
+          payload: {
+            'idempotency_key': 'journal-1',
+            'queue_scope': '9:3',
+            'journal_id': 7,
+            'submit_intent': true,
+            'created_entry_id': 42,
+            'stage': 'created',
+          },
+        ),
+      );
+      operation.status = SyncOperationStatuses.sending;
+      await store.put(operation);
+      expect((await service.retryDueOperations()).successCount, 1);
+      expect(adapter.requests.single.path, '/journal-entries/42/submit');
+      expect(await store.all(), isEmpty);
+    },
+  );
+
+  test(
+    'journal worker does not send scoped operation while logged out',
+    () async {
+      final store = _MemorySyncQueueStore();
+      final adapter = _QueueHttpAdapter();
+      final service = SyncQueueService(
+        store: store,
+        dio: _dio(adapter),
+        currentScope: () => null,
+      );
+      await service.enqueue(
+        const SyncQueueDraft(
+          moduleSlug: 'construction_journal',
+          operationType: 'submit_entry',
+          method: 'POST',
+          endpoint: '/journal-entries/42/submit',
+          payload: {'queue_scope': '9:3', 'idempotency_key': 'j'},
+        ),
+      );
+      expect((await service.retryDueOperations()).blockedCount, 1);
+      expect(adapter.requests, isEmpty);
+      expect(await store.all(), hasLength(1));
+    },
+  );
+
   test('queues draft when network unavailable', () async {
     final store = _MemorySyncQueueStore();
     final service = SyncQueueService(

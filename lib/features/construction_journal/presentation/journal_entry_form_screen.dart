@@ -1,10 +1,14 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
+import '../../../core/network/api_exception.dart';
 import '../../../core/widgets/app_error_notice.dart';
 import '../data/construction_journal_models.dart';
 import '../data/construction_journal_repository.dart';
+import '../data/journal_entry_operation_recovery.dart';
 
 class JournalEntryFormScreen extends ConsumerStatefulWidget {
   const JournalEntryFormScreen({
@@ -41,8 +45,18 @@ class _JournalEntryFormScreenState
   int? _selectedEstimateItemId;
   bool _isLoadingOptions = false;
   bool _isSaving = false;
+  bool _isRestoring = true;
+  bool _recoveryFailed = false;
+  String? _operationKey;
+  String? _submitOperationKey;
+  PendingJournalEntryOperation? _pendingOperation;
+  ConstructionJournalEntryModel? _recoveredEntry;
+  String? _recoveryNotice;
 
   bool get _isEdit => widget.initialEntry != null;
+
+  bool get _hasRecoveredEntry =>
+      _recoveredEntry != null || _pendingOperation?.entryId != null;
 
   List<ConstructionJournalEstimateOption> get _estimates =>
       _options?.estimates ?? const [];
@@ -122,7 +136,166 @@ class _JournalEntryFormScreenState
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadFormOptions();
+      _restorePendingOperation();
     });
+  }
+
+  Future<void> _restorePendingOperation() async {
+    try {
+      if (_isEdit) return;
+      _recoveryFailed = false;
+      final repository = ref.read(constructionJournalRepositoryProvider);
+      final pending = await repository.findPendingEntryOperation(
+        widget.journalId,
+      );
+      if (!mounted || pending == null) {
+        return;
+      }
+
+      _pendingOperation = pending;
+      if (pending.entryId != null) {
+        _submitOperationKey =
+            pending.payload['stage'] == 'submit'
+                ? pending.idempotencyKey
+                : '${pending.idempotencyKey}:submit';
+      } else {
+        _operationKey = pending.idempotencyKey;
+      }
+      if (pending.entryId != null) {
+        try {
+          final entry = await repository.fetchEntryDetail(pending.entryId!);
+          if (!mounted) {
+            return;
+          }
+          _recoveredEntry = entry;
+          _restoreEntry(entry);
+          _recoveryNotice =
+              'Запись создана, отправка ещё не завершена. Можно продолжить.';
+        } on ApiException {
+          if (!mounted) {
+            return;
+          }
+          _restorePayload(pending.payload);
+          _recoveryNotice =
+              'Сохранённая запись ожидает подтверждения сервера. Повторите отправку позже.';
+        }
+      } else {
+        _restorePayload(pending.payload);
+        _recoveryNotice =
+            'Операция поставлена в очередь. Повторите отправку после восстановления связи.';
+      }
+      setState(() {});
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _recoveryFailed = true;
+          _recoveryNotice =
+              'Не удалось проверить сохранённую операцию. Повторите позже.';
+        });
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isRestoring = false);
+      }
+    }
+  }
+
+  void _restoreEntry(ConstructionJournalEntryModel entry) {
+    _entryDate = DateTime.tryParse(entry.entryDate);
+    _selectedEstimateId = entry.estimateId;
+    _descriptionController.text = entry.workDescription;
+    _problemsController.text = entry.problemsDescription ?? '';
+    _safetyController.text = entry.safetyNotes ?? '';
+    _visitorsController.text = entry.visitorsNotes ?? '';
+    _qualityController.text = entry.qualityNotes ?? '';
+    _temperatureController.text =
+        entry.weatherConditions?.temperature?.toString() ?? '';
+    _precipitationController.text =
+        entry.weatherConditions?.precipitation ?? '';
+    _windSpeedController.text =
+        entry.weatherConditions?.windSpeed?.toString() ?? '';
+    for (final item in _workVolumes) {
+      item.dispose();
+    }
+    for (final item in _materials) {
+      item.dispose();
+    }
+    for (final item in _workers) {
+      item.dispose();
+    }
+    for (final item in _equipment) {
+      item.dispose();
+    }
+    _workVolumes
+      ..clear()
+      ..addAll(entry.workVolumes.map(_WorkVolumeInput.fromModel));
+    _materials
+      ..clear()
+      ..addAll(entry.materials.map(_MaterialUsageInput.fromModel));
+    _workers
+      ..clear()
+      ..addAll(entry.workers.map(_WorkerInput.fromModel));
+    _equipment
+      ..clear()
+      ..addAll(entry.equipment.map(_EquipmentInput.fromModel));
+  }
+
+  void _restorePayload(Map<String, dynamic> payload) {
+    _entryDate = DateTime.tryParse(payload['entry_date']?.toString() ?? '');
+    _descriptionController.text = payload['work_description']?.toString() ?? '';
+    _problemsController.text =
+        payload['problems_description']?.toString() ?? '';
+    _safetyController.text = payload['safety_notes']?.toString() ?? '';
+    _visitorsController.text = payload['visitors_notes']?.toString() ?? '';
+    _qualityController.text = payload['quality_notes']?.toString() ?? '';
+    final weather = payload['weather_conditions'];
+    if (weather is Map) {
+      final values = weather.map(
+        (key, value) => MapEntry(key.toString(), value),
+      );
+      _temperatureController.text = values['temperature']?.toString() ?? '';
+      _precipitationController.text = values['precipitation']?.toString() ?? '';
+      _windSpeedController.text = values['wind_speed']?.toString() ?? '';
+    }
+    try {
+      final workVolumes = _payloadModels(
+        payload['work_volumes'],
+        ConstructionJournalWorkVolumeModel.fromJson,
+      );
+      final materials = _payloadModels(
+        payload['materials'],
+        ConstructionJournalMaterialUsageModel.fromJson,
+      );
+      final workers = _payloadModels(
+        payload['workers'],
+        ConstructionJournalWorkerModel.fromJson,
+      );
+      final equipment = _payloadModels(
+        payload['equipment'],
+        ConstructionJournalEquipmentModel.fromJson,
+      );
+      _workVolumes.addAll(workVolumes.map(_WorkVolumeInput.fromModel));
+      _materials.addAll(materials.map(_MaterialUsageInput.fromModel));
+      _workers.addAll(workers.map(_WorkerInput.fromModel));
+      _equipment.addAll(equipment.map(_EquipmentInput.fromModel));
+    } catch (_) {}
+  }
+
+  List<T> _payloadModels<T>(
+    dynamic value,
+    T Function(Map<String, dynamic>) fromJson,
+  ) {
+    if (value is! List) {
+      return const [];
+    }
+    return value
+        .whereType<Map>()
+        .map(
+          (item) => fromJson(
+            item.map((key, value) => MapEntry(key.toString(), value)),
+          ),
+        )
+        .toList();
   }
 
   @override
@@ -152,6 +325,47 @@ class _JournalEntryFormScreenState
 
   @override
   Widget build(BuildContext context) {
+    if (_recoveryFailed || (_pendingOperation != null && !_hasRecoveredEntry)) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Восстановление записи')),
+        body: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                _recoveryNotice ??
+                    'Создание записи на сервере ещё не подтверждено.',
+              ),
+              const SizedBox(height: 16),
+              Text(
+                _pendingOperation?.payload['work_description']?.toString() ??
+                    '',
+              ),
+              const SizedBox(height: 16),
+              ElevatedButton(
+                onPressed:
+                    _isSaving || _isRestoring
+                        ? null
+                        : () {
+                          if (_recoveryFailed) {
+                            setState(() => _isRestoring = true);
+                            _restorePendingOperation();
+                          } else {
+                            _save(
+                              isDraft:
+                                  _pendingOperation?.payload['submit_intent'] !=
+                                  true,
+                            );
+                          }
+                        },
+                child: const Text('Продолжить отправку'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
     return Scaffold(
       appBar: AppBar(
         title: Text(_isEdit ? 'Редактирование записи' : 'Новая запись'),
@@ -159,6 +373,14 @@ class _JournalEntryFormScreenState
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          if (_recoveryNotice != null)
+            Card(
+              color: Theme.of(context).colorScheme.surfaceContainerHighest,
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Text(_recoveryNotice!),
+              ),
+            ),
           ListTile(
             contentPadding: EdgeInsets.zero,
             title: const Text('Дата записи'),
@@ -215,14 +437,20 @@ class _JournalEntryFormScreenState
             children: [
               Expanded(
                 child: OutlinedButton(
-                  onPressed: _isSaving ? null : () => _save(isDraft: true),
+                  onPressed:
+                      _isSaving || _isRestoring
+                          ? null
+                          : () => _save(isDraft: true),
                   child: const Text('Сохранить черновик'),
                 ),
               ),
               const SizedBox(width: 12),
               Expanded(
                 child: ElevatedButton(
-                  onPressed: _isSaving ? null : () => _save(isDraft: false),
+                  onPressed:
+                      _isSaving || _isRestoring
+                          ? null
+                          : () => _save(isDraft: false),
                   child: const Text('Отправить'),
                 ),
               ),
@@ -640,6 +868,31 @@ class _JournalEntryFormScreenState
   }
 
   Future<void> _save({required bool isDraft}) async {
+    if (_isSaving || _isRestoring) return;
+    final repository = ref.read(constructionJournalRepositoryProvider);
+    if (_hasRecoveredEntry) {
+      setState(() => _isSaving = true);
+      try {
+        final current = await repository.fetchEntryDetail(
+          _recoveredEntry?.id ?? _pendingOperation!.entryId!,
+        );
+        if (!mounted) return;
+        if (current.status != 'draft') {
+          if (_pendingOperation != null) {
+            await repository.clearPendingEntryOperation(_pendingOperation!);
+            _pendingOperation = null;
+          }
+          if (mounted) Navigator.of(context).pop(true);
+          return;
+        }
+        _recoveredEntry = current;
+      } catch (error) {
+        if (mounted) AppErrorNotice.show(context, error);
+        return;
+      } finally {
+        if (mounted) setState(() => _isSaving = false);
+      }
+    }
     if (_descriptionController.text.trim().isEmpty) {
       _showMessage('Добавьте описание работ.');
       return;
@@ -686,7 +939,6 @@ class _JournalEntryFormScreenState
     });
 
     try {
-      final repository = ref.read(constructionJournalRepositoryProvider);
       if (_isEdit) {
         final updatedEntry = await repository.updateEntry(
           entryId: widget.initialEntry!.id,
@@ -704,10 +956,64 @@ class _JournalEntryFormScreenState
           materials: materials,
         );
         if (!isDraft) {
-          await repository.submitEntry(updatedEntry.id);
+          await repository.submitEntry(
+            updatedEntry.id,
+            journalId: widget.journalId,
+          );
+        }
+      } else if (_hasRecoveredEntry) {
+        final recoveredId = _recoveredEntry?.id ?? _pendingOperation!.entryId!;
+        final updatedEntry = await repository.updateEntry(
+          entryId: recoveredId,
+          entryDate: _entryDate!.toIso8601String().split('T').first,
+          workDescription: _descriptionController.text.trim(),
+          estimateId: _selectedEstimateId,
+          problemsDescription: _problemsController.text.trim(),
+          safetyNotes: _safetyController.text.trim(),
+          visitorsNotes: _visitorsController.text.trim(),
+          qualityNotes: _qualityController.text.trim(),
+          weatherConditions: weather,
+          workVolumes: workVolumes,
+          workers: workers,
+          equipment: equipment,
+          materials: materials,
+        );
+        if (!isDraft) {
+          await repository.submitEntry(
+            updatedEntry.id,
+            journalId: widget.journalId,
+            idempotencyKey:
+                _submitOperationKey ??=
+                    '${_operationKey ?? _newLocalKey()}:submit',
+          );
+        }
+        if (_pendingOperation != null) {
+          await repository.clearPendingEntryOperation(_pendingOperation!);
+          _pendingOperation = null;
+        }
+      } else if (_pendingOperation != null &&
+          _pendingOperation!.entryId == null) {
+        final createdEntry = await repository.retryPendingCreate(
+          _pendingOperation!,
+        );
+        final pendingSubmit =
+            _pendingOperation?.payload['submit_intent'] == true;
+        if (pendingSubmit) {
+          _recoveredEntry = createdEntry;
+          _submitOperationKey ??= '$_operationKey:submit';
+          await repository.submitEntry(
+            createdEntry.id,
+            journalId: widget.journalId,
+            idempotencyKey: _submitOperationKey,
+          );
+        }
+        if (_pendingOperation != null) {
+          await repository.clearPendingEntryOperation(_pendingOperation!);
+          _pendingOperation = null;
         }
       } else {
-        await repository.createEntry(
+        _operationKey ??= _newLocalKey();
+        final createdEntry = await repository.createEntry(
           journalId: widget.journalId,
           entryDate: _entryDate!.toIso8601String().split('T').first,
           workDescription: _descriptionController.text.trim(),
@@ -721,16 +1027,62 @@ class _JournalEntryFormScreenState
           workers: workers,
           equipment: equipment,
           materials: materials,
-          submitAfterCreate: !isDraft,
+          submitAfterCreate: false,
+          submitIntent: !isDraft,
+          idempotencyKey: _operationKey,
         );
+        if (!isDraft) {
+          _recoveredEntry = createdEntry;
+          _submitOperationKey ??= '$_operationKey:submit';
+          _pendingOperation = await repository.findPendingEntryOperation(
+            widget.journalId,
+          );
+          await repository.submitEntry(
+            createdEntry.id,
+            journalId: widget.journalId,
+            idempotencyKey: _submitOperationKey,
+          );
+        }
+        if (_pendingOperation != null) {
+          await repository.clearPendingEntryOperation(_pendingOperation!);
+          _pendingOperation = null;
+        }
       }
 
       if (mounted) {
         Navigator.of(context).pop(true);
       }
     } catch (error) {
+      if (!_isEdit) {
+        _pendingOperation = await repository.findPendingEntryOperation(
+          widget.journalId,
+        );
+      }
       if (mounted) {
-        AppErrorNotice.show(context, error);
+        if (error is ApiException &&
+            error.statusCode == 422 &&
+            !_hasRecoveredEntry &&
+            _pendingOperation?.payload['submit_after_create'] != true) {
+          if (_pendingOperation != null) {
+            await repository.clearPendingEntryOperation(_pendingOperation!);
+            _pendingOperation = null;
+          }
+          _operationKey = null;
+          _submitOperationKey = null;
+        }
+        if (!mounted) return;
+        if (_hasRecoveredEntry) {
+          setState(() {
+            _recoveryNotice =
+                'Запись сохранена локально. Исправьте данные и повторите отправку.';
+          });
+        } else if (_pendingOperation == null) {
+          setState(() {
+            _recoveryNotice =
+                'Операция не подтверждена сервером и будет повторена с тем же ключом.';
+          });
+        }
+        if (mounted) AppErrorNotice.show(context, error);
       }
     } finally {
       if (mounted) {
@@ -739,6 +1091,11 @@ class _JournalEntryFormScreenState
         });
       }
     }
+  }
+
+  String _newLocalKey() {
+    final entropy = Random.secure().nextInt(1 << 32).toRadixString(16);
+    return 'journal-${DateTime.now().microsecondsSinceEpoch}-$entropy';
   }
 
   List<ConstructionJournalWorkVolumeModel> _normalizedWorkVolumes() {

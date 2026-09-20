@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:dio/dio.dart';
 
 import '../network/api_exception.dart';
@@ -35,13 +37,20 @@ class SyncQueueService {
     required SyncQueueStore store,
     required Dio dio,
     DateTime Function()? now,
+    String? Function()? currentScope,
   }) : _store = store,
        _dio = dio,
-       _now = now ?? DateTime.now;
+       _now = now ?? DateTime.now,
+       _currentScope = currentScope;
 
   final SyncQueueStore _store;
   final Dio _dio;
   final DateTime Function() _now;
+  final String? Function()? _currentScope;
+  Future<SyncQueueProcessResult>? _processing;
+
+  String? get currentScope => _currentScope?.call();
+  bool get requiresScope => _currentScope != null;
 
   static bool shouldQueueDioException(DioException error) {
     if (_isNetworkError(error)) {
@@ -64,6 +73,14 @@ class SyncQueueService {
 
   Future<QueuedSyncOperation?> get(int id) {
     return _store.get(id);
+  }
+
+  Future<void> delete(int id) {
+    return _store.delete(id);
+  }
+
+  Future<void> update(QueuedSyncOperation operation) {
+    return _store.put(operation);
   }
 
   Future<void> replaceDraftPayload(
@@ -98,7 +115,13 @@ class SyncQueueService {
     await _store.put(operation);
   }
 
-  Future<SyncQueueProcessResult> retryDueOperations() async {
+  Future<SyncQueueProcessResult> retryDueOperations() {
+    return _processing ??= _processDueOperations().whenComplete(() {
+      _processing = null;
+    });
+  }
+
+  Future<SyncQueueProcessResult> _processDueOperations() async {
     final now = _now();
     final operations = await _store.all();
     var successCount = 0;
@@ -106,7 +129,11 @@ class SyncQueueService {
     var blockedCount = 0;
 
     for (final operation in operations) {
-      if (operation.status != SyncOperationStatuses.queued) {
+      final interruptedJournal =
+          operation.moduleSlug == 'construction_journal' &&
+          operation.status == SyncOperationStatuses.sending;
+      if (operation.status != SyncOperationStatuses.queued &&
+          !interruptedJournal) {
         blockedCount++;
         break;
       }
@@ -138,6 +165,19 @@ class SyncQueueService {
   }
 
   Future<_RetryOutcome> _retryOperation(QueuedSyncOperation operation) async {
+    final operationScope = operation.payload['queue_scope']?.toString();
+    if ((requiresScope &&
+            operation.moduleSlug == 'construction_journal' &&
+            operationScope == null) ||
+        (operationScope != null &&
+            operationScope.isNotEmpty &&
+            (currentScope == null || operationScope != currentScope))) {
+      operation
+        ..status = SyncOperationStatuses.permissionDenied
+        ..lastBusinessError = SyncQueueMessages.permissionDenied;
+      await _store.put(operation);
+      return _RetryOutcome.blocked;
+    }
     operation
       ..status = SyncOperationStatuses.sending
       ..attemptCount = operation.attemptCount + 1
@@ -146,8 +186,22 @@ class SyncQueueService {
     await _store.put(operation);
 
     try {
+      var journalCreate =
+          operation.moduleSlug == 'construction_journal' &&
+          RegExp(
+            r'^/construction-journals/\d+/entries$',
+          ).hasMatch(operation.endpoint);
+      final knownId = int.tryParse(
+        operation.payload['created_entry_id']?.toString() ?? '',
+      );
+      if (journalCreate &&
+          knownId != null &&
+          operation.payload['submit_intent'] == true) {
+        await _advanceJournalToSubmit(operation, knownId);
+        journalCreate = false;
+      }
       final idempotencyKey = operation.payload['idempotency_key']?.toString();
-      await _dio.request<dynamic>(
+      final response = await _dio.request<dynamic>(
         operation.endpoint,
         data: await _requestData(operation),
         options: Options(
@@ -158,9 +212,37 @@ class SyncQueueService {
           },
         ),
       );
+      if (journalCreate && operation.payload['submit_intent'] == true) {
+        final raw = response.data;
+        final data = raw is Map && raw['data'] is Map ? raw['data'] : raw;
+        final id =
+            data is Map ? int.tryParse(data['id']?.toString() ?? '') : null;
+        final status = data is Map ? data['status']?.toString() : null;
+        if (id == null ||
+            id <= 0 ||
+            !['draft', 'submitted', 'approved', 'rejected'].contains(status)) {
+          throw const FormatException(
+            'Не удалось подтвердить состояние созданной записи.',
+          );
+        }
+        if (status == 'draft') {
+          await _advanceJournalToSubmit(operation, id);
+          return _retryOperation(operation);
+        }
+      }
       await _store.delete(operation.id);
       return _RetryOutcome.success;
     } on DioException catch (error) {
+      final statusCode = error.response?.statusCode;
+      if ((statusCode == 403 || statusCode == 422) &&
+          operation.moduleSlug == 'construction_journal' &&
+          RegExp(
+            r'^/journal-entries/\d+/submit$',
+          ).hasMatch(operation.endpoint) &&
+          await _submitWasAlreadyApplied(operation.endpoint)) {
+        await _store.delete(operation.id);
+        return _RetryOutcome.success;
+      }
       await _recordRetryFailure(operation, error);
 
       if (operation.status == SyncOperationStatuses.queued) {
@@ -168,6 +250,50 @@ class SyncQueueService {
       }
 
       return _RetryOutcome.blocked;
+    } on FormatException catch (error) {
+      operation
+        ..status = SyncOperationStatuses.needsEdit
+        ..lastBusinessError = error.message;
+      await _store.put(operation);
+      return _RetryOutcome.blocked;
+    }
+  }
+
+  Future<void> _advanceJournalToSubmit(
+    QueuedSyncOperation operation,
+    int entryId,
+  ) async {
+    final payload = operation.payload;
+    final createKey =
+        payload['create_idempotency_key'] ?? payload['idempotency_key'];
+    operation
+      ..operationType = 'submit_entry'
+      ..endpoint = '/journal-entries/$entryId/submit'
+      ..method = 'POST'
+      ..payloadJson = jsonEncode({
+        ...payload,
+        'stage': 'submit',
+        'created_entry_id': entryId,
+        'entry_id': entryId,
+        'create_idempotency_key': createKey,
+        'idempotency_key': '$createKey:submit',
+      });
+    await _store.put(operation);
+  }
+
+  Future<bool> _submitWasAlreadyApplied(String submitEndpoint) async {
+    final entryEndpoint = submitEndpoint.substring(
+      0,
+      submitEndpoint.length - '/submit'.length,
+    );
+    try {
+      final response = await _dio.get(entryEndpoint);
+      final data = response.data;
+      final payload = data is Map && data['data'] is Map ? data['data'] : data;
+      final status = payload is Map ? payload['status']?.toString() : null;
+      return status == 'submitted' || status == 'approved';
+    } on DioException catch (_) {
+      return false;
     }
   }
 
@@ -212,12 +338,31 @@ class SyncQueueService {
 
   Future<Object?> _requestData(QueuedSyncOperation operation) async {
     final attachments = operation.attachments;
+    final payload = operation.payload;
+    if (operation.moduleSlug == 'construction_journal') {
+      if (RegExp(
+        r'^/journal-entries/\d+/submit$',
+      ).hasMatch(operation.endpoint)) {
+        return {'idempotency_key': payload['idempotency_key']};
+      }
+      for (final key in [
+        'queue_scope',
+        'stage',
+        'created_entry_id',
+        'submit_intent',
+        'create_idempotency_key',
+        'journal_id',
+        'entry_id',
+      ]) {
+        payload.remove(key);
+      }
+    }
     if (attachments.isEmpty) {
-      return operation.payload;
+      return payload;
     }
 
     final formData = FormData();
-    operation.payload.forEach((key, value) {
+    payload.forEach((key, value) {
       if (value != null) {
         formData.fields.add(MapEntry(key, _formValue(value)));
       }

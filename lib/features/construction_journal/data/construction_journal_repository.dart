@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:math';
 
 import 'package:dio/dio.dart';
@@ -7,10 +8,12 @@ import '../../../core/network/api_exception.dart';
 import '../../../core/network/dio_client.dart';
 import '../../../core/network/mobile_api_response.dart';
 import '../../../core/sync/sync_queue_draft.dart';
+import '../../../core/sync/queued_sync_operation.dart';
 import '../../../core/sync/sync_queue_provider.dart';
 import '../../../core/sync/sync_queue_repository.dart';
 import '../../../core/sync/sync_queue_service.dart';
 import 'construction_journal_models.dart';
+import 'journal_entry_operation_recovery.dart';
 
 final constructionJournalRepositoryProvider =
     Provider<ConstructionJournalRepository>((ref) {
@@ -253,11 +256,16 @@ class ConstructionJournalRepository extends SyncQueueAwareRepository {
     List<ConstructionJournalEquipmentModel> equipment = const [],
     List<ConstructionJournalMaterialUsageModel> materials = const [],
     bool submitAfterCreate = false,
+    bool? submitIntent,
+    String? idempotencyKey,
   }) async {
-    final idempotencyKey = _newIdempotencyKey();
+    final operationKey = idempotencyKey ?? _newIdempotencyKey();
+    final shouldSubmit = submitIntent ?? submitAfterCreate;
     final payload = <String, dynamic>{
-      'idempotency_key': idempotencyKey,
+      'idempotency_key': operationKey,
+      'journal_id': journalId,
       'submit_after_create': submitAfterCreate,
+      'submit_intent': shouldSubmit,
       if (scheduleTaskId != null) 'schedule_task_id': scheduleTaskId,
       if (estimateId != null) 'estimate_id': estimateId,
       'entry_date': entryDate,
@@ -273,17 +281,42 @@ class ConstructionJournalRepository extends SyncQueueAwareRepository {
       'materials': materials.map((material) => material.toJson()).toList(),
     };
 
+    final draft = SyncQueueDraft(
+      moduleSlug: 'construction_journal',
+      operationType:
+          submitAfterCreate ? 'create_and_submit_entry' : 'create_entry',
+      method: 'POST',
+      endpoint: '/construction-journals/$journalId/entries',
+      payload: payload,
+    );
+    final preparedOperation = await _prepareOperation(draft);
     try {
+      final knownId = int.tryParse(
+        preparedOperation?.payload['created_entry_id']?.toString() ?? '',
+      );
+      if (knownId != null) {
+        return await fetchEntryDetail(knownId);
+      }
       final response = await _dio.post(
         '/construction-journals/$journalId/entries',
-        data: payload,
+        data: _wirePayload(preparedOperation?.payload ?? payload),
       );
 
-      return ConstructionJournalEntryModel.fromJson(
+      final result = ConstructionJournalEntryModel.fromJson(
         _extractMap(MobileApiResponse.payload(response.data)),
       );
+      if (preparedOperation != null &&
+          preparedOperation.payload['submit_intent'] == true) {
+        await _persistCreatedStage(preparedOperation, result.id);
+      } else {
+        await _deletePreparedOperation(preparedOperation);
+      }
+      return result;
     } on DioException catch (error) {
       if (SyncQueueService.shouldQueueDioException(error)) {
+        if (preparedOperation != null) {
+          throw SyncQueuedException(queueId: preparedOperation.id);
+        }
         await queueAndThrow(
           SyncQueueDraft(
             moduleSlug: 'construction_journal',
@@ -296,9 +329,53 @@ class ConstructionJournalRepository extends SyncQueueAwareRepository {
         );
       }
 
+      await _deletePreparedOperation(preparedOperation);
       throw ApiException.fromDio(
         error,
         fallbackMessage: 'Не удалось создать запись.',
+      );
+    }
+  }
+
+  Future<ConstructionJournalEntryModel> retryPendingCreate(
+    PendingJournalEntryOperation operation,
+  ) async {
+    final scope = operation.payload['queue_scope'];
+    final queueService =
+        syncQueueServiceFuture == null ? null : await syncQueueServiceFuture!;
+    if (scope != null && scope != queueService?.currentScope) {
+      throw const ApiException(
+        'Сохранённая операция относится к другой сессии.',
+        statusCode: 403,
+      );
+    }
+    try {
+      final response = await _dio.post(
+        operation.operation.endpoint,
+        data: _wirePayload(operation.payload),
+      );
+      final result = ConstructionJournalEntryModel.fromJson(
+        _extractMap(MobileApiResponse.payload(response.data)),
+      );
+      final queue = syncQueueServiceFuture;
+      if (queue != null && operation.payload['submit_intent'] == true) {
+        await (await queue).replaceDraftPayload(
+          operation.operation.id,
+          payload: {
+            ...operation.payload,
+            'stage': 'created',
+            'created_entry_id': result.id,
+          },
+          attachments: operation.operation.attachments,
+        );
+      } else {
+        await clearPendingEntryOperation(operation);
+      }
+      return result;
+    } on DioException catch (error) {
+      throw ApiException.fromDio(
+        error,
+        fallbackMessage: 'Не удалось повторить создание записи.',
       );
     }
   }
@@ -380,8 +457,230 @@ class ConstructionJournalRepository extends SyncQueueAwareRepository {
     }
   }
 
-  Future<ConstructionJournalEntryModel> submitEntry(int entryId) async {
-    return _entryAction('/journal-entries/$entryId/submit', const {});
+  Future<ConstructionJournalEntryModel> submitEntry(
+    int entryId, {
+    String? idempotencyKey,
+    int? journalId,
+  }) async {
+    final operationKey = idempotencyKey ?? _newIdempotencyKey();
+    final draft = SyncQueueDraft(
+      moduleSlug: 'construction_journal',
+      operationType: 'submit_entry',
+      method: 'POST',
+      endpoint: '/journal-entries/$entryId/submit',
+      payload: {
+        'idempotency_key': operationKey,
+        'entry_id': entryId,
+        if (journalId != null) 'journal_id': journalId,
+      },
+    );
+    final preparedOperation = await _prepareSubmitOperation(draft, entryId);
+    try {
+      final response = await _dio.post(
+        '/journal-entries/$entryId/submit',
+        data: {'idempotency_key': operationKey},
+      );
+      final result = ConstructionJournalEntryModel.fromJson(
+        _extractMap(MobileApiResponse.payload(response.data)),
+      );
+      await _deletePreparedOperation(preparedOperation);
+      return result;
+    } on DioException catch (error) {
+      final statusCode = error.response?.statusCode;
+      if (statusCode == 403 || statusCode == 422) {
+        try {
+          final current = await fetchEntryDetail(entryId);
+          if (current.status == 'submitted' || current.status == 'approved') {
+            await _deletePreparedOperation(preparedOperation);
+            return current;
+          }
+        } catch (_) {}
+      }
+
+      if (SyncQueueService.shouldQueueDioException(error)) {
+        if (preparedOperation != null) {
+          throw SyncQueuedException(queueId: preparedOperation.id);
+        }
+        await queueAndThrow(
+          SyncQueueDraft(
+            moduleSlug: 'construction_journal',
+            operationType: 'submit_entry',
+            method: 'POST',
+            endpoint: '/journal-entries/$entryId/submit',
+            payload: {'idempotency_key': operationKey},
+          ),
+        );
+      }
+
+      if (preparedOperation?.payload['created_entry_id'] == null) {
+        await _deletePreparedOperation(preparedOperation);
+      } else {
+        preparedOperation!
+          ..status =
+              statusCode == 403
+                  ? SyncOperationStatuses.permissionDenied
+                  : SyncOperationStatuses.needsEdit
+          ..lastBusinessError = ApiException.fromDio(error).message
+          ..nextAttemptAt = null;
+        await (await syncQueueServiceFuture!).update(preparedOperation);
+      }
+
+      throw ApiException.fromDio(
+        error,
+        fallbackMessage: 'Не удалось отправить запись на согласование.',
+      );
+    }
+  }
+
+  Future<PendingJournalEntryOperation?> findPendingEntryOperation(
+    int journalId,
+  ) async {
+    final queue = syncQueueServiceFuture;
+    if (queue == null) {
+      return null;
+    }
+
+    final candidates =
+        await JournalEntryOperationRecovery(await queue).findCandidates();
+    final currentScope = (await queue).currentScope;
+    for (final candidate in candidates) {
+      final operationScope = candidate.payload['queue_scope']?.toString();
+      if (((await queue).requiresScope && operationScope == null) ||
+          (operationScope != null &&
+              (currentScope == null || operationScope != currentScope))) {
+        continue;
+      }
+      if (candidate.journalId == journalId && candidate.entryId == null) {
+        return candidate;
+      }
+      final entryId = candidate.entryId;
+      if (entryId == null) {
+        continue;
+      }
+      if (candidate.journalId == journalId) {
+        return candidate;
+      }
+      try {
+        final entry = await fetchEntryDetail(entryId);
+        if (entry.journalId == journalId) {
+          return candidate;
+        }
+      } catch (_) {
+        if (candidate.journalId == journalId) {
+          return candidate;
+        }
+      }
+    }
+    return null;
+  }
+
+  Future<void> clearPendingEntryOperation(
+    PendingJournalEntryOperation operation,
+  ) async {
+    final queue = syncQueueServiceFuture;
+    if (queue != null) {
+      await (await queue).delete(operation.operation.id);
+    }
+  }
+
+  Future<QueuedSyncOperation?> _prepareOperation(SyncQueueDraft draft) async {
+    final future = syncQueueServiceFuture;
+    if (future == null) {
+      return null;
+    }
+    final service = await future;
+    final scope = service.currentScope;
+    if (service.requiresScope && scope == null) {
+      throw const ApiException(
+        'Войдите в аккаунт перед сохранением записи.',
+        statusCode: 401,
+      );
+    }
+    if (scope != null) {
+      draft.payload['queue_scope'] = scope;
+    }
+    final key = draft.payload['idempotency_key'];
+    for (final existing in await service.all()) {
+      final stored = existing.payload;
+      if (existing.moduleSlug == draft.moduleSlug &&
+          stored['queue_scope'] == scope &&
+          (existing.endpoint == draft.endpoint ||
+              (stored['journal_id'] == draft.payload['journal_id'] &&
+                  stored['create_idempotency_key'] == key)) &&
+          (stored['idempotency_key'] == key ||
+              stored['create_idempotency_key'] == key)) {
+        return existing;
+      }
+    }
+    return service.enqueue(draft);
+  }
+
+  Future<QueuedSyncOperation?> _prepareSubmitOperation(
+    SyncQueueDraft draft,
+    int entryId,
+  ) async {
+    final future = syncQueueServiceFuture;
+    if (future == null) {
+      return null;
+    }
+    final service = await future;
+    for (final operation in await service.all()) {
+      if (operation.moduleSlug != 'construction_journal' ||
+          operation.payload['created_entry_id']?.toString() !=
+              entryId.toString()) {
+        continue;
+      }
+      final operationScope = operation.payload['queue_scope']?.toString();
+      if (operationScope != null &&
+          (service.currentScope == null ||
+              operationScope != service.currentScope)) {
+        continue;
+      }
+      operation
+        ..endpoint = draft.endpoint
+        ..method = draft.method
+        ..operationType = draft.operationType
+        ..status = SyncOperationStatuses.queued
+        ..nextAttemptAt = null
+        ..lastBusinessError = null
+        ..payloadJson = jsonEncode({
+          ...operation.payload,
+          ...draft.payload,
+          'create_idempotency_key':
+              operation.payload['create_idempotency_key'] ??
+              operation.payload['idempotency_key'],
+          'stage': 'submit',
+        });
+      await service.update(operation);
+      return operation;
+    }
+    return _prepareOperation(draft);
+  }
+
+  Future<void> _deletePreparedOperation(QueuedSyncOperation? operation) async {
+    if (operation == null || syncQueueServiceFuture == null) {
+      return;
+    }
+    await (await syncQueueServiceFuture!).delete(operation.id);
+  }
+
+  Future<void> _persistCreatedStage(
+    QueuedSyncOperation operation,
+    int entryId,
+  ) async {
+    final queue = syncQueueServiceFuture;
+    if (queue == null) {
+      return;
+    }
+    await (await queue).replaceDraftPayload(
+      operation.id,
+      payload: {
+        ...operation.payload,
+        'stage': 'created',
+        'created_entry_id': entryId,
+      },
+      attachments: operation.attachments,
+    );
   }
 
   Future<ConstructionJournalEntryModel> approveEntry(int entryId) async {
@@ -543,6 +842,22 @@ class ConstructionJournalRepository extends SyncQueueAwareRepository {
         ).map((value) => value.toRadixString(16).padLeft(8, '0')).join();
 
     return 'journal-${DateTime.now().microsecondsSinceEpoch}-$entropy';
+  }
+
+  Map<String, dynamic> _wirePayload(Map<String, dynamic> payload) {
+    final wire = Map<String, dynamic>.from(payload);
+    for (final key in const [
+      'queue_scope',
+      'stage',
+      'created_entry_id',
+      'submit_intent',
+      'journal_id',
+      'entry_id',
+      'create_idempotency_key',
+    ]) {
+      wire.remove(key);
+    }
+    return wire;
   }
 
   void _rethrowKnown(Object error) {
