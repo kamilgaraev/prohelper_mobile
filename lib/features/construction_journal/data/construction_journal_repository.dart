@@ -854,6 +854,15 @@ class ConstructionJournalRepository extends SyncQueueAwareRepository {
       'journal_id',
       'entry_id',
       'create_idempotency_key',
+      'confirm',
+      'confirmed',
+      'act',
+      'acting',
+      'force',
+      'override',
+      'skip_readiness',
+      'skip_confirmation',
+      'available_to_act',
     ]) {
       wire.remove(key);
     }

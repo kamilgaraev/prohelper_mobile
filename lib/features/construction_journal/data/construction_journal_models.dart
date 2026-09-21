@@ -25,7 +25,7 @@ class ConstructionJournalActionModel {
 
   factory ConstructionJournalActionModel.fromJson(Map<String, dynamic> json) {
     return ConstructionJournalActionModel(
-      action: _requiredKnownString(json, 'action', _journalActions),
+      action: _requiredString(json, 'action'),
       label: _requiredCleanLabel(json, 'label'),
     );
   }
@@ -619,6 +619,52 @@ class ConstructionJournalWorkVolumeModel {
   }
 }
 
+class ConstructionJournalRelatedWorkModel {
+  const ConstructionJournalRelatedWorkModel({
+    required this.id,
+    this.status,
+    this.completedQuantity,
+    this.completionDate,
+    this.scheduleTaskId,
+    this.estimateItemId,
+  });
+
+  final int id;
+  final String? status;
+  final double? completedQuantity;
+  final String? completionDate;
+  final int? scheduleTaskId;
+  final int? estimateItemId;
+
+  String get displayLabel {
+    final parts = <String>['Работа №$id'];
+    final statusText = _relatedWorkStatusLabel(status);
+    if (statusText != null) {
+      parts.add(statusText);
+    }
+    if (completedQuantity != null) {
+      parts.add('объём $completedQuantity');
+    }
+    if ((completionDate ?? '').trim().isNotEmpty) {
+      parts.add(completionDate!.trim());
+    }
+    return parts.join(' · ');
+  }
+
+  factory ConstructionJournalRelatedWorkModel.fromJson(
+    Map<String, dynamic> json,
+  ) {
+    return ConstructionJournalRelatedWorkModel(
+      id: _requiredInt(json, 'id'),
+      status: _asNullableString(json['status']),
+      completedQuantity: _asNullableDouble(json['completed_quantity']),
+      completionDate: _asNullableString(json['completion_date']),
+      scheduleTaskId: _asNullableInt(json['schedule_task_id']),
+      estimateItemId: _asNullableInt(json['estimate_item_id']),
+    );
+  }
+}
+
 class ConstructionJournalBlockerModel {
   const ConstructionJournalBlockerModel({
     required this.code,
@@ -635,11 +681,19 @@ class ConstructionJournalBlockerModel {
   final int? journalWorkVolumeId;
 
   factory ConstructionJournalBlockerModel.fromJson(Map<String, dynamic> json) {
+    final message =
+        _asNullableString(json['message']) ?? _asNullableString(json['label']);
     return ConstructionJournalBlockerModel(
-      code: _requiredString(json, 'code'),
-      message: _requiredCleanLabel(json, 'message'),
-      target: _requiredString(json, 'target'),
-      canOverride: _requiredBool(json, 'can_override'),
+      code: _asNullableString(json['code']) ?? 'unknown',
+      message:
+          message == null ||
+                  message.startsWith('construction_journal.') ||
+                  message.startsWith('workflow.') ||
+                  message.startsWith('handover_acceptance.')
+              ? 'Сервер отклонил операцию.'
+              : message,
+      target: _blockerTarget(json['target']),
+      canOverride: _asNullableBool(json['can_override']) ?? false,
       journalWorkVolumeId: _asNullableInt(json['journal_work_volume_id']),
     );
   }
@@ -774,6 +828,7 @@ class ConstructionJournalEntryModel {
     this.materials = const [],
     required this.blockers,
     required this.availableActions,
+    this.completedWorks = const [],
     this.rejectionReason,
     this.createdByName,
     this.approvedByName,
@@ -810,6 +865,7 @@ class ConstructionJournalEntryModel {
   final List<ConstructionJournalMaterialUsageModel> materials;
   final List<ConstructionJournalBlockerModel> blockers;
   final List<ConstructionJournalActionModel> availableActions;
+  final List<ConstructionJournalRelatedWorkModel> completedWorks;
 
   bool hasAction(String action) {
     return availableActions.hasAction(action);
@@ -857,11 +913,7 @@ class ConstructionJournalEntryModel {
               : ConstructionJournalWeatherModel.fromJson(
                 _requiredMap(json, 'weather_conditions'),
               ),
-      workflowState: _requiredKnownString(
-        json,
-        'workflow_state',
-        _workflowStates,
-      ),
+      workflowState: _requiredString(json, 'workflow_state'),
       workVolumes:
           _requiredList(
             json,
@@ -892,6 +944,7 @@ class ConstructionJournalEntryModel {
             json,
             'available_actions',
           ).map(ConstructionJournalActionModel.fromJson).toList(),
+      completedWorks: _parseRelatedWorks(json),
     );
   }
 }
@@ -981,6 +1034,57 @@ List<Map<String, dynamic>> _requiredList(
   }).toList();
 }
 
+List<ConstructionJournalRelatedWorkModel> _parseRelatedWorks(
+  Map<String, dynamic> json,
+) {
+  final value = json['completed_works'] ?? json['completedWorks'];
+  if (value == null) {
+    return const [];
+  }
+  if (value is! List) {
+    return const [];
+  }
+
+  final works = <ConstructionJournalRelatedWorkModel>[];
+  for (final item in value) {
+    if (item is! Map) {
+      continue;
+    }
+    try {
+      works.add(
+        ConstructionJournalRelatedWorkModel.fromJson(
+          item.map((key, value) => MapEntry(key.toString(), value)),
+        ),
+      );
+    } catch (_) {}
+  }
+  return works;
+}
+
+String _blockerTarget(dynamic value) {
+  if (value is Map) {
+    final type = value['type']?.toString().trim() ?? '';
+    final id = value['id'];
+    if (type.isEmpty) {
+      return id?.toString() ?? '';
+    }
+    return id == null ? type : '$type:$id';
+  }
+
+  return value?.toString().trim() ?? '';
+}
+
+String? _relatedWorkStatusLabel(String? status) {
+  return switch (status) {
+    'draft' => 'Черновик',
+    'confirmed' => 'Подтверждена',
+    'in_act' || 'acted' => 'В акте',
+    'cancelled' => 'Отменена',
+    null || '' => null,
+    _ => null,
+  };
+}
+
 List<Map<String, dynamic>> _requiredRawMapList(
   Map<String, dynamic> json,
   String key,
@@ -1062,15 +1166,6 @@ bool? _asNullableBool(dynamic value) {
   return null;
 }
 
-bool _requiredBool(Map<String, dynamic> json, String key) {
-  final value = _asNullableBool(json[key]);
-  if (value == null) {
-    throw FormatException('Construction journal field "$key" is required.');
-  }
-
-  return value;
-}
-
 String? _asNullableString(dynamic value) {
   final normalized = value?.toString().trim() ?? '';
   return normalized.isEmpty ? null : normalized;
@@ -1128,22 +1223,4 @@ const _journalStatuses = {'active', 'archived', 'closed'};
 
 const _entryStatuses = {'draft', 'submitted', 'approved', 'rejected'};
 
-const _workflowStates = {'ready', 'blocked'};
-
 const _estimateItemTypes = {'work'};
-
-const _journalActions = {
-  ConstructionJournalActionKeys.view,
-  ConstructionJournalActionKeys.create,
-  ConstructionJournalActionKeys.update,
-  ConstructionJournalActionKeys.delete,
-  ConstructionJournalActionKeys.export,
-  ConstructionJournalActionKeys.createEntry,
-  ConstructionJournalActionKeys.submit,
-  ConstructionJournalActionKeys.approve,
-  ConstructionJournalActionKeys.reject,
-  ConstructionJournalActionKeys.exportDailyReport,
-  ConstructionJournalActionKeys.close,
-  ConstructionJournalActionKeys.archive,
-  ConstructionJournalActionKeys.reopen,
-};

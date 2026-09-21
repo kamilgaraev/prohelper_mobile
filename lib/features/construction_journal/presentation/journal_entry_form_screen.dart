@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/network/api_exception.dart';
+import '../../../core/sync/sync_queue_service.dart';
 import '../../../core/widgets/app_error_notice.dart';
 import '../data/construction_journal_models.dart';
 import '../data/construction_journal_repository.dart';
@@ -24,6 +25,8 @@ class JournalEntryFormScreen extends ConsumerStatefulWidget {
   ConsumerState<JournalEntryFormScreen> createState() =>
       _JournalEntryFormScreenState();
 }
+
+enum _JournalSyncStatus { saved, queued, unsent, rejected }
 
 class _JournalEntryFormScreenState
     extends ConsumerState<JournalEntryFormScreen> {
@@ -52,6 +55,9 @@ class _JournalEntryFormScreenState
   PendingJournalEntryOperation? _pendingOperation;
   ConstructionJournalEntryModel? _recoveredEntry;
   String? _recoveryNotice;
+  _JournalSyncStatus? _syncStatus;
+  String? _serverRejectionReason;
+  final ScrollController _formScrollController = ScrollController();
 
   bool get _isEdit => widget.initialEntry != null;
 
@@ -169,6 +175,7 @@ class _JournalEntryFormScreenState
           }
           _recoveredEntry = entry;
           _restoreEntry(entry);
+          _syncStatus = _JournalSyncStatus.unsent;
           _recoveryNotice =
               'Запись создана, отправка ещё не завершена. Можно продолжить.';
         } on ApiException {
@@ -176,11 +183,13 @@ class _JournalEntryFormScreenState
             return;
           }
           _restorePayload(pending.payload);
+          _syncStatus = _JournalSyncStatus.unsent;
           _recoveryNotice =
               'Сохранённая запись ожидает подтверждения сервера. Повторите отправку позже.';
         }
       } else {
         _restorePayload(pending.payload);
+        _syncStatus = _JournalSyncStatus.queued;
         _recoveryNotice =
             'Операция поставлена в очередь. Повторите отправку после восстановления связи.';
       }
@@ -189,6 +198,7 @@ class _JournalEntryFormScreenState
       if (mounted) {
         setState(() {
           _recoveryFailed = true;
+          _syncStatus = _JournalSyncStatus.unsent;
           _recoveryNotice =
               'Не удалось проверить сохранённую операцию. Повторите позже.';
         });
@@ -320,6 +330,7 @@ class _JournalEntryFormScreenState
     for (final item in _equipment) {
       item.dispose();
     }
+    _formScrollController.dispose();
     super.dispose();
   }
 
@@ -333,6 +344,8 @@ class _JournalEntryFormScreenState
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              Text(_syncStatusText ?? ''),
+              if ((_syncStatusText ?? '').isNotEmpty) const SizedBox(height: 12),
               Text(
                 _recoveryNotice ??
                     'Создание записи на сервере ещё не подтверждено.',
@@ -371,9 +384,18 @@ class _JournalEntryFormScreenState
         title: Text(_isEdit ? 'Редактирование записи' : 'Новая запись'),
       ),
       body: ListView(
+        controller: _formScrollController,
         padding: const EdgeInsets.all(16),
         children: [
-          if (_recoveryNotice != null)
+          if (_syncStatusText != null)
+            Card(
+              color: Theme.of(context).colorScheme.surfaceContainerHighest,
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Text(_syncStatusText!),
+              ),
+            ),
+          if (_recoveryNotice != null && _recoveryNotice != _syncStatusText)
             Card(
               color: Theme.of(context).colorScheme.surfaceContainerHighest,
               child: Padding(
@@ -381,6 +403,20 @@ class _JournalEntryFormScreenState
                 child: Text(_recoveryNotice!),
               ),
             ),
+          if (_visibleRelatedWorks.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Text(
+              'Связанные работы',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 8),
+            ..._visibleRelatedWorks.map(
+              (work) => Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Text(work.displayLabel),
+              ),
+            ),
+          ],
           ListTile(
             contentPadding: EdgeInsets.zero,
             title: const Text('Дата записи'),
@@ -1071,16 +1107,33 @@ class _JournalEntryFormScreenState
           _submitOperationKey = null;
         }
         if (!mounted) return;
-        if (_hasRecoveredEntry) {
-          setState(() {
+        final rejection =
+            error is ApiException && error.statusCode == 422
+                ? error.message.trim()
+                : '';
+        setState(() {
+          if (error is SyncQueuedException) {
+            _syncStatus = _JournalSyncStatus.queued;
+            _recoveryNotice =
+                'Операция поставлена в очередь. Повторите отправку после восстановления связи.';
+          } else if (rejection.isNotEmpty) {
+            _syncStatus = _JournalSyncStatus.rejected;
+            _serverRejectionReason = rejection;
+            _recoveryNotice = 'Отклонено сервером: $rejection';
+          } else if (_hasRecoveredEntry) {
+            _syncStatus = _JournalSyncStatus.unsent;
             _recoveryNotice =
                 'Запись сохранена локально. Исправьте данные и повторите отправку.';
-          });
-        } else if (_pendingOperation == null) {
-          setState(() {
+          } else if (_pendingOperation == null) {
+            _syncStatus = _JournalSyncStatus.unsent;
             _recoveryNotice =
                 'Операция не подтверждена сервером и будет повторена с тем же ключом.';
-          });
+          } else {
+            _syncStatus = _JournalSyncStatus.unsent;
+          }
+        });
+        if (_formScrollController.hasClients) {
+          _formScrollController.jumpTo(0);
         }
         if (mounted) AppErrorNotice.show(context, error);
       }
@@ -1091,6 +1144,25 @@ class _JournalEntryFormScreenState
         });
       }
     }
+  }
+
+  String? get _syncStatusText {
+    return switch (_syncStatus) {
+      _JournalSyncStatus.saved => 'Сохранено',
+      _JournalSyncStatus.queued => 'В очереди',
+      _JournalSyncStatus.unsent => 'Не отправлено',
+      _JournalSyncStatus.rejected =>
+        _serverRejectionReason == null || _serverRejectionReason!.isEmpty
+            ? 'Отклонено сервером'
+            : 'Отклонено сервером: $_serverRejectionReason',
+      null => null,
+    };
+  }
+
+  List<ConstructionJournalRelatedWorkModel> get _visibleRelatedWorks {
+    return _recoveredEntry?.completedWorks ??
+        widget.initialEntry?.completedWorks ??
+        const [];
   }
 
   String _newLocalKey() {

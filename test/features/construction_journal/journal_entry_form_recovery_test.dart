@@ -223,6 +223,92 @@ void main() {
     expect(await store.all(), isEmpty);
     expect(writes, 0);
   });
+
+  testWidgets('shows server rejection and does not create a second entry', (
+    tester,
+  ) async {
+    final store = _Store();
+    var creates = 0;
+    final dio =
+        Dio()
+          ..interceptors.add(
+            InterceptorsWrapper(
+              onRequest: (options, handler) {
+                if (options.path.endsWith('/entry-form-options')) {
+                  handler.resolve(
+                    Response(
+                      requestOptions: options,
+                      data: const {
+                        'data': {
+                          'estimates': <dynamic>[],
+                          'work_types': <dynamic>[],
+                          'project_materials': <dynamic>[],
+                        },
+                      },
+                    ),
+                  );
+                  return;
+                }
+                creates++;
+                handler.reject(
+                  DioException(
+                    requestOptions: options,
+                    response: Response(
+                      requestOptions: options,
+                      statusCode: 422,
+                      data: {
+                        'message': 'Нет протокола для участка А',
+                      },
+                    ),
+                    type: DioExceptionType.badResponse,
+                  ),
+                );
+              },
+            ),
+          );
+    final queue = SyncQueueService(store: store, dio: dio);
+    final repository = ConstructionJournalRepository(
+      dio,
+      syncQueueServiceFuture: Future.value(queue),
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          constructionJournalRepositoryProvider.overrideWithValue(repository),
+        ],
+        child: const MaterialApp(
+          home: Scaffold(body: JournalEntryFormScreen(journalId: 7)),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Дата записи'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('OK'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byWidgetPredicate(
+        (w) => w is TextField && w.decoration?.labelText == 'Описание работ',
+      ),
+      'Монтаж',
+    );
+    await tester.scrollUntilVisible(
+      find.text('Сохранить черновик'),
+      400,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(find.text('Сохранить черновик'));
+    await tester.pumpAndSettle();
+    expect(creates, 1);
+    expect(await store.all(), isEmpty);
+    await tester.scrollUntilVisible(
+      find.textContaining('Отклонено сервером'),
+      -400,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(find.textContaining('Отклонено сервером'), findsWidgets);
+    expect(find.textContaining('Нет протокола для участка А'), findsWidgets);
+  });
 }
 
 class _Store implements SyncQueueStore {

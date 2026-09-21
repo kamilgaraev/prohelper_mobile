@@ -52,6 +52,59 @@ void main() {
     },
   );
 
+  test('reads new related works and object blockers without failing', () {
+    final payload = _entryPayload();
+    payload['workflow_state'] = 'needs_review';
+    payload['readiness_revision'] = 4;
+    payload['available_actions'] = [
+      {'action': 'view', 'label': 'Открыть'},
+      {'action': 'new_server_action', 'label': 'Новое действие'},
+    ];
+    payload['blockers'] = [
+      {
+        'code': 'quantity_source_changed',
+        'requirement_id': 'req-1',
+        'scope_id': 10,
+        'stage': 'technical_acceptance',
+        'message': 'Нет протокола для участка А',
+        'target': {'type': 'acceptance_scope', 'id': 10},
+      },
+    ];
+    payload['completed_works'] = [
+      {
+        'id': 501,
+        'schedule_task_id': 77,
+        'estimate_item_id': 81,
+        'planning_status': 'internal',
+        'work_origin_type': 'journal',
+        'completed_quantity': 12.5,
+        'status': 'confirmed',
+        'completion_date': '2026-09-20',
+        'quantity_conflict': false,
+      },
+    ];
+
+    final entry = ConstructionJournalEntryModel.fromJson(payload);
+
+    expect(entry.workflowState, 'needs_review');
+    expect(entry.blockers.single.message, 'Нет протокола для участка А');
+    expect(entry.blockers.single.target, 'acceptance_scope:10');
+    expect(entry.blockers.single.canOverride, isFalse);
+    expect(entry.completedWorks.single.displayLabel, contains('Работа №501'));
+    expect(entry.completedWorks.single.displayLabel, contains('Подтверждена'));
+    expect(entry.hasAction('new_server_action'), isTrue);
+  });
+
+  test('keeps reading an entry when related works list is omitted', () {
+    final payload = _entryPayload()..remove('completed_works');
+    payload.remove('completed_works_count');
+
+    expect(
+      ConstructionJournalEntryModel.fromJson(payload).completedWorks,
+      isEmpty,
+    );
+  });
+
   test('rejects entry without required status label', () {
     final payload = _entryPayload()..remove('status_label');
 

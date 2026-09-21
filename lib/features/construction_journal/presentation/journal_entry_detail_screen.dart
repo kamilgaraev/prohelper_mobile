@@ -143,6 +143,16 @@ class JournalEntryDetailScreen extends ConsumerWidget {
               const SizedBox(height: 16),
               _BlockersCard(blockers: entry.blockers),
             ],
+            if (entry.completedWorks.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              _FieldResourcesCard(
+                title: 'Связанные работы',
+                lines:
+                    entry.completedWorks
+                        .map((work) => work.displayLabel)
+                        .toList(),
+              ),
+            ],
             const SizedBox(height: 16),
             _WorkVolumesReadOnlyCard(volumes: entry.workVolumes),
             if (entry.weatherConditions != null) ...[

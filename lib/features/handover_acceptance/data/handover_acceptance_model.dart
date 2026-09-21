@@ -30,9 +30,51 @@ class HandoverProblemFlag {
       key: _requiredAnyString(json, ['key', 'code']),
       severity: _requiredString(json, 'severity'),
       label: _requiredAnyString(json, ['label', 'message']),
-      count: _requiredInt(json, 'count'),
+      count: json.containsKey('count') ? _requiredInt(json, 'count') : 0,
     );
   }
+}
+
+class HandoverReadinessBlocker {
+  const HandoverReadinessBlocker({
+    required this.code,
+    required this.message,
+    this.stage,
+    this.targetLabel,
+  });
+
+  final String code;
+  final String message;
+  final String? stage;
+  final String? targetLabel;
+
+  factory HandoverReadinessBlocker.fromJson(Map<String, dynamic> json) {
+    final message =
+        json['message']?.toString().trim() ??
+        json['label']?.toString().trim() ??
+        '';
+    return HandoverReadinessBlocker(
+      code: json['code']?.toString() ?? 'unknown',
+      message:
+          message.isEmpty ||
+                  message.startsWith('handover_acceptance.') ||
+                  message.startsWith('workflow.') ||
+                  message.startsWith('executive_documentation.')
+              ? 'Сейчас это действие недоступно.'
+              : message,
+      stage: json['stage']?.toString(),
+      targetLabel: _readinessTarget(json['target']),
+    );
+  }
+}
+
+String? _readinessTarget(dynamic value) {
+  if (value is Map) {
+    final type = value['type']?.toString();
+    return type == null || type.isEmpty ? null : type;
+  }
+  final text = value?.toString().trim();
+  return text == null || text.isEmpty ? null : text;
 }
 
 class HandoverWorkflowSummary {
@@ -40,21 +82,32 @@ class HandoverWorkflowSummary {
     required this.status,
     required this.availableActions,
     required this.problemFlags,
+    this.readinessReady,
+    this.readinessBlockers = const [],
   });
 
   final String status;
   final List<String> availableActions;
   final List<HandoverProblemFlag> problemFlags;
+  final bool? readinessReady;
+  final List<HandoverReadinessBlocker> readinessBlockers;
 
   factory HandoverWorkflowSummary.fromJson(Map<String, dynamic> json) {
+    final readiness = _asMap(json['readiness']);
     return HandoverWorkflowSummary(
-      status: _requiredStringIn(json, 'status', _scopeStatuses),
+      status: _requiredString(json, 'status'),
       availableActions: _requiredStringList(json, 'available_actions'),
       problemFlags:
           _requiredMapList(
             json,
             'problem_flags',
           ).map(HandoverProblemFlag.fromJson).toList(),
+      readinessReady:
+          readiness.isEmpty ? null : readiness['ready'] == true,
+      readinessBlockers:
+          _asMapList(readiness['blockers'])
+              .map(HandoverReadinessBlocker.fromJson)
+              .toList(),
     );
   }
 }
@@ -327,7 +380,7 @@ class AcceptanceScopeModel {
       projectId: _requiredInt(json, 'project_id'),
       title: _requiredString(json, 'title'),
       description: json['description']?.toString(),
-      status: _requiredStringIn(json, 'status', _scopeStatuses),
+      status: _requiredString(json, 'status'),
       plannedAcceptanceDate: json['planned_acceptance_date']?.toString(),
       acceptedAt: json['accepted_at']?.toString(),
       handedOverAt: json['handed_over_at']?.toString(),
@@ -498,17 +551,6 @@ List<String> _requiredStringList(Map<String, dynamic> json, String key) {
 
   return _asStringList(value);
 }
-
-const _scopeStatuses = {
-  'planned',
-  'in_progress',
-  'findings_open',
-  'ready_for_reinspection',
-  'accepted',
-  'handed_over',
-  'reopened',
-  'rejected',
-};
 
 const _checklistStatuses = {'draft', 'active', 'completed', 'findings_open'};
 

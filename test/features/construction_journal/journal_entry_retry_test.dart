@@ -429,6 +429,59 @@ void main() {
       expect(await repository.findPendingEntryOperation(7), isNull);
     },
   );
+  test('does not send confirmation or acting bypass fields on the wire', () async {
+    final store = _MemorySyncQueueStore();
+    Map<String, dynamic>? body;
+    final dio =
+        Dio()
+          ..interceptors.add(
+            InterceptorsWrapper(
+              onRequest: (options, handler) {
+                body = Map<String, dynamic>.from(options.data as Map);
+                handler.resolve(
+                  Response(
+                    requestOptions: options,
+                    data: {'data': _entry(42)},
+                  ),
+                );
+              },
+            ),
+          );
+    final queue = SyncQueueService(
+      store: store,
+      dio: dio,
+      currentScope: () => '9:3',
+    );
+    await queue.enqueue(
+      const SyncQueueDraft(
+        moduleSlug: 'construction_journal',
+        operationType: 'create_entry',
+        method: 'POST',
+        endpoint: '/construction-journals/7/entries',
+        payload: {
+          'queue_scope': '9:3',
+          'idempotency_key': 'legacy',
+          'journal_id': 7,
+          'entry_date': '2026-09-20',
+          'work_description': 'Монтаж',
+          'confirm': true,
+          'act': true,
+          'skip_readiness': true,
+        },
+      ),
+    );
+    final repo = ConstructionJournalRepository(
+      dio,
+      syncQueueServiceFuture: Future.value(queue),
+    );
+    final pending = (await repo.findPendingEntryOperation(7))!;
+    await repo.retryPendingCreate(pending);
+    expect(body, isNotNull);
+    expect(body!.containsKey('confirm'), isFalse);
+    expect(body!.containsKey('act'), isFalse);
+    expect(body!.containsKey('skip_readiness'), isFalse);
+    expect(body!.containsKey('queue_scope'), isFalse);
+  });
 }
 
 Map<String, dynamic> _entry(int id, {String status = 'draft'}) => {
