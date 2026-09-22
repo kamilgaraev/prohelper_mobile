@@ -108,7 +108,7 @@ void main() {
       dio.httpClientAdapter = _LegalDocumentJsonAdapter((options) {
         requests.add(options);
         final query = options.queryParameters;
-        if (query['sync_after_id'] == null) {
+        if (query['sync_after_id'] == 0) {
           return {
             'success': true,
             'data': {
@@ -144,7 +144,7 @@ void main() {
       expect(result.isPartial, isFalse);
       expect(requests, hasLength(2));
       expect(requests[0].queryParameters['per_page'], 50);
-      expect(requests[0].queryParameters.containsKey('sync_after_id'), isFalse);
+      expect(requests[0].queryParameters['sync_after_id'], 0);
       expect(requests[1].queryParameters['sync_after_id'], 50);
       expect(requests[1].queryParameters['sync_max_id'], 51);
     },
@@ -184,6 +184,83 @@ void main() {
     expect(result.isPartial, isTrue);
     expect(result.error, isNotEmpty);
   });
+
+  test(
+    'full scans replace changed and deleted documents with cursor zero',
+    () async {
+      const identity = LegalDocumentCacheIdentity(
+        userId: 3,
+        organizationId: 8,
+        sessionId: 'session-a',
+      );
+      final snapshots = <String, LegalDocumentListSnapshotData>{};
+      final requests = <RequestOptions>[];
+      var scan = 0;
+      final dio = Dio(BaseOptions(baseUrl: 'https://api.example.test'));
+      dio.httpClientAdapter = _LegalDocumentJsonAdapter((options) {
+        requests.add(options);
+        scan++;
+        final records = switch (scan) {
+          1 => [_document(1, title: 'Старое название'), _document(2)],
+          2 => [_document(1, title: 'Новое название')],
+          _ => <Map<String, dynamic>>[],
+        };
+        return {
+          'success': true,
+          'data': {'data': records},
+          'meta': {
+            'next_cursor': null,
+            'has_more': false,
+            'sync_max_id': 2,
+            'per_page': 50,
+          },
+        };
+      });
+      final repository = LegalDocumentRepository(
+        dio,
+        listSnapshotReader: (_, _, kind) async => snapshots[kind],
+        listSnapshotWriter: (
+          _,
+          _,
+          kind,
+          documents,
+          maxId,
+          nextCursor,
+          isComplete,
+          clearPartial,
+        ) async {
+          snapshots[kind] = LegalDocumentListSnapshotData(
+            rawDocuments: List<Map<String, dynamic>>.from(documents),
+            syncMaxId: maxId,
+            nextCursor: nextCursor,
+            isComplete: isComplete,
+          );
+          if (clearPartial) snapshots.remove('partial');
+        },
+      );
+
+      await repository.fetchDocumentList(projectId: 7, identity: identity);
+      final secondScan = await repository.fetchDocumentList(
+        projectId: 7,
+        identity: identity,
+      );
+
+      expect(requests[0].queryParameters['sync_after_id'], 0);
+      expect(requests[1].queryParameters['sync_after_id'], 0);
+      expect(secondScan.documents, hasLength(1));
+      expect(secondScan.documents.single.title, 'Новое название');
+      expect(snapshots['list']!.rawDocuments, hasLength(1));
+
+      final emptyScan = await repository.fetchDocumentList(
+        projectId: 7,
+        identity: identity,
+      );
+      expect(requests[2].queryParameters['sync_after_id'], 0);
+      expect(emptyScan.documents, isEmpty);
+      expect(snapshots['list']!.rawDocuments, isEmpty);
+      expect(snapshots['list']!.isComplete, isTrue);
+    },
+  );
 
   test(
     'does not fall back to a cached detail after access is denied',
@@ -232,9 +309,9 @@ void main() {
   );
 }
 
-Map<String, dynamic> _document(int id) => {
+Map<String, dynamic> _document(int id, {String? title}) => {
   'id': id,
-  'title': 'Документ $id',
+  'title': title ?? 'Документ $id',
   'document_type_label': 'Договор',
   'status': 'active',
 };

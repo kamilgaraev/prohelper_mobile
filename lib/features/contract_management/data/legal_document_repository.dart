@@ -33,6 +33,38 @@ class LegalDocumentListResult {
   final String? error;
 }
 
+class LegalDocumentListSnapshotData {
+  const LegalDocumentListSnapshotData({
+    required this.rawDocuments,
+    required this.syncMaxId,
+    required this.isComplete,
+    this.nextCursor,
+  });
+
+  final List<Map<String, dynamic>> rawDocuments;
+  final int syncMaxId;
+  final int? nextCursor;
+  final bool isComplete;
+}
+
+typedef LegalDocumentListSnapshotReader =
+    Future<LegalDocumentListSnapshotData?> Function(
+      int projectId,
+      LegalDocumentCacheIdentity identity,
+      String kind,
+    );
+typedef LegalDocumentListSnapshotWriter =
+    Future<void> Function(
+      int projectId,
+      LegalDocumentCacheIdentity identity,
+      String kind,
+      List<Map<String, dynamic>> documents,
+      int syncMaxId,
+      int? nextCursor,
+      bool isComplete,
+      bool clearPartial,
+    );
+
 class _LegalDocumentPage {
   const _LegalDocumentPage(
     this.items,
@@ -56,6 +88,15 @@ class _StoredLegalList {
   final List<LegalDocumentModel> documents;
   final int syncMaxId;
 }
+
+_StoredLegalList _storedList(LegalDocumentListSnapshotData snapshot) =>
+    _StoredLegalList(
+      rawDocuments: snapshot.rawDocuments,
+      documents: snapshot.rawDocuments
+          .map(LegalDocumentModel.fromJson)
+          .toList(growable: false),
+      syncMaxId: snapshot.syncMaxId,
+    );
 
 class _PartialLegalList {
   const _PartialLegalList({
@@ -170,13 +211,17 @@ class LegalDocumentRepository {
     LegalDocumentSnapshotReader? snapshotReader,
     LegalDocumentSnapshotWriter? snapshotWriter,
     LegalDocumentSnapshotDeleter? snapshotDeleter,
+    LegalDocumentListSnapshotReader? listSnapshotReader,
+    LegalDocumentListSnapshotWriter? listSnapshotWriter,
   }) : _isar = isar,
        _snapshotReader = snapshotReader,
        _snapshotWriter = snapshotWriter,
        _snapshotDeleter = snapshotDeleter,
        _syncQueueService = syncQueueService,
        _currentOwnerIdentity = currentOwnerIdentity,
-       _fileCache = fileCache;
+       _fileCache = fileCache,
+       _listSnapshotReader = listSnapshotReader,
+       _listSnapshotWriter = listSnapshotWriter;
 
   final Dio _dio;
   final Future<Isar>? _isar;
@@ -186,6 +231,8 @@ class LegalDocumentRepository {
   final Future<SyncQueueService> Function()? _syncQueueService;
   final String? Function()? _currentOwnerIdentity;
   final EncryptedLocalFileCache? _fileCache;
+  final LegalDocumentListSnapshotReader? _listSnapshotReader;
+  final LegalDocumentListSnapshotWriter? _listSnapshotWriter;
 
   Future<LegalDocumentListResult> fetchDocumentList({
     required int projectId,
@@ -196,7 +243,7 @@ class LegalDocumentRepository {
     final cached = await _readListSnapshot(projectId, identity);
     final pending = await _readPartialSnapshot(projectId, identity);
     final oldDocuments = cached?.documents ?? const <LegalDocumentModel>[];
-    final cachedMaxId = pending?.nextCursor ?? cached?.syncMaxId ?? 0;
+    final cachedMaxId = pending?.nextCursor ?? 0;
     final updates = <int, Map<String, dynamic>>{
       for (final item
           in pending?.rawDocuments ?? const <Map<String, dynamic>>[])
@@ -213,7 +260,7 @@ class LegalDocumentRepository {
           queryParameters: {
             'project_id': projectId,
             'per_page': 50,
-            if (cursor > 0) 'sync_after_id': cursor,
+            'sync_after_id': cursor,
             if (syncMaxId != null) 'sync_max_id': syncMaxId,
           },
           cancelToken: cancelToken,
@@ -258,14 +305,8 @@ class LegalDocumentRepository {
         }
       }
 
-      final merged = <int, Map<String, dynamic>>{
-        for (final document
-            in (cached?.rawDocuments ?? const <Map<String, dynamic>>[]))
-          _intValue(document['id']): document,
-        ...updates,
-      };
       final rawDocuments =
-          merged.values.toList()..sort(
+          updates.values.toList()..sort(
             (left, right) =>
                 _intValue(left['id']).compareTo(_intValue(right['id'])),
           );
@@ -440,6 +481,11 @@ class LegalDocumentRepository {
     int projectId,
     LegalDocumentCacheIdentity? identity,
   ) async {
+    if (_listSnapshotReader != null && identity != null) {
+      final snapshot = await _listSnapshotReader(projectId, identity, 'list');
+      if (snapshot == null || !snapshot.isComplete) return null;
+      return _storedList(snapshot);
+    }
     final isar = await _isar;
     if (isar == null || identity == null || identity.organizationId == null) {
       return null;
@@ -469,6 +515,19 @@ class LegalDocumentRepository {
     int projectId,
     LegalDocumentCacheIdentity? identity,
   ) async {
+    if (_listSnapshotReader != null && identity != null) {
+      final snapshot = await _listSnapshotReader(
+        projectId,
+        identity,
+        'partial',
+      );
+      if (snapshot == null || snapshot.isComplete) return null;
+      return _PartialLegalList(
+        rawDocuments: snapshot.rawDocuments,
+        syncMaxId: snapshot.syncMaxId,
+        nextCursor: snapshot.nextCursor ?? 0,
+      );
+    }
     final isar = await _isar;
     if (isar == null || identity == null || identity.organizationId == null) {
       return null;
@@ -504,6 +563,21 @@ class LegalDocumentRepository {
     int? nextCursor,
     bool clearPartial = false,
   }) async {
+    if (_listSnapshotWriter != null &&
+        identity != null &&
+        identity.organizationId != null) {
+      await _listSnapshotWriter(
+        projectId,
+        identity,
+        kind,
+        documents,
+        maxId,
+        nextCursor,
+        isComplete,
+        clearPartial,
+      );
+      return;
+    }
     final isar = await _isar;
     if (isar == null || identity == null || identity.organizationId == null) {
       return;
