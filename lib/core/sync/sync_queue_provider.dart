@@ -1,10 +1,11 @@
-﻿import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../network/dio_client.dart';
 import '../storage/isar_service.dart';
 import 'isar_sync_queue_store.dart';
 import 'sync_queue_service.dart';
 import 'sync_queue_store.dart';
+import '../../features/auth/domain/auth_provider.dart';
 
 final syncQueueStoreProvider = FutureProvider<SyncQueueStore>((ref) async {
   final isar = await ref.watch(isarProvider.future);
@@ -13,5 +14,15 @@ final syncQueueStoreProvider = FutureProvider<SyncQueueStore>((ref) async {
 
 final syncQueueServiceProvider = FutureProvider<SyncQueueService>((ref) async {
   final store = await ref.watch(syncQueueStoreProvider.future);
-  return SyncQueueService(store: store, dio: ref.read(dioProvider));
+  return SyncQueueService(
+    store: store,
+    dio: ref.read(dioProvider),
+    currentScope: () {
+      final state = ref.read(authProvider);
+      if (state is! AuthAuthenticated) {
+        return null;
+      }
+      return '${state.user.serverId}:${state.user.currentOrganizationId ?? 0}';
+    },
+  );
 });

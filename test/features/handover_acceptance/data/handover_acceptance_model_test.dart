@@ -115,6 +115,70 @@ void main() {
     );
   });
 
+  test('reads new readiness blockers with object targets', () {
+    final scope = AcceptanceScopeModel.fromJson({
+      'id': 10,
+      'project_id': 9,
+      'title': 'Секция А / этаж 2',
+      'status': 'in_progress',
+      'workflow_summary': {
+        'status': 'in_progress',
+        'available_actions': ['create_finding'],
+        'problem_flags': [
+          {
+            'code': 'open_findings',
+            'severity': 'warning',
+            'message': 'Есть открытые замечания',
+          },
+        ],
+        'readiness': {
+          'ready': false,
+          'blockers': [
+            {
+              'code': 'quantity_source_changed',
+              'requirement_id': 'req-9',
+              'scope_id': 10,
+              'stage': 'technical_acceptance',
+              'message': 'Нет протокола для участка А',
+              'target': {'type': 'acceptance_scope', 'id': 10},
+            },
+          ],
+        },
+      },
+      'checklists': [],
+      'sessions': [],
+      'findings': [],
+    });
+
+    expect(scope.workflowSummary.readinessReady, isFalse);
+    expect(
+      scope.workflowSummary.readinessBlockers.single.message,
+      'Нет протокола для участка А',
+    );
+    expect(scope.workflowSummary.availableActions, isNot(contains('accept')));
+    expect(scope.workflowSummary.problemFlags.single.count, 0);
+  });
+
+  test('reads an unknown scope status without failing', () {
+    final scope = AcceptanceScopeModel.fromJson({
+      'id': 10,
+      'project_id': 9,
+      'title': 'Секция А / этаж 2',
+      'status': 'awaiting_customer',
+      'workflow_summary': {
+        'status': 'awaiting_customer',
+        'available_actions': ['view'],
+        'problem_flags': [],
+      },
+      'checklists': [],
+      'sessions': [],
+      'findings': [],
+    });
+
+    expect(scope.status, 'awaiting_customer');
+    expect(scope.workflowSummary.status, 'awaiting_customer');
+  });
+
   test('rejects scope payload without workflow summary', () {
     expect(
       () => AcceptanceScopeModel.fromJson({

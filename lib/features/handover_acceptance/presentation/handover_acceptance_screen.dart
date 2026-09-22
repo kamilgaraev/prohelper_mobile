@@ -1205,6 +1205,24 @@ class _ScopeDetailContent extends StatelessWidget {
             ),
           ),
         ],
+        if (scope.workflowSummary.readinessBlockers.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          _DetailSection(
+            title: 'Почему действие недоступно',
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children:
+                  scope.workflowSummary.readinessBlockers
+                      .map(
+                        (blocker) => Padding(
+                          padding: const EdgeInsets.only(top: 4),
+                          child: Text(blocker.message),
+                        ),
+                      )
+                      .toList(),
+            ),
+          ),
+        ],
       ],
     );
   }
@@ -1513,6 +1531,15 @@ class _ScopeCard extends StatelessWidget {
               'Документы: ${package.approvedRequiredDocuments}/${package.requiredDocuments}',
               style: AppTypography.bodyMedium(context),
             ),
+          if (scope.workflowSummary.readinessBlockers.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            ...scope.workflowSummary.readinessBlockers.map(
+              (blocker) => Text(
+                blocker.message,
+                style: AppTypography.bodyMedium(context),
+              ),
+            ),
+          ],
           const SizedBox(height: 12),
           Wrap(
             spacing: 8,
@@ -1594,7 +1621,7 @@ class _StatusChip extends StatelessWidget {
       'planned' ||
       'in_progress' ||
       'ready_for_reinspection' => AppColors.primary,
-      _ => throw ArgumentError.value(status, 'status'),
+      _ => AppColors.warning,
     };
 
     return Chip(
@@ -1615,7 +1642,7 @@ String _statusLabel(String status) {
     'handed_over' => 'Передана',
     'reopened' => 'Повторно',
     'rejected' => 'Отклонена',
-    _ => throw ArgumentError.value(status, 'status'),
+    _ => status,
   };
 }
 
