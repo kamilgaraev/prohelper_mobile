@@ -511,6 +511,11 @@ class _MemorySecureStorage extends SecureStorageService {
   Future<void> clearToken() async {
     token = null;
   }
+
+  @override
+  Future<void> rebindOfflineAuthToken(String token) async {
+    this.token = token;
+  }
 }
 
 class _AuthHttpAdapter implements HttpClientAdapter {

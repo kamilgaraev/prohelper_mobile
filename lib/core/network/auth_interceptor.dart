@@ -4,11 +4,13 @@ import '../storage/secure_storage_service.dart';
 import '../../features/auth/domain/auth_session_provider.dart';
 
 final authRefreshClientFactoryProvider = Provider<Dio Function(BaseOptions)>(
-  (ref) => (options) => Dio(options),
+  (ref) =>
+      (options) => Dio(options),
 );
 
 final authRetryClientFactoryProvider = Provider<Dio Function()>(
-  (ref) => () => Dio(),
+  (ref) =>
+      () => Dio(),
 );
 
 class AuthInterceptor extends Interceptor {
@@ -157,10 +159,12 @@ class AuthInterceptor extends Interceptor {
 
     final response = await refreshClient.post('/auth/refresh');
     final responseData = response.data;
-    final payload =
-        responseData is Map<String, dynamic> ? responseData['data'] : null;
-    final refreshedToken =
-        payload is Map<String, dynamic> ? payload['token'] : null;
+    final payload = responseData is Map<String, dynamic>
+        ? responseData['data']
+        : null;
+    final refreshedToken = payload is Map<String, dynamic>
+        ? payload['token']
+        : null;
 
     if (refreshedToken is String && refreshedToken.isNotEmpty) {
       if (await storage.getToken() != currentToken) {
@@ -170,6 +174,7 @@ class AuthInterceptor extends Interceptor {
         );
       }
       await storage.saveToken(refreshedToken);
+      await storage.rebindOfflineAuthToken(refreshedToken);
       return refreshedToken;
     }
 

@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -25,7 +25,10 @@ class _FakeAuthRepository extends AuthRepository {
     return User()
       ..serverId = 7
       ..email = 'foreman@example.test'
-      ..name = 'Иван Прораб';
+      ..name = 'Иван Прораб'
+      ..roles = <String>[]
+      ..organizationsJson = '[]'
+      ..permissionsJson = '{}';
   }
 
   @override
@@ -38,7 +41,10 @@ class _FakeAuthRepository extends AuthRepository {
     return User()
       ..serverId = 7
       ..email = email
-      ..name = 'Иван Прораб';
+      ..name = 'Иван Прораб'
+      ..roles = <String>[]
+      ..organizationsJson = '[]'
+      ..permissionsJson = '{}';
   }
 }
 
@@ -48,6 +54,8 @@ class _MemoryStorage extends SecureStorageService {
   String? token = 'token-1';
   int getTokenCalls = 0;
   int clearCalls = 0;
+  String? sessionId;
+  Map<String, dynamic>? offlineAuth;
 
   @override
   Future<String?> getToken() async {
@@ -59,6 +67,29 @@ class _MemoryStorage extends SecureStorageService {
   Future<void> clearToken() async {
     clearCalls += 1;
     token = null;
+    await clearOfflineAuth();
+  }
+
+  @override
+  Future<String> ensureSessionId() async => sessionId ??= 'session-1';
+
+  @override
+  Future<void> saveOfflineAuth(Map<String, dynamic> value) async {
+    offlineAuth = Map<String, dynamic>.from(value);
+  }
+
+  @override
+  Future<Map<String, dynamic>?> getOfflineAuth() async => offlineAuth;
+
+  @override
+  Future<void> clearOfflineAuth() async {
+    offlineAuth = null;
+    sessionId = null;
+  }
+
+  @override
+  Future<void> rebindOfflineAuthToken(String token) async {
+    if (offlineAuth != null) offlineAuth!['token'] = token;
   }
 }
 
@@ -193,4 +224,76 @@ void main() {
     expect(notifier.state, isA<AuthUnauthenticated>());
     expect(storage.clearCalls, 0);
   });
+
+  test('offline restore is bound to token and is unverified', () async {
+    final storage = _MemoryStorage();
+    final confirmedAt = DateTime.now().toUtc();
+    storage.offlineAuth = {
+      'token': 'token-1',
+      'session_id': 'session-1',
+      'user_id': 7,
+      'organization_id': 12,
+      'confirmed_at': confirmedAt.toIso8601String(),
+      'user': {
+        'server_id': 7,
+        'email': 'offline@example.test',
+        'name': 'Офлайн',
+        'organization_id': 12,
+        'organization_name': 'МОСТ',
+        'organizations_json': '[]',
+        'roles': <String>['foreman'],
+        'permissions_json': '{}',
+      },
+    };
+    final notifier = AuthNotifier(
+      _FakeAuthRepository(getMeError: const ApiException('Нет сети.')),
+      storage,
+    );
+    addTearDown(notifier.dispose);
+
+    await pumpEventQueue();
+
+    final auth = notifier.state as AuthAuthenticated;
+    expect(auth.user.email, 'offline@example.test');
+    expect(auth.isOnlineVerified, isFalse);
+    expect(auth.sessionIdentity?.userId, 7);
+    expect(auth.sessionIdentity?.organizationId, 12);
+    expect(auth.sessionIdentity?.sessionId, 'session-1');
+  });
+
+  test(
+    'offline restore rejects another token and expired confirmation',
+    () async {
+      final storage = _MemoryStorage()..token = 'different-token';
+      storage.offlineAuth = {
+        'token': 'token-1',
+        'session_id': 'session-1',
+        'user_id': 7,
+        'organization_id': 12,
+        'confirmed_at':
+            DateTime.now()
+                .toUtc()
+                .subtract(const Duration(days: 15))
+                .toIso8601String(),
+        'user': {
+          'server_id': 7,
+          'email': 'stale@example.test',
+          'name': 'Старый профиль',
+          'organization_id': 12,
+          'organizations_json': '[]',
+          'roles': <String>[],
+          'permissions_json': '{}',
+        },
+      };
+      final notifier = AuthNotifier(
+        _FakeAuthRepository(getMeError: const ApiException('Нет сети.')),
+        storage,
+      );
+      addTearDown(notifier.dispose);
+
+      await pumpEventQueue();
+
+      expect(notifier.state, isA<AuthError>());
+    },
+  );
 }
