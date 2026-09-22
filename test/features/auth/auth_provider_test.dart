@@ -48,6 +48,35 @@ class _FakeAuthRepository extends AuthRepository {
   }
 }
 
+class _BlockingOfflineSaveStorage extends _MemoryStorage {
+  final saveStarted = Completer<void>();
+  final allowSave = Completer<void>();
+  bool _blockNextSave = true;
+
+  @override
+  Future<void> saveOfflineAuth(Map<String, dynamic> value) async {
+    if (_blockNextSave) {
+      _blockNextSave = false;
+      saveStarted.complete();
+      await allowSave.future;
+    }
+    await super.saveOfflineAuth(value);
+  }
+}
+
+class _LogoutCheckingRepository extends _FakeAuthRepository {
+  _LogoutCheckingRepository(this.storage) : super();
+
+  final _MemoryStorage storage;
+  String? tokenAtLogout;
+
+  @override
+  Future<void> logout() async {
+    tokenAtLogout = await storage.getToken();
+    await storage.clearToken();
+  }
+}
+
 class _MemoryStorage extends SecureStorageService {
   _MemoryStorage();
 
@@ -131,7 +160,7 @@ void main() {
     await notifier.checkAuth();
     await pumpEventQueue();
 
-    expect(storage.getTokenCalls, 1);
+    expect(storage.getTokenCalls, 2);
     expect(notifier.state, isA<AuthAuthenticated>());
   });
 
@@ -296,4 +325,51 @@ void main() {
       expect(notifier.state, isA<AuthError>());
     },
   );
+
+  test(
+    'logout sends the saved bearer before cleaning local auth cache',
+    () async {
+      final storage = _MemoryStorage()..token = 'saved-bearer';
+      storage.offlineAuth = {'session_id': 'session-1'};
+      final repository = _LogoutCheckingRepository(storage);
+      var invalidationCount = 0;
+      final notifier = AuthNotifier(
+        repository,
+        storage,
+        autoCheckAuth: false,
+        onSessionInvalidated: () => invalidationCount++,
+      );
+      addTearDown(notifier.dispose);
+
+      await notifier.logout();
+
+      expect(repository.tokenAtLogout, 'saved-bearer');
+      expect(storage.token, isNull);
+      expect(storage.offlineAuth, isNull);
+      expect(invalidationCount, 1);
+      expect(notifier.state, isA<AuthUnauthenticated>());
+    },
+  );
+
+  test('stale profile write cannot replace a later login bundle', () async {
+    final storage = _BlockingOfflineSaveStorage();
+    final notifier = AuthNotifier(
+      _FakeAuthRepository(),
+      storage,
+      autoCheckAuth: false,
+    );
+    addTearDown(() {
+      if (!storage.allowSave.isCompleted) storage.allowSave.complete();
+      notifier.dispose();
+    });
+
+    final profileCheck = notifier.checkAuth();
+    await storage.saveStarted.future;
+    final newLogin = notifier.login('new@example.test', 'password');
+    storage.allowSave.complete();
+    await Future.wait([profileCheck, newLogin]);
+
+    expect(notifier.state.user?.email, 'new@example.test');
+    expect(storage.offlineAuth?['user']['email'], 'new@example.test');
+  });
 }

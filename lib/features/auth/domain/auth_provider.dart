@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/error/user_message.dart';
@@ -70,6 +72,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
   final SecureStorageService _storage;
   final void Function()? _onSessionInvalidated;
   int _operation = 0;
+  Future<void> _offlineMutationQueue = Future<void>.value();
 
   Future<void> checkAuth() async {
     final operation = ++_operation;
@@ -92,13 +95,13 @@ class AuthNotifier extends StateNotifier<AuthState> {
         sessionIdentity: identity,
         isOnlineVerified: true,
       );
-      await _saveOfflineUser(user, token, identity);
+      await _saveOfflineUser(user, token, identity, operation);
     } catch (error) {
       if (!_isCurrent(operation)) return;
       if (_isConfirmedRejection(error)) {
         state = AuthUnauthenticated();
-        await _storage.clearToken();
         _onSessionInvalidated?.call();
+        await _clearTokenAndOfflineIdentity();
         return;
       }
       final cached = await _readOfflineUser(token);
@@ -122,7 +125,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     try {
       final user = await _repository.login(email, password);
       if (!_isCurrent(operation)) return;
-      await _storage.clearOfflineAuth();
+      await _queueOfflineMutation(_storage.clearOfflineAuth);
       final sessionId = await _storage.ensureSessionId();
       final identity = _identity(user, sessionId);
       state = AuthAuthenticated(
@@ -130,7 +133,12 @@ class AuthNotifier extends StateNotifier<AuthState> {
         sessionIdentity: identity,
         isOnlineVerified: true,
       );
-      await _saveOfflineUser(user, await _storage.getToken() ?? '', identity);
+      await _saveOfflineUser(
+        user,
+        await _storage.getToken() ?? '',
+        identity,
+        operation,
+      );
     } catch (error) {
       if (_isCurrent(operation)) {
         state = AuthError(UserMessage.fromError(error));
@@ -157,6 +165,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
         updatedUser,
         await _storage.getToken() ?? '',
         identity,
+        operation,
       );
     } catch (_) {
       if (_isCurrent(operation)) {
@@ -192,14 +201,15 @@ class AuthNotifier extends StateNotifier<AuthState> {
         verifiedUser,
         await _storage.getToken() ?? token,
         verifiedIdentity,
+        operation,
       );
       return sameOwner && _isCurrent(operation);
     } catch (error) {
       if (!_isCurrent(operation)) return false;
       if (_isConfirmedRejection(error)) {
         state = AuthUnauthenticated();
-        await _storage.clearToken();
         _onSessionInvalidated?.call();
+        await _clearTokenAndOfflineIdentity();
       } else {
         state = AuthAuthenticated(
           auth.user,
@@ -216,14 +226,22 @@ class AuthNotifier extends StateNotifier<AuthState> {
     ++_operation;
     state = AuthUnauthenticated();
     _onSessionInvalidated?.call();
-    await _storage.clearToken();
-    await _repository.logout();
+    try {
+      await _queueOfflineMutation(_storage.clearOfflineAuth);
+    } finally {
+      await _repository.logout();
+    }
   }
 
   void handleSessionInvalidation() {
     if (!mounted) return;
     ++_operation;
     state = AuthUnauthenticated();
+    unawaited(
+      _queueOfflineMutation(
+        _storage.clearOfflineAuth,
+      ).catchError((Object _) {}),
+    );
   }
 
   void clearError() {
@@ -248,9 +266,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
     User user,
     String token,
     AuthSessionIdentity identity,
+    int operation,
   ) async {
     if (token.isEmpty) return;
-    await _storage.saveOfflineAuth({
+    final bundle = {
       'token': token,
       'session_id': identity.sessionId,
       'user_id': user.serverId,
@@ -267,7 +286,27 @@ class AuthNotifier extends StateNotifier<AuthState> {
         'roles': user.roles,
         'permissions_json': user.permissionsJson,
       },
+    };
+    await _queueOfflineMutation(() async {
+      final currentToken = await _storage.getToken();
+      final currentAuth = state;
+      if (!_isCurrent(operation) ||
+          currentToken != token ||
+          currentAuth is! AuthAuthenticated ||
+          currentAuth.sessionIdentity != identity) {
+        return;
+      }
+      await _storage.saveOfflineAuth(bundle);
     });
+  }
+
+  Future<void> _clearTokenAndOfflineIdentity() =>
+      _queueOfflineMutation(_storage.clearToken);
+
+  Future<void> _queueOfflineMutation(Future<void> Function() mutation) {
+    final next = _offlineMutationQueue.then((_) => mutation());
+    _offlineMutationQueue = next.catchError((Object _) {});
+    return next;
   }
 
   Future<(User, AuthSessionIdentity)?> _readOfflineUser(String token) async {
