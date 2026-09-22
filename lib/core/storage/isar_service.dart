@@ -2,6 +2,7 @@
 import 'package:path_provider/path_provider.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import '../../features/auth/data/user_model.dart';
+import '../../features/contract_management/data/legal_document_snapshot.dart';
 import '../sync/queued_sync_operation.dart';
 
 final isarProvider = FutureProvider<Isar>((ref) async {
@@ -9,6 +10,7 @@ final isarProvider = FutureProvider<Isar>((ref) async {
   return await Isar.open([
     UserSchema,
     QueuedSyncOperationSchema,
+    LegalDocumentSnapshotSchema,
   ], directory: dir.path);
 });
 

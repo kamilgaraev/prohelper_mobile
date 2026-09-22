@@ -4,8 +4,10 @@ import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:prohelpers_mobile/core/network/api_exception.dart';
 import 'package:prohelpers_mobile/features/contract_management/data/legal_document_model.dart';
 import 'package:prohelpers_mobile/features/contract_management/data/legal_document_repository.dart';
+import 'package:prohelpers_mobile/features/contract_management/data/legal_document_snapshot.dart';
 
 void main() {
   test('offline fallback excludes authorization and not-found responses', () {
@@ -97,7 +99,145 @@ void main() {
       );
     },
   );
+
+  test(
+    'follows the stable cursor until the final page and retains data.data shape',
+    () async {
+      final requests = <RequestOptions>[];
+      final dio = Dio(BaseOptions(baseUrl: 'https://api.example.test'));
+      dio.httpClientAdapter = _LegalDocumentJsonAdapter((options) {
+        requests.add(options);
+        final query = options.queryParameters;
+        if (query['sync_after_id'] == null) {
+          return {
+            'success': true,
+            'data': {
+              'data': List.generate(50, (index) => _document(index + 1)),
+            },
+            'meta': {
+              'next_cursor': 50,
+              'has_more': true,
+              'sync_max_id': 51,
+              'per_page': 50,
+            },
+          };
+        }
+        return {
+          'success': true,
+          'data': {
+            'data': [_document(51)],
+          },
+          'meta': {
+            'next_cursor': null,
+            'has_more': false,
+            'sync_max_id': 51,
+            'per_page': 50,
+          },
+        };
+      });
+
+      final result = await LegalDocumentRepository(
+        dio,
+      ).fetchDocumentList(projectId: 7);
+
+      expect(result.documents, hasLength(51));
+      expect(result.isPartial, isFalse);
+      expect(requests, hasLength(2));
+      expect(requests[0].queryParameters['per_page'], 50);
+      expect(requests[0].queryParameters.containsKey('sync_after_id'), isFalse);
+      expect(requests[1].queryParameters['sync_after_id'], 50);
+      expect(requests[1].queryParameters['sync_max_id'], 51);
+    },
+  );
+
+  test('returns a partial result after an interrupted cursor page', () async {
+    var call = 0;
+    final dio = Dio(BaseOptions(baseUrl: 'https://api.example.test'));
+    dio.httpClientAdapter = _LegalDocumentJsonAdapter((options) {
+      call++;
+      if (call == 1) {
+        return {
+          'success': true,
+          'data': {
+            'data': [_document(1)],
+          },
+          'meta': {
+            'next_cursor': 1,
+            'has_more': true,
+            'sync_max_id': 2,
+            'per_page': 50,
+          },
+        };
+      }
+      throw DioException(
+        requestOptions: options,
+        type: DioExceptionType.connectionError,
+        message: 'offline',
+      );
+    });
+
+    final result = await LegalDocumentRepository(
+      dio,
+    ).fetchDocumentList(projectId: 7);
+
+    expect(result.documents, hasLength(1));
+    expect(result.isPartial, isTrue);
+    expect(result.error, isNotEmpty);
+  });
+
+  test(
+    'does not fall back to a cached detail after access is denied',
+    () async {
+      const identity = LegalDocumentCacheIdentity(
+        userId: 3,
+        organizationId: 8,
+        sessionId: 'session-a',
+      );
+      final cached = <int, LegalDocumentModel>{};
+      final dio = Dio(BaseOptions(baseUrl: 'https://api.example.test'));
+      dio.httpClientAdapter = _LegalDocumentJsonAdapter((options) {
+        throw DioException(
+          requestOptions: options,
+          type: DioExceptionType.badResponse,
+          response: Response<dynamic>(
+            requestOptions: options,
+            statusCode: 403,
+            data: {'message': 'forbidden'},
+          ),
+        );
+      });
+      final repository = LegalDocumentRepository(
+        dio,
+        snapshotReader: (_, documentId, _) async => cached[documentId],
+        snapshotWriter: (_, documentId, _, payload) async {
+          cached[documentId] = LegalDocumentModel.fromJson(payload);
+        },
+        snapshotDeleter: (_, documentId, _) async {
+          cached.remove(documentId);
+        },
+      );
+      await repository.saveDocumentSnapshot(
+        projectId: 7,
+        documentId: 44,
+        identity: identity,
+        payload: _document(44),
+      );
+
+      await expectLater(
+        repository.fetchDocument(44, projectId: 7, identity: identity),
+        throwsA(isA<ApiException>()),
+      );
+      expect(cached, isEmpty);
+    },
+  );
 }
+
+Map<String, dynamic> _document(int id) => {
+  'id': id,
+  'title': 'Документ $id',
+  'document_type_label': 'Договор',
+  'status': 'active',
+};
 
 class _LegalDocumentJsonAdapter implements HttpClientAdapter {
   _LegalDocumentJsonAdapter(this.handler);

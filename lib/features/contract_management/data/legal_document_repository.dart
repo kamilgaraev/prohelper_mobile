@@ -1,25 +1,150 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:crypto/crypto.dart';
 import 'package:dio/dio.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:isar/isar.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../../../core/network/api_exception.dart';
 import '../../../core/network/dio_client.dart';
 import '../../../core/network/mobile_api_response.dart';
+import '../../../core/storage/isar_service.dart';
 import '../../../core/storage/encrypted_local_file_cache.dart';
 import '../../../core/sync/sync_queue_draft.dart';
 import '../../../core/sync/sync_queue_provider.dart';
 import '../../../core/sync/sync_queue_service.dart';
 import '../../auth/domain/auth_provider.dart';
 import 'legal_document_model.dart';
+import 'legal_document_snapshot.dart';
+
+class LegalDocumentListResult {
+  const LegalDocumentListResult({
+    required this.documents,
+    required this.isPartial,
+    required this.isFromCache,
+    this.error,
+  });
+
+  final List<LegalDocumentModel> documents;
+  final bool isPartial;
+  final bool isFromCache;
+  final String? error;
+}
+
+class _LegalDocumentPage {
+  const _LegalDocumentPage(
+    this.items,
+    this.nextCursor,
+    this.syncMaxId,
+    this.hasMore,
+  );
+  final List<Map<String, dynamic>> items;
+  final int? nextCursor;
+  final int? syncMaxId;
+  final bool hasMore;
+}
+
+class _StoredLegalList {
+  const _StoredLegalList({
+    required this.rawDocuments,
+    required this.documents,
+    required this.syncMaxId,
+  });
+  final List<Map<String, dynamic>> rawDocuments;
+  final List<LegalDocumentModel> documents;
+  final int syncMaxId;
+}
+
+class _PartialLegalList {
+  const _PartialLegalList({
+    required this.rawDocuments,
+    required this.syncMaxId,
+    required this.nextCursor,
+  });
+  final List<Map<String, dynamic>> rawDocuments;
+  final int syncMaxId;
+  final int nextCursor;
+}
+
+typedef LegalDocumentSnapshotReader =
+    Future<LegalDocumentModel?> Function(
+      int projectId,
+      int documentId,
+      LegalDocumentCacheIdentity identity,
+    );
+typedef LegalDocumentSnapshotWriter =
+    Future<void> Function(
+      int projectId,
+      int documentId,
+      LegalDocumentCacheIdentity identity,
+      Map<String, dynamic> payload,
+    );
+typedef LegalDocumentSnapshotDeleter =
+    Future<void> Function(
+      int projectId,
+      int documentId,
+      LegalDocumentCacheIdentity identity,
+    );
+
+_LegalDocumentPage _legalDocumentPage(dynamic responseData) {
+  final root =
+      responseData is Map
+          ? Map<String, dynamic>.from(responseData)
+          : const <String, dynamic>{};
+  final payload = root['data'];
+  final payloadMap =
+      payload is Map
+          ? Map<String, dynamic>.from(payload)
+          : const <String, dynamic>{};
+  final rawItems =
+      payloadMap['data'] is List
+          ? payloadMap['data'] as List
+          : payloadMap['documents'] is List
+          ? payloadMap['documents'] as List
+          : payload is List
+          ? payload
+          : const <dynamic>[];
+  final meta =
+      root['meta'] is Map
+          ? Map<String, dynamic>.from(root['meta'] as Map)
+          : payloadMap['meta'] is Map
+          ? Map<String, dynamic>.from(payloadMap['meta'] as Map)
+          : const <String, dynamic>{};
+  final items = rawItems
+      .whereType<Map>()
+      .map((item) => Map<String, dynamic>.from(item))
+      .toList(growable: false);
+  final nextCursor = _nullableIntValue(meta['next_cursor']);
+  final lastPage = _intValue(meta['last_page']);
+  final currentPage = _intValue(meta['current_page'], fallback: 1);
+  final hasMore =
+      meta['has_more'] is bool
+          ? meta['has_more'] == true
+          : lastPage > 0 && currentPage < lastPage;
+  return _LegalDocumentPage(
+    items,
+    nextCursor,
+    _nullableIntValue(meta['sync_max_id']),
+    hasMore,
+  );
+}
+
+int _intValue(Object? value, {int fallback = 0}) =>
+    value is num
+        ? value.toInt()
+        : int.tryParse(value?.toString() ?? '') ?? fallback;
+
+int? _nullableIntValue(Object? value) =>
+    value == null ? null : _intValue(value);
 
 final legalDocumentRepositoryProvider = Provider<LegalDocumentRepository>((
   ref,
 ) {
   return LegalDocumentRepository(
     ref.read(dioProvider),
+    isar: ref.read(isarProvider.future),
     syncQueueService: () => ref.read(syncQueueServiceProvider.future),
     currentOwnerIdentity: () {
       final state = ref.read(authProvider);
@@ -38,52 +163,459 @@ bool shouldUseOfflineVersionAfterStatus(int? statusCode) =>
 class LegalDocumentRepository {
   LegalDocumentRepository(
     this._dio, {
+    Future<Isar>? isar,
     Future<SyncQueueService> Function()? syncQueueService,
     String? Function()? currentOwnerIdentity,
     EncryptedLocalFileCache? fileCache,
-  }) : _syncQueueService = syncQueueService,
+    LegalDocumentSnapshotReader? snapshotReader,
+    LegalDocumentSnapshotWriter? snapshotWriter,
+    LegalDocumentSnapshotDeleter? snapshotDeleter,
+  }) : _isar = isar,
+       _snapshotReader = snapshotReader,
+       _snapshotWriter = snapshotWriter,
+       _snapshotDeleter = snapshotDeleter,
+       _syncQueueService = syncQueueService,
        _currentOwnerIdentity = currentOwnerIdentity,
        _fileCache = fileCache;
 
   final Dio _dio;
+  final Future<Isar>? _isar;
+  final LegalDocumentSnapshotReader? _snapshotReader;
+  final LegalDocumentSnapshotWriter? _snapshotWriter;
+  final LegalDocumentSnapshotDeleter? _snapshotDeleter;
   final Future<SyncQueueService> Function()? _syncQueueService;
   final String? Function()? _currentOwnerIdentity;
   final EncryptedLocalFileCache? _fileCache;
 
+  Future<LegalDocumentListResult> fetchDocumentList({
+    required int projectId,
+    LegalDocumentCacheIdentity? identity,
+    CancelToken? cancelToken,
+    bool Function()? isCurrent,
+  }) async {
+    final cached = await _readListSnapshot(projectId, identity);
+    final pending = await _readPartialSnapshot(projectId, identity);
+    final oldDocuments = cached?.documents ?? const <LegalDocumentModel>[];
+    final cachedMaxId = pending?.nextCursor ?? cached?.syncMaxId ?? 0;
+    final updates = <int, Map<String, dynamic>>{
+      for (final item
+          in pending?.rawDocuments ?? const <Map<String, dynamic>>[])
+        _intValue(item['id']): item,
+    };
+    var cursor = cachedMaxId;
+    int? syncMaxId = pending?.syncMaxId;
+
+    try {
+      var hasMore = true;
+      while (hasMore) {
+        final response = await _dio.get(
+          '/legal-archive/documents',
+          queryParameters: {
+            'project_id': projectId,
+            'per_page': 50,
+            if (cursor > 0) 'sync_after_id': cursor,
+            if (syncMaxId != null) 'sync_max_id': syncMaxId,
+          },
+          cancelToken: cancelToken,
+        );
+        if (isCurrent != null && !isCurrent()) {
+          throw DioException(
+            requestOptions: response.requestOptions,
+            type: DioExceptionType.cancel,
+          );
+        }
+        final page = _legalDocumentPage(response.data);
+        for (final item in page.items) {
+          final id = _intValue(item['id']);
+          if (id > 0) updates[id] = item;
+        }
+        syncMaxId ??= page.syncMaxId;
+        final nextCursor = page.nextCursor;
+        hasMore = page.hasMore;
+        if (hasMore && (nextCursor == null || nextCursor <= cursor)) {
+          throw const FormatException('legal_document_cursor_did_not_advance');
+        }
+        if (nextCursor != null) cursor = nextCursor;
+        if (page.items.isEmpty && hasMore) {
+          throw const FormatException('legal_document_empty_page_with_more');
+        }
+        if (hasMore) {
+          if (isCurrent != null && !isCurrent()) {
+            throw DioException(
+              requestOptions: response.requestOptions,
+              type: DioExceptionType.cancel,
+            );
+          }
+          await _writeListSnapshot(
+            projectId,
+            identity,
+            updates.values.toList(growable: false),
+            syncMaxId ?? 0,
+            kind: 'partial',
+            isComplete: false,
+            nextCursor: cursor,
+          );
+        }
+      }
+
+      final merged = <int, Map<String, dynamic>>{
+        for (final document
+            in (cached?.rawDocuments ?? const <Map<String, dynamic>>[]))
+          _intValue(document['id']): document,
+        ...updates,
+      };
+      final rawDocuments =
+          merged.values.toList()..sort(
+            (left, right) =>
+                _intValue(left['id']).compareTo(_intValue(right['id'])),
+          );
+      final documents = rawDocuments
+          .map(LegalDocumentModel.fromJson)
+          .toList(growable: false);
+      if (isCurrent != null && !isCurrent()) {
+        throw DioException(
+          requestOptions: RequestOptions(path: '/legal-archive/documents'),
+          type: DioExceptionType.cancel,
+        );
+      }
+      final finalMaxId =
+          syncMaxId ??
+          (rawDocuments.isEmpty
+              ? cachedMaxId
+              : _intValue(rawDocuments.last['id']));
+      await _writeListSnapshot(
+        projectId,
+        identity,
+        rawDocuments,
+        finalMaxId,
+        clearPartial: true,
+      );
+      return LegalDocumentListResult(
+        documents: documents,
+        isPartial: false,
+        isFromCache: false,
+      );
+    } on DioException catch (error) {
+      if (CancelToken.isCancel(error)) rethrow;
+      final statusCode = error.response?.statusCode;
+      if (statusCode != null && statusCode < 500) {
+        if (statusCode == 401 || statusCode == 403 || statusCode == 404) {
+          await _deleteListSnapshots(projectId, identity);
+        }
+        throw ApiException.fromDio(error);
+      }
+      final partialDocuments = updates.values
+          .map(LegalDocumentModel.fromJson)
+          .toList(growable: false);
+      final visible = <int, LegalDocumentModel>{
+        for (final item in oldDocuments) item.id: item,
+        for (final item in partialDocuments) item.id: item,
+      }.values.toList(growable: false);
+      return LegalDocumentListResult(
+        documents: visible,
+        isPartial: true,
+        isFromCache: oldDocuments.isNotEmpty,
+        error: ApiException.fromDio(error).message,
+      );
+    } on FormatException catch (error) {
+      final partialDocuments = updates.values
+          .map(LegalDocumentModel.fromJson)
+          .toList(growable: false);
+      final visible = <int, LegalDocumentModel>{
+        for (final item in oldDocuments) item.id: item,
+        for (final item in partialDocuments) item.id: item,
+      }.values.toList(growable: false);
+      return LegalDocumentListResult(
+        documents: visible,
+        isPartial: true,
+        isFromCache: oldDocuments.isNotEmpty,
+        error: error.message,
+      );
+    }
+  }
+
   Future<List<LegalDocumentModel>> fetchDocuments({
     required int projectId,
+  }) async => (await fetchDocumentList(projectId: projectId)).documents;
+
+  Future<LegalDocumentModel> fetchDocument(
+    int id, {
+    required int projectId,
+    LegalDocumentCacheIdentity? identity,
+    bool Function()? isCurrent,
   }) async {
     try {
-      final response = await _dio.get(
-        '/legal-archive/documents',
-        queryParameters: {'project_id': projectId, 'per_page': 50},
-      );
-      final data = MobileApiResponse.dataMap(response.data);
-      final records =
-          data['data'] is List
-              ? data['data'] as List
-              : data['documents'] as List? ?? const [];
-      return records
-          .whereType<Map>()
-          .map(
-            (item) =>
-                LegalDocumentModel.fromJson(Map<String, dynamic>.from(item)),
-          )
-          .toList(growable: false);
+      final response = await _dio.get('/legal-archive/documents/$id');
+      if (isCurrent != null && !isCurrent()) {
+        throw DioException(
+          requestOptions: response.requestOptions,
+          type: DioExceptionType.cancel,
+        );
+      }
+      final payload = MobileApiResponse.dataMap(response.data);
+      final document = LegalDocumentModel.fromJson(payload);
+      await _writeDetailSnapshot(projectId, identity, id, payload);
+      return document;
     } on DioException catch (error) {
+      if (CancelToken.isCancel(error)) rethrow;
+      final statusCode = error.response?.statusCode;
+      if (statusCode == 403 || statusCode == 404) {
+        await _deleteDetailSnapshot(projectId, identity, id);
+        throw ApiException.fromDio(error);
+      }
+      if (statusCode != null && statusCode < 500) {
+        throw ApiException.fromDio(error);
+      }
+      final cached = await readDocumentSnapshot(
+        projectId: projectId,
+        documentId: id,
+        identity: identity,
+      );
+      if (cached != null) return cached;
       throw ApiException.fromDio(error);
     }
   }
 
-  Future<LegalDocumentModel> fetchDocument(int id) async {
-    try {
-      final response = await _dio.get('/legal-archive/documents/$id');
-      return LegalDocumentModel.fromJson(
-        MobileApiResponse.dataMap(response.data),
-      );
-    } on DioException catch (error) {
-      throw ApiException.fromDio(error);
+  Future<LegalDocumentModel?> readDocumentSnapshot({
+    required int projectId,
+    required int documentId,
+    LegalDocumentCacheIdentity? identity,
+  }) async {
+    if (_snapshotReader != null && identity != null) {
+      return _snapshotReader(projectId, documentId, identity);
     }
+    final isar = await _isar;
+    if (isar == null || identity == null || identity.organizationId == null) {
+      return null;
+    }
+    final snapshot =
+        await isar.legalDocumentSnapshots
+            .filter()
+            .cacheKeyEqualTo(identity.key(projectId, 'detail', documentId))
+            .findFirst();
+    return snapshot == null
+        ? null
+        : LegalDocumentModel.fromJson(snapshot.payload);
+  }
+
+  Future<void> saveDocumentSnapshot({
+    required int projectId,
+    required int documentId,
+    required LegalDocumentCacheIdentity identity,
+    required Map<String, dynamic> payload,
+  }) => _writeDetailSnapshot(projectId, identity, documentId, payload);
+
+  Future<void> clearSnapshotScope(LegalDocumentCacheIdentity identity) async {
+    final isar = await _isar;
+    if (isar == null || identity.organizationId == null) return;
+    final snapshots =
+        await isar.legalDocumentSnapshots
+            .filter()
+            .userIdEqualTo(identity.userId)
+            .and()
+            .organizationIdEqualTo(identity.organizationId!)
+            .and()
+            .sessionIdEqualTo(identity.sessionId)
+            .findAll();
+    await isar.writeTxn(() async {
+      await isar.legalDocumentSnapshots.deleteAll(
+        snapshots.map((snapshot) => snapshot.id).toList(growable: false),
+      );
+    });
+  }
+
+  Future<LegalDocumentListResult> readListSnapshot({
+    required int projectId,
+    required LegalDocumentCacheIdentity identity,
+  }) async {
+    final snapshot = await _readListSnapshot(projectId, identity);
+    return LegalDocumentListResult(
+      documents: snapshot?.documents ?? const <LegalDocumentModel>[],
+      isPartial: false,
+      isFromCache: true,
+    );
+  }
+
+  Future<_StoredLegalList?> _readListSnapshot(
+    int projectId,
+    LegalDocumentCacheIdentity? identity,
+  ) async {
+    final isar = await _isar;
+    if (isar == null || identity == null || identity.organizationId == null) {
+      return null;
+    }
+    final snapshot =
+        await isar.legalDocumentSnapshots
+            .filter()
+            .cacheKeyEqualTo(identity.key(projectId, 'list'))
+            .findFirst();
+    if (snapshot == null || !snapshot.isComplete) return null;
+    final payload = snapshot.payload;
+    final raw =
+        payload['documents'] is List
+            ? (payload['documents'] as List)
+                .whereType<Map>()
+                .map((item) => Map<String, dynamic>.from(item))
+                .toList()
+            : <Map<String, dynamic>>[];
+    return _StoredLegalList(
+      rawDocuments: raw,
+      documents: raw.map(LegalDocumentModel.fromJson).toList(growable: false),
+      syncMaxId: _intValue(payload['sync_max_id']),
+    );
+  }
+
+  Future<_PartialLegalList?> _readPartialSnapshot(
+    int projectId,
+    LegalDocumentCacheIdentity? identity,
+  ) async {
+    final isar = await _isar;
+    if (isar == null || identity == null || identity.organizationId == null) {
+      return null;
+    }
+    final snapshot =
+        await isar.legalDocumentSnapshots
+            .filter()
+            .cacheKeyEqualTo(identity.key(projectId, 'partial'))
+            .findFirst();
+    if (snapshot == null || snapshot.isComplete) return null;
+    final payload = snapshot.payload;
+    final raw =
+        payload['documents'] is List
+            ? (payload['documents'] as List)
+                .whereType<Map>()
+                .map((item) => Map<String, dynamic>.from(item))
+                .toList()
+            : <Map<String, dynamic>>[];
+    return _PartialLegalList(
+      rawDocuments: raw,
+      syncMaxId: _intValue(payload['sync_max_id']),
+      nextCursor: _intValue(payload['next_cursor']),
+    );
+  }
+
+  Future<void> _writeListSnapshot(
+    int projectId,
+    LegalDocumentCacheIdentity? identity,
+    List<Map<String, dynamic>> documents,
+    int maxId, {
+    String kind = 'list',
+    bool isComplete = true,
+    int? nextCursor,
+    bool clearPartial = false,
+  }) async {
+    final isar = await _isar;
+    if (isar == null || identity == null || identity.organizationId == null) {
+      return;
+    }
+    final snapshot =
+        LegalDocumentSnapshot()
+          ..cacheKey = identity.key(projectId, kind)
+          ..userId = identity.userId
+          ..organizationId = identity.organizationId!
+          ..projectId = projectId
+          ..sessionId = identity.sessionId
+          ..kind = kind
+          ..payloadJson = jsonEncode({
+            'documents': documents,
+            'sync_max_id': maxId,
+            if (nextCursor != null) 'next_cursor': nextCursor,
+          })
+          ..isComplete = isComplete
+          ..savedAt = DateTime.now().toUtc();
+    await isar.writeTxn(() async {
+      await isar.legalDocumentSnapshots.put(snapshot);
+      if (clearPartial) {
+        final partial =
+            await isar.legalDocumentSnapshots
+                .filter()
+                .cacheKeyEqualTo(identity.key(projectId, 'partial'))
+                .findFirst();
+        if (partial != null) {
+          await isar.legalDocumentSnapshots.delete(partial.id);
+        }
+      }
+    });
+  }
+
+  Future<void> _writeDetailSnapshot(
+    int projectId,
+    LegalDocumentCacheIdentity? identity,
+    int documentId,
+    Map<String, dynamic> payload,
+  ) async {
+    if (_snapshotWriter != null &&
+        identity != null &&
+        identity.organizationId != null) {
+      await _snapshotWriter(projectId, documentId, identity, payload);
+      return;
+    }
+    final isar = await _isar;
+    if (isar == null || identity == null || identity.organizationId == null) {
+      return;
+    }
+    final snapshot =
+        LegalDocumentSnapshot()
+          ..cacheKey = identity.key(projectId, 'detail', documentId)
+          ..userId = identity.userId
+          ..organizationId = identity.organizationId!
+          ..projectId = projectId
+          ..sessionId = identity.sessionId
+          ..kind = 'detail'
+          ..documentId = documentId
+          ..payloadJson = jsonEncode(payload)
+          ..isComplete = true
+          ..savedAt = DateTime.now().toUtc();
+    await isar.writeTxn(() => isar.legalDocumentSnapshots.put(snapshot));
+  }
+
+  Future<void> _deleteDetailSnapshot(
+    int projectId,
+    LegalDocumentCacheIdentity? identity,
+    int documentId,
+  ) async {
+    if (_snapshotDeleter != null && identity != null) {
+      await _snapshotDeleter(projectId, documentId, identity);
+      return;
+    }
+    final isar = await _isar;
+    if (isar == null || identity == null || identity.organizationId == null) {
+      return;
+    }
+    final snapshot =
+        await isar.legalDocumentSnapshots
+            .filter()
+            .cacheKeyEqualTo(identity.key(projectId, 'detail', documentId))
+            .findFirst();
+    if (snapshot != null) {
+      await isar.writeTxn(
+        () => isar.legalDocumentSnapshots.delete(snapshot.id),
+      );
+    }
+  }
+
+  Future<void> _deleteListSnapshots(
+    int projectId,
+    LegalDocumentCacheIdentity? identity,
+  ) async {
+    final isar = await _isar;
+    if (isar == null || identity == null || identity.organizationId == null) {
+      return;
+    }
+    final list =
+        await isar.legalDocumentSnapshots
+            .filter()
+            .cacheKeyEqualTo(identity.key(projectId, 'list'))
+            .findFirst();
+    final partial =
+        await isar.legalDocumentSnapshots
+            .filter()
+            .cacheKeyEqualTo(identity.key(projectId, 'partial'))
+            .findFirst();
+    await isar.writeTxn(() async {
+      if (list != null) await isar.legalDocumentSnapshots.delete(list.id);
+      if (partial != null) await isar.legalDocumentSnapshots.delete(partial.id);
+    });
   }
 
   Future<LegalDocumentModel> performAction({
@@ -116,17 +648,13 @@ class LegalDocumentRepository {
       if (SyncQueueService.shouldQueueDioException(error)) {
         final identity = _requireOwnerIdentity();
         final service = await _requireQueueService();
-        final request = <String, dynamic>{
-          ...payload,
-          ..._queueIdentity(identity, documentId),
-        };
         final queued = await service.enqueue(
           SyncQueueDraft(
             moduleSlug: 'legal_archive',
             operationType: action.action,
             method: 'POST',
             endpoint: endpoint,
-            payload: request,
+            payload: {...payload, ..._queueIdentity(identity, documentId)},
           ),
         );
         throw SyncQueuedException(queueId: queued.id);
@@ -202,12 +730,6 @@ class LegalDocumentRepository {
       await fileCache.deleteStagedUpload(stagedPath);
     } on DioException catch (error) {
       if (SyncQueueService.shouldQueueDioException(error)) {
-        final queuePayload = <String, dynamic>{
-          'signed_at': signedAt.toUtc().toIso8601String(),
-          'lock_version': documentLockVersion,
-          'idempotency_key': idempotencyKey,
-          ..._queueIdentity(identity, documentId),
-        };
         final service = await _requireQueueService();
         final queued = await service.enqueue(
           SyncQueueDraft(
@@ -216,7 +738,12 @@ class LegalDocumentRepository {
             method: 'POST',
             endpoint:
                 '/legal-archive/signature-requests/$signatureRequestId/upload-original',
-            payload: queuePayload,
+            payload: {
+              'signed_at': signedAt.toUtc().toIso8601String(),
+              'lock_version': documentLockVersion,
+              'idempotency_key': idempotencyKey,
+              ..._queueIdentity(identity, documentId),
+            },
             attachments: [
               SyncAttachmentRef(
                 field: 'file',
@@ -233,9 +760,8 @@ class LegalDocumentRepository {
       await fileCache.deleteStagedUpload(stagedPath);
       throw ApiException.fromDio(error);
     } finally {
-      if (temporaryPath != null) {
+      if (temporaryPath != null)
         await fileCache.deleteStagedUpload(temporaryPath);
-      }
     }
   }
 
@@ -244,7 +770,7 @@ class LegalDocumentRepository {
     required LegalDocumentVersion version,
   }) async {
     final identity = _requireOwnerIdentity();
-    final fileCache = _requireFileCache();
+    final cache = _requireFileCache();
     final url = await fetchVersionUrl(
       documentId: documentId,
       versionId: version.id,
@@ -252,7 +778,7 @@ class LegalDocumentRepository {
     );
     final temporary = await _temporaryFile(version.fileName);
     try {
-      final signedFileClient = Dio(
+      final client = Dio(
         BaseOptions(
           connectTimeout: const Duration(seconds: 15),
           receiveTimeout: const Duration(minutes: 2),
@@ -260,9 +786,9 @@ class LegalDocumentRepository {
         ),
       );
       try {
-        await signedFileClient.download(url.toString(), temporary.path);
+        await client.download(url.toString(), temporary.path);
       } finally {
-        signedFileClient.close(force: true);
+        client.close(force: true);
       }
       if (version.contentHash != null &&
           RegExp(r'^[a-fA-F0-9]{64}$').hasMatch(version.contentHash!)) {
@@ -274,7 +800,7 @@ class LegalDocumentRepository {
           );
         }
       }
-      return fileCache.saveForOffline(
+      return cache.saveForOffline(
         ownerIdentity: identity,
         documentId: documentId,
         versionId: version.id,
@@ -288,24 +814,20 @@ class LegalDocumentRepository {
   Future<bool> isVersionSaved({
     required int documentId,
     required int versionId,
-  }) {
-    return _requireFileCache().isSaved(
-      ownerIdentity: _requireOwnerIdentity(),
-      documentId: documentId,
-      versionId: versionId,
-    );
-  }
+  }) => _requireFileCache().isSaved(
+    ownerIdentity: _requireOwnerIdentity(),
+    documentId: documentId,
+    versionId: versionId,
+  );
 
   Future<void> deleteSavedVersion({
     required int documentId,
     required int versionId,
-  }) {
-    return _requireFileCache().deleteSavedVersion(
-      ownerIdentity: _requireOwnerIdentity(),
-      documentId: documentId,
-      versionId: versionId,
-    );
-  }
+  }) => _requireFileCache().deleteSavedVersion(
+    ownerIdentity: _requireOwnerIdentity(),
+    documentId: documentId,
+    versionId: versionId,
+  );
 
   Future<String> openSavedVersion({
     required int documentId,
@@ -313,9 +835,10 @@ class LegalDocumentRepository {
     String? fileName,
   }) async {
     final identity = _requireOwnerIdentity();
-    return _requireFileCache().materialize(
+    final cache = _requireFileCache();
+    return cache.materialize(
       ownerIdentity: identity,
-      encryptedPath: await _requireFileCache().savedPath(
+      encryptedPath: await cache.savedPath(
         ownerIdentity: identity,
         documentId: documentId,
         versionId: versionId,
@@ -347,16 +870,15 @@ class LegalDocumentRepository {
 
   String _requireOwnerIdentity() {
     final identity = _currentOwnerIdentity?.call();
-    if (identity == null || identity.isEmpty) {
+    if (identity == null || identity.isEmpty)
       throw StateError('Действие требует активной пользовательской сессии.');
-    }
     return identity;
   }
 
   Future<SyncQueueService> _requireQueueService() async {
-    final provider = _syncQueueService;
-    if (provider == null) throw StateError('Синхронизация не настроена.');
-    return provider();
+    final service = _syncQueueService;
+    if (service == null) throw StateError('Синхронизация не настроена.');
+    return service();
   }
 
   EncryptedLocalFileCache _requireFileCache() {

@@ -42,7 +42,7 @@ class _ContractManagementScreenState
   Widget build(BuildContext context) {
     final state = ref.watch(legalDocumentProvider);
     final projectId = ref.watch(projectsProvider).selectedProject?.serverId;
-    if (state.projectId != projectId && !state.isLoading) {
+    if (state.projectId != projectId) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _syncAndLoad());
     }
 
@@ -96,7 +96,27 @@ class _ContractManagementScreenState
 
     return RefreshIndicator(
       onRefresh: () => ref.read(legalDocumentProvider.notifier).load(),
-      child: LegalDocumentList(documents: state.documents, onOpen: _open),
+      child: Column(
+        children: [
+          if (state.isPartial)
+            MaterialBanner(
+              content: Text(
+                state.isFromCache
+                    ? 'Показаны сохранённые и полученные данные. Синхронизация не завершена.'
+                    : 'Показана часть списка. Синхронизация не завершена.',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: state.isLoading
+                      ? null
+                      : () => ref.read(legalDocumentProvider.notifier).load(),
+                  child: const Text('Повторить'),
+                ),
+              ],
+            ),
+          Expanded(child: LegalDocumentList(documents: state.documents, onOpen: _open)),
+        ],
+      ),
     );
   }
 
