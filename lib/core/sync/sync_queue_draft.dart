@@ -40,11 +40,15 @@ class SyncAttachmentRef {
     required this.field,
     required this.path,
     this.filename,
+    this.encrypted = false,
+    this.context,
   });
 
   final String field;
   final String path;
   final String? filename;
+  final bool encrypted;
+  final String? context;
 
   Map<String, dynamic> toJson() {
     return <String, dynamic>{
@@ -52,6 +56,8 @@ class SyncAttachmentRef {
       'path': path,
       if (filename != null && filename!.trim().isNotEmpty)
         'filename': filename!.trim(),
+      if (encrypted) 'encrypted': true,
+      if (context != null && context!.trim().isNotEmpty) 'context': context,
     };
   }
 
@@ -71,6 +77,8 @@ class SyncAttachmentRef {
       field: field,
       path: path,
       filename: filename == null || filename.isEmpty ? null : filename,
+      encrypted: json['encrypted'] == true,
+      context: json['context']?.toString(),
     );
   }
 

@@ -10,6 +10,9 @@ class LegalDocumentDetail extends StatelessWidget {
     required this.document,
     required this.onAction,
     required this.onVersionOpen,
+    this.onVersionSave,
+    this.savedVersions = const <int>{},
+    this.syncMessage,
     required this.onPaperOriginalUpload,
     this.paperOriginalUploads = const <int, PaperOriginalUploadState>{},
     this.onPaperOriginalUploadCancel,
@@ -21,6 +24,9 @@ class LegalDocumentDetail extends StatelessWidget {
   final ValueChanged<LegalDocumentAction> onAction;
   final Future<void> Function(LegalDocumentVersion version, String purpose)
   onVersionOpen;
+  final Future<void> Function(LegalDocumentVersion version)? onVersionSave;
+  final Set<int> savedVersions;
+  final String? syncMessage;
   final Future<void> Function(LegalDocumentSignatureRequest request)
   onPaperOriginalUpload;
   final Map<int, PaperOriginalUploadState> paperOriginalUploads;
@@ -50,6 +56,19 @@ class LegalDocumentDetail extends StatelessWidget {
           ],
         ),
       ),
+      if (syncMessage != null) ...[
+        const SizedBox(height: 12),
+        ProCard(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Icon(Icons.sync_problem_outlined),
+              const SizedBox(width: 10),
+              Expanded(child: Text(syncMessage!)),
+            ],
+          ),
+        ),
+      ],
       if (document.workflow.problemFlags.isNotEmpty) ...[
         const SizedBox(height: 12),
         ProCard(
@@ -126,6 +145,23 @@ class LegalDocumentDetail extends StatelessWidget {
                           ? () => onVersionOpen(version, 'download')
                           : null,
                   icon: const Icon(Icons.download_outlined),
+                ),
+                IconButton(
+                  tooltip:
+                      savedVersions.contains(version.id)
+                          ? 'Сохранено для работы без сети'
+                          : 'Сохранить на устройстве',
+                  onPressed:
+                      onVersionSave == null ||
+                              savedVersions.contains(version.id) ||
+                              version.processingStatus != 'ready'
+                          ? null
+                          : () => onVersionSave!(version),
+                  icon: Icon(
+                    savedVersions.contains(version.id)
+                        ? Icons.offline_pin_outlined
+                        : Icons.save_alt_outlined,
+                  ),
                 ),
               ],
             ),
@@ -205,7 +241,7 @@ class LegalDocumentDetail extends StatelessWidget {
   );
 }
 
-enum PaperOriginalUploadPhase { idle, uploading, failed, cancelled }
+enum PaperOriginalUploadPhase { idle, uploading, queued, failed, cancelled }
 
 class PaperOriginalUploadState {
   const PaperOriginalUploadState._(this.phase, {this.progress});
@@ -214,6 +250,9 @@ class PaperOriginalUploadState {
 
   const PaperOriginalUploadState.uploading(double progress)
     : this._(PaperOriginalUploadPhase.uploading, progress: progress);
+
+  const PaperOriginalUploadState.queued()
+    : this._(PaperOriginalUploadPhase.queued);
 
   const PaperOriginalUploadState.failed()
     : this._(PaperOriginalUploadPhase.failed);
@@ -236,6 +275,7 @@ class PaperOriginalUploadState {
     PaperOriginalUploadPhase.idle => 'Загрузить скан оригинала',
     PaperOriginalUploadPhase.uploading =>
       'Загрузка скана ${((progress ?? 0) * 100).round()}%',
+    PaperOriginalUploadPhase.queued => 'Скан сохранён для отправки',
     PaperOriginalUploadPhase.failed => 'Не удалось загрузить скан',
     PaperOriginalUploadPhase.cancelled => 'Загрузка отменена',
   };
@@ -245,6 +285,8 @@ class PaperOriginalUploadState {
       'Фотография или скан загружаются в защищённое хранилище.',
     PaperOriginalUploadPhase.uploading =>
       'Не закрывайте приложение до завершения загрузки.',
+    PaperOriginalUploadPhase.queued =>
+      'Отправим файл после проверки связи и входа.',
     PaperOriginalUploadPhase.failed =>
       'Проверьте подключение и повторите загрузку.',
     PaperOriginalUploadPhase.cancelled =>

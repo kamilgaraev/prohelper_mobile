@@ -38,15 +38,36 @@ class SyncQueueService {
     required Dio dio,
     DateTime Function()? now,
     String? Function()? currentScope,
+    bool Function()? onlineVerified,
+    Future<String> Function(SyncAttachmentRef attachment, String ownerIdentity)?
+    materializeAttachment,
+    Future<void> Function(String path)? deleteMaterializedAttachment,
+    Future<void> Function(SyncAttachmentRef attachment)? deleteQueuedAttachment,
+    Future<bool> Function()? verifyOnline,
   }) : _store = store,
        _dio = dio,
        _now = now ?? DateTime.now,
-       _currentScope = currentScope;
+       _currentScope = currentScope,
+       _onlineVerified = onlineVerified,
+       _materializeAttachment = materializeAttachment,
+       _deleteMaterializedAttachment = deleteMaterializedAttachment,
+       _deleteQueuedAttachment = deleteQueuedAttachment,
+       _verifyOnline = verifyOnline;
 
   final SyncQueueStore _store;
   final Dio _dio;
   final DateTime Function() _now;
   final String? Function()? _currentScope;
+  final bool Function()? _onlineVerified;
+  final Future<String> Function(
+    SyncAttachmentRef attachment,
+    String ownerIdentity,
+  )?
+  _materializeAttachment;
+  final Future<void> Function(String path)? _deleteMaterializedAttachment;
+  final Future<void> Function(SyncAttachmentRef attachment)?
+  _deleteQueuedAttachment;
+  final Future<bool> Function()? _verifyOnline;
   Future<SyncQueueProcessResult>? _processing;
 
   String? get currentScope => _currentScope?.call();
@@ -77,6 +98,14 @@ class SyncQueueService {
 
   Future<void> delete(int id) {
     return _store.delete(id);
+  }
+
+  Future<void> clearScope(String ownerIdentity) async {
+    for (final operation in await _store.all()) {
+      if (operation.payload['queue_scope']?.toString() == ownerIdentity) {
+        await _store.delete(operation.id);
+      }
+    }
   }
 
   Future<void> update(QueuedSyncOperation operation) {
@@ -116,13 +145,42 @@ class SyncQueueService {
   }
 
   Future<SyncQueueProcessResult> retryDueOperations() {
-    return _processing ??= _processDueOperations().whenComplete(() {
+    return _processing ??= _verifyAndProcess().whenComplete(() {
       _processing = null;
     });
   }
 
+  Future<SyncQueueProcessResult> _verifyAndProcess() async {
+    final initialScope = currentScope;
+    if ((_verifyOnline == null && _onlineVerified?.call() == false) ||
+        (requiresScope && initialScope == null && _verifyOnline != null)) {
+      return const SyncQueueProcessResult(
+        successCount: 0,
+        retryCount: 0,
+        blockedCount: 0,
+      );
+    }
+    final verifyOnline = _verifyOnline;
+    if (verifyOnline != null && !await verifyOnline()) {
+      return const SyncQueueProcessResult(
+        successCount: 0,
+        retryCount: 0,
+        blockedCount: 0,
+      );
+    }
+    if (initialScope != currentScope || _onlineVerified?.call() == false) {
+      return const SyncQueueProcessResult(
+        successCount: 0,
+        retryCount: 0,
+        blockedCount: 0,
+      );
+    }
+    return _processDueOperations();
+  }
+
   Future<SyncQueueProcessResult> _processDueOperations() async {
     final now = _now();
+    final verifiedScope = currentScope;
     final operations = await _store.all();
     var successCount = 0;
     var retryCount = 0;
@@ -132,8 +190,12 @@ class SyncQueueService {
       final interruptedJournal =
           operation.moduleSlug == 'construction_journal' &&
           operation.status == SyncOperationStatuses.sending;
+      final interruptedLegalAction =
+          operation.moduleSlug == 'legal_archive' &&
+          operation.status == SyncOperationStatuses.sending;
       if (operation.status != SyncOperationStatuses.queued &&
-          !interruptedJournal) {
+          !interruptedJournal &&
+          !interruptedLegalAction) {
         blockedCount++;
         break;
       }
@@ -141,7 +203,10 @@ class SyncQueueService {
         retryCount++;
         break;
       }
-      final outcome = await _retryOperation(operation);
+      final outcome = await _retryOperation(
+        operation,
+        verifiedScope: verifiedScope,
+      );
 
       switch (outcome) {
         case _RetryOutcome.success:
@@ -164,10 +229,23 @@ class SyncQueueService {
     );
   }
 
-  Future<_RetryOutcome> _retryOperation(QueuedSyncOperation operation) async {
+  Future<_RetryOutcome> _retryOperation(
+    QueuedSyncOperation operation, {
+    required String? verifiedScope,
+  }) async {
     final operationScope = operation.payload['queue_scope']?.toString();
+    if (requiresScope && verifiedScope != currentScope) {
+      operation
+        ..status = SyncOperationStatuses.permissionDenied
+        ..lastBusinessError = SyncQueueMessages.permissionDenied;
+      await _store.put(operation);
+      return _RetryOutcome.blocked;
+    }
     if ((requiresScope &&
-            operation.moduleSlug == 'construction_journal' &&
+            [
+              'construction_journal',
+              'legal_archive',
+            ].contains(operation.moduleSlug) &&
             operationScope == null) ||
         (operationScope != null &&
             operationScope.isNotEmpty &&
@@ -185,6 +263,7 @@ class SyncQueueService {
       ..lastBusinessError = null;
     await _store.put(operation);
 
+    final temporaryAttachments = <String>[];
     try {
       var journalCreate =
           operation.moduleSlug == 'construction_journal' &&
@@ -201,9 +280,17 @@ class SyncQueueService {
         journalCreate = false;
       }
       final idempotencyKey = operation.payload['idempotency_key']?.toString();
+      final requestData = await _requestData(operation, temporaryAttachments);
+      if (requiresScope && verifiedScope != currentScope) {
+        operation
+          ..status = SyncOperationStatuses.queued
+          ..lastBusinessError = SyncQueueMessages.permissionDenied;
+        await _store.put(operation);
+        return _RetryOutcome.blocked;
+      }
       final response = await _dio.request<dynamic>(
         operation.endpoint,
-        data: await _requestData(operation),
+        data: requestData,
         options: Options(
           method: operation.method,
           headers: {
@@ -212,6 +299,13 @@ class SyncQueueService {
           },
         ),
       );
+      if (requiresScope && verifiedScope != currentScope) {
+        operation
+          ..status = SyncOperationStatuses.queued
+          ..lastBusinessError = SyncQueueMessages.permissionDenied;
+        await _store.put(operation);
+        return _RetryOutcome.blocked;
+      }
       if (journalCreate && operation.payload['submit_intent'] == true) {
         final raw = response.data;
         final data = raw is Map && raw['data'] is Map ? raw['data'] : raw;
@@ -227,7 +321,12 @@ class SyncQueueService {
         }
         if (status == 'draft') {
           await _advanceJournalToSubmit(operation, id);
-          return _retryOperation(operation);
+          return _retryOperation(operation, verifiedScope: verifiedScope);
+        }
+      }
+      for (final attachment in operation.attachments) {
+        if (attachment.encrypted) {
+          await _deleteQueuedAttachment?.call(attachment);
         }
       }
       await _store.delete(operation.id);
@@ -256,6 +355,10 @@ class SyncQueueService {
         ..lastBusinessError = error.message;
       await _store.put(operation);
       return _RetryOutcome.blocked;
+    } finally {
+      for (final path in temporaryAttachments) {
+        await _deleteMaterializedAttachment?.call(path);
+      }
     }
   }
 
@@ -263,7 +366,7 @@ class SyncQueueService {
     QueuedSyncOperation operation,
     int entryId,
   ) async {
-    final payload = operation.payload;
+    final payload = Map<String, dynamic>.from(operation.payload);
     final createKey =
         payload['create_idempotency_key'] ?? payload['idempotency_key'];
     operation
@@ -336,7 +439,10 @@ class SyncQueueService {
     await _store.put(operation);
   }
 
-  Future<Object?> _requestData(QueuedSyncOperation operation) async {
+  Future<Object?> _requestData(
+    QueuedSyncOperation operation,
+    List<String> temporaryAttachments,
+  ) async {
     final attachments = operation.attachments;
     final payload = operation.payload;
     if (operation.moduleSlug == 'construction_journal') {
@@ -357,6 +463,19 @@ class SyncQueueService {
         payload.remove(key);
       }
     }
+    if (operation.moduleSlug == 'legal_archive') {
+      for (final key in [
+        'queue_scope',
+        'queue_owner_identity',
+        'queue_session_id',
+        'queue_user_id',
+        'queue_organization_id',
+        'queue_document_id',
+        'queue_encrypted_attachment',
+      ]) {
+        payload.remove(key);
+      }
+    }
     if (attachments.isEmpty) {
       return payload;
     }
@@ -373,7 +492,13 @@ class SyncQueueService {
         MapEntry(
           attachment.field,
           await MultipartFile.fromFile(
-            attachment.path,
+            attachment.encrypted
+                ? await _materializeQueuedAttachment(
+                  attachment,
+                  operation,
+                  temporaryAttachments,
+                )
+                : attachment.path,
             filename: attachment.filename ?? _fileName(attachment.path),
           ),
         ),
@@ -381,6 +506,21 @@ class SyncQueueService {
     }
 
     return formData;
+  }
+
+  Future<String> _materializeQueuedAttachment(
+    SyncAttachmentRef attachment,
+    QueuedSyncOperation operation,
+    List<String> temporaryAttachments,
+  ) async {
+    final callback = _materializeAttachment;
+    final ownerIdentity = operation.payload['queue_owner_identity']?.toString();
+    if (callback == null || ownerIdentity == null || ownerIdentity.isEmpty) {
+      throw const FormatException('Не удалось открыть файл для отправки.');
+    }
+    final path = await callback(attachment, ownerIdentity);
+    temporaryAttachments.add(path);
+    return path;
   }
 
   Duration _backoff(int attemptCount) {

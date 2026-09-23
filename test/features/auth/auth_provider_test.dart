@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -25,7 +25,10 @@ class _FakeAuthRepository extends AuthRepository {
     return User()
       ..serverId = 7
       ..email = 'foreman@example.test'
-      ..name = 'Иван Прораб';
+      ..name = 'Иван Прораб'
+      ..roles = <String>[]
+      ..organizationsJson = '[]'
+      ..permissionsJson = '{}';
   }
 
   @override
@@ -38,7 +41,39 @@ class _FakeAuthRepository extends AuthRepository {
     return User()
       ..serverId = 7
       ..email = email
-      ..name = 'Иван Прораб';
+      ..name = 'Иван Прораб'
+      ..roles = <String>[]
+      ..organizationsJson = '[]'
+      ..permissionsJson = '{}';
+  }
+}
+
+class _BlockingOfflineSaveStorage extends _MemoryStorage {
+  final saveStarted = Completer<void>();
+  final allowSave = Completer<void>();
+  bool _blockNextSave = true;
+
+  @override
+  Future<void> saveOfflineAuth(Map<String, dynamic> value) async {
+    if (_blockNextSave) {
+      _blockNextSave = false;
+      saveStarted.complete();
+      await allowSave.future;
+    }
+    await super.saveOfflineAuth(value);
+  }
+}
+
+class _LogoutCheckingRepository extends _FakeAuthRepository {
+  _LogoutCheckingRepository(this.storage) : super();
+
+  final _MemoryStorage storage;
+  String? tokenAtLogout;
+
+  @override
+  Future<void> logout() async {
+    tokenAtLogout = await storage.getToken();
+    await storage.clearToken();
   }
 }
 
@@ -48,6 +83,8 @@ class _MemoryStorage extends SecureStorageService {
   String? token = 'token-1';
   int getTokenCalls = 0;
   int clearCalls = 0;
+  String? sessionId;
+  Map<String, dynamic>? offlineAuth;
 
   @override
   Future<String?> getToken() async {
@@ -59,6 +96,29 @@ class _MemoryStorage extends SecureStorageService {
   Future<void> clearToken() async {
     clearCalls += 1;
     token = null;
+    await clearOfflineAuth();
+  }
+
+  @override
+  Future<String> ensureSessionId() async => sessionId ??= 'session-1';
+
+  @override
+  Future<void> saveOfflineAuth(Map<String, dynamic> value) async {
+    offlineAuth = Map<String, dynamic>.from(value);
+  }
+
+  @override
+  Future<Map<String, dynamic>?> getOfflineAuth() async => offlineAuth;
+
+  @override
+  Future<void> clearOfflineAuth() async {
+    offlineAuth = null;
+    sessionId = null;
+  }
+
+  @override
+  Future<void> rebindOfflineAuthToken(String token) async {
+    if (offlineAuth != null) offlineAuth!['token'] = token;
   }
 }
 
@@ -100,7 +160,7 @@ void main() {
     await notifier.checkAuth();
     await pumpEventQueue();
 
-    expect(storage.getTokenCalls, 1);
+    expect(storage.getTokenCalls, 2);
     expect(notifier.state, isA<AuthAuthenticated>());
   });
 
@@ -192,5 +252,124 @@ void main() {
 
     expect(notifier.state, isA<AuthUnauthenticated>());
     expect(storage.clearCalls, 0);
+  });
+
+  test('offline restore is bound to token and is unverified', () async {
+    final storage = _MemoryStorage();
+    final confirmedAt = DateTime.now().toUtc();
+    storage.offlineAuth = {
+      'token': 'token-1',
+      'session_id': 'session-1',
+      'user_id': 7,
+      'organization_id': 12,
+      'confirmed_at': confirmedAt.toIso8601String(),
+      'user': {
+        'server_id': 7,
+        'email': 'offline@example.test',
+        'name': 'Офлайн',
+        'organization_id': 12,
+        'organization_name': 'МОСТ',
+        'organizations_json': '[]',
+        'roles': <String>['foreman'],
+        'permissions_json': '{}',
+      },
+    };
+    final notifier = AuthNotifier(
+      _FakeAuthRepository(getMeError: const ApiException('Нет сети.')),
+      storage,
+    );
+    addTearDown(notifier.dispose);
+
+    await pumpEventQueue();
+
+    final auth = notifier.state as AuthAuthenticated;
+    expect(auth.user.email, 'offline@example.test');
+    expect(auth.isOnlineVerified, isFalse);
+    expect(auth.sessionIdentity?.userId, 7);
+    expect(auth.sessionIdentity?.organizationId, 12);
+    expect(auth.sessionIdentity?.sessionId, 'session-1');
+  });
+
+  test(
+    'offline restore rejects another token and expired confirmation',
+    () async {
+      final storage = _MemoryStorage()..token = 'different-token';
+      storage.offlineAuth = {
+        'token': 'token-1',
+        'session_id': 'session-1',
+        'user_id': 7,
+        'organization_id': 12,
+        'confirmed_at':
+            DateTime.now()
+                .toUtc()
+                .subtract(const Duration(days: 15))
+                .toIso8601String(),
+        'user': {
+          'server_id': 7,
+          'email': 'stale@example.test',
+          'name': 'Старый профиль',
+          'organization_id': 12,
+          'organizations_json': '[]',
+          'roles': <String>[],
+          'permissions_json': '{}',
+        },
+      };
+      final notifier = AuthNotifier(
+        _FakeAuthRepository(getMeError: const ApiException('Нет сети.')),
+        storage,
+      );
+      addTearDown(notifier.dispose);
+
+      await pumpEventQueue();
+
+      expect(notifier.state, isA<AuthError>());
+    },
+  );
+
+  test(
+    'logout sends the saved bearer before cleaning local auth cache',
+    () async {
+      final storage = _MemoryStorage()..token = 'saved-bearer';
+      storage.offlineAuth = {'session_id': 'session-1'};
+      final repository = _LogoutCheckingRepository(storage);
+      var invalidationCount = 0;
+      final notifier = AuthNotifier(
+        repository,
+        storage,
+        autoCheckAuth: false,
+        onSessionInvalidated: () => invalidationCount++,
+      );
+      addTearDown(notifier.dispose);
+
+      await notifier.logout();
+
+      expect(repository.tokenAtLogout, 'saved-bearer');
+      expect(storage.token, isNull);
+      expect(storage.offlineAuth, isNull);
+      expect(invalidationCount, 1);
+      expect(notifier.state, isA<AuthUnauthenticated>());
+    },
+  );
+
+  test('stale profile write cannot replace a later login bundle', () async {
+    final storage = _BlockingOfflineSaveStorage();
+    final notifier = AuthNotifier(
+      _FakeAuthRepository(),
+      storage,
+      autoCheckAuth: false,
+    );
+    addTearDown(() {
+      if (!storage.allowSave.isCompleted) storage.allowSave.complete();
+      notifier.dispose();
+    });
+
+    final profileCheck = notifier.checkAuth();
+    await storage.saveStarted.future;
+    final newLogin = notifier.login('new@example.test', 'password');
+    storage.allowSave.complete();
+    await Future.wait([profileCheck, newLogin]);
+
+    expect(notifier.state.user?.email, 'new@example.test');
+    expect(storage.offlineAuth?['user']['email'], 'new@example.test');
   });
 }

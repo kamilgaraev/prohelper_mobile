@@ -295,6 +295,8 @@ class _FieldConstructionJournalRepository
     List<ConstructionJournalEquipmentModel> equipment = const [],
     List<ConstructionJournalMaterialUsageModel> materials = const [],
     bool submitAfterCreate = false,
+    bool? submitIntent,
+    String? idempotencyKey,
   }) async {
     createdJournalId = journalId;
     return _journalEntry(

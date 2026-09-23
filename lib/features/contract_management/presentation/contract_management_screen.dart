@@ -1,8 +1,11 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:open_filex/open_filex.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../../core/storage/encrypted_local_file_cache.dart';
+import '../../../core/network/api_exception.dart';
 import '../../../core/widgets/app_empty_state.dart';
 import '../../../core/widgets/app_error_state.dart';
 import '../../../core/widgets/app_loading_state.dart';
@@ -10,8 +13,12 @@ import '../../../core/widgets/mesh_background.dart';
 import '../../projects/domain/projects_provider.dart';
 import '../data/legal_document_model.dart';
 import '../data/legal_document_original_picker.dart';
+import '../data/legal_document_repository.dart';
 import '../domain/legal_document_provider.dart';
 import '../domain/legal_document_state.dart';
+import '../../../core/sync/sync_queue_service.dart';
+import '../../../core/sync/sync_queue_provider.dart';
+import '../../../core/sync/queued_sync_operation.dart';
 import 'widgets/legal_document_detail.dart';
 import 'widgets/legal_document_list.dart';
 
@@ -19,10 +26,12 @@ class ContractManagementScreen extends ConsumerStatefulWidget {
   const ContractManagementScreen({super.key});
 
   @override
-  ConsumerState<ContractManagementScreen> createState() => _ContractManagementScreenState();
+  ConsumerState<ContractManagementScreen> createState() =>
+      _ContractManagementScreenState();
 }
 
-class _ContractManagementScreenState extends ConsumerState<ContractManagementScreen> {
+class _ContractManagementScreenState
+    extends ConsumerState<ContractManagementScreen> {
   @override
   void initState() {
     super.initState();
@@ -33,25 +42,30 @@ class _ContractManagementScreenState extends ConsumerState<ContractManagementScr
   Widget build(BuildContext context) {
     final state = ref.watch(legalDocumentProvider);
     final projectId = ref.watch(projectsProvider).selectedProject?.serverId;
-    if (state.projectId != projectId && !state.isLoading) {
+    if (state.projectId != projectId) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _syncAndLoad());
     }
 
-    return MeshBackground(child: Scaffold(
-      backgroundColor: Colors.transparent,
-      appBar: AppBar(
-        title: const Text('Юридические документы'),
+    return MeshBackground(
+      child: Scaffold(
         backgroundColor: Colors.transparent,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh_rounded),
-            tooltip: 'Обновить',
-            onPressed: projectId == null ? null : () => ref.read(legalDocumentProvider.notifier).load(),
-          ),
-        ],
+        appBar: AppBar(
+          title: const Text('Юридические документы'),
+          backgroundColor: Colors.transparent,
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.refresh_rounded),
+              tooltip: 'Обновить',
+              onPressed:
+                  projectId == null
+                      ? null
+                      : () => ref.read(legalDocumentProvider.notifier).load(),
+            ),
+          ],
+        ),
+        body: _body(state, projectId),
       ),
-      body: _body(state, projectId),
-    ));
+    );
   }
 
   Widget _body(LegalDocumentState state, int? projectId) {
@@ -82,7 +96,27 @@ class _ContractManagementScreenState extends ConsumerState<ContractManagementScr
 
     return RefreshIndicator(
       onRefresh: () => ref.read(legalDocumentProvider.notifier).load(),
-      child: LegalDocumentList(documents: state.documents, onOpen: _open),
+      child: Column(
+        children: [
+          if (state.isPartial)
+            MaterialBanner(
+              content: Text(
+                state.isFromCache
+                    ? 'Показаны сохранённые и полученные данные. Синхронизация не завершена.'
+                    : 'Показана часть списка. Синхронизация не завершена.',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: state.isLoading
+                      ? null
+                      : () => ref.read(legalDocumentProvider.notifier).load(),
+                  child: const Text('Повторить'),
+                ),
+              ],
+            ),
+          Expanded(child: LegalDocumentList(documents: state.documents, onOpen: _open)),
+        ],
+      ),
     );
   }
 
@@ -93,7 +127,11 @@ class _ContractManagementScreenState extends ConsumerState<ContractManagementScr
   }
 
   void _open(LegalDocumentModel document) {
-    Navigator.of(context).push(MaterialPageRoute(builder: (_) => _LegalDocumentDetailScreen(id: document.id)));
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => _LegalDocumentDetailScreen(id: document.id),
+      ),
+    );
   }
 }
 
@@ -103,22 +141,36 @@ class _LegalDocumentDetailScreen extends ConsumerStatefulWidget {
   final int id;
 
   @override
-  ConsumerState<_LegalDocumentDetailScreen> createState() => _LegalDocumentDetailScreenState();
+  ConsumerState<_LegalDocumentDetailScreen> createState() =>
+      _LegalDocumentDetailScreenState();
 }
 
-class _LegalDocumentDetailScreenState extends ConsumerState<_LegalDocumentDetailScreen> {
+class _LegalDocumentDetailScreenState
+    extends ConsumerState<_LegalDocumentDetailScreen> {
   late Future<LegalDocumentModel> _future;
-  final Map<int, _PaperOriginalUploadAttempt> _originalUploads = <int, _PaperOriginalUploadAttempt>{};
+  final Set<int> _savedVersions = <int>{};
+  String? _syncMessage;
+  final Map<int, _PaperOriginalUploadAttempt> _originalUploads =
+      <int, _PaperOriginalUploadAttempt>{};
 
   @override
   void initState() {
     super.initState();
-    _future = ref.read(legalDocumentProvider.notifier).detail(widget.id);
+    _future = _loadDocument();
   }
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Документ')),
+    appBar: AppBar(
+      title: const Text('Документ'),
+      actions: [
+        IconButton(
+          tooltip: 'Обновить',
+          onPressed: _reload,
+          icon: const Icon(Icons.refresh_rounded),
+        ),
+      ],
+    ),
     body: FutureBuilder<LegalDocumentModel>(
       future: _future,
       builder: (context, snapshot) {
@@ -137,20 +189,71 @@ class _LegalDocumentDetailScreenState extends ConsumerState<_LegalDocumentDetail
         return LegalDocumentDetail(
           document: document,
           onAction: _action,
-          onVersionOpen: (version, purpose) => _openVersion(document, version, purpose),
-          onPaperOriginalUpload: (request) => _uploadPaperOriginal(document, request),
-          paperOriginalUploads: Map<int, PaperOriginalUploadState>.unmodifiable({
-            for (final entry in _originalUploads.entries) entry.key: entry.value.state,
-          }),
+          onVersionOpen:
+              (version, purpose) => _openVersion(document, version, purpose),
+          onVersionSave: _saveVersionOffline,
+          savedVersions: Set<int>.unmodifiable(_savedVersions),
+          syncMessage: _syncMessage,
+          onPaperOriginalUpload:
+              (request) => _uploadPaperOriginal(document, request),
+          paperOriginalUploads:
+              Map<int, PaperOriginalUploadState>.unmodifiable({
+                for (final entry in _originalUploads.entries)
+                  entry.key: entry.value.state,
+              }),
           onPaperOriginalUploadCancel: _cancelPaperOriginalUpload,
-          onPaperOriginalUploadRetry: (request) => _retryPaperOriginalUpload(document, request),
+          onPaperOriginalUploadRetry:
+              (request) => _retryPaperOriginalUpload(document, request),
         );
       },
     ),
   );
 
   void _reload() {
-    setState(() => _future = ref.read(legalDocumentProvider.notifier).detail(widget.id));
+    setState(() => _future = _loadDocument());
+  }
+
+  Future<LegalDocumentModel> _loadDocument() async {
+    final notifier = ref.read(legalDocumentProvider.notifier);
+    final document = await notifier.detail(widget.id);
+    final saved = <int>{};
+    for (final version in document.versions) {
+      if (await notifier.isVersionSaved(
+        documentId: document.id,
+        versionId: version.id,
+      )) {
+        saved.add(version.id);
+      }
+    }
+    final queue = await ref.read(syncQueueServiceProvider.future);
+    final queuedOperations = (await queue.all()).where(
+      (operation) =>
+          operation.moduleSlug == 'legal_archive' &&
+          operation.payload['queue_document_id']?.toString() ==
+              document.id.toString(),
+    );
+    final lastOperation =
+        queuedOperations.isEmpty ? null : queuedOperations.last;
+    final syncMessage = switch (lastOperation?.status) {
+      SyncOperationStatuses.conflict =>
+        'Состояние документа изменилось. Проверьте его и повторите действие вручную.',
+      SyncOperationStatuses.permissionDenied =>
+        'Для отправки действия больше нет доступа. Обратитесь к администратору.',
+      SyncOperationStatuses.needsEdit =>
+        'Действие требует исправления перед отправкой.',
+      SyncOperationStatuses.queued || SyncOperationStatuses.sending =>
+        'Действие сохранено и будет отправлено после проверки связи.',
+      _ => null,
+    };
+    if (mounted) {
+      setState(() {
+        _savedVersions
+          ..clear()
+          ..addAll(saved);
+        _syncMessage = syncMessage;
+      });
+    }
+    return document;
   }
 
   Future<void> _action(LegalDocumentAction action) async {
@@ -158,50 +261,179 @@ class _LegalDocumentDetailScreenState extends ConsumerState<_LegalDocumentDetail
     if (!mounted || comment == null) {
       return;
     }
-    if ((action.requiresComment || action.requiresReason) && comment.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Укажите комментарий к действию')));
+    if ((action.requiresComment || action.requiresReason) &&
+        comment.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Укажите комментарий к действию')),
+      );
 
       return;
     }
     try {
-      await ref.read(legalDocumentProvider.notifier).action(
-        id: widget.id,
-        action: action,
-        comment: action.requiresComment ? comment : null,
-        reason: action.requiresReason ? comment : null,
-      );
+      await ref
+          .read(legalDocumentProvider.notifier)
+          .action(
+            id: widget.id,
+            action: action,
+            comment: action.requiresComment ? comment : null,
+            reason: action.requiresReason ? comment : null,
+          );
       _reload();
+    } on SyncQueuedException {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Действие сохранено и будет отправлено после проверки связи',
+            ),
+          ),
+        );
+        _reload();
+      }
+    } on ApiException catch (error) {
+      if (mounted) {
+        final message = switch (error.statusCode) {
+          403 =>
+            'Для этого действия больше нет доступа. Обратитесь к администратору.',
+          409 =>
+            'Состояние документа изменилось. Обновите карточку и проверьте действие.',
+          _ => 'Не удалось выполнить действие',
+        };
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(message)));
+        if (error.statusCode == 409 || error.statusCode == 403) _reload();
+      }
     } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Не удалось выполнить действие')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Не удалось выполнить действие')),
+        );
       }
     }
   }
 
-  Future<void> _openVersion(LegalDocumentModel document, LegalDocumentVersion version, String purpose) async {
+  Future<void> _openVersion(
+    LegalDocumentModel document,
+    LegalDocumentVersion version,
+    String purpose,
+  ) async {
+    String? temporaryPath;
     try {
-      final uri = await ref.read(legalDocumentProvider.notifier).versionUrl(
-        documentId: document.id,
-        versionId: version.id,
-        purpose: purpose,
-      );
-      final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      Uri? uri;
+      try {
+        uri = await ref
+            .read(legalDocumentProvider.notifier)
+            .versionUrl(
+              documentId: document.id,
+              versionId: version.id,
+              purpose: purpose,
+            );
+      } on ApiException catch (error) {
+        if (error.statusCode == 401 || error.statusCode == 403) {
+          if (error.statusCode == 403) {
+            await ref
+                .read(legalDocumentProvider.notifier)
+                .deleteSavedVersion(
+                  documentId: document.id,
+                  versionId: version.id,
+                );
+            if (mounted) setState(() => _savedVersions.remove(version.id));
+          }
+          rethrow;
+        }
+        if (!shouldUseOfflineVersionAfterStatus(error.statusCode)) {
+          rethrow;
+        }
+        if (!await ref
+            .read(legalDocumentProvider.notifier)
+            .isVersionSaved(documentId: document.id, versionId: version.id)) {
+          rethrow;
+        }
+        temporaryPath = await ref
+            .read(legalDocumentProvider.notifier)
+            .openSavedVersion(
+              documentId: document.id,
+              versionId: version.id,
+              fileName: version.fileName,
+            );
+      }
+      final opened =
+          temporaryPath == null
+              ? await launchUrl(uri!, mode: LaunchMode.externalApplication)
+              : (await OpenFilex.open(temporaryPath)).type == ResultType.done;
       if (!opened) {
         throw StateError('legal_document_url_not_opened');
       }
-    } catch (_) {
+      if (temporaryPath != null) {
+        final cache = ref.read(encryptedLocalFileCacheProvider);
+        final openedPath = temporaryPath;
+        Future<void>.delayed(const Duration(minutes: 2), () {
+          return cache.deleteStagedUpload(openedPath);
+        });
+      }
+    } on ApiException {
+      if (temporaryPath != null) {
+        try {
+          await ref
+              .read(encryptedLocalFileCacheProvider)
+              .deleteStagedUpload(temporaryPath);
+        } catch (_) {}
+      }
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Не удалось открыть файл')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Файл недоступен. Проверьте права и повторите попытку.',
+            ),
+          ),
+        );
+      }
+    } catch (_) {
+      if (temporaryPath != null) {
+        try {
+          await ref
+              .read(encryptedLocalFileCacheProvider)
+              .deleteStagedUpload(temporaryPath);
+        } catch (_) {}
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Не удалось открыть файл')),
+        );
       }
     }
   }
 
-  Future<void> _uploadPaperOriginal(LegalDocumentModel document, LegalDocumentSignatureRequest request) async {
+  Future<void> _saveVersionOffline(LegalDocumentVersion version) async {
+    try {
+      await ref
+          .read(legalDocumentProvider.notifier)
+          .saveVersionForOffline(documentId: widget.id, version: version);
+      if (!mounted) return;
+      setState(() => _savedVersions.add(version.id));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Файл сохранён для работы без сети')),
+      );
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Не удалось сохранить файл')),
+        );
+      }
+    }
+  }
+
+  Future<void> _uploadPaperOriginal(
+    LegalDocumentModel document,
+    LegalDocumentSignatureRequest request,
+  ) async {
     final existing = _originalUploads[request.id];
     if (existing?.state.isUploading == true) {
       return;
     }
-    final path = await ref.read(legalDocumentOriginalPickerProvider).pickFromCamera();
+    final path =
+        await ref.read(legalDocumentOriginalPickerProvider).pickFromCamera();
     if (!mounted || path == null || path.isEmpty) {
       return;
     }
@@ -215,7 +447,10 @@ class _LegalDocumentDetailScreenState extends ConsumerState<_LegalDocumentDetail
     await _sendPaperOriginal(document, request, attempt);
   }
 
-  Future<void> _retryPaperOriginalUpload(LegalDocumentModel document, LegalDocumentSignatureRequest request) async {
+  Future<void> _retryPaperOriginalUpload(
+    LegalDocumentModel document,
+    LegalDocumentSignatureRequest request,
+  ) async {
     final attempt = _originalUploads[request.id];
     if (attempt == null || attempt.state.isUploading) {
       return;
@@ -240,33 +475,74 @@ class _LegalDocumentDetailScreenState extends ConsumerState<_LegalDocumentDetail
     _PaperOriginalUploadAttempt attempt,
   ) async {
     try {
-      await ref.read(legalDocumentProvider.notifier).uploadPaperOriginal(
-        signatureRequestId: request.id,
-        filePath: attempt.filePath,
-        signedAt: attempt.signedAt,
-        documentLockVersion: attempt.documentLockVersion,
-        idempotencyKey: attempt.idempotencyKey,
-        cancelToken: attempt.cancelToken,
-        onSendProgress: (sent, total) {
-          if (!mounted || total <= 0 || !identical(_originalUploads[request.id], attempt)) {
-            return;
-          }
-          attempt.updateProgress(sent / total);
-          setState(() {});
-        },
-      );
+      await ref
+          .read(legalDocumentProvider.notifier)
+          .uploadPaperOriginal(
+            documentId: document.id,
+            signatureRequestId: request.id,
+            filePath: attempt.filePath,
+            signedAt: attempt.signedAt,
+            documentLockVersion: attempt.documentLockVersion,
+            idempotencyKey: attempt.idempotencyKey,
+            cancelToken: attempt.cancelToken,
+            onSendProgress: (sent, total) {
+              if (!mounted ||
+                  total <= 0 ||
+                  !identical(_originalUploads[request.id], attempt)) {
+                return;
+              }
+              attempt.updateProgress(sent / total);
+              setState(() {});
+            },
+          );
       if (mounted) {
         _originalUploads.remove(request.id);
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Скан оригинала зарегистрирован')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Скан оригинала зарегистрирован')),
+        );
         _reload();
       }
-    } catch (_) {
+    } catch (error) {
       if (mounted) {
-        if (attempt.wasCancelled) {
+        if (error is SyncQueuedException) {
+          attempt.markQueued();
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Скан сохранён и будет отправлен после проверки связи',
+              ),
+            ),
+          );
+          _reload();
+        } else if (attempt.wasCancelled) {
           attempt.markCancelled();
+        } else if (error is ApiException && error.statusCode == 403) {
+          attempt.markFailed();
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Для загрузки больше нет доступа. Обратитесь к администратору.',
+              ),
+            ),
+          );
+          _reload();
+        } else if (error is ApiException && error.statusCode == 409) {
+          attempt.markFailed();
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Состояние документа изменилось. Обновите карточку перед повтором.',
+              ),
+            ),
+          );
+          _reload();
         } else {
           attempt.markFailed();
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Не удалось загрузить скан оригинала')));
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Не удалось загрузить скан оригинала'),
+            ),
+          );
         }
         setState(() {});
       }
@@ -280,18 +556,25 @@ class _LegalDocumentDetailScreenState extends ConsumerState<_LegalDocumentDetail
     final controller = TextEditingController();
     final result = await showDialog<String>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text(action.label),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          decoration: const InputDecoration(labelText: 'Комментарий'),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Отмена')),
-          FilledButton(onPressed: () => Navigator.pop(context, controller.text.trim()), child: const Text('Отправить')),
-        ],
-      ),
+      builder:
+          (context) => AlertDialog(
+            title: Text(action.label),
+            content: TextField(
+              controller: controller,
+              autofocus: true,
+              decoration: const InputDecoration(labelText: 'Комментарий'),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Отмена'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(context, controller.text.trim()),
+                child: const Text('Отправить'),
+              ),
+            ],
+          ),
     );
     controller.dispose();
 
@@ -339,6 +622,10 @@ class _PaperOriginalUploadAttempt {
 
   void markFailed() {
     state = const PaperOriginalUploadState.failed();
+  }
+
+  void markQueued() {
+    state = const PaperOriginalUploadState.queued();
   }
 
   void markCancelled() {
