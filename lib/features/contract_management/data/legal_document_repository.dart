@@ -739,6 +739,7 @@ class LegalDocumentRepository {
     String? comment,
     String? reason,
   }) async {
+    final identityAtStart = _currentOwnerIdentity?.call();
     final idempotencyKey = _idempotencyKey();
     final payload = <String, dynamic>{
       'idempotency_key': idempotencyKey,
@@ -761,15 +762,25 @@ class LegalDocumentRepository {
       );
     } on DioException catch (error) {
       if (SyncQueueService.shouldQueueDioException(error)) {
-        final identity = _requireOwnerIdentity();
+        if (identityAtStart == null ||
+            identityAtStart.isEmpty ||
+            _currentOwnerIdentity?.call() != identityAtStart) {
+          throw StateError('Владелец данных изменился во время действия.');
+        }
         final service = await _requireQueueService();
+        if (_currentOwnerIdentity?.call() != identityAtStart) {
+          throw StateError('Владелец данных изменился во время действия.');
+        }
         final queued = await service.enqueue(
           SyncQueueDraft(
             moduleSlug: 'legal_archive',
             operationType: action.action,
             method: 'POST',
             endpoint: endpoint,
-            payload: {...payload, ..._queueIdentity(identity, documentId)},
+            payload: {
+              ...payload,
+              ..._queueIdentity(identityAtStart, documentId),
+            },
           ),
         );
         throw SyncQueuedException(queueId: queued.id);

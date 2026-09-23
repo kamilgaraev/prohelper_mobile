@@ -5,6 +5,9 @@ import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:prohelpers_mobile/core/network/api_exception.dart';
+import 'package:prohelpers_mobile/core/sync/queued_sync_operation.dart';
+import 'package:prohelpers_mobile/core/sync/sync_queue_service.dart';
+import 'package:prohelpers_mobile/core/sync/sync_queue_store.dart';
 import 'package:prohelpers_mobile/features/contract_management/data/legal_document_model.dart';
 import 'package:prohelpers_mobile/features/contract_management/data/legal_document_repository.dart';
 import 'package:prohelpers_mobile/features/contract_management/data/legal_document_snapshot.dart';
@@ -307,6 +310,45 @@ void main() {
       expect(cached, isEmpty);
     },
   );
+  test(
+    'does not queue an action under a new owner after an in-flight POST',
+    () async {
+      var currentIdentity = '3:8:session-a';
+      final requestStarted = Completer<void>();
+      final responseFailure = Completer<void>();
+      final dio = Dio(BaseOptions(baseUrl: 'https://api.example.test'));
+      dio.httpClientAdapter = _FailAfterOwnerSwitchAdapter(
+        requestStarted: requestStarted,
+        responseFailure: responseFailure,
+      );
+      final store = _MemorySyncQueueStore();
+      final queue = SyncQueueService(store: store, dio: Dio());
+      final repository = LegalDocumentRepository(
+        dio,
+        currentOwnerIdentity: () => currentIdentity,
+        syncQueueService: () async => queue,
+      );
+
+      final action = repository.performAction(
+        documentId: 44,
+        action: const LegalDocumentAction(
+          action: 'approve',
+          label: 'Согласовать',
+          enabled: true,
+          blockers: [],
+          targetStepId: 12,
+          expectedInstanceLockVersion: 3,
+          expectedStepLockVersion: 5,
+        ),
+      );
+      await requestStarted.future;
+      currentIdentity = '9:11:session-b';
+      responseFailure.complete();
+
+      await expectLater(action, throwsA(isA<StateError>()));
+      expect(store.operations, isEmpty);
+    },
+  );
 }
 
 Map<String, dynamic> _document(int id, {String? title}) => {
@@ -338,4 +380,61 @@ class _LegalDocumentJsonAdapter implements HttpClientAdapter {
       },
     );
   }
+}
+
+class _FailAfterOwnerSwitchAdapter implements HttpClientAdapter {
+  _FailAfterOwnerSwitchAdapter({
+    required this.requestStarted,
+    required this.responseFailure,
+  });
+
+  final Completer<void> requestStarted;
+  final Completer<void> responseFailure;
+
+  @override
+  void close({bool force = false}) {}
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) async {
+    requestStarted.complete();
+    await responseFailure.future;
+    throw DioException(
+      requestOptions: options,
+      type: DioExceptionType.connectionError,
+      message: 'offline',
+    );
+  }
+}
+
+class _MemorySyncQueueStore implements SyncQueueStore {
+  final List<QueuedSyncOperation> operations = [];
+
+  @override
+  Future<QueuedSyncOperation> put(QueuedSyncOperation operation) async {
+    if (operation.id == 0) operation.id = operations.length + 1;
+    operations.removeWhere((item) => item.id == operation.id);
+    operations.add(operation);
+    return operation;
+  }
+
+  @override
+  Future<List<QueuedSyncOperation>> all() async => List.of(operations);
+
+  @override
+  Future<List<QueuedSyncOperation>> due(DateTime now) async =>
+      operations
+          .where((item) => item.nextAttemptAt?.isBefore(now) ?? true)
+          .toList();
+
+  @override
+  Future<QueuedSyncOperation?> get(int id) async =>
+      operations.where((item) => item.id == id).firstOrNull;
+
+  @override
+  Future<void> delete(int id) async =>
+      operations.removeWhere((item) => item.id == id);
 }
