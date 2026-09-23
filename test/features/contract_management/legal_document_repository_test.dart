@@ -349,6 +349,42 @@ void main() {
       expect(store.operations, isEmpty);
     },
   );
+  test('removes a queued action when the owner changes during storage', () async {
+    var currentIdentity = '3:8:session-a';
+    final requestStarted = Completer<void>();
+    final responseFailure = Completer<void>();
+    final dio = Dio(BaseOptions(baseUrl: 'https://api.example.test'));
+    dio.httpClientAdapter = _FailAfterOwnerSwitchAdapter(
+      requestStarted: requestStarted,
+      responseFailure: responseFailure,
+    );
+    final store = _MemorySyncQueueStore()
+      ..afterPut = () => currentIdentity = '9:11:session-b';
+    final queue = SyncQueueService(store: store, dio: Dio());
+    final repository = LegalDocumentRepository(
+      dio,
+      currentOwnerIdentity: () => currentIdentity,
+      syncQueueService: () async => queue,
+    );
+
+    final action = repository.performAction(
+      documentId: 44,
+      action: const LegalDocumentAction(
+        action: 'approve',
+        label: 'Согласовать',
+        enabled: true,
+        blockers: [],
+        targetStepId: 12,
+        expectedInstanceLockVersion: 3,
+        expectedStepLockVersion: 5,
+      ),
+    );
+    await requestStarted.future;
+    responseFailure.complete();
+
+    await expectLater(action, throwsA(isA<StateError>()));
+    expect(store.operations, isEmpty);
+  });
 }
 
 Map<String, dynamic> _document(int id, {String? title}) => {
@@ -412,12 +448,14 @@ class _FailAfterOwnerSwitchAdapter implements HttpClientAdapter {
 
 class _MemorySyncQueueStore implements SyncQueueStore {
   final List<QueuedSyncOperation> operations = [];
+  void Function()? afterPut;
 
   @override
   Future<QueuedSyncOperation> put(QueuedSyncOperation operation) async {
     if (operation.id == 0) operation.id = operations.length + 1;
     operations.removeWhere((item) => item.id == operation.id);
     operations.add(operation);
+    afterPut?.call();
     return operation;
   }
 

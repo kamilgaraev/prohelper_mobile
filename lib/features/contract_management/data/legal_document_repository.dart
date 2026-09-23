@@ -757,6 +757,9 @@ class LegalDocumentRepository {
         data: payload,
         options: Options(headers: {'Idempotency-Key': idempotencyKey}),
       );
+      if (_currentOwnerIdentity?.call() != identityAtStart) {
+        throw StateError('Владелец данных изменился во время действия.');
+      }
       return LegalDocumentModel.fromJson(
         MobileApiResponse.dataMap(response.data),
       );
@@ -783,6 +786,10 @@ class LegalDocumentRepository {
             },
           ),
         );
+        if (_currentOwnerIdentity?.call() != identityAtStart) {
+          await service.delete(queued.id);
+          throw StateError('Владелец данных изменился во время действия.');
+        }
         throw SyncQueuedException(queueId: queued.id);
       }
       throw ApiException.fromDio(error);
@@ -861,6 +868,10 @@ class LegalDocumentRepository {
           throw StateError('Владелец данных изменился во время загрузки.');
         }
         final service = await _requireQueueService();
+        if (_currentOwnerIdentity?.call() != identity) {
+          await fileCache.deleteStagedUpload(stagedPath);
+          throw StateError('Владелец данных изменился во время загрузки.');
+        }
         final queued = await service.enqueue(
           SyncQueueDraft(
             moduleSlug: 'legal_archive',
@@ -885,6 +896,11 @@ class LegalDocumentRepository {
             ],
           ),
         );
+        if (_currentOwnerIdentity?.call() != identity) {
+          await service.delete(queued.id);
+          await fileCache.deleteStagedUpload(stagedPath);
+          throw StateError('Владелец данных изменился во время загрузки.');
+        }
         throw SyncQueuedException(queueId: queued.id);
       }
       await fileCache.deleteStagedUpload(stagedPath);
