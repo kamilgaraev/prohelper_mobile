@@ -8,6 +8,7 @@ import '../../../core/storage/secure_storage_service.dart';
 import '../data/auth_repository.dart';
 import '../data/auth_session_identity.dart';
 import '../data/user_model.dart';
+import '../../notifications/data/mobile_push_service.dart';
 import 'auth_session_provider.dart';
 
 abstract class AuthState {
@@ -44,6 +45,8 @@ final authProvider = StateNotifierProvider<AuthNotifier, AuthState>((ref) {
     ref.read(authRepositoryProvider),
     ref.read(secureStorageProvider),
     autoCheckAuth: false,
+    beforeLogout:
+        () => ref.read(mobilePushServiceProvider).setAuthenticated(false),
     onSessionInvalidated: () {
       ref.read(authSessionVersionProvider.notifier).state++;
     },
@@ -61,8 +64,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
     this._repository,
     this._storage, {
     bool autoCheckAuth = true,
+    Future<void> Function()? beforeLogout,
     void Function()? onSessionInvalidated,
   }) : _onSessionInvalidated = onSessionInvalidated,
+       _beforeLogout = beforeLogout,
        super(AuthInitial()) {
     if (autoCheckAuth) checkAuth();
   }
@@ -71,6 +76,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
   final AuthRepository _repository;
   final SecureStorageService _storage;
   final void Function()? _onSessionInvalidated;
+  final Future<void> Function()? _beforeLogout;
+  bool _loggingOut = false;
   int _operation = 0;
   Future<void> _offlineMutationQueue = Future<void>.value();
 
@@ -222,19 +229,32 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   Future<void> logout() async {
-    if (!mounted) return;
+    if (!mounted || _loggingOut) return;
+    _loggingOut = true;
     ++_operation;
-    state = AuthUnauthenticated();
-    _onSessionInvalidated?.call();
+    state = AuthLoading();
+    String? installationId;
+    try {
+      installationId = await _storage.getPushInstallationId();
+    } catch (_) {}
+    try {
+      await _beforeLogout?.call();
+    } catch (_) {}
     try {
       await _queueOfflineMutation(_storage.clearOfflineAuth);
     } finally {
-      await _repository.logout();
+      try {
+        await _repository.logout(installationId: installationId);
+      } finally {
+        _loggingOut = false;
+        _onSessionInvalidated?.call();
+        if (mounted) state = AuthUnauthenticated();
+      }
     }
   }
 
   void handleSessionInvalidation() {
-    if (!mounted) return;
+    if (!mounted || _loggingOut) return;
     ++_operation;
     state = AuthUnauthenticated();
     unawaited(

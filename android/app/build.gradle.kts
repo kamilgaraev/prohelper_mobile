@@ -7,6 +7,21 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+val mobileEnvFile = rootProject.projectDir.parentFile.resolve(".env")
+val mobileEnv = java.util.Properties().apply {
+    if (mobileEnvFile.exists()) {
+        mobileEnvFile.readLines().forEach { line ->
+            val entry = line.trim()
+            if (entry.isNotEmpty() && !entry.startsWith("#")) {
+                val separator = entry.indexOf('=')
+                if (separator > 0) {
+                    setProperty(entry.substring(0, separator).trim(), entry.substring(separator + 1).trim().trim('"', '\''))
+                }
+            }
+        }
+    }
+}
+
 val keystorePropertiesFile = rootProject.file("key.properties")
 val keystoreProperties = Properties()
 if (keystorePropertiesFile.exists()) {
@@ -16,7 +31,7 @@ if (keystorePropertiesFile.exists()) {
 android {
     namespace = "ru.prohelper.prohelpers_mobile"
     compileSdk = 36
-    ndkVersion = "27.0.12077973"
+    ndkVersion = "28.2.13676358"
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
@@ -33,6 +48,7 @@ android {
         targetSdk = 35
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        manifestPlaceholders["rustoreProjectId"] = mobileEnv.getProperty("RUSTORE_PROJECT_ID", "")
     }
 
     signingConfigs {

@@ -141,12 +141,16 @@ class AuthRepository {
       );
   }
 
-  Future<void> logout() async {
+  Future<void> logout({String? installationId}) async {
     final tokenSnapshot = _normalizeToken(await _storage.getToken());
 
     try {
       await _dio.post(
         '/auth/logout',
+        data:
+            installationId == null
+                ? null
+                : <String, dynamic>{'installation_id': installationId},
         options: Options(
           headers:
               tokenSnapshot == null
