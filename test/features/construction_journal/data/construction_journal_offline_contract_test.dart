@@ -13,10 +13,10 @@ void main() {
           'lib/features/construction_journal/presentation/journal_entry_form_screen.dart',
         ).readAsStringSync();
 
-    expect(repository, contains("'idempotency_key': idempotencyKey"));
+    expect(repository, contains("'idempotency_key': operationKey"));
     expect(repository, contains("'submit_after_create': submitAfterCreate"));
     expect(repository, contains("'create_and_submit_entry'"));
-    expect(form, contains('submitAfterCreate: !isDraft'));
+    expect(form, contains('submitIntent: !isDraft'));
     expect(form, isNot(contains('await repository.submitEntry(entry.id)')));
   });
 

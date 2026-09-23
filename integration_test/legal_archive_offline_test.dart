@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:isar/isar.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:prohelpers_mobile/core/storage/encrypted_local_file_cache.dart';
 import 'package:prohelpers_mobile/features/contract_management/data/legal_document_repository.dart';
 import 'package:prohelpers_mobile/features/contract_management/data/legal_document_snapshot.dart';
 
@@ -155,6 +156,60 @@ void main() {
       }
     },
   );
+
+  testWidgets('открывает сохранённый файл без сети и проверяет его целостность', (
+    tester,
+  ) async {
+    final root = await getTemporaryDirectory();
+    final directory = await Directory(
+      '${root.path}/legal-file-offline-test',
+    ).create(recursive: true);
+    const owner = 'legal-integration-user:organization:session';
+    final original = List<int>.generate(200000, (index) => index % 251);
+    try {
+      final source = File('${directory.path}/agreement.pdf');
+      await source.writeAsBytes(original);
+      final cache = EncryptedLocalFileCache(
+        directoryProvider: () async => directory,
+      );
+      final encryptedPath = await cache.saveForOffline(
+        ownerIdentity: owner,
+        documentId: 8,
+        versionId: 9,
+        sourcePath: source.path,
+      );
+      await source.delete();
+
+      final reopenedCache = EncryptedLocalFileCache(
+        directoryProvider: () async => directory,
+      );
+      final restoredPath = await reopenedCache.materialize(
+        ownerIdentity: owner,
+        encryptedPath: encryptedPath,
+        context: 'document:8:9',
+        fileName: 'agreement.pdf',
+      );
+      expect(await File(restoredPath).readAsBytes(), original);
+      await File(restoredPath).delete();
+
+      final encrypted = File(encryptedPath);
+      final bytes = await encrypted.readAsBytes();
+      bytes[55] ^= 1;
+      await encrypted.writeAsBytes(bytes);
+      await expectLater(
+        reopenedCache.materialize(
+          ownerIdentity: owner,
+          encryptedPath: encryptedPath,
+          context: 'document:8:9',
+          fileName: 'agreement.pdf',
+        ),
+        throwsA(anything),
+      );
+      await reopenedCache.clearIdentity(owner);
+    } finally {
+      if (await directory.exists()) await directory.delete(recursive: true);
+    }
+  });
 }
 
 Future<Isar> _openIsar(String directory) => Isar.open(

@@ -160,7 +160,7 @@ void main() {
         ..email = 'foreman@test.local'
         ..name = 'Иван Прораб',
     );
-    await tester.pumpAndSettle();
+    await tester.pump();
   });
 
   testWidgets('password visibility control has screen reader labels', (
