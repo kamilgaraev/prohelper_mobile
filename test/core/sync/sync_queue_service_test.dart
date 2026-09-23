@@ -13,6 +13,55 @@ import 'package:prohelpers_mobile/core/sync/sync_queue_service.dart';
 import 'package:prohelpers_mobile/core/sync/sync_queue_store.dart';
 
 void main() {
+  test('legal archive queue waits for online identity verification', () async {
+    final store = _MemorySyncQueueStore();
+    final adapter =
+        _QueueHttpAdapter()
+          ..responses.add(
+            const _AdapterResponse(statusCode: 200, body: '{"data":{}}'),
+          );
+    var verified = false;
+    final service = SyncQueueService(
+      store: store,
+      dio: _dio(adapter),
+      currentScope: () => '27:4:session-a',
+      onlineVerified: () => verified,
+      verifyOnline: () async => verified,
+    );
+    await service.enqueue(
+      const SyncQueueDraft(
+        moduleSlug: 'legal_archive',
+        operationType: 'approve',
+        method: 'POST',
+        endpoint: '/legal-archive/documents/8/actions/approve',
+        payload: {
+          'idempotency_key': 'action-key',
+          'instance_lock_version': 4,
+          'step_lock_version': 7,
+          'queue_scope': '27:4:session-a',
+          'queue_owner_identity': '27:4:session-a',
+          'queue_user_id': 27,
+          'queue_organization_id': 4,
+          'queue_session_id': 'session-a',
+        },
+      ),
+    );
+
+    expect((await service.retryDueOperations()).successCount, 0);
+    expect(adapter.requests, isEmpty);
+    expect((await store.all()).single.status, SyncOperationStatuses.queued);
+
+    verified = true;
+    expect((await service.retryDueOperations()).successCount, 1);
+    expect(adapter.requests, hasLength(1));
+    expect(adapter.requests.single.headers['Idempotency-Key'], 'action-key');
+    expect(
+      adapter.requests.single.data.toString(),
+      isNot(contains('queue_scope')),
+    );
+    expect(await store.all(), isEmpty);
+  });
+
   test(
     'journal worker persists created ID before submit and resumes after restart',
     () async {

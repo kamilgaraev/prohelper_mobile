@@ -8,6 +8,15 @@ import 'package:prohelpers_mobile/features/contract_management/data/legal_docume
 import 'package:prohelpers_mobile/features/contract_management/data/legal_document_repository.dart';
 
 void main() {
+  test('offline fallback excludes authorization and not-found responses', () {
+    expect(shouldUseOfflineVersionAfterStatus(null), isTrue);
+    expect(shouldUseOfflineVersionAfterStatus(408), isTrue);
+    expect(shouldUseOfflineVersionAfterStatus(503), isTrue);
+    expect(shouldUseOfflineVersionAfterStatus(401), isFalse);
+    expect(shouldUseOfflineVersionAfterStatus(403), isFalse);
+    expect(shouldUseOfflineVersionAfterStatus(404), isFalse);
+  });
+
   test('normalizes workflow actions and optional legal document fields', () {
     final document = LegalDocumentModel.fromJson({
       'id': 44,
@@ -17,7 +26,12 @@ void main() {
       'workflow_summary': {
         'status': 'in_progress',
         'available_action_details': [
-          {'action': 'approve', 'label': 'Согласовать', 'enabled': true, 'blockers': []},
+          {
+            'action': 'approve',
+            'label': 'Согласовать',
+            'enabled': true,
+            'blockers': [],
+          },
         ],
         'problem_flags': ['workflow_overdue'],
       },
@@ -48,30 +62,41 @@ void main() {
     expect(document.lockVersion, 4);
   });
 
-  test('uses exact protected version route and rejects insecure response URL', () async {
-    late RequestOptions request;
-    final dio = Dio(BaseOptions(baseUrl: 'https://api.example.test'));
-    dio.httpClientAdapter = _LegalDocumentJsonAdapter((options) {
-      request = options;
-      return {'success': true, 'data': {'url': 'https://storage.example.test/file'}};
-    });
+  test(
+    'uses exact protected version route and rejects insecure response URL',
+    () async {
+      late RequestOptions request;
+      final dio = Dio(BaseOptions(baseUrl: 'https://api.example.test'));
+      dio.httpClientAdapter = _LegalDocumentJsonAdapter((options) {
+        request = options;
+        return {
+          'success': true,
+          'data': {'url': 'https://storage.example.test/file'},
+        };
+      });
 
-    final url = await LegalDocumentRepository(dio).fetchVersionUrl(
-      documentId: 44,
-      versionId: 10,
-      purpose: 'preview',
-    );
+      final url = await LegalDocumentRepository(
+        dio,
+      ).fetchVersionUrl(documentId: 44, versionId: 10, purpose: 'preview');
 
-    expect(request.method, 'GET');
-    expect(request.path, '/legal-archive/documents/44/versions/10/preview');
-    expect(url.scheme, 'https');
+      expect(request.method, 'GET');
+      expect(request.path, '/legal-archive/documents/44/versions/10/preview');
+      expect(url.scheme, 'https');
 
-    dio.httpClientAdapter = _LegalDocumentJsonAdapter((_) => {'success': true, 'data': {'url': 'http://unsafe.test/file'}});
-    await expectLater(
-      LegalDocumentRepository(dio).fetchVersionUrl(documentId: 44, versionId: 10, purpose: 'download'),
-      throwsA(isA<FormatException>()),
-    );
-  });
+      dio.httpClientAdapter = _LegalDocumentJsonAdapter(
+        (_) => {
+          'success': true,
+          'data': {'url': 'http://unsafe.test/file'},
+        },
+      );
+      await expectLater(
+        LegalDocumentRepository(
+          dio,
+        ).fetchVersionUrl(documentId: 44, versionId: 10, purpose: 'download'),
+        throwsA(isA<FormatException>()),
+      );
+    },
+  );
 }
 
 class _LegalDocumentJsonAdapter implements HttpClientAdapter {
@@ -83,7 +108,17 @@ class _LegalDocumentJsonAdapter implements HttpClientAdapter {
   void close({bool force = false}) {}
 
   @override
-  Future<ResponseBody> fetch(RequestOptions options, Stream<Uint8List>? requestStream, Future<void>? cancelFuture) async {
-    return ResponseBody.fromString(jsonEncode(handler(options)), 200, headers: {Headers.contentTypeHeader: [Headers.jsonContentType]});
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) async {
+    return ResponseBody.fromString(
+      jsonEncode(handler(options)),
+      200,
+      headers: {
+        Headers.contentTypeHeader: [Headers.jsonContentType],
+      },
+    );
   }
 }

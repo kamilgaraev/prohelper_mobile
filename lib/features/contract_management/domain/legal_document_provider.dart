@@ -12,7 +12,11 @@ class LegalDocumentNotifier extends StateNotifier<LegalDocumentState> {
 
   void syncProject(int? projectId) {
     if (state.projectId != projectId) {
-      state = state.copyWith(projectId: projectId, documents: const [], error: null);
+      state = state.copyWith(
+        projectId: projectId,
+        documents: const [],
+        error: null,
+      );
     }
   }
 
@@ -30,14 +34,27 @@ class LegalDocumentNotifier extends StateNotifier<LegalDocumentState> {
       if (state.projectId != projectId) {
         return;
       }
-      state = state.copyWith(isLoading: false, error: UserMessage.fromError(error));
+      state = state.copyWith(
+        isLoading: false,
+        error: UserMessage.fromError(error),
+      );
     }
   }
 
   Future<LegalDocumentModel> detail(int id) => _repository.fetchDocument(id);
 
-  Future<LegalDocumentModel> action({required int id, required LegalDocumentAction action, String? comment, String? reason}) async {
-    final document = await _repository.performAction(documentId: id, action: action, comment: comment, reason: reason);
+  Future<LegalDocumentModel> action({
+    required int id,
+    required LegalDocumentAction action,
+    String? comment,
+    String? reason,
+  }) async {
+    final document = await _repository.performAction(
+      documentId: id,
+      action: action,
+      comment: comment,
+      reason: reason,
+    );
     await load();
     return document;
   }
@@ -54,7 +71,50 @@ class LegalDocumentNotifier extends StateNotifier<LegalDocumentState> {
     );
   }
 
+  Future<String> saveVersionForOffline({
+    required int documentId,
+    required LegalDocumentVersion version,
+  }) {
+    return _repository.saveVersionForOffline(
+      documentId: documentId,
+      version: version,
+    );
+  }
+
+  Future<bool> isVersionSaved({
+    required int documentId,
+    required int versionId,
+  }) {
+    return _repository.isVersionSaved(
+      documentId: documentId,
+      versionId: versionId,
+    );
+  }
+
+  Future<void> deleteSavedVersion({
+    required int documentId,
+    required int versionId,
+  }) {
+    return _repository.deleteSavedVersion(
+      documentId: documentId,
+      versionId: versionId,
+    );
+  }
+
+  Future<String> openSavedVersion({
+    required int documentId,
+    required int versionId,
+    String? fileName,
+  }) {
+    return _repository.openSavedVersion(
+      documentId: documentId,
+      versionId: versionId,
+      fileName: fileName,
+    );
+  }
+
   Future<void> uploadPaperOriginal({
+    required int documentId,
     required int signatureRequestId,
     required String filePath,
     required DateTime signedAt,
@@ -64,6 +124,7 @@ class LegalDocumentNotifier extends StateNotifier<LegalDocumentState> {
     ProgressCallback? onSendProgress,
   }) async {
     await _repository.uploadPaperOriginal(
+      documentId: documentId,
       signatureRequestId: signatureRequestId,
       filePath: filePath,
       signedAt: signedAt,
@@ -76,6 +137,7 @@ class LegalDocumentNotifier extends StateNotifier<LegalDocumentState> {
   }
 }
 
-final legalDocumentProvider = StateNotifierProvider<LegalDocumentNotifier, LegalDocumentState>((ref) {
-  return LegalDocumentNotifier(ref.read(legalDocumentRepositoryProvider));
-});
+final legalDocumentProvider =
+    StateNotifierProvider<LegalDocumentNotifier, LegalDocumentState>((ref) {
+      return LegalDocumentNotifier(ref.read(legalDocumentRepositoryProvider));
+    });

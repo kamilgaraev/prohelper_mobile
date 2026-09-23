@@ -1,9 +1,10 @@
-﻿import 'dart:async';
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'core/localization/most_localizations.dart';
+import 'core/storage/encrypted_local_file_cache.dart';
 import 'core/widgets/app_loading_state.dart';
 import 'core/widgets/mobile_app_shell.dart';
 import 'core/theme/pro_theme.dart';
@@ -14,6 +15,7 @@ import 'features/projects/presentation/project_selection_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await EncryptedLocalFileCache().clearTemporaryPlaintext();
 
   runApp(const ProviderScope(child: MostApp()));
 }
