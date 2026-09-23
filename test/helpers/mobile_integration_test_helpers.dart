@@ -169,7 +169,7 @@ class TestAuthRepository extends AuthRepository {
   Future<User> switchOrganization(int organizationId) async => _user;
 
   @override
-  Future<void> logout() async {
+  Future<void> logout({String? installationId}) async {
     await _storage.clearToken();
   }
 }
