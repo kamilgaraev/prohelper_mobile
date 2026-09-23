@@ -32,19 +32,31 @@ class MobilePushService {
 
   bool _started = false;
   bool _authenticated = false;
+  Future<void>? _starting;
   int _registrationAttempt = 0;
+  String? _registeredToken;
   Stream<PushMessage> get foregroundMessages => _foregroundMessages.stream;
   Stream<PushMessage> get openedMessages => _openedMessages.stream;
 
   static Future<bool> initialize() async =>
       defaultTargetPlatform == TargetPlatform.android;
 
-  Future<void> start({required bool pushReady}) async {
+  Future<void> start({required bool pushReady}) {
     if (!pushReady ||
         _started ||
         defaultTargetPlatform != TargetPlatform.android) {
-      return;
+      return Future<void>.value();
     }
+    final starting = _starting;
+    if (starting != null) return starting;
+    final future = _start();
+    _starting = future;
+    return future.whenComplete(() {
+      if (identical(_starting, future)) _starting = null;
+    });
+  }
+
+  Future<void> _start() async {
     try {
       await RustorePushClient.attachCallbacks(
         onMessageReceived: (dynamic message) {
@@ -54,6 +66,7 @@ class MobilePushService {
           if (message != null) _openedMessages.add(_fromRustore(message));
         },
         onNewToken: (dynamic token) {
+          _registeredToken = null;
           if (_authenticated) unawaited(_registerCurrentDevice());
         },
       );
@@ -84,6 +97,7 @@ class MobilePushService {
       await _registerCurrentDevice();
       return;
     }
+    _registeredToken = null;
     await _unregisterDevice(generation: generation);
     try {
       await RustorePushClient.deleteToken();
@@ -102,6 +116,7 @@ class MobilePushService {
       );
       if (attempt != _registrationAttempt) return;
       if (granted != true || !await RustorePushClient.available()) {
+        _registeredToken = null;
         await _unregisterDevice(generation: generation);
         return;
       }
@@ -117,6 +132,7 @@ class MobilePushService {
       }
       await _deviceOperations.enqueue(() async {
         if (!_deviceOperations.isCurrent(generation)) return;
+        if (_registeredToken == token) return;
         final registration = PushDeviceRegistration(
           installationId: installationId,
           platform: 'android',
@@ -124,6 +140,7 @@ class MobilePushService {
           token: token,
         );
         await _dio.post('/notifications/devices', data: registration.toJson());
+        if (_deviceOperations.isCurrent(generation)) _registeredToken = token;
       });
     } catch (error) {
       _log('Mobile push registration failed', error);

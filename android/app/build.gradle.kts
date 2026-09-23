@@ -8,7 +8,7 @@ plugins {
 }
 
 val mobileEnvFile = rootProject.projectDir.parentFile.resolve(".env")
-val mobileEnv = java.util.Properties().apply {
+val mobileEnv = Properties().apply {
     if (mobileEnvFile.exists()) {
         mobileEnvFile.readLines().forEach { line ->
             val entry = line.trim()
@@ -19,6 +19,24 @@ val mobileEnv = java.util.Properties().apply {
                 }
             }
         }
+    }
+}
+val rustoreProjectId = System.getenv("RUSTORE_PROJECT_ID")
+    ?.trim()
+    ?.takeIf { it.isNotEmpty() }
+    ?: mobileEnv.getProperty("RUSTORE_PROJECT_ID", "").trim()
+val validateReleaseRustoreProjectId = tasks.register("validateReleaseRustoreProjectId") {
+    doLast {
+        if (rustoreProjectId.isBlank()) {
+            throw GradleException(
+                "RUSTORE_PROJECT_ID is required for release builds. Set the environment variable or mobile .env file."
+            )
+        }
+    }
+}
+tasks.configureEach {
+    if (name != "validateReleaseRustoreProjectId" && name.contains("Release")) {
+        dependsOn(validateReleaseRustoreProjectId)
     }
 }
 
@@ -48,7 +66,7 @@ android {
         targetSdk = 35
         versionCode = flutter.versionCode
         versionName = flutter.versionName
-        manifestPlaceholders["rustoreProjectId"] = mobileEnv.getProperty("RUSTORE_PROJECT_ID", "")
+        manifestPlaceholders["rustoreProjectId"] = rustoreProjectId
     }
 
     signingConfigs {
