@@ -13,6 +13,15 @@ class SecureStorageService {
   static const _tokenKey = 'auth_token';
   static const _selectedProjectIdKey = 'selected_project_id';
   static const _pinnedMobileActionsKey = 'pinned_mobile_action_ids';
+  static const _pushInstallationIdKey = 'push_installation_id';
+
+  Future<String?> getPushInstallationId() async =>
+      await _storage.read(key: _pushInstallationIdKey);
+
+  Future<void> savePushInstallationId(String installationId) async {
+    await _storage.write(key: _pushInstallationIdKey, value: installationId);
+  }
+
   static const _offlineAuthKey = 'offline_auth_session';
   static const _offlineSessionIdKey = 'offline_session_id';
 

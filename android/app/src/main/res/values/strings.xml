@@ -1,4 +1,6 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">МОСТ</string>
+    <string name="most_updates_channel_name">Обновления МОСТ</string>
+    <string name="most_updates_channel_description">Уведомления о событиях и задачах</string>
 </resources>

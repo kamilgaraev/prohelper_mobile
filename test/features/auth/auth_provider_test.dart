@@ -69,10 +69,12 @@ class _LogoutCheckingRepository extends _FakeAuthRepository {
 
   final _MemoryStorage storage;
   String? tokenAtLogout;
+  String? installationIdAtLogout;
 
   @override
-  Future<void> logout() async {
+  Future<void> logout({String? installationId}) async {
     tokenAtLogout = await storage.getToken();
+    installationIdAtLogout = installationId;
     await storage.clearToken();
   }
 }
@@ -84,6 +86,7 @@ class _MemoryStorage extends SecureStorageService {
   int getTokenCalls = 0;
   int clearCalls = 0;
   String? sessionId;
+  String? pushInstallationId;
   Map<String, dynamic>? offlineAuth;
 
   @override
@@ -91,6 +94,9 @@ class _MemoryStorage extends SecureStorageService {
     getTokenCalls += 1;
     return token;
   }
+
+  @override
+  Future<String?> getPushInstallationId() async => pushInstallationId;
 
   @override
   Future<void> clearToken() async {
@@ -329,7 +335,10 @@ void main() {
   test(
     'logout sends the saved bearer before cleaning local auth cache',
     () async {
-      final storage = _MemoryStorage()..token = 'saved-bearer';
+      final storage =
+          _MemoryStorage()
+            ..token = 'saved-bearer'
+            ..pushInstallationId = 'install-1';
       storage.offlineAuth = {'session_id': 'session-1'};
       final repository = _LogoutCheckingRepository(storage);
       var invalidationCount = 0;
@@ -344,6 +353,7 @@ void main() {
       await notifier.logout();
 
       expect(repository.tokenAtLogout, 'saved-bearer');
+      expect(repository.installationIdAtLogout, 'install-1');
       expect(storage.token, isNull);
       expect(storage.offlineAuth, isNull);
       expect(invalidationCount, 1);
