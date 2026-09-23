@@ -322,6 +322,7 @@ class SiteRequestModel {
   int groupRequestCount = 0;
   bool canBeCancelled = false;
   bool canBeEdited = false;
+  bool canBeAssigned = false;
   bool materialReserved = false;
   double? reservedQuantity;
   DateTime? reservedAt;
@@ -492,6 +493,7 @@ class SiteRequestModel {
               : 0
       ..canBeCancelled = json['can_be_cancelled'] == true
       ..canBeEdited = json['can_be_edited'] == true
+      ..canBeAssigned = json['can_be_assigned'] == true
       ..materialReserved =
           metadata is Map && metadata['material_reserved'] == true
       ..reservedQuantity =

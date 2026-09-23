@@ -1,4 +1,4 @@
-﻿import 'package:dio/dio.dart';
+import 'package:dio/dio.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/network/api_exception.dart';
@@ -73,6 +73,47 @@ class ScheduleRepository extends SyncQueueAwareRepository {
       }
 
       throw const ApiException('Не удалось загрузить детали графика работ.');
+    }
+  }
+
+  Future<ScheduleTaskModel> fetchTask(int taskId) async {
+    try {
+      final payload = MobileApiResponse.dataMap(
+        (await _dio.get('/schedule/tasks/$taskId')).data,
+      );
+      final task = payload['task'];
+      final taskPayload =
+          task is Map
+              ? task.map((key, value) => MapEntry(key.toString(), value))
+              : payload;
+      if (taskPayload.isEmpty) {
+        throw const ApiException('Сервер вернул пустой ответ по задаче.');
+      }
+      return ScheduleTaskModel.fromJson(taskPayload);
+    } on DioException catch (error) {
+      throw ApiException.fromDio(
+        error,
+        fallbackMessage: 'Не удалось открыть задачу графика.',
+      );
+    }
+  }
+
+  Future<void> saveTask({
+    required int scheduleId,
+    int? taskId,
+    required Map<String, dynamic> data,
+  }) async {
+    try {
+      if (taskId == null) {
+        await _dio.post('/schedule/$scheduleId/tasks', data: data);
+      } else {
+        await _dio.patch('/schedule/tasks/$taskId', data: data);
+      }
+    } on DioException catch (error) {
+      throw ApiException.fromDio(
+        error,
+        fallbackMessage: 'Не удалось сохранить задачу графика.',
+      );
     }
   }
 

@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 
 import '../../module_companions/presentation/companion_module_screen.dart';
 
@@ -11,6 +11,7 @@ class ChangeManagementScreen extends StatelessWidget {
       moduleSlug: 'change-management',
       title: 'Изменения',
       icon: Icons.change_circle_outlined,
+      requiresProject: true,
     );
   }
 }

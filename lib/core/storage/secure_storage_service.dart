@@ -1,7 +1,9 @@
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'dart:convert';
 import 'dart:math';
+
+import 'package:crypto/crypto.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 final secureStorageProvider = Provider<SecureStorageService>(
   (ref) => SecureStorageService(),
@@ -14,6 +16,32 @@ class SecureStorageService {
   static const _selectedProjectIdKey = 'selected_project_id';
   static const _pinnedMobileActionsKey = 'pinned_mobile_action_ids';
   static const _pushInstallationIdKey = 'push_installation_id';
+
+  Future<String> getOrCreateOperationKey({
+    required String namespace,
+    required String fingerprint,
+  }) async {
+    final storageKey = _operationStorageKey(namespace, fingerprint);
+    final existing = await _storage.read(key: storageKey);
+    if (existing != null && existing.isNotEmpty) return existing;
+    final random = Random.secure();
+    final bytes = List<int>.generate(32, (_) => random.nextInt(256));
+    final created = base64UrlEncode(bytes);
+    await _storage.write(key: storageKey, value: created);
+    return created;
+  }
+
+  Future<void> clearOperationKey({
+    required String namespace,
+    required String fingerprint,
+  }) async {
+    await _storage.delete(key: _operationStorageKey(namespace, fingerprint));
+  }
+
+  String _operationStorageKey(String namespace, String fingerprint) {
+    final hash = sha256.convert(utf8.encode('$namespace|$fingerprint'));
+    return 'mobile_operation_key_$hash';
+  }
 
   Future<String?> getPushInstallationId() async =>
       await _storage.read(key: _pushInstallationIdKey);

@@ -1,4 +1,4 @@
-﻿import 'package:dio/dio.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -13,7 +13,8 @@ class _FakeModulesRepository extends ModulesRepository {
   _FakeModulesRepository() : super(Dio());
 
   @override
-  Future<List<MobileModuleModel>> fetchModules() async => const [];
+  Future<List<MobileModuleModel>> fetchModules({int? projectId}) async =>
+      const [];
 }
 
 class _FakeModulesNotifier extends ModulesNotifier {

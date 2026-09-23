@@ -11,9 +11,12 @@ import '../../../core/widgets/mesh_background.dart';
 import '../../../core/widgets/pro_card.dart';
 import '../../../core/widgets/pro_metric_tile.dart';
 import '../../../core/widgets/pro_status_banner.dart';
+import '../../../core/providers/module_provider.dart';
+import '../../../core/services/permission_service.dart';
 import '../../projects/domain/projects_provider.dart';
 import '../data/safety_model.dart';
 import '../domain/safety_provider.dart';
+import 'widgets/safety_photo_evidence_field.dart';
 
 class SafetyScreen extends ConsumerStatefulWidget {
   const SafetyScreen({super.key});
@@ -41,6 +44,13 @@ class _SafetyScreenState extends ConsumerState<SafetyScreen> {
   Widget build(BuildContext context) {
     final state = ref.watch(safetyProvider);
     final selectedProject = ref.watch(projectsProvider).selectedProject;
+    final permissions = ref.watch(permissionServiceProvider);
+    final canCreateRecord =
+        permissions.canAccessModule(AppModule.safetyManagement) &&
+        permissions.hasAnyPermission(const [
+          'safety-management.incidents.create',
+          'safety-management.violations.create',
+        ]);
 
     if (selectedProject?.serverId != state.projectFilter && !state.isLoading) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -71,7 +81,7 @@ class _SafetyScreenState extends ConsumerState<SafetyScreen> {
           ],
         ),
         floatingActionButton:
-            selectedProject == null
+            selectedProject == null || !canCreateRecord
                 ? null
                 : FloatingActionButton.extended(
                   onPressed: () => _showCreateSheet(context),
@@ -183,16 +193,26 @@ class _SafetyScreenState extends ConsumerState<SafetyScreen> {
       return;
     }
 
+    final permissions = ref.read(permissionServiceProvider);
+    final canCreateIncident = permissions.hasPermission(
+      'safety-management.incidents.create',
+    );
+    final canCreateViolation = permissions.hasPermission(
+      'safety-management.violations.create',
+    );
+    if (!canCreateIncident && !canCreateViolation) return;
+
     final titleController = TextEditingController();
     final descriptionController = TextEditingController();
     final locationController = TextEditingController();
     final immediateActionsController = TextEditingController();
     final correctiveActionController = TextEditingController();
-    var mode = 'incident';
+    var mode = canCreateIncident ? 'incident' : 'violation';
     String? severity;
     String? incidentType;
     DateTime? occurredAt;
     DateTime? dueDate;
+    String? photoPath;
     var submitting = false;
 
     await showModalBottomSheet<void>(
@@ -224,22 +244,25 @@ class _SafetyScreenState extends ConsumerState<SafetyScreen> {
                         ),
                         const SizedBox(height: 16),
                         SegmentedButton<String>(
-                          segments: const [
-                            ButtonSegment(
-                              value: 'incident',
-                              label: Text('Происшествие'),
-                              icon: Icon(Icons.report_problem_outlined),
-                            ),
-                            ButtonSegment(
-                              value: 'violation',
-                              label: Text('Нарушение'),
-                              icon: Icon(Icons.gpp_bad_outlined),
-                            ),
-                            ButtonSegment(
-                              value: 'finding',
-                              label: Text('Замечание'),
-                              icon: Icon(Icons.fact_check_outlined),
-                            ),
+                          segments: [
+                            if (canCreateIncident)
+                              const ButtonSegment(
+                                value: 'incident',
+                                label: Text('Происшествие'),
+                                icon: Icon(Icons.report_problem_outlined),
+                              ),
+                            if (canCreateViolation)
+                              const ButtonSegment(
+                                value: 'violation',
+                                label: Text('Нарушение'),
+                                icon: Icon(Icons.gpp_bad_outlined),
+                              ),
+                            if (canCreateViolation)
+                              const ButtonSegment(
+                                value: 'finding',
+                                label: Text('Замечание'),
+                                icon: Icon(Icons.fact_check_outlined),
+                              ),
                           ],
                           selected: {mode},
                           onSelectionChanged:
@@ -300,6 +323,14 @@ class _SafetyScreenState extends ConsumerState<SafetyScreen> {
                             labelText: 'Описание',
                           ),
                         ),
+                        if (mode == 'violation') ...[
+                          const SizedBox(height: 8),
+                          SafetyPhotoEvidenceField(
+                            path: photoPath,
+                            onChanged:
+                                (path) => setSheetState(() => photoPath = path),
+                          ),
+                        ],
                         if (mode == 'incident') ...[
                           DropdownButtonFormField<String>(
                             value: incidentType,
@@ -525,21 +556,27 @@ class _SafetyScreenState extends ConsumerState<SafetyScreen> {
                                         } else if (mode == 'violation') {
                                           await ref
                                               .read(safetyProvider.notifier)
-                                              .createViolation({
-                                                ...data,
-                                                if (dueDate != null)
-                                                  'due_date': _apiDate(
-                                                    dueDate!,
-                                                  ),
-                                                if (correctiveActionController
-                                                    .text
-                                                    .trim()
-                                                    .isNotEmpty)
-                                                  'corrective_action':
-                                                      correctiveActionController
-                                                          .text
-                                                          .trim(),
-                                              });
+                                              .createViolation(
+                                                {
+                                                  ...data,
+                                                  if (dueDate != null)
+                                                    'due_date': _apiDate(
+                                                      dueDate!,
+                                                    ),
+                                                  if (correctiveActionController
+                                                      .text
+                                                      .trim()
+                                                      .isNotEmpty)
+                                                    'corrective_action':
+                                                        correctiveActionController
+                                                            .text
+                                                            .trim(),
+                                                },
+                                                photoPaths:
+                                                    photoPath == null
+                                                        ? const []
+                                                        : [photoPath!],
+                                              );
                                         } else {
                                           await ref
                                               .read(safetyProvider.notifier)
@@ -554,6 +591,10 @@ class _SafetyScreenState extends ConsumerState<SafetyScreen> {
 
                                         if (sheetContext.mounted) {
                                           Navigator.pop(sheetContext);
+                                        }
+                                      } catch (error) {
+                                        if (context.mounted) {
+                                          AppErrorNotice.show(context, error);
                                         }
                                       } finally {
                                         if (context.mounted) {
@@ -917,6 +958,7 @@ class _SafetyScreenState extends ConsumerState<SafetyScreen> {
   ) async {
     final commentController = TextEditingController();
     var submitting = false;
+    String? photoPath;
 
     await showModalBottomSheet<void>(
       context: context,
@@ -954,6 +996,12 @@ class _SafetyScreenState extends ConsumerState<SafetyScreen> {
                             labelText: 'Что сделано',
                           ),
                         ),
+                        const SizedBox(height: 8),
+                        SafetyPhotoEvidenceField(
+                          path: photoPath,
+                          onChanged:
+                              (path) => setSheetState(() => photoPath = path),
+                        ),
                         const SizedBox(height: 16),
                         SizedBox(
                           width: double.infinity,
@@ -984,9 +1032,17 @@ class _SafetyScreenState extends ConsumerState<SafetyScreen> {
                                             .resolveViolation(
                                               violation.id,
                                               comment,
+                                              photoPaths:
+                                                  photoPath == null
+                                                      ? const []
+                                                      : [photoPath!],
                                             );
                                         if (sheetContext.mounted) {
                                           Navigator.pop(sheetContext);
+                                        }
+                                      } catch (error) {
+                                        if (context.mounted) {
+                                          AppErrorNotice.show(context, error);
                                         }
                                       } finally {
                                         if (context.mounted) {

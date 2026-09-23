@@ -1,4 +1,4 @@
-﻿import 'package:dio/dio.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -17,6 +17,7 @@ class _RecordingProcurementRepository extends ProcurementRepository {
 
   int? loadedProjectId;
   int? fetchedOrderId;
+  int? fetchedPurchaseRequestId;
   int? receivedOrderId;
   int? receivedWarehouseId;
   String? receivedReceiptDate;
@@ -32,6 +33,14 @@ class _RecordingProcurementRepository extends ProcurementRepository {
   Future<ProcurementSummaryModel> fetchSummary({int? projectId}) async {
     loadedProjectId = projectId;
     return ProcurementSummaryModel.fromJson(procurementSummaryJson());
+  }
+
+  @override
+  Future<ProcurementPurchaseRequestModel> fetchPurchaseRequest(int id) async {
+    fetchedPurchaseRequestId = id;
+    return ProcurementPurchaseRequestModel.fromJson(
+      procurementPurchaseRequestJson(),
+    );
   }
 
   @override
@@ -153,6 +162,29 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
   }
 
+  testWidgets('opens purchase request details from its list card', (
+    tester,
+  ) async {
+    final repository = _RecordingProcurementRepository();
+    useLargeSurface(tester);
+    await tester.pumpWidget(
+      buildApp(
+        const ProcurementScreen(),
+        repository,
+        selectedProject: project(),
+      ),
+    );
+    await pumpUi(tester);
+
+    await tester.tap(find.text('Поставка бетона').first);
+    await pumpUi(tester);
+
+    expect(repository.fetchedPurchaseRequestId, 12);
+    expect(find.text('Состав заявки'), findsWidgets);
+    expect(find.text('Бетон М300'), findsOneWidget);
+    expect(find.text('Связанные заказы'), findsOneWidget);
+  });
+
   testWidgets('shows procurement summary for selected project', (tester) async {
     final repository = _RecordingProcurementRepository();
     useLargeSurface(tester);
@@ -167,6 +199,9 @@ void main() {
     await pumpUi(tester);
 
     expect(repository.loadedProjectId, 9);
+    expect(find.text('Бетон М300 — 5 м3'), findsOneWidget);
+    expect(find.text('ГОСТ'), findsOneWidget);
+    expect(find.textContaining('PO-61'), findsWidgets);
     expect(find.text('Закупки'), findsOneWidget);
     expect(find.text('Башня'), findsWidgets);
     expect(find.text('Согласования'), findsWidgets);

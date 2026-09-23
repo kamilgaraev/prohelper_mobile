@@ -1,6 +1,8 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../theme/pro_theme.dart';
+
+import 'package:prohelpers_mobile/core/theme/pro_theme.dart';
+import 'package:prohelpers_mobile/core/widgets/pro_surface.dart';
 
 class IndustrialCard extends StatelessWidget {
   final Widget child;
@@ -26,60 +28,30 @@ class IndustrialCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final radius = BorderRadius.circular(MostTheme.cardRadius);
-    final decoration = BoxDecoration(
-      color: backgroundColor ?? theme.cardTheme.color,
-      borderRadius: radius,
-      border:
-          border ??
-          Border.all(
-            color: borderColor ?? theme.colorScheme.outline,
-            width: MostTheme.borderWidth,
-          ),
-      boxShadow: [
-        BoxShadow(
-          color:
-              theme.cardTheme.shadowColor ??
-              Colors.black.withValues(
-                alpha: theme.brightness == Brightness.dark ? 0.18 : 0.04,
-              ),
-          blurRadius: 10,
-          offset: const Offset(0, 4),
-        ),
-      ],
+    final surface = ProSurface(
+      width: width,
+      height: height,
+      onTap: onTap,
+      onTapFeedback: onTap == null ? null : HapticFeedback.lightImpact,
+      padding: padding,
+      borderRadius: MostTheme.cardRadius,
+      tone: ProSurfaceTone.base,
+      bordered: border == null,
+      backgroundColor: backgroundColor ?? Theme.of(context).cardTheme.color,
+      borderColor: borderColor ?? Theme.of(context).colorScheme.outline,
+      borderWidth: MostTheme.borderWidth,
+      child: child,
     );
 
-    if (onTap == null) {
-      return Container(
-        height: height,
-        width: width,
-        padding: padding,
-        decoration: decoration,
-        child: child,
-      );
+    if (border == null) {
+      return surface;
     }
 
-    return Semantics(
-      container: true,
-      button: true,
-      enabled: true,
-      child: Material(
-        color: Colors.transparent,
-        child: Ink(
-          height: height,
-          width: width,
-          decoration: decoration,
-          child: InkWell(
-            borderRadius: radius,
-            onTap: () {
-              HapticFeedback.lightImpact();
-              onTap!();
-            },
-            child: Padding(padding: padding, child: child),
-          ),
-        ),
-      ),
+    return DecoratedBox(
+      position: DecorationPosition.foreground,
+      decoration: BoxDecoration(border: border, borderRadius: radius),
+      child: surface,
     );
   }
 }

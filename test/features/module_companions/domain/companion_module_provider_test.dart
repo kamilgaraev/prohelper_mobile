@@ -1,4 +1,4 @@
-﻿import 'package:dio/dio.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:prohelpers_mobile/core/network/api_exception.dart';
 import 'package:prohelpers_mobile/features/module_companions/data/companion_module_model.dart';
@@ -15,6 +15,7 @@ class _RecordingCompanionRepository extends CompanionModuleRepository {
   int? loadedProjectId;
   String? loadedStatus;
   String? loadedQuery;
+  int? loadedPage;
   int? detailId;
   String? actionKey;
   String? actionComment;
@@ -26,6 +27,7 @@ class _RecordingCompanionRepository extends CompanionModuleRepository {
     int? projectId,
     String? status,
     String? query,
+    int page = 1,
     int perPage = 20,
   }) async {
     final currentError = error;
@@ -37,10 +39,11 @@ class _RecordingCompanionRepository extends CompanionModuleRepository {
     loadedProjectId = projectId;
     loadedStatus = status;
     loadedQuery = query;
+    loadedPage = page;
     refreshCount++;
 
     return CompanionModuleListModel.fromJson(
-      companionListJson(slug: moduleSlug),
+      companionListJson(slug: moduleSlug, page: page, lastPage: 2),
     );
   }
 
@@ -99,6 +102,16 @@ void main() {
     expect(repository.actionComment, 'Done');
     expect(repository.refreshCount, 1);
     expect(detail.sections.single.title, 'Основное');
+  });
+
+  test('loads next server page and appends unique items', () async {
+    final repository = _RecordingCompanionRepository();
+    final notifier = CompanionModuleNotifier(repository, 'contract-management');
+    await notifier.load();
+    await notifier.loadMore();
+
+    expect(repository.loadedPage, 2);
+    expect(notifier.state.list?.items.map((item) => item.id), [42]);
   });
 
   test('marks permission and malformed states', () async {

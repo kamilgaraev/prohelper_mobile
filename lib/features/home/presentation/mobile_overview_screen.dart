@@ -1,12 +1,13 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import 'package:prohelpers_mobile/core/navigation/mobile_action_recommendation_provider.dart';
 import 'package:prohelpers_mobile/core/navigation/mobile_destination.dart';
-import 'package:prohelpers_mobile/core/navigation/mobile_navigation_registry.dart';
 import 'package:prohelpers_mobile/core/navigation/mobile_navigation_state.dart';
+import 'package:prohelpers_mobile/core/providers/module_provider.dart';
 import 'package:prohelpers_mobile/core/widgets/pro_page_scaffold.dart';
+import 'package:prohelpers_mobile/features/actions/presentation/mobile_action_search.dart';
 import 'package:prohelpers_mobile/features/auth/domain/auth_provider.dart';
 import 'package:prohelpers_mobile/features/dashboard/data/dashboard_widget_model.dart';
 import 'package:prohelpers_mobile/features/dashboard/presentation/controllers/dashboard_controller.dart';
@@ -17,6 +18,7 @@ import 'package:prohelpers_mobile/features/home/presentation/widgets/overview_wo
 import 'package:prohelpers_mobile/features/notifications/domain/notifications_provider.dart';
 import 'package:prohelpers_mobile/features/notifications/presentation/notifications_screen.dart';
 import 'package:prohelpers_mobile/features/notifications/presentation/widgets/notification_action_button.dart';
+import 'package:prohelpers_mobile/features/my_actions/presentation/my_actions_section.dart';
 import 'package:prohelpers_mobile/features/projects/domain/projects_provider.dart';
 import 'package:prohelpers_mobile/features/projects/presentation/project_selection_screen.dart';
 
@@ -84,6 +86,8 @@ class MobileOverviewScreen extends ConsumerWidget {
                 ),
           ),
           const SizedBox(height: 20),
+          const MyActionsSection(),
+          const SizedBox(height: 20),
           OverviewNextActions(
             actions: actions,
             onOpen:
@@ -110,7 +114,10 @@ class MobileOverviewScreen extends ConsumerWidget {
     WidgetRef ref,
     MobileModuleGroup group,
   ) {
-    final destinations = MobileNavigationRegistry.byGroup(group);
+    final destinations =
+        visibleMobileDestinations(
+          ref.read(supportedMobileModulesProvider),
+        ).where((destination) => destination.group == group).toList();
     final destination = destinations.isEmpty ? null : destinations.first;
     if (destination == null) {
       ref.read(mobileNavigationProvider.notifier).setTab(MobileNavTab.work);

@@ -88,6 +88,18 @@ class ProcurementNotifier extends StateNotifier<ProcurementState> {
     }
   }
 
+  Future<ProcurementPurchaseRequestModel> fetchPurchaseRequest(int id) {
+    return _repository.fetchPurchaseRequest(id);
+  }
+
+  Future<ProcurementPurchaseRequestModel> createPurchaseRequest(
+    Map<String, dynamic> payload,
+  ) async {
+    final created = await _repository.createPurchaseRequest(payload);
+    await loadSummary();
+    return created;
+  }
+
   Future<ProcurementOrderDetailModel> fetchOrder(int id) {
     return _repository.fetchOrder(id);
   }

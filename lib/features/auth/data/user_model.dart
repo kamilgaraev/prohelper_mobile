@@ -1,4 +1,4 @@
-﻿import 'dart:convert';
+import 'dart:convert';
 
 import 'package:isar/isar.dart';
 
@@ -37,6 +37,37 @@ class User {
   late String permissionsJson;
 
   @ignore
+  Set<String> get grantedPermissions {
+    try {
+      final decoded = jsonDecode(permissionsJson);
+      if (decoded is! Map) {
+        return const <String>{};
+      }
+
+      final permissions = <String>{};
+      for (final entry in decoded.entries) {
+        final module = entry.key.toString();
+        final values = entry.value;
+        if (values is! List) {
+          continue;
+        }
+        for (final value in values.whereType<String>()) {
+          if (value == '*') {
+            permissions.add('$module.*');
+          } else if (value.contains('.')) {
+            permissions.add(value);
+          } else {
+            permissions.add('$module.$value');
+          }
+        }
+      }
+      return permissions;
+    } catch (_) {
+      return const <String>{};
+    }
+  }
+
+  @ignore
   List<String> get displayRoles {
     return roles.map(_humanizeRole).toList();
   }
@@ -45,7 +76,7 @@ class User {
     return switch (role) {
       'organization_owner' => 'Владелец',
       'organization_admin' => 'Администратор',
-      'foreman' => 'Прораб',
+      'foreman' => 'Участник',
       'worker' => 'Рабочий',
       'observer' => 'Наблюдатель',
       _ => role

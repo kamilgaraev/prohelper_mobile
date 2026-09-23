@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'package:prohelpers_mobile/core/design/pro_design_tokens.dart';
@@ -15,6 +15,13 @@ class ProSurface extends StatelessWidget {
     this.bordered = true,
     this.borderRadius = ProRadius.sm,
     this.semanticLabel,
+    this.backgroundColor,
+    this.borderColor,
+    this.borderWidth = 1,
+    this.width,
+    this.height,
+    this.gradient,
+    this.onTapFeedback,
   });
 
   final Widget child;
@@ -24,6 +31,13 @@ class ProSurface extends StatelessWidget {
   final bool bordered;
   final double borderRadius;
   final String? semanticLabel;
+  final Color? backgroundColor;
+  final Color? borderColor;
+  final double borderWidth;
+  final double? width;
+  final double? height;
+  final Gradient? gradient;
+  final VoidCallback? onTapFeedback;
 
   @override
   Widget build(BuildContext context) {
@@ -44,6 +58,7 @@ class ProSurface extends StatelessWidget {
             ? theme.colorScheme.surfaceContainerHigh
             : theme.colorScheme.surface,
     };
+    final surfaceColor = backgroundColor ?? color;
     final borderAlpha = switch (tone) {
       ProSurfaceTone.elevated => isDark ? 0.22 : 0.58,
       ProSurfaceTone.tinted => isDark ? 0.2 : 0.42,
@@ -63,30 +78,51 @@ class ProSurface extends StatelessWidget {
       side:
           bordered
               ? BorderSide(
-                color: theme.colorScheme.outline.withValues(alpha: borderAlpha),
+                color:
+                    borderColor ??
+                    theme.colorScheme.outline.withValues(alpha: borderAlpha),
+                width: borderWidth,
               )
               : BorderSide.none,
     );
 
-    final content = Padding(padding: padding, child: child);
+    final paddedContent = Padding(padding: padding, child: child);
+    final content =
+        gradient == null
+            ? paddedContent
+            : DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: gradient,
+                borderRadius: BorderRadius.circular(borderRadius),
+              ),
+              child: paddedContent,
+            );
 
     return Material(
-      color: color,
+      color: surfaceColor,
+      clipBehavior: Clip.antiAlias,
       surfaceTintColor: Colors.transparent,
       elevation: elevation,
       shadowColor: Colors.black.withValues(alpha: shadowAlpha),
       shape: shape,
-      clipBehavior: Clip.antiAlias,
-      child:
-          onTap == null
-              ? Semantics(container: true, child: content)
-              : _buildInteractiveSurface(content),
+      child: SizedBox(
+        width: width,
+        height: height,
+        child:
+            onTap == null
+                ? Semantics(container: true, child: content)
+                : _buildInteractiveSurface(content),
+      ),
     );
   }
 
   Widget _buildInteractiveSurface(Widget content) {
     void handleTap() {
-      HapticFeedback.selectionClick();
+      if (onTapFeedback == null) {
+        HapticFeedback.selectionClick();
+      } else {
+        onTapFeedback!();
+      }
       onTap!();
     }
 

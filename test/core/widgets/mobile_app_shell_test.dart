@@ -1,4 +1,4 @@
-﻿import 'package:dio/dio.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -16,6 +16,8 @@ import 'package:prohelpers_mobile/features/dashboard/data/dashboard_widget_model
 import 'package:prohelpers_mobile/features/dashboard/presentation/controllers/dashboard_controller.dart';
 import 'package:prohelpers_mobile/features/modules/data/mobile_module_model.dart';
 import 'package:prohelpers_mobile/features/modules/data/modules_repository.dart';
+import 'package:prohelpers_mobile/features/my_actions/data/my_action.dart';
+import 'package:prohelpers_mobile/features/my_actions/data/my_actions_repository.dart';
 import 'package:prohelpers_mobile/features/notifications/data/notification_model.dart';
 import 'package:prohelpers_mobile/features/notifications/data/notifications_repository.dart';
 import 'package:prohelpers_mobile/features/projects/data/project_model.dart';
@@ -91,7 +93,8 @@ class _TestModulesRepository extends ModulesRepository {
   _TestModulesRepository() : super(Dio());
 
   @override
-  Future<List<MobileModuleModel>> fetchModules() async => const [];
+  Future<List<MobileModuleModel>> fetchModules({int? projectId}) async =>
+      const [];
 }
 
 class _TestModulesNotifier extends ModulesNotifier {
@@ -99,6 +102,22 @@ class _TestModulesNotifier extends ModulesNotifier {
     : super(_TestModulesRepository(), canLoad: false) {
     state = ModulesState(isLoading: false, modules: modules, error: null);
   }
+}
+
+class _TestMyActionsRepository extends MyActionsRepository {
+  _TestMyActionsRepository() : super(Dio());
+
+  @override
+  Future<MyActionsPage> fetch({
+    int? projectId,
+    int page = 1,
+    int perPage = 10,
+  }) async => MyActionsPage(
+    items: const [],
+    currentPage: page,
+    lastPage: page,
+    total: 0,
+  );
 }
 
 class _TestNotificationsRepository extends NotificationsRepository {
@@ -193,6 +212,9 @@ void main() {
             (ref) => _TestNotificationsRepository(),
           ),
           secureStorageProvider.overrideWithValue(_TestSecureStorageService()),
+          myActionsRepositoryProvider.overrideWithValue(
+            _TestMyActionsRepository(),
+          ),
         ],
         child: const MaterialApp(home: MobileAppShell()),
       ),
@@ -238,11 +260,11 @@ void main() {
 
     expect(find.byType(NavigationBar), findsOneWidget);
     expect(find.text('Найти раздел'), findsOneWidget);
-    expect(find.text('Доступно разделов: 1'), findsOneWidget);
-    expect(find.text('Полевые работы'), findsOneWidget);
+    expect(find.text('Доступно разделов: 2'), findsOneWidget);
+    expect(find.text('Стройка'), findsOneWidget);
     expect(
       find.ancestor(
-        of: find.text('Полевые работы'),
+        of: find.text('Стройка'),
         matching: find.byType(ProSurface),
       ),
       findsOneWidget,

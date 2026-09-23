@@ -1,4 +1,4 @@
-﻿import 'package:dio/dio.dart';
+import 'package:dio/dio.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/network/api_exception.dart';
@@ -15,9 +15,12 @@ class ModulesRepository {
 
   final Dio _dio;
 
-  Future<List<MobileModuleModel>> fetchModules() async {
+  Future<List<MobileModuleModel>> fetchModules({int? projectId}) async {
     try {
-      final response = await _dio.get('/modules');
+      final response = await _dio.get(
+        '/modules',
+        queryParameters: projectId == null ? null : {'project_id': projectId},
+      );
       final payload = MobileApiResponse.dataMap(response.data);
       final modules = payload['modules'];
 

@@ -1,4 +1,4 @@
-﻿import 'package:dio/dio.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:prohelpers_mobile/core/network/api_exception.dart';
 import 'package:prohelpers_mobile/features/handover_acceptance/data/handover_acceptance_model.dart';
@@ -21,8 +21,11 @@ class _FakeHandoverAcceptanceRepository extends HandoverAcceptanceRepository {
   String? uploadedDocumentPath;
   String? reviewedChecklistStatus;
   String? reviewedChecklistComment;
+  List<String> reviewedChecklistPhotoPaths = const [];
   int? createdFindingSessionId;
+  List<String> createdFindingPhotoPaths = const [];
   int? resolvedFindingId;
+  List<String> resolvedFindingPhotoPaths = const [];
   int? readyScopeId;
   int? startedScopeId;
   int? acceptedScopeId;
@@ -30,7 +33,9 @@ class _FakeHandoverAcceptanceRepository extends HandoverAcceptanceRepository {
   int? rejectedScopeId;
   int? reopenedScopeId;
   String? acceptedComment;
+  List<String> acceptedPhotoPaths = const [];
   String? rejectedReason;
+  List<String> rejectedPhotoPaths = const [];
   String? reopenedReason;
 
   @override
@@ -65,10 +70,12 @@ class _FakeHandoverAcceptanceRepository extends HandoverAcceptanceRepository {
     int itemId, {
     required String status,
     String? comment,
+    List<String> photoPaths = const [],
   }) async {
     reviewedChecklistItemId = itemId;
     reviewedChecklistStatus = status;
     reviewedChecklistComment = comment;
+    reviewedChecklistPhotoPaths = photoPaths;
     return _checklist;
   }
 
@@ -85,9 +92,11 @@ class _FakeHandoverAcceptanceRepository extends HandoverAcceptanceRepository {
   @override
   Future<AcceptanceFindingModel> createFinding(
     int sessionId,
-    Map<String, dynamic> data,
-  ) async {
+    Map<String, dynamic> data, {
+    List<String> photoPaths = const [],
+  }) async {
     createdFindingSessionId = sessionId;
+    createdFindingPhotoPaths = photoPaths;
     return _finding;
   }
 
@@ -95,8 +104,10 @@ class _FakeHandoverAcceptanceRepository extends HandoverAcceptanceRepository {
   Future<AcceptanceFindingModel> resolveFinding(
     int findingId, {
     required String resolutionComment,
+    List<String> photoPaths = const [],
   }) async {
     resolvedFindingId = findingId;
+    resolvedFindingPhotoPaths = photoPaths;
     return _finding;
   }
 
@@ -116,9 +127,11 @@ class _FakeHandoverAcceptanceRepository extends HandoverAcceptanceRepository {
   Future<AcceptanceScopeModel> acceptScope(
     int scopeId, {
     String? comment,
+    List<String> photoPaths = const [],
   }) async {
     acceptedScopeId = scopeId;
     acceptedComment = comment;
+    acceptedPhotoPaths = photoPaths;
     return _scope;
   }
 
@@ -132,9 +145,11 @@ class _FakeHandoverAcceptanceRepository extends HandoverAcceptanceRepository {
   Future<AcceptanceScopeModel> rejectScope(
     int scopeId, {
     required String reason,
+    List<String> photoPaths = const [],
   }) async {
     rejectedScopeId = scopeId;
     rejectedReason = reason;
+    rejectedPhotoPaths = photoPaths;
     return _scope;
   }
 
@@ -244,12 +259,14 @@ void main() {
       41,
       status: 'rejected',
       comment: 'Нужно заменить стеклопакет',
+      photoPaths: const ['checklist.jpg'],
     );
 
     expect(repository.loadedScopeId, 10);
     expect(repository.reviewedChecklistItemId, 41);
     expect(repository.reviewedChecklistStatus, 'rejected');
     expect(repository.reviewedChecklistComment, 'Нужно заменить стеклопакет');
+    expect(repository.reviewedChecklistPhotoPaths, ['checklist.jpg']);
     expect(notifier.state.selectedScope?.id, 10);
   });
 
@@ -273,24 +290,44 @@ void main() {
     final repository = _FakeHandoverAcceptanceRepository();
     final notifier = HandoverAcceptanceNotifier(repository)..syncProject(15);
 
-    await notifier.createFinding(21, {'title': 'Скол плитки'});
-    await notifier.resolveFinding(31, resolutionComment: 'Исправлено');
+    await notifier.createFinding(
+      21,
+      {'title': 'Скол плитки'},
+      photoPaths: const ['finding.jpg'],
+    );
+    await notifier.resolveFinding(
+      31,
+      resolutionComment: 'Исправлено',
+      photoPaths: const ['resolved.jpg'],
+    );
     await notifier.readyForReinspection(10);
     await notifier.startScope(10);
-    await notifier.acceptScope(10, comment: 'Принято');
+    await notifier.acceptScope(
+      10,
+      comment: 'Принято',
+      photoPaths: const ['accept.jpg'],
+    );
     await notifier.handoverScope(10);
-    await notifier.rejectScope(10, reason: 'Есть замечания');
+    await notifier.rejectScope(
+      10,
+      reason: 'Есть замечания',
+      photoPaths: const ['reject.jpg'],
+    );
     await notifier.reopenScope(10, reason: 'Вернуть на проверку');
 
     expect(repository.createdFindingSessionId, 21);
+    expect(repository.createdFindingPhotoPaths, ['finding.jpg']);
     expect(repository.resolvedFindingId, 31);
+    expect(repository.resolvedFindingPhotoPaths, ['resolved.jpg']);
     expect(repository.readyScopeId, 10);
     expect(repository.startedScopeId, 10);
     expect(repository.acceptedScopeId, 10);
     expect(repository.acceptedComment, 'Принято');
+    expect(repository.acceptedPhotoPaths, ['accept.jpg']);
     expect(repository.handedOverScopeId, 10);
     expect(repository.rejectedScopeId, 10);
     expect(repository.rejectedReason, 'Есть замечания');
+    expect(repository.rejectedPhotoPaths, ['reject.jpg']);
     expect(repository.reopenedScopeId, 10);
     expect(repository.reopenedReason, 'Вернуть на проверку');
     expect(notifier.state.scopes, hasLength(1));

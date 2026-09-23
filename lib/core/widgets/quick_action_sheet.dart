@@ -1,10 +1,9 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import 'package:prohelpers_mobile/core/navigation/mobile_action_recommendation_provider.dart';
 import 'package:prohelpers_mobile/core/navigation/mobile_destination.dart';
-import 'package:prohelpers_mobile/core/navigation/mobile_navigation_registry.dart';
 import 'package:prohelpers_mobile/core/providers/module_provider.dart';
 import 'package:prohelpers_mobile/features/actions/presentation/mobile_action_center_screen.dart';
 import 'package:prohelpers_mobile/features/actions/presentation/mobile_action_search.dart';
@@ -49,13 +48,7 @@ class _QuickActionSheetState extends ConsumerState<QuickActionSheet> {
     final modulesState = ref.watch(modulesProvider);
     final modules = ref.watch(supportedMobileModulesProvider);
     final smartActions = ref.watch(mobileRecommendedActionsProvider);
-    final allDestinations = uniqueDestinations(
-      modules.map(
-        (module) =>
-            MobileNavigationRegistry.destinationForRoute(module.route) ??
-            MobileNavigationRegistry.destinationForRoute(module.slug),
-      ),
-    );
+    final allDestinations = visibleMobileDestinations(modules);
     final filteredDestinations = filterMobileActions(allDestinations, _query);
 
     return SafeArea(

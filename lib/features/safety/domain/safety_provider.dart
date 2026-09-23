@@ -1,4 +1,4 @@
-﻿import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/error/user_message.dart';
 import '../../../core/network/api_exception.dart';
@@ -209,8 +209,11 @@ class SafetyNotifier extends StateNotifier<SafetyState> {
     await load();
   }
 
-  Future<void> createViolation(Map<String, dynamic> data) async {
-    await _repository.createViolation(data);
+  Future<void> createViolation(
+    Map<String, dynamic> data, {
+    List<String> photoPaths = const [],
+  }) async {
+    await _repository.createViolation(data, photoPaths: photoPaths);
     await load();
   }
 
@@ -219,8 +222,12 @@ class SafetyNotifier extends StateNotifier<SafetyState> {
     await load();
   }
 
-  Future<void> resolveViolation(int id, String comment) async {
-    await _repository.resolveViolation(id, comment);
+  Future<void> resolveViolation(
+    int id,
+    String comment, {
+    List<String> photoPaths = const [],
+  }) async {
+    await _repository.resolveViolation(id, comment, photoPaths: photoPaths);
     await load();
   }
 

@@ -1,4 +1,6 @@
-﻿import 'package:flutter/material.dart';
+import 'dart:async';
+
+import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:prohelpers_mobile/core/error/user_message.dart';
 import 'package:prohelpers_mobile/core/design/pro_status.dart';
@@ -42,6 +44,7 @@ class _SiteRequestsScreenState extends ConsumerState<SiteRequestsScreen> {
   final TextEditingController _searchController = TextEditingController();
   _RequestFilter _selectedFilter = _RequestFilter.all;
   String _searchQuery = '';
+  Timer? _searchDebounce;
 
   bool get _isApprovalsMode => widget.scope == SiteRequestsScope.approvals;
 
@@ -62,6 +65,7 @@ class _SiteRequestsScreenState extends ConsumerState<SiteRequestsScreen> {
 
   @override
   void dispose() {
+    _searchDebounce?.cancel();
     _scrollController.dispose();
     _searchController
       ..removeListener(_handleSearchChanged)
@@ -77,6 +81,14 @@ class _SiteRequestsScreenState extends ConsumerState<SiteRequestsScreen> {
 
     setState(() {
       _searchQuery = nextValue;
+    });
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(const Duration(milliseconds: 350), () {
+      if (mounted) {
+        ref
+            .read(siteRequestsProvider.notifier)
+            .setSearchFilter(nextValue.isEmpty ? null : nextValue);
+      }
     });
   }
 
@@ -339,6 +351,9 @@ class _SiteRequestsScreenState extends ConsumerState<SiteRequestsScreen> {
                         setState(() {
                           _selectedFilter = filter;
                         });
+                        ref
+                            .read(siteRequestsProvider.notifier)
+                            .setUrgentFilter(filter == _RequestFilter.urgent);
                       },
                       onClearSearch:
                           _searchQuery.isEmpty

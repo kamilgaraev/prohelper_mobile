@@ -1063,20 +1063,13 @@ class _JournalEntryFormScreenState
           workers: workers,
           equipment: equipment,
           materials: materials,
-          submitAfterCreate: false,
-          submitIntent: !isDraft,
+          submitAfterCreate: !isDraft,
           idempotencyKey: _operationKey,
         );
         if (!isDraft) {
           _recoveredEntry = createdEntry;
-          _submitOperationKey ??= '$_operationKey:submit';
           _pendingOperation = await repository.findPendingEntryOperation(
             widget.journalId,
-          );
-          await repository.submitEntry(
-            createdEntry.id,
-            journalId: widget.journalId,
-            idempotencyKey: _submitOperationKey,
           );
         }
         if (_pendingOperation != null) {

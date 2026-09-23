@@ -1,4 +1,6 @@
-﻿import 'package:flutter/material.dart';
+export 'procurement_purchase_request_detail_screen.dart';
+
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
@@ -14,6 +16,8 @@ import '../../../core/widgets/pro_card.dart';
 import '../../projects/domain/projects_provider.dart';
 import '../data/procurement_model.dart';
 import '../domain/procurement_provider.dart';
+import 'purchase_request_form_screen.dart';
+import 'procurement_purchase_request_detail_screen.dart';
 
 class ProcurementScreen extends ConsumerStatefulWidget {
   const ProcurementScreen({super.key});
@@ -61,6 +65,27 @@ class _ProcurementScreenState extends ConsumerState<ProcurementScreen> {
           ],
         ),
         body: _buildBody(context, state, selectedProject?.name),
+        floatingActionButton:
+            projectId == null
+                ? null
+                : FloatingActionButton.extended(
+                  onPressed: () async {
+                    final created = await Navigator.of(context).push<bool>(
+                      MaterialPageRoute(
+                        builder:
+                            (_) =>
+                                PurchaseRequestFormScreen(projectId: projectId),
+                      ),
+                    );
+                    if (created == true && context.mounted) {
+                      await ref
+                          .read(procurementProvider.notifier)
+                          .loadSummary();
+                    }
+                  },
+                  icon: const Icon(Icons.add),
+                  label: const Text('Заявка на закупку'),
+                ),
       ),
     );
   }
@@ -153,7 +178,10 @@ class _ProcurementScreenState extends ConsumerState<ProcurementScreen> {
             ...summary.purchaseRequests.map(
               (request) => Padding(
                 padding: const EdgeInsets.only(bottom: 12),
-                child: _PurchaseRequestCard(request: request),
+                child: _PurchaseRequestCard(
+                  request: request,
+                  onTap: () => _openPurchaseRequest(request.id),
+                ),
               ),
             ),
           ],
@@ -167,6 +195,15 @@ class _ProcurementScreenState extends ConsumerState<ProcurementScreen> {
     final notifier = ref.read(procurementProvider.notifier);
     notifier.syncProject(selectedProject?.serverId);
     notifier.loadSummary();
+  }
+
+  void _openPurchaseRequest(int requestId) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder:
+            (_) => ProcurementPurchaseRequestDetailScreen(requestId: requestId),
+      ),
+    );
   }
 
   void _openOrder(int orderId) {
@@ -771,68 +808,138 @@ class _PriceBreakdownRow extends StatelessWidget {
 }
 
 class _PurchaseRequestCard extends StatelessWidget {
-  const _PurchaseRequestCard({required this.request});
+  const _PurchaseRequestCard({required this.request, required this.onTap});
 
   final ProcurementPurchaseRequestModel request;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return ProCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  request.title,
-                  style: AppTypography.bodyLarge(
-                    context,
-                  ).copyWith(fontWeight: FontWeight.w900),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: ProCard(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    request.title,
+                    style: AppTypography.bodyLarge(
+                      context,
+                    ).copyWith(fontWeight: FontWeight.w900),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
-              ),
-              const SizedBox(width: 10),
-              _StatusPill(
-                label: request.statusLabel,
-                color: _requestColor(request.status, theme),
+                const SizedBox(width: 10),
+                _StatusPill(
+                  label: request.statusLabel,
+                  color: _requestColor(request.status, theme),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              request.requestNumber,
+              style: AppTypography.caption(
+                context,
+              ).copyWith(color: theme.colorScheme.onSurfaceVariant),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: _CompactFact(
+                    label: 'Строки',
+                    value: request.statistics.linesCount.toString(),
+                  ),
+                ),
+                Expanded(
+                  child: _CompactFact(
+                    label: 'Заказы',
+                    value: request.statistics.purchaseOrdersCount.toString(),
+                  ),
+                ),
+                Expanded(
+                  child: _CompactFact(
+                    label: 'Бюджет',
+                    value: _formatMoney(request.budgetAmount),
+                  ),
+                ),
+              ],
+            ),
+            if (request.neededBy != null) ...[
+              const SizedBox(height: 8),
+              Text(
+                'Нужно к ${request.neededBy}',
+                style: AppTypography.caption(context),
               ),
             ],
-          ),
-          const SizedBox(height: 8),
-          Text(
-            request.requestNumber,
-            style: AppTypography.caption(
-              context,
-            ).copyWith(color: theme.colorScheme.onSurfaceVariant),
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: _CompactFact(
-                  label: 'Строки',
-                  value: request.statistics.linesCount.toString(),
-                ),
+            if ((request.notes ?? '').trim().isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text(request.notes!, style: AppTypography.bodyMedium(context)),
+            ],
+            if (request.lines.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              Text(
+                'Состав заявки',
+                style: AppTypography.bodyLarge(
+                  context,
+                ).copyWith(fontWeight: FontWeight.w800),
               ),
-              Expanded(
-                child: _CompactFact(
-                  label: 'Заказы',
-                  value: request.statistics.purchaseOrdersCount.toString(),
-                ),
-              ),
-              Expanded(
-                child: _CompactFact(
-                  label: 'Бюджет',
-                  value: _formatMoney(request.budgetAmount),
+              const SizedBox(height: 4),
+              ...request.lines.map(
+                (line) => Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Icon(Icons.circle, size: 6),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '${line.name} — ${_formatQuantity(line.quantity)}${line.unit == null ? '' : ' ${line.unit}'}',
+                              style: AppTypography.bodyMedium(context),
+                            ),
+                            if ((line.specification ?? '').trim().isNotEmpty)
+                              Text(
+                                line.specification!,
+                                style: AppTypography.caption(context).copyWith(
+                                  color: theme.colorScheme.onSurfaceVariant,
+                                ),
+                              ),
+                            if (line.neededBy != null)
+                              Text(
+                                'К сроку: ${line.neededBy}',
+                                style: AppTypography.caption(context).copyWith(
+                                  color: theme.colorScheme.onSurfaceVariant,
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ],
-          ),
-        ],
+            if (request.purchaseOrders.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text(
+                'Связанные заказы: ${request.purchaseOrders.map((order) => order.orderNumber).join(', ')}',
+                style: AppTypography.caption(context),
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }

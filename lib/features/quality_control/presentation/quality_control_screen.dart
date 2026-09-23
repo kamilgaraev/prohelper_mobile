@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/error/user_message.dart';
@@ -10,6 +10,7 @@ import '../../../core/widgets/app_loading_state.dart';
 import '../../../core/widgets/mesh_background.dart';
 import '../../../core/widgets/pro_card.dart';
 import '../../../core/widgets/pro_metric_tile.dart';
+import '../../auth/domain/auth_provider.dart';
 import '../../projects/domain/projects_provider.dart';
 import '../data/quality_defect_model.dart';
 import '../data/quality_photo_picker.dart';
@@ -42,6 +43,13 @@ class _QualityControlScreenState extends ConsumerState<QualityControlScreen> {
   Widget build(BuildContext context) {
     final state = ref.watch(qualityControlProvider);
     final selectedProject = ref.watch(projectsProvider).selectedProject;
+    final canAssignDefects =
+        ref
+            .watch(authProvider)
+            .user
+            ?.grantedPermissions
+            .contains('quality-control.defects.assign') ??
+        false;
 
     if (selectedProject?.serverId != state.projectFilter && !state.isLoading) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -145,6 +153,10 @@ class _QualityControlScreenState extends ConsumerState<QualityControlScreen> {
                                     defect,
                                     _QualityAction.reject,
                                   ),
+                              onAssign:
+                                  canAssignDefects
+                                      ? () => _assignDefect(defect)
+                                      : null,
                             ),
                           ),
                         ),
@@ -171,6 +183,82 @@ class _QualityControlScreenState extends ConsumerState<QualityControlScreen> {
     final notifier = ref.read(qualityControlProvider.notifier);
     notifier.setOverdueOnly(overdueOnly);
     notifier.loadDefects();
+  }
+
+  Future<void> _assignDefect(QualityDefectModel defect) async {
+    try {
+      final candidates = await ref
+          .read(qualityControlProvider.notifier)
+          .fetchAssignees(defect.id);
+      if (!mounted) return;
+      if (candidates.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('На объекте нет доступных сотрудников.'),
+          ),
+        );
+        return;
+      }
+      int? selectedId = defect.assignedUser?.id;
+      final userId = await showDialog<int>(
+        context: context,
+        builder:
+            (dialogContext) => StatefulBuilder(
+              builder:
+                  (context, setState) => AlertDialog(
+                    title: const Text('Ответственный за замечание'),
+                    content: DropdownButtonFormField<int>(
+                      initialValue:
+                          candidates.any((user) => user.id == selectedId)
+                              ? selectedId
+                              : null,
+                      decoration: const InputDecoration(labelText: 'Сотрудник'),
+                      items:
+                          candidates
+                              .map(
+                                (user) => DropdownMenuItem(
+                                  value: user.id,
+                                  child: Text(user.name),
+                                ),
+                              )
+                              .toList(),
+                      onChanged: (value) => setState(() => selectedId = value),
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(dialogContext),
+                        child: const Text('Отмена'),
+                      ),
+                      FilledButton(
+                        onPressed:
+                            selectedId == null
+                                ? null
+                                : () =>
+                                    Navigator.pop(dialogContext, selectedId),
+                        child: const Text('Назначить'),
+                      ),
+                    ],
+                  ),
+            ),
+      );
+      if (userId == null || !mounted) {
+        return;
+      }
+      await ref
+          .read(qualityControlProvider.notifier)
+          .assignDefect(defect.id, userId: userId);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Ответственный назначен.')),
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(UserMessage.fromError(error))));
+      }
+    }
   }
 
   Future<void> _showCreateSheet(BuildContext context) async {
@@ -445,7 +533,7 @@ class _QualityControlScreenState extends ConsumerState<QualityControlScreen> {
               final detail = snapshot.data!;
 
               return _QualitySheetFrame(
-                child: _QualityDefectDetail(defect: detail),
+                child: QualityDefectDetailView(defect: detail),
               );
             },
           ),
@@ -865,8 +953,8 @@ class _QualityFilterBar extends StatelessWidget {
   }
 }
 
-class _QualityDefectDetail extends StatelessWidget {
-  const _QualityDefectDetail({required this.defect});
+class QualityDefectDetailView extends StatelessWidget {
+  const QualityDefectDetailView({super.key, required this.defect});
 
   final QualityDefectModel defect;
 
@@ -1097,6 +1185,7 @@ class _QualityDefectCard extends StatelessWidget {
     required this.onResolve,
     required this.onVerify,
     required this.onReject,
+    required this.onAssign,
   });
 
   final QualityDefectModel defect;
@@ -1105,6 +1194,7 @@ class _QualityDefectCard extends StatelessWidget {
   final VoidCallback onResolve;
   final VoidCallback onVerify;
   final VoidCallback onReject;
+  final VoidCallback? onAssign;
 
   @override
   Widget build(BuildContext context) {
@@ -1113,6 +1203,7 @@ class _QualityDefectCard extends StatelessWidget {
     final canResolve = defect.availableActions.contains('resolve');
     final canVerify = defect.availableActions.contains('verify');
     final canReject = defect.availableActions.contains('reject');
+    final canAssign = onAssign != null;
 
     return ProCard(
       child: Column(
@@ -1194,6 +1285,12 @@ class _QualityDefectCard extends StatelessWidget {
                   onPressed: onReject,
                   icon: const Icon(Icons.undo_rounded),
                   label: const Text('Вернуть'),
+                ),
+              if (canAssign)
+                OutlinedButton.icon(
+                  onPressed: onAssign,
+                  icon: const Icon(Icons.person_add_alt_1_rounded),
+                  label: const Text('Назначить'),
                 ),
             ],
           ),

@@ -43,7 +43,8 @@ class OperatorShiftScreen extends ConsumerWidget {
         else if (asset == null)
           const _MessageCard(
             icon: Icons.precision_manufacturing_outlined,
-            text: 'Нет назначенной техники. Обратитесь к прорабу.',
+            text:
+                'Нет назначенной техники. Обратитесь к ответственному за технику.',
           )
         else ...[
           _AssetHeader(asset: asset),
@@ -375,7 +376,7 @@ class _SubmitShiftCard extends ConsumerWidget {
                   .read(machineryOperationsProvider.notifier)
                   .execute(SubmitShiftAction(asset.id, shiftId: shift.id)),
           icon: const Icon(Icons.send_rounded),
-          label: const Text('Отправить рапорт прорабу'),
+          label: const Text('Передать рапорт на проверку'),
         ),
       ),
     ),

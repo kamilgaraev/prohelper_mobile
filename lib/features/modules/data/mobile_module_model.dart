@@ -1,4 +1,4 @@
-﻿class MobileModuleModel {
+class MobileModuleModel {
   const MobileModuleModel({
     required this.slug,
     required this.title,
@@ -51,6 +51,17 @@ String _resolveModuleTitle(String slug, String? rawTitle) {
     'basic-warehouse' => 'Склад',
     'schedule-management' => 'График работ',
     'ai-assistant' => 'AI-ассистент',
+    'crm' => 'CRM',
+    'tenders' => 'Тендеры',
+    'act-reporting' => 'Акты',
+    'payments' => 'Финансовые документы',
+    'file-management' => 'Опубликованные отчёты',
+    'report-templates' => 'Шаблоны отчётов',
+    'budgeting' => 'Исполнение бюджета',
+    'one-c-basic-exchange' => 'Обмен с 1С',
+    'access_recertification' => 'Пересмотр доступов',
+    'rate-management' => 'Коэффициенты',
+    'system-logs' => 'Журнал событий',
     'workflow-management' => 'Согласования',
     'time-tracking' => 'Учет времени',
     'construction-journal' => 'Журнал работ',
@@ -63,11 +74,13 @@ String _resolveModuleTitle(String slug, String? rawTitle) {
     'handover-acceptance' => 'Приемка зон',
     'procurement' => 'Закупки',
     'contract-management' => 'Договоры',
+    'design-management' => 'ПИР',
     'change-management' => 'Изменения',
     'executive-documentation' => 'Исполнительная документация',
     'project-management' => 'Управление проектом',
     'catalog-management' => 'Справочники',
     'brigades' => 'Бригады',
+    'contractor-marketplace' => 'Подрядчики',
     'video-monitoring' => 'Видеонаблюдение',
     _ => 'Модуль',
   };
@@ -85,6 +98,12 @@ String _resolveModuleDescription(String slug, String? rawDescription) {
     'schedule-management' => 'Графики работ, прогресс и задачи по объектам.',
     'ai-assistant' =>
       'История диалогов, управленческие вопросы и быстрый доступ к AI-помощнику.',
+    'crm' => 'Компании, контакты, лиды и сделки.',
+    'tenders' => 'Сроки и статусы участия в тендерах.',
+    'act-reporting' => 'Реестр актов и фиксация полевой приёмки.',
+    'payments' => 'Счета, согласование и учёт оплаты.',
+    'file-management' => 'Просмотр и скачивание опубликованных отчётов.',
+    'report-templates' => 'Библиотека доступных шаблонов.',
     'workflow-management' =>
       'Маршруты согласований и статусы бизнес-процессов.',
     'time-tracking' => 'Отметки, смены и контроль рабочего времени.',
@@ -107,6 +126,8 @@ String _resolveModuleDescription(String slug, String? rawDescription) {
       'Заявки, поставки, согласования и связь со складской приемкой.',
     'contract-management' =>
       'Договоры, обязательства, статусы и назначенные согласования.',
+    'design-management' =>
+      'Пакеты проектной документации, результаты и согласования.',
     'change-management' =>
       'Запросы на изменения, влияние на сроки и бюджет, согласования.',
     'executive-documentation' =>
@@ -116,6 +137,14 @@ String _resolveModuleDescription(String slug, String? rawDescription) {
     'catalog-management' =>
       'Материалы, ресурсы и справочные данные для полевых форм.',
     'brigades' => 'Составы бригад, назначения и связь с явкой сотрудников.',
+    'contractor-marketplace' =>
+      'Поиск подрядчиков и приглашение к работе на объекте.',
+    'budgeting' => 'Сводка исполнения бюджета и показатели по объекту.',
+    'one-c-basic-exchange' => 'Состояние и ошибки обмена с 1С.',
+    'access_recertification' =>
+      'Кампании пересмотра доступов и назначенные решения.',
+    'rate-management' => 'Действующие коэффициенты организации.',
+    'system-logs' => 'Журнал событий организации.',
     'video-monitoring' =>
       'Камеры объекта, статусы подключения и контроль доступности.',
     _ => '',

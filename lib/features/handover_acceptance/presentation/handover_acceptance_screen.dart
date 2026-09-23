@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/theme/app_colors.dart';
@@ -13,6 +13,7 @@ import '../../projects/domain/projects_provider.dart';
 import '../data/handover_acceptance_model.dart';
 import '../data/handover_document_picker.dart';
 import '../domain/handover_acceptance_provider.dart';
+import 'widgets/handover_evidence_photo_field.dart';
 
 class HandoverAcceptanceScreen extends ConsumerStatefulWidget {
   const HandoverAcceptanceScreen({super.key});
@@ -199,6 +200,7 @@ class _HandoverAcceptanceScreenState
     String? severity;
     bool? createQualityDefect;
     bool? qualityDefectInspectionRequired;
+    String? photoPath;
     var submitting = false;
 
     await showModalBottomSheet<void>(
@@ -304,6 +306,13 @@ class _HandoverAcceptanceScreenState
                                 qualityDefectInspectionRequired = value;
                               }),
                         ),
+                      const SizedBox(height: 8),
+                      HandoverEvidencePhotoField(
+                        path: photoPath,
+                        onChanged:
+                            (path) => setSheetState(() => photoPath = path),
+                        label: 'Добавить фото замечания',
+                      ),
                       const SizedBox(height: 12),
                       SizedBox(
                         width: double.infinity,
@@ -367,27 +376,44 @@ class _HandoverAcceptanceScreenState
                                             ? qualityDefectInspectionRequired!
                                             : null;
                                     setSheetState(() => submitting = true);
-                                    await ref
-                                        .read(
-                                          handoverAcceptanceProvider.notifier,
-                                        )
-                                        .createFinding(session.id, {
-                                          'title': title,
-                                          if (descriptionController.text
-                                              .trim()
-                                              .isNotEmpty)
-                                            'description':
-                                                descriptionController.text
-                                                    .trim(),
-                                          'severity': selectedSeverity,
-                                          'create_quality_defect':
-                                              shouldCreateQualityDefect,
-                                          if (shouldCreateQualityDefect)
-                                            'quality_defect_inspection_required':
-                                                shouldInspectQualityDefect,
-                                        });
-                                    if (context.mounted) {
-                                      Navigator.of(sheetContext).pop();
+                                    try {
+                                      await ref
+                                          .read(
+                                            handoverAcceptanceProvider.notifier,
+                                          )
+                                          .createFinding(
+                                            session.id,
+                                            {
+                                              'title': title,
+                                              if (descriptionController.text
+                                                  .trim()
+                                                  .isNotEmpty)
+                                                'description':
+                                                    descriptionController.text
+                                                        .trim(),
+                                              'severity': selectedSeverity,
+                                              'create_quality_defect':
+                                                  shouldCreateQualityDefect,
+                                              if (shouldCreateQualityDefect)
+                                                'quality_defect_inspection_required':
+                                                    shouldInspectQualityDefect,
+                                            },
+                                            photoPaths:
+                                                photoPath == null
+                                                    ? const []
+                                                    : [photoPath!],
+                                          );
+                                      if (context.mounted) {
+                                        Navigator.of(sheetContext).pop();
+                                      }
+                                    } catch (error) {
+                                      if (context.mounted) {
+                                        AppErrorNotice.show(context, error);
+                                      }
+                                    } finally {
+                                      if (context.mounted) {
+                                        setSheetState(() => submitting = false);
+                                      }
                                     }
                                   },
                           child: const Text('Добавить'),
@@ -419,6 +445,7 @@ class _HandoverAcceptanceScreenState
     final openFinding = finding;
     final commentController = TextEditingController();
     var submitting = false;
+    String? photoPath;
 
     await showModalBottomSheet<void>(
       context: context,
@@ -455,6 +482,13 @@ class _HandoverAcceptanceScreenState
                           labelText: 'Комментарий об устранении',
                         ),
                       ),
+                      const SizedBox(height: 8),
+                      HandoverEvidencePhotoField(
+                        path: photoPath,
+                        onChanged:
+                            (path) => setSheetState(() => photoPath = path),
+                        label: 'Добавить фото после устранения',
+                      ),
                       const SizedBox(height: 16),
                       SizedBox(
                         width: double.infinity,
@@ -487,9 +521,17 @@ class _HandoverAcceptanceScreenState
                                           .resolveFinding(
                                             openFinding.id,
                                             resolutionComment: comment,
+                                            photoPaths:
+                                                photoPath == null
+                                                    ? const []
+                                                    : [photoPath!],
                                           );
                                       if (sheetContext.mounted) {
                                         Navigator.pop(sheetContext);
+                                      }
+                                    } catch (error) {
+                                      if (context.mounted) {
+                                        AppErrorNotice.show(context, error);
                                       }
                                     } finally {
                                       if (context.mounted) {
@@ -515,6 +557,7 @@ class _HandoverAcceptanceScreenState
   ) async {
     final commentController = TextEditingController();
     var submitting = false;
+    String? photoPath;
 
     await showModalBottomSheet<void>(
       context: context,
@@ -548,6 +591,13 @@ class _HandoverAcceptanceScreenState
                           labelText: 'Комментарий',
                         ),
                       ),
+                      const SizedBox(height: 8),
+                      HandoverEvidencePhotoField(
+                        path: photoPath,
+                        onChanged:
+                            (path) => setSheetState(() => photoPath = path),
+                        label: 'Добавить фото осмотра зоны',
+                      ),
                       const SizedBox(height: 16),
                       SizedBox(
                         width: double.infinity,
@@ -570,6 +620,10 @@ class _HandoverAcceptanceScreenState
                                                 comment.isEmpty
                                                     ? null
                                                     : comment,
+                                            photoPaths:
+                                                photoPath == null
+                                                    ? const []
+                                                    : [photoPath!],
                                           );
                                       if (sheetContext.mounted) {
                                         Navigator.pop(sheetContext);
@@ -601,6 +655,7 @@ class _HandoverAcceptanceScreenState
   }) async {
     final reasonController = TextEditingController();
     var submitting = false;
+    String? photoPath;
     final title =
         action == _HandoverScopeDecision.reject
             ? 'Отклонить зону'
@@ -636,6 +691,15 @@ class _HandoverAcceptanceScreenState
                         maxLines: 5,
                         decoration: const InputDecoration(labelText: 'Причина'),
                       ),
+                      if (action == _HandoverScopeDecision.reject) ...[
+                        const SizedBox(height: 8),
+                        HandoverEvidencePhotoField(
+                          path: photoPath,
+                          onChanged:
+                              (path) => setSheetState(() => photoPath = path),
+                          label: 'Добавить фото осмотра зоны',
+                        ),
+                      ],
                       const SizedBox(height: 16),
                       SizedBox(
                         width: double.infinity,
@@ -666,6 +730,10 @@ class _HandoverAcceptanceScreenState
                                         await notifier.rejectScope(
                                           scope.id,
                                           reason: reason,
+                                          photoPaths:
+                                              photoPath == null
+                                                  ? const []
+                                                  : [photoPath!],
                                         );
                                       } else {
                                         await notifier.reopenScope(
@@ -796,18 +864,24 @@ class _HandoverAcceptanceScreenState
     AcceptanceChecklistItemModel item, {
     required String status,
   }) async {
-    String? comment;
-    if (status == 'rejected') {
-      comment = await _showChecklistRejectSheet(context, item);
-      if (comment == null) {
-        return;
-      }
+    final review = await _showChecklistReviewSheet(
+      context,
+      item,
+      status: status,
+    );
+    if (review == null) {
+      return;
     }
 
     try {
       await ref
           .read(handoverAcceptanceProvider.notifier)
-          .reviewChecklistItem(item.id, status: status, comment: comment);
+          .reviewChecklistItem(
+            item.id,
+            status: status,
+            comment: review.$1,
+            photoPaths: review.$2 == null ? const [] : [review.$2!],
+          );
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Пункт чек-листа обновлен')),
@@ -820,14 +894,17 @@ class _HandoverAcceptanceScreenState
     }
   }
 
-  Future<String?> _showChecklistRejectSheet(
+  Future<(String?, String?)?> _showChecklistReviewSheet(
     BuildContext context,
-    AcceptanceChecklistItemModel item,
-  ) async {
+    AcceptanceChecklistItemModel item, {
+    required String status,
+  }) async {
     final commentController = TextEditingController();
     var submitting = false;
+    String? photoPath;
+    final isReject = status == 'rejected';
 
-    return showModalBottomSheet<String>(
+    return showModalBottomSheet<(String?, String?)>(
       context: context,
       isScrollControlled: true,
       builder:
@@ -845,7 +922,9 @@ class _HandoverAcceptanceScreenState
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Отклонить пункт чек-листа',
+                        isReject
+                            ? 'Отклонить пункт чек-листа'
+                            : 'Принять пункт чек-листа',
                         style: AppTypography.h2(context),
                       ),
                       const SizedBox(height: 8),
@@ -858,9 +937,17 @@ class _HandoverAcceptanceScreenState
                         controller: commentController,
                         minLines: 3,
                         maxLines: 5,
-                        decoration: const InputDecoration(
-                          labelText: 'Причина отклонения',
+                        decoration: InputDecoration(
+                          labelText:
+                              isReject ? 'Причина отклонения' : 'Комментарий',
                         ),
+                      ),
+                      const SizedBox(height: 8),
+                      HandoverEvidencePhotoField(
+                        path: photoPath,
+                        onChanged:
+                            (path) => setSheetState(() => photoPath = path),
+                        label: 'Добавить фото пункта',
                       ),
                       const SizedBox(height: 16),
                       SizedBox(
@@ -872,7 +959,7 @@ class _HandoverAcceptanceScreenState
                                   : () {
                                     final comment =
                                         commentController.text.trim();
-                                    if (comment.isEmpty) {
+                                    if (isReject && comment.isEmpty) {
                                       ScaffoldMessenger.of(
                                         context,
                                       ).showSnackBar(
@@ -885,10 +972,17 @@ class _HandoverAcceptanceScreenState
                                       return;
                                     }
                                     setSheetState(() => submitting = true);
-                                    Navigator.pop(sheetContext, comment);
+                                    Navigator.pop(sheetContext, (
+                                      comment.isEmpty ? null : comment,
+                                      photoPath,
+                                    ));
                                   },
                           child: Text(
-                            submitting ? 'Сохранение...' : 'Отклонить',
+                            submitting
+                                ? 'Сохранение...'
+                                : isReject
+                                ? 'Отклонить'
+                                : 'Принять',
                           ),
                         ),
                       ),

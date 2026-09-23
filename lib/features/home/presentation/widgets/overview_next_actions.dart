@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'package:prohelpers_mobile/core/design/pro_design_tokens.dart';
@@ -103,14 +103,14 @@ String _nextActionsSubtitle(int visibleActionCount) {
   }
 
   if (visibleActionCount == 1) {
-    return '1 быстрый вход под вашу роль и текущий объект.';
+    return '1 быстрый вход по вашим правам и текущему объекту.';
   }
 
   if (visibleActionCount < 5) {
-    return '$visibleActionCount быстрых входа под вашу роль и текущий объект.';
+    return '$visibleActionCount быстрых входа по вашим правам и текущему объекту.';
   }
 
-  return '$visibleActionCount быстрых входов под вашу роль и текущий объект.';
+  return '$visibleActionCount быстрых входов по вашим правам и текущему объекту.';
 }
 
 class _OverviewActionRow extends StatelessWidget {

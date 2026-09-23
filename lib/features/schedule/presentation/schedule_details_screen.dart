@@ -1,13 +1,16 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
+import '../../../core/error/user_message.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_typography.dart';
+import '../../auth/domain/auth_provider.dart';
 import '../../../core/widgets/app_empty_state.dart';
 import '../../../core/widgets/app_error_state.dart';
 import '../../../core/widgets/app_loading_state.dart';
 import '../../../core/widgets/industrial_card.dart';
 import '../data/schedule_model.dart';
+import '../data/schedule_repository.dart';
 import '../domain/schedule_provider.dart';
 
 enum _TaskFilter {
@@ -62,9 +65,119 @@ class _ScheduleDetailsScreenState extends ConsumerState<ScheduleDetailsScreen> {
     });
   }
 
+  Future<void> _editTask(
+    ScheduleDetailsModel detail, [
+    ScheduleTaskModel? task,
+  ]) async {
+    final name = TextEditingController(text: task?.name ?? '');
+    final description = TextEditingController(text: task?.description ?? '');
+    final start = TextEditingController(text: task?.plannedStartDate ?? '');
+    final end = TextEditingController(text: task?.plannedEndDate ?? '');
+    final form = GlobalKey<FormState>();
+    final payload = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder:
+          (dialogContext) => AlertDialog(
+            title: Text(task == null ? 'Новая задача' : 'Изменить задачу'),
+            content: Form(
+              key: form,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextFormField(
+                      controller: name,
+                      decoration: const InputDecoration(labelText: 'Название'),
+                      validator:
+                          (value) =>
+                              value == null || value.trim().isEmpty
+                                  ? 'Укажите название'
+                                  : null,
+                    ),
+                    TextFormField(
+                      controller: description,
+                      decoration: const InputDecoration(labelText: 'Описание'),
+                      maxLines: 3,
+                    ),
+                    TextFormField(
+                      controller: start,
+                      decoration: const InputDecoration(
+                        labelText: 'Начало (ГГГГ-ММ-ДД)',
+                      ),
+                    ),
+                    TextFormField(
+                      controller: end,
+                      decoration: const InputDecoration(
+                        labelText: 'Окончание (ГГГГ-ММ-ДД)',
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('Отмена'),
+              ),
+              FilledButton(
+                onPressed: () {
+                  if (form.currentState!.validate()) {
+                    Navigator.pop(dialogContext, <String, dynamic>{
+                      'name': name.text.trim(),
+                      'description': description.text.trim(),
+                      'planned_start_date':
+                          start.text.trim().isEmpty ? null : start.text.trim(),
+                      'planned_end_date':
+                          end.text.trim().isEmpty ? null : end.text.trim(),
+                    });
+                  }
+                },
+                child: const Text('Сохранить'),
+              ),
+            ],
+          ),
+    );
+    name.dispose();
+    description.dispose();
+    start.dispose();
+    end.dispose();
+    if (payload == null || !mounted) {
+      return;
+    }
+    try {
+      await ref
+          .read(scheduleRepositoryProvider)
+          .saveTask(
+            scheduleId: detail.schedule.id,
+            taskId: task?.id,
+            data: payload,
+          );
+      await ref.read(scheduleDetailProvider(widget.scheduleId).notifier).load();
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Задача сохранена.')));
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(UserMessage.fromError(error))));
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(scheduleDetailProvider(widget.scheduleId));
+    final canEditTasks =
+        ref
+            .watch(authProvider)
+            .user
+            ?.grantedPermissions
+            .contains('schedule.edit') ??
+        false;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Детали графика'), centerTitle: false),
@@ -105,6 +218,9 @@ class _ScheduleDetailsScreenState extends ConsumerState<ScheduleDetailsScreen> {
                             )
                             .load(),
                 isRefreshing: state.isLoading,
+                onCreateTask: () => _editTask(state.detail!),
+                onEditTask: (task) => _editTask(state.detail!, task),
+                canEditTasks: canEditTasks,
               ),
     );
   }
@@ -119,6 +235,9 @@ class _ScheduleDetailsContent extends StatelessWidget {
     required this.onFilterChanged,
     required this.onRefresh,
     required this.isRefreshing,
+    required this.onCreateTask,
+    required this.onEditTask,
+    required this.canEditTasks,
   });
 
   final ScheduleDetailsModel detail;
@@ -128,6 +247,9 @@ class _ScheduleDetailsContent extends StatelessWidget {
   final ValueChanged<_TaskFilter> onFilterChanged;
   final Future<void> Function() onRefresh;
   final bool isRefreshing;
+  final VoidCallback onCreateTask;
+  final ValueChanged<ScheduleTaskModel> onEditTask;
+  final bool canEditTasks;
 
   @override
   Widget build(BuildContext context) {
@@ -198,7 +320,22 @@ class _ScheduleDetailsContent extends StatelessWidget {
           SliverPadding(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
             sliver: SliverToBoxAdapter(
-              child: Text('Задачи графика', style: AppTypography.h2(context)),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Задачи графика',
+                      style: AppTypography.h2(context),
+                    ),
+                  ),
+                  if (canEditTasks)
+                    IconButton(
+                      onPressed: onCreateTask,
+                      tooltip: 'Добавить задачу',
+                      icon: const Icon(Icons.add_circle_outline_rounded),
+                    ),
+                ],
+              ),
             ),
           ),
           if (detail.tasks.isEmpty)
@@ -239,6 +376,7 @@ class _ScheduleDetailsContent extends StatelessWidget {
                                 title: section.title,
                                 subtitle: section.subtitle,
                                 tasks: section.tasks,
+                                onEditTask: canEditTasks ? onEditTask : null,
                               ),
                             ),
                           )
@@ -648,11 +786,13 @@ class _TaskSection extends StatelessWidget {
     required this.title,
     required this.subtitle,
     required this.tasks,
+    required this.onEditTask,
   });
 
   final String title;
   final String subtitle;
   final List<ScheduleTaskModel> tasks;
+  final ValueChanged<ScheduleTaskModel>? onEditTask;
 
   @override
   Widget build(BuildContext context) {
@@ -671,7 +811,10 @@ class _TaskSection extends StatelessWidget {
         ...tasks.map(
           (task) => Padding(
             padding: const EdgeInsets.only(bottom: 12),
-            child: _TaskCard(task: task),
+            child: _TaskCard(
+              task: task,
+              onEdit: onEditTask == null ? null : () => onEditTask!(task),
+            ),
           ),
         ),
       ],
@@ -680,9 +823,10 @@ class _TaskSection extends StatelessWidget {
 }
 
 class _TaskCard extends StatelessWidget {
-  const _TaskCard({required this.task});
+  const _TaskCard({required this.task, required this.onEdit});
 
   final ScheduleTaskModel task;
+  final VoidCallback? onEdit;
 
   @override
   Widget build(BuildContext context) {
@@ -752,6 +896,12 @@ class _TaskCard extends StatelessWidget {
                     context,
                   ).copyWith(fontWeight: FontWeight.w700),
                 ),
+                if (onEdit != null)
+                  IconButton(
+                    onPressed: onEdit,
+                    tooltip: 'Изменить задачу',
+                    icon: const Icon(Icons.edit_outlined),
+                  ),
               ],
             ),
             const SizedBox(height: 12),

@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 
 import 'package:prohelpers_mobile/core/models/user_context.dart';
 import 'package:prohelpers_mobile/core/providers/module_provider.dart';
@@ -6,6 +6,32 @@ import 'package:prohelpers_mobile/core/providers/module_provider.dart';
 enum MobileNavTab { overview, work, actions, more }
 
 enum MobileWorkIntent { create, inspect, approve, record, search, manage }
+
+enum MobileAdminGroup {
+  main,
+  construction,
+  pto,
+  resources,
+  personnel,
+  finance,
+  team,
+  dataAndReports,
+  system,
+}
+
+extension MobileAdminGroupLabel on MobileAdminGroup {
+  String get label => switch (this) {
+    MobileAdminGroup.main => 'Основное',
+    MobileAdminGroup.construction => 'Стройка',
+    MobileAdminGroup.pto => 'ПТО',
+    MobileAdminGroup.resources => 'Ресурсы',
+    MobileAdminGroup.personnel => 'Персонал',
+    MobileAdminGroup.finance => 'Финансы',
+    MobileAdminGroup.team => 'Команда',
+    MobileAdminGroup.dataAndReports => 'Данные и отчёты',
+    MobileAdminGroup.system => 'Система',
+  };
+}
 
 enum MobileModuleGroup {
   fieldWork,
@@ -34,12 +60,14 @@ class MobileModuleDestination {
     required this.icon,
     required this.group,
     required this.builder,
+    this.adminGroup = MobileAdminGroup.main,
     this.aliases = const <String>[],
     this.isPrimaryAction = false,
     this.appModule,
+    this.viewPermissions = const <String>[],
     this.actionId,
     this.basePriority = 100,
-    this.recommendedReason = 'Доступно по вашей роли',
+    this.recommendedReason = 'Доступно по вашим правам',
     this.preferredContexts = const <UserContext>{},
     this.requiresProject = true,
     this.searchKeywords = const <String>[],
@@ -53,10 +81,12 @@ class MobileModuleDestination {
   final String shortTitle;
   final IconData icon;
   final MobileModuleGroup group;
+  final MobileAdminGroup adminGroup;
   final WidgetBuilder builder;
   final List<String> aliases;
   final bool isPrimaryAction;
   final AppModule? appModule;
+  final List<String> viewPermissions;
   final String? actionId;
   final int basePriority;
   final String recommendedReason;
@@ -65,6 +95,23 @@ class MobileModuleDestination {
   final List<String> searchKeywords;
   final MobileWorkIntent intent;
   final bool isSecondary;
+
+  bool allowsPermissions(Iterable<String> granted) {
+    if (viewPermissions.isEmpty) {
+      return true;
+    }
+
+    final grantedSet = granted.toSet();
+    if (grantedSet.contains('*')) {
+      return true;
+    }
+
+    return viewPermissions.any(
+      (permission) =>
+          grantedSet.contains(permission) ||
+          grantedSet.contains('${permission.split('.').first}.*'),
+    );
+  }
 
   bool matches(String value) {
     return route == value || slug == value || aliases.contains(value);
@@ -76,15 +123,16 @@ class MobileModuleDestination {
       return true;
     }
 
-    final haystack = [
-      route,
-      slug,
-      title,
-      shortTitle,
-      recommendedReason,
-      ...aliases,
-      ...searchKeywords,
-    ].join(' ').toLowerCase();
+    final haystack =
+        [
+          route,
+          slug,
+          title,
+          shortTitle,
+          recommendedReason,
+          ...aliases,
+          ...searchKeywords,
+        ].join(' ').toLowerCase();
 
     return haystack.contains(normalized);
   }

@@ -1,4 +1,4 @@
-﻿import 'package:dio/dio.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -114,6 +114,11 @@ class _SmokeSiteRequestsRepository extends SiteRequestsRepository {
     String? status,
     int? projectId,
     String? search,
+    String? requestType,
+    int? assignedUserId,
+    bool urgentOnly = false,
+    DateTime? requiredFrom,
+    DateTime? requiredTo,
     SiteRequestsScope scope = SiteRequestsScope.own,
   }) async {
     return [MostTestData.siteRequest()];

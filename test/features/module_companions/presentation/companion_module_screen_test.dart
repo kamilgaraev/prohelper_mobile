@@ -1,4 +1,4 @@
-﻿import 'package:dio/dio.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -20,7 +20,8 @@ class _FakeProjectsRepository extends ProjectsRepository {
 }
 
 class _FakeProjectsNotifier extends ProjectsNotifier {
-  _FakeProjectsNotifier() : super(_FakeProjectsRepository()) {
+  _FakeProjectsNotifier({bool hasSelectedProject = true})
+    : super(_FakeProjectsRepository()) {
     final project =
         Project()
           ..serverId = 9
@@ -28,8 +29,8 @@ class _FakeProjectsNotifier extends ProjectsNotifier {
           ..address = 'Site';
     state = ProjectsState(
       isLoading: false,
-      projects: [project],
-      selectedProject: project,
+      projects: hasSelectedProject ? [project] : const [],
+      selectedProject: hasSelectedProject ? project : null,
     );
   }
 }
@@ -39,14 +40,19 @@ class _FakeCompanionRepository extends CompanionModuleRepository {
 }
 
 class _FakeCompanionNotifier extends CompanionModuleNotifier {
-  _FakeCompanionNotifier()
-    : super(_FakeCompanionRepository(), 'contract-management') {
-    _setLoadedState();
+  _FakeCompanionNotifier({String moduleSlug = 'contract-management'})
+    : _moduleSlug = moduleSlug,
+      super(_FakeCompanionRepository(), moduleSlug) {
+    _setLoadedState(moduleSlug: moduleSlug);
   }
 
+  final String _moduleSlug;
   String? query;
   String? status;
   String? action;
+  String? executiveAction;
+  int? executiveDocumentId;
+  int loadCalls = 0;
 
   @override
   void syncProject(int? projectId) {
@@ -55,6 +61,7 @@ class _FakeCompanionNotifier extends CompanionModuleNotifier {
 
   @override
   Future<void> load() async {
+    loadCalls++;
     _setLoadedState(projectId: state.projectId);
   }
 
@@ -70,7 +77,9 @@ class _FakeCompanionNotifier extends CompanionModuleNotifier {
 
   @override
   Future<CompanionModuleDetailModel> fetchDetail(int id) async {
-    return CompanionModuleDetailModel.fromJson(companionDetailJson());
+    return CompanionModuleDetailModel.fromJson(
+      companionDetailJson(slug: _moduleSlug),
+    );
   }
 
   @override
@@ -83,20 +92,43 @@ class _FakeCompanionNotifier extends CompanionModuleNotifier {
     return CompanionModuleDetailModel.fromJson(companionDetailJson());
   }
 
-  void _setLoadedState({int? projectId}) {
+  @override
+  Future<CompanionModuleDetailModel> executeExecutiveDocumentAction({
+    required int documentId,
+    required String action,
+    String? comment,
+    int? versionId,
+    String? severity,
+  }) async {
+    executiveAction = action;
+    executiveDocumentId = documentId;
+    return CompanionModuleDetailModel.fromJson(
+      companionDetailJson(slug: _moduleSlug),
+    );
+  }
+
+  void _setLoadedState({int? projectId, String? moduleSlug}) {
     state = CompanionModuleState(
       isLoading: false,
       projectId: projectId,
-      list: CompanionModuleListModel.fromJson(companionListJson()),
+      list: CompanionModuleListModel.fromJson(
+        companionListJson(slug: moduleSlug ?? _moduleSlug),
+      ),
     );
   }
 }
 
 void main() {
-  Widget buildApp(Widget child, _FakeCompanionNotifier notifier) {
+  Widget buildApp(
+    Widget child,
+    _FakeCompanionNotifier notifier, {
+    _FakeProjectsNotifier? projectsNotifier,
+  }) {
     return ProviderScope(
       overrides: [
-        projectsProvider.overrideWith((ref) => _FakeProjectsNotifier()),
+        projectsProvider.overrideWith(
+          (ref) => projectsNotifier ?? _FakeProjectsNotifier(),
+        ),
         companionModuleProvider.overrideWith((ref, moduleSlug) => notifier),
       ],
       child: MaterialApp(home: child),
@@ -135,6 +167,29 @@ void main() {
     expect(notifier.status, 'draft');
   });
 
+  testWidgets('requires a selected project for field workflow lists', (
+    tester,
+  ) async {
+    final notifier = _FakeCompanionNotifier();
+    await tester.pumpWidget(
+      buildApp(
+        const CompanionModuleScreen(
+          moduleSlug: 'change-management',
+          title: 'Изменения',
+          icon: Icons.change_circle_outlined,
+          requiresProject: true,
+        ),
+        notifier,
+        projectsNotifier: _FakeProjectsNotifier(hasSelectedProject: false),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Выберите объект'), findsOneWidget);
+    expect(find.text('C-001'), findsNothing);
+    expect(notifier.loadCalls, 0);
+  });
+
   testWidgets('shows detail screen and executes action', (tester) async {
     final notifier = _FakeCompanionNotifier();
 
@@ -152,7 +207,6 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Основное'), findsOneWidget);
-    expect(find.text('Связанные записи'), findsOneWidget);
     expect(find.text('Отправить на оценку'), findsOneWidget);
 
     await tester.tap(find.text('Отправить на оценку'));
@@ -161,5 +215,124 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(notifier.action, 'submit');
+    await tester.scrollUntilVisible(
+      find.text('Связанные записи'),
+      250,
+      scrollable: find.byType(Scrollable).last,
+    );
+    expect(find.text('Связанные записи'), findsOneWidget);
+  });
+
+  testWidgets('shows files, comments, result and permitted executive actions', (
+    tester,
+  ) async {
+    final notifier = _FakeCompanionNotifier(
+      moduleSlug: 'executive-documentation',
+    );
+
+    await tester.pumpWidget(
+      buildApp(
+        const CompanionModuleDetailScreen(
+          moduleSlug: 'executive-documentation',
+          title: 'Исполнительная документация',
+          icon: Icons.description_outlined,
+          itemId: 42,
+        ),
+        notifier,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.scrollUntilVisible(
+      find.text('Исполнительная схема.pdf'),
+      250,
+      scrollable: find.byType(Scrollable).last,
+    );
+    expect(find.text('Файлы'), findsOneWidget);
+    expect(find.text('Исполнительная схема.pdf'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('Комментарии'),
+      250,
+      scrollable: find.byType(Scrollable).last,
+    );
+    expect(find.text('Комментарии'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.textContaining('Проверено'),
+      250,
+      scrollable: find.byType(Scrollable).last,
+    );
+    expect(find.textContaining('Проверено'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.textContaining('Принято'),
+      250,
+      scrollable: find.byType(Scrollable).last,
+    );
+    expect(find.textContaining('Принято'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('Передано на проверку'),
+      250,
+      scrollable: find.byType(Scrollable).last,
+    );
+    expect(find.text('Передано на проверку'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('Исполнительные документы'),
+      250,
+      scrollable: find.byType(Scrollable).last,
+    );
+    expect(find.text('Исполнительные документы'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('Согласовать'),
+      250,
+      scrollable: find.byType(Scrollable).last,
+    );
+    expect(find.text('Согласовать'), findsOneWidget);
+
+    await tester.tap(find.text('Согласовать'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Выполнить'));
+    await tester.pumpAndSettle();
+
+    expect(notifier.executiveAction, 'approve');
+    expect(notifier.executiveDocumentId, 7);
+  });
+
+  testWidgets('hides detail and actions after selected project changes', (
+    tester,
+  ) async {
+    final notifier = _FakeCompanionNotifier();
+    final projects = _FakeProjectsNotifier();
+    await tester.pumpWidget(
+      buildApp(
+        const CompanionModuleDetailScreen(
+          moduleSlug: 'change-management',
+          title: 'Изменения',
+          icon: Icons.change_circle_outlined,
+          itemId: 42,
+          requiresProject: true,
+          projectId: 9,
+        ),
+        notifier,
+        projectsNotifier: projects,
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Основное'), findsOneWidget);
+
+    final otherProject =
+        Project()
+          ..serverId = 10
+          ..name = 'Tower B'
+          ..address = 'Other site';
+    projects.state = ProjectsState(
+      isLoading: false,
+      projects: [otherProject],
+      selectedProject: otherProject,
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Объект изменился'), findsOneWidget);
+    expect(find.text('Отправить на оценку'), findsNothing);
+    expect(find.text('Основное'), findsNothing);
+    expect(find.text('Исполнительная схема.pdf'), findsNothing);
   });
 }

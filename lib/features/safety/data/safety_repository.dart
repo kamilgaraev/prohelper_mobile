@@ -225,16 +225,31 @@ class SafetyRepository extends SyncQueueAwareRepository {
   }
 
   Future<SafetyViolationModel> createViolation(
-    Map<String, dynamic> data,
-  ) async {
+    Map<String, dynamic> data, {
+    List<String> photoPaths = const [],
+  }) async {
+    final payload = Map<String, dynamic>.from(data);
+    final attachments = _photoAttachments(photoPaths);
     try {
       final response = await _dio.post(
         '/safety-management/violations',
-        data: data,
+        data: await _withPhotos(data, photoPaths),
       );
 
       return SafetyViolationModel.fromJson(_object(response.data));
     } on DioException catch (error) {
+      if (SyncQueueService.shouldQueueDioException(error)) {
+        await queueAndThrow(
+          SyncQueueDraft(
+            moduleSlug: 'safety',
+            operationType: 'create_violation',
+            method: 'POST',
+            endpoint: '/safety-management/violations',
+            payload: payload,
+            attachments: attachments,
+          ),
+        );
+      }
       throw ApiException.fromDio(error);
     }
   }
@@ -268,17 +283,68 @@ class SafetyRepository extends SyncQueueAwareRepository {
     }
   }
 
-  Future<SafetyViolationModel> resolveViolation(int id, String comment) async {
+  Future<SafetyViolationModel> resolveViolation(
+    int id,
+    String comment, {
+    List<String> photoPaths = const [],
+  }) async {
     try {
       final response = await _dio.post(
         '/safety-management/violations/$id/resolve',
-        data: {'resolution_comment': comment.trim()},
+        data: await _withPhotos({
+          'resolution_comment': comment.trim(),
+        }, photoPaths),
       );
 
       return SafetyViolationModel.fromJson(_object(response.data));
     } on DioException catch (error) {
       throw ApiException.fromDio(error);
     }
+  }
+
+  Future<Object> _withPhotos(
+    Map<String, dynamic> data,
+    List<String> photoPaths,
+  ) async {
+    if (photoPaths.isEmpty) {
+      return data;
+    }
+
+    final formData = FormData();
+    for (final entry in data.entries) {
+      if (entry.value != null) {
+        formData.fields.add(MapEntry(entry.key, _formValue(entry.value)));
+      }
+    }
+    for (final path in photoPaths.take(5)) {
+      formData.files.add(
+        MapEntry(
+          'photos[]',
+          await MultipartFile.fromFile(path, filename: _fileName(path)),
+        ),
+      );
+    }
+    return formData;
+  }
+
+  List<SyncAttachmentRef> _photoAttachments(List<String> paths) => paths
+      .take(5)
+      .map((path) {
+        final separator = path.lastIndexOf(RegExp(r'[/\\]'));
+        return SyncAttachmentRef(
+          field: 'photos[]',
+          path: path,
+          filename: path.substring(separator + 1),
+        );
+      })
+      .toList(growable: false);
+
+  String _formValue(Object value) =>
+      value is bool ? (value ? '1' : '0') : value.toString();
+
+  String _fileName(String path) {
+    final separator = path.lastIndexOf(RegExp(r'[/\\]'));
+    return path.substring(separator + 1);
   }
 
   Future<SafetyBriefingModel> signBriefingParticipant({

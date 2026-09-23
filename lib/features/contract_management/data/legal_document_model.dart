@@ -79,10 +79,15 @@ class LegalDocumentVersion {
 }
 
 class LegalDocumentSignatureRequest {
-  const LegalDocumentSignatureRequest({required this.id, required this.method});
+  const LegalDocumentSignatureRequest({
+    required this.id,
+    required this.method,
+    this.canUploadOriginal = false,
+  });
 
   final int id;
   final String method;
+  final bool canUploadOriginal;
 
   bool get supportsPaperOriginal => method == 'paper';
 
@@ -90,6 +95,8 @@ class LegalDocumentSignatureRequest {
     return LegalDocumentSignatureRequest(
       id: _int(json['id']),
       method: _string(json['method']),
+      canUploadOriginal:
+          json['can_upload_original'] == true || json['can_upload'] == true,
     );
   }
 }

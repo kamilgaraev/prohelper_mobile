@@ -1,4 +1,4 @@
-﻿import 'package:dio/dio.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -17,7 +17,8 @@ class _FakeModulesRepository extends ModulesRepository {
   _FakeModulesRepository() : super(Dio());
 
   @override
-  Future<List<MobileModuleModel>> fetchModules() async => const [];
+  Future<List<MobileModuleModel>> fetchModules({int? projectId}) async =>
+      const [];
 }
 
 class _FakeModulesNotifier extends ModulesNotifier {
@@ -64,11 +65,7 @@ void main() {
     expect(searchBar.density, ProSearchFilterDensity.compact);
     expect(find.text('Доступно разделов: 3'), findsOneWidget);
 
-    for (final title in const [
-      'Полевые работы',
-      'Склад и снабжение',
-      'Согласования и документы',
-    ]) {
+    for (final title in const ['Персонал', 'Ресурсы', 'ПТО']) {
       expect(
         find.ancestor(of: find.text(title), matching: find.byType(ProSurface)),
         findsOneWidget,
@@ -97,7 +94,7 @@ void main() {
     expect(find.text('Процессы'), findsNothing);
     expect(
       find.ancestor(
-        of: find.text('Склад и снабжение'),
+        of: find.text('Ресурсы'),
         matching: find.byType(ProSurface),
       ),
       findsOneWidget,

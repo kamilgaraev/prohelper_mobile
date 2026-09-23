@@ -75,6 +75,7 @@ class TimeEntryModel {
     this.workTypeLabel,
     this.taskId,
     this.taskLabel,
+    this.workerLabel,
     this.startTime,
     this.endTime,
     this.hoursWorked,
@@ -97,6 +98,7 @@ class TimeEntryModel {
   final String? workTypeLabel;
   final int? taskId;
   final String? taskLabel;
+  final String? workerLabel;
   final String workDate;
   final String? startTime;
   final String? endTime;
@@ -123,6 +125,8 @@ class TimeEntryModel {
   bool get canStop => availableActions.contains('stop');
   bool get canSubmit => availableActions.contains('submit');
   bool get canCorrect => availableActions.contains('correction');
+  bool get canApprove => availableActions.contains('approve');
+  bool get canReject => availableActions.contains('reject');
 
   factory TimeEntryModel.fromJson(Map<String, dynamic> json) {
     return TimeEntryModel(
@@ -135,6 +139,7 @@ class TimeEntryModel {
       workTypeLabel: _nullableString(json['work_type_label']),
       taskId: _nullableInt(json['task_id']),
       taskLabel: _nullableString(json['task_label']),
+      workerLabel: _nullableString(json['worker_label']),
       workDate: _requiredString(json, 'work_date'),
       startTime: _nullableString(json['start_time']),
       endTime: _nullableString(json['end_time']),
@@ -475,4 +480,4 @@ Map<String, int> _statusCountMap(Map<String, dynamic> map) {
 
 const _timeEntryStatuses = {'draft', 'submitted', 'approved', 'rejected'};
 
-const _timeEntryActions = {'stop', 'submit', 'correction'};
+const _timeEntryActions = {'stop', 'submit', 'correction', 'approve', 'reject'};

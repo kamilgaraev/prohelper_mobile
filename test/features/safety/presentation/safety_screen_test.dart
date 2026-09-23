@@ -1,7 +1,10 @@
-﻿import 'package:dio/dio.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:prohelpers_mobile/core/models/user_context.dart';
+import 'package:prohelpers_mobile/core/providers/module_provider.dart';
+import 'package:prohelpers_mobile/core/services/permission_service.dart';
 import 'package:prohelpers_mobile/features/projects/data/project_model.dart';
 import 'package:prohelpers_mobile/features/projects/data/projects_repository.dart';
 import 'package:prohelpers_mobile/features/projects/domain/projects_provider.dart';
@@ -147,6 +150,16 @@ void main() {
   Widget buildScreen(_RecordingSafetyRepository repository) {
     return ProviderScope(
       overrides: [
+        permissionServiceProvider.overrideWithValue(
+          PermissionService(
+            context: UserContext.field,
+            activeModules: const {AppModule.safetyManagement},
+            grantedPermissions: const {
+              'safety-management.incidents.create',
+              'safety-management.violations.create',
+            },
+          ),
+        ),
         projectsProvider.overrideWith(
           (ref) => _TestProjectsNotifier(project()),
         ),
@@ -212,6 +225,8 @@ void main() {
   ) async {
     final repository = _RecordingSafetyRepository();
     useLargeSurface(tester);
+    tester.view.physicalSize = const Size(1000, 1800);
+    addTearDown(tester.view.resetPhysicalSize);
 
     await tester.pumpWidget(buildScreen(repository));
     await pumpUi(tester);
@@ -221,6 +236,8 @@ void main() {
       300,
       scrollable: find.byType(Scrollable).first,
     );
+    await tester.ensureVisible(find.text('Подробнее').first);
+    await pumpUi(tester);
     await tester.tap(find.text('Подробнее').first);
     await pumpUi(tester);
     expect(find.text('Наряд-допуск'), findsOneWidget);

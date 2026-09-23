@@ -1,4 +1,4 @@
-﻿const remainingCompanionSlugs = [
+const remainingCompanionSlugs = [
   'contract-management',
   'change-management',
   'executive-documentation',
@@ -8,7 +8,11 @@
   'video-monitoring',
 ];
 
-Map<String, dynamic> companionListJson({String slug = 'contract-management'}) {
+Map<String, dynamic> companionListJson({
+  String slug = 'contract-management',
+  int page = 1,
+  int lastPage = 1,
+}) {
   return {
     'module': {
       'slug': slug,
@@ -29,7 +33,12 @@ Map<String, dynamic> companionListJson({String slug = 'contract-management'}) {
       'title': 'Раздел недоступен',
       'description': 'Нет доступа',
     },
-    'meta': {'current_page': 1, 'per_page': 20, 'total': 1, 'last_page': 1},
+    'meta': {
+      'current_page': page,
+      'per_page': 20,
+      'total': lastPage > 1 ? 21 : 1,
+      'last_page': lastPage,
+    },
   };
 }
 
@@ -61,7 +70,33 @@ Map<String, dynamic> companionDetailJson({
         'subtitle': 'Tower A',
         'status': 'active',
         'status_label': 'Активно',
+        'actions_endpoint': '/api/v1/mobile/pto/executive-documents/7/actions',
+        'available_actions': [
+          {'key': 'approve', 'title': 'Согласовать', 'requires_comment': false},
+        ],
       },
+    ],
+    'result': {'title': 'Результат проверки', 'value': 'Принято'},
+    'files': [
+      {
+        'id': 11,
+        'name': 'Исполнительная схема.pdf',
+        'mime_type': 'application/pdf',
+        'preview_url': 'https://files.example.test/preview',
+        'download_url': 'https://files.example.test/download',
+      },
+    ],
+    'comments': [
+      {
+        'id': 1,
+        'author': 'Инженер',
+        'body': 'Проверено',
+        'status': 'Принято',
+        'created_at': '2026-09-23T08:00:00Z',
+      },
+    ],
+    'workflow_history': [
+      {'title': 'Передано на проверку', 'created_at': '2026-09-22T08:00:00Z'},
     ],
     'empty_state': {'title': 'Нет записей', 'description': 'Записи не найдены'},
     'permission_state': {

@@ -169,7 +169,7 @@ class LegalDocumentDetail extends StatelessWidget {
         ),
       ),
       if (document.signatureRequests.any(
-        (request) => request.supportsPaperOriginal,
+        (request) => request.supportsPaperOriginal && request.canUploadOriginal,
       )) ...[
         const SizedBox(height: 16),
         Text(
@@ -181,6 +181,7 @@ class LegalDocumentDetail extends StatelessWidget {
         const SizedBox(height: 8),
         ...document.signatureRequests
             .where((request) => request.supportsPaperOriginal)
+            .where((request) => request.canUploadOriginal)
             .map((request) {
               final upload =
                   paperOriginalUploads[request.id] ??

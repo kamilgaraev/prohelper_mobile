@@ -1,4 +1,6 @@
-﻿import 'package:flutter/material.dart';
+import 'dart:ui' show Tristate;
+
+import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:prohelpers_mobile/core/design/pro_design_tokens.dart';
@@ -10,6 +12,7 @@ import 'package:prohelpers_mobile/core/widgets/pro_bottom_sheet.dart';
 import 'package:prohelpers_mobile/core/widgets/industrial_card.dart';
 import 'package:prohelpers_mobile/core/widgets/mesh_background.dart';
 import 'package:prohelpers_mobile/core/widgets/pro_metric_tile.dart';
+import 'package:prohelpers_mobile/core/widgets/pro_operational_page.dart';
 import 'package:prohelpers_mobile/core/widgets/pro_page_scaffold.dart';
 import 'package:prohelpers_mobile/core/widgets/pro_search_filter_bar.dart';
 import 'package:prohelpers_mobile/core/widgets/pro_section.dart';
@@ -556,6 +559,74 @@ void main() {
     expect(find.text('Контент'), findsOneWidget);
     expect(tester.hasRunningAnimations, isFalse);
   });
+
+  testWidgets('operational page shares accessible shell in both themes', (
+    tester,
+  ) async {
+    for (final theme in [MostTheme.lightTheme, MostTheme.darkTheme]) {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: theme,
+          home: MediaQuery(
+            data: const MediaQueryData(textScaler: TextScaler.linear(2)),
+            child: const ProOperationalPage(
+              title: 'Рабочий день',
+              subtitle: 'Текущий объект',
+              floatingActionButton: FloatingActionButton(
+                onPressed: null,
+                child: Icon(Icons.add),
+              ),
+              children: [Text('Сводка')],
+            ),
+          ),
+        ),
+      );
+
+      final appBar = tester.widget<AppBar>(find.byType(AppBar));
+      final scaffold = tester.widget<Scaffold>(find.byType(Scaffold));
+
+      expect(appBar.toolbarHeight, greaterThan(kToolbarHeight));
+      expect(find.text('Рабочий день'), findsOneWidget);
+      expect(find.text('Сводка'), findsOneWidget);
+      expect(scaffold.floatingActionButton, isNotNull);
+    }
+  });
+
+  testWidgets('legacy card widgets share surface and preserve tap behavior', (
+    tester,
+  ) async {
+    var proCardTapped = false;
+    var industrialCardTapped = false;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: MostTheme.lightTheme,
+        home: Scaffold(
+          body: Column(
+            children: [
+              ProCard(
+                onTap: () => proCardTapped = true,
+                child: const Text('Pro карточка'),
+              ),
+              IndustrialCard(
+                onTap: () => industrialCardTapped = true,
+                backgroundColor: Colors.amber,
+                border: Border.all(color: Colors.orange, width: 2),
+                child: const Text('Industrial карточка'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    expect(find.byType(ProSurface), findsNWidgets(2));
+    await tester.tap(find.text('Pro карточка'));
+    await tester.tap(find.text('Industrial карточка'));
+
+    expect(proCardTapped, isTrue);
+    expect(industrialCardTapped, isTrue);
+  });
 }
 
 List<SemanticsNode> _collectSemanticsRoots(PipelineOwner owner) {
@@ -573,9 +644,9 @@ List<SemanticsNode> _collectSemanticsRoots(PipelineOwner owner) {
 bool _hasSearchFieldSemantics(SemanticsNode node, String label) {
   final data = node.getSemanticsData();
   if (data.label == label &&
-      node.hasFlag(SemanticsFlag.isTextField) &&
-      node.hasFlag(SemanticsFlag.hasEnabledState) &&
-      node.hasFlag(SemanticsFlag.isEnabled)) {
+      data.flagsCollection.isTextField &&
+      data.flagsCollection.isEnabled != Tristate.none &&
+      data.flagsCollection.isEnabled == Tristate.isTrue) {
     return true;
   }
 

@@ -17,6 +17,12 @@ class SiteRequestsState {
   final bool permissionDenied;
   final String? error;
   final String? statusFilter;
+  final String? searchFilter;
+  final bool urgentOnly;
+  final int? assignedUserFilter;
+  final String? requestTypeFilter;
+  final DateTime? requiredFromFilter;
+  final DateTime? requiredToFilter;
   final int? projectFilter;
   final SiteRequestsScope scope;
 
@@ -28,6 +34,12 @@ class SiteRequestsState {
     this.permissionDenied = false,
     this.error,
     this.statusFilter,
+    this.searchFilter,
+    this.urgentOnly = false,
+    this.assignedUserFilter,
+    this.requestTypeFilter,
+    this.requiredFromFilter,
+    this.requiredToFilter,
     this.projectFilter,
     this.scope = SiteRequestsScope.own,
   });
@@ -40,6 +52,12 @@ class SiteRequestsState {
     bool? permissionDenied,
     Object? error = _siteRequestsSentinel,
     String? statusFilter,
+    String? searchFilter,
+    bool? urgentOnly,
+    int? assignedUserFilter,
+    String? requestTypeFilter,
+    DateTime? requiredFromFilter,
+    DateTime? requiredToFilter,
     int? projectFilter,
     SiteRequestsScope? scope,
     bool clearStatusFilter = false,
@@ -57,6 +75,12 @@ class SiteRequestsState {
               : error as String?,
       statusFilter:
           clearStatusFilter ? null : (statusFilter ?? this.statusFilter),
+      searchFilter: searchFilter ?? this.searchFilter,
+      urgentOnly: urgentOnly ?? this.urgentOnly,
+      assignedUserFilter: assignedUserFilter ?? this.assignedUserFilter,
+      requestTypeFilter: requestTypeFilter ?? this.requestTypeFilter,
+      requiredFromFilter: requiredFromFilter ?? this.requiredFromFilter,
+      requiredToFilter: requiredToFilter ?? this.requiredToFilter,
       projectFilter:
           clearProjectFilter ? null : (projectFilter ?? this.projectFilter),
       scope: scope ?? this.scope,
@@ -87,10 +111,12 @@ class SiteRequestsNotifier extends StateNotifier<SiteRequestsState> {
        );
 
   final SiteRequestsRepository _repository;
+  int _requestEpoch = 0;
 
   Future<void> loadRequests({bool refresh = false}) async {
-    if (state.isLoading) return;
+    if (state.isLoading && !refresh) return;
     if (!refresh && !state.hasMore) return;
+    final requestEpoch = refresh ? ++_requestEpoch : _requestEpoch;
 
     if (refresh) {
       state = state.copyWith(
@@ -113,10 +139,17 @@ class SiteRequestsNotifier extends StateNotifier<SiteRequestsState> {
       final newRequests = await _repository.fetchSiteRequests(
         page: state.currentPage,
         status: state.statusFilter,
+        search: state.searchFilter,
+        urgentOnly: state.urgentOnly,
+        assignedUserId: state.assignedUserFilter,
+        requestType: state.requestTypeFilter,
+        requiredFrom: state.requiredFromFilter,
+        requiredTo: state.requiredToFilter,
         projectId: state.projectFilter,
         scope: state.scope,
       );
 
+      if (requestEpoch != _requestEpoch) return;
       state = state.copyWith(
         isLoading: false,
         requests: [...state.requests, ...newRequests],
@@ -124,6 +157,7 @@ class SiteRequestsNotifier extends StateNotifier<SiteRequestsState> {
         hasMore: newRequests.isNotEmpty,
       );
     } catch (error) {
+      if (requestEpoch != _requestEpoch) return;
       state = state.copyWith(
         isLoading: false,
         permissionDenied: _isPermissionDenied(error),
@@ -169,6 +203,31 @@ class SiteRequestsNotifier extends StateNotifier<SiteRequestsState> {
       statusFilter: status,
       clearStatusFilter: status == null,
     );
+    loadRequests(refresh: true);
+  }
+
+  void setSearchFilter(String? value) {
+    state = state.copyWith(searchFilter: value);
+    loadRequests(refresh: true);
+  }
+
+  void setUrgentFilter(bool value) {
+    state = state.copyWith(urgentOnly: value);
+    loadRequests(refresh: true);
+  }
+
+  void setAssigneeFilter(int? value) {
+    state = state.copyWith(assignedUserFilter: value);
+    loadRequests(refresh: true);
+  }
+
+  void setRequestTypeFilter(String? value) {
+    state = state.copyWith(requestTypeFilter: value);
+    loadRequests(refresh: true);
+  }
+
+  void setRequiredDateRange(DateTime? from, DateTime? to) {
+    state = state.copyWith(requiredFromFilter: from, requiredToFilter: to);
     loadRequests(refresh: true);
   }
 

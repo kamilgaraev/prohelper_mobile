@@ -1,4 +1,4 @@
-﻿import 'package:dio/dio.dart';
+import 'package:dio/dio.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/network/api_exception.dart';
@@ -22,6 +22,7 @@ class CompanionModuleRepository {
     int? projectId,
     String? status,
     String? query,
+    int page = 1,
     int perPage = 20,
   }) async {
     try {
@@ -32,6 +33,7 @@ class CompanionModuleRepository {
           if (status != null && status.trim().isNotEmpty)
             'status': status.trim(),
           if (query != null && query.trim().isNotEmpty) 'q': query.trim(),
+          'page': page,
           'per_page': perPage,
         },
       );
@@ -76,6 +78,36 @@ class CompanionModuleRepository {
         },
       );
 
+      return CompanionModuleDetailModel.fromJson(
+        MobileApiResponse.dataMap(response.data),
+      );
+    } on DioException catch (error) {
+      throw ApiException.fromDio(error);
+    }
+  }
+
+  Future<CompanionModuleDetailModel> executeExecutiveDocumentAction({
+    required int documentId,
+    required String action,
+    String? comment,
+    int? versionId,
+    String? severity,
+  }) async {
+    if (!RegExp(r'^[a-z_]+$').hasMatch(action)) {
+      throw ArgumentError.value(action, 'action');
+    }
+    final trimmedComment = comment?.trim();
+    try {
+      final response = await _dio.post(
+        '/pto/executive-documents/$documentId/actions/$action',
+        data: {
+          if (trimmedComment != null && trimmedComment.isNotEmpty)
+            'comment': trimmedComment,
+          if (versionId != null) 'version_id': versionId,
+          if (severity != null && severity.trim().isNotEmpty)
+            'severity': severity.trim(),
+        },
+      );
       return CompanionModuleDetailModel.fromJson(
         MobileApiResponse.dataMap(response.data),
       );

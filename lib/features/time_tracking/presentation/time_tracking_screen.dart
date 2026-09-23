@@ -12,6 +12,7 @@ import '../../../core/widgets/mesh_background.dart';
 import '../../../core/widgets/pro_card.dart';
 import '../../projects/domain/projects_provider.dart';
 import '../data/time_entry_model.dart';
+import '../data/time_tracking_repository.dart';
 import '../domain/time_tracking_provider.dart';
 
 class TimeTrackingScreen extends ConsumerStatefulWidget {
@@ -76,23 +77,6 @@ class _TimeTrackingScreenState extends ConsumerState<TimeTrackingScreen> {
                   description:
                       'Учет времени ведется по конкретному объекту. Выберите объект на главном экране.',
                 )
-                : state.isLoading && state.entries.isEmpty
-                ? const AppLoadingState(message: 'Загружаем учет времени')
-                : state.error != null && state.entries.isEmpty
-                ? AppErrorState(
-                  title:
-                      state.permissionDenied
-                          ? 'Нет доступа к учету времени'
-                          : state.malformedContract
-                          ? 'Данные учета времени требуют проверки'
-                          : 'Не удалось загрузить учет времени',
-                  description: state.error,
-                  onRetry:
-                      () =>
-                          ref
-                              .read(timeTrackingProvider.notifier)
-                              .loadDailySummary(),
-                )
                 : RefreshIndicator(
                   onRefresh:
                       () =>
@@ -102,6 +86,26 @@ class _TimeTrackingScreenState extends ConsumerState<TimeTrackingScreen> {
                   child: ListView(
                     padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
                     children: [
+                      _PendingTimeEntryApprovals(projectId: projectId),
+                      const SizedBox(height: 12),
+                      if (state.isLoading && state.entries.isEmpty)
+                        const AppLoadingState(message: 'Загружаем учет времени')
+                      else if (state.error != null && state.entries.isEmpty)
+                        AppErrorState(
+                          title:
+                              state.permissionDenied
+                                  ? 'Нет доступа к учету времени'
+                                  : state.malformedContract
+                                  ? 'Данные учета времени требуют проверки'
+                                  : 'Не удалось загрузить учет времени',
+                          description: state.error,
+                          onRetry:
+                              () =>
+                                  ref
+                                      .read(timeTrackingProvider.notifier)
+                                      .loadDailySummary(),
+                        )
+                      else ...[
                       _ScopePanel(
                         selectedDate: _selectedDate,
                         projectName: selectedProject?.name,
@@ -161,6 +165,7 @@ class _TimeTrackingScreenState extends ConsumerState<TimeTrackingScreen> {
                             ),
                           ),
                         ),
+                      ],
                     ],
                   ),
                 ),
@@ -204,6 +209,169 @@ class _TimeTrackingScreenState extends ConsumerState<TimeTrackingScreen> {
       MaterialPageRoute(
         builder: (_) => TimeEntryDetailScreen(entryId: entryId),
       ),
+    );
+  }
+}
+
+class _PendingTimeEntryApprovals extends ConsumerStatefulWidget {
+  const _PendingTimeEntryApprovals({required this.projectId});
+
+  final int projectId;
+
+  @override
+  ConsumerState<_PendingTimeEntryApprovals> createState() =>
+      _PendingTimeEntryApprovalsState();
+}
+
+class _PendingTimeEntryApprovalsState
+    extends ConsumerState<_PendingTimeEntryApprovals> {
+  late Future<List<TimeEntryModel>> _future;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = _load();
+  }
+
+  @override
+  void didUpdateWidget(covariant _PendingTimeEntryApprovals oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.projectId != widget.projectId) {
+      _future = _load();
+    }
+  }
+
+  Future<List<TimeEntryModel>> _load() => ref
+      .read(timeTrackingRepositoryProvider)
+      .fetchPendingApprovals(projectId: widget.projectId);
+
+  Future<void> _decide(TimeEntryModel entry, String action) async {
+    String? reason;
+    if (action == 'reject') {
+      reason = await showDialog<String>(
+        context: context,
+        builder: (context) {
+          final controller = TextEditingController();
+          return AlertDialog(
+            title: const Text('Отклонить трудозатраты'),
+            content: TextField(
+              controller: controller,
+              autofocus: true,
+              maxLength: 500,
+              decoration: const InputDecoration(labelText: 'Причина'),
+              minLines: 2,
+              maxLines: 4,
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Отмена'),
+              ),
+              FilledButton(
+                onPressed: () {
+                  final value = controller.text.trim();
+                  if (value.isNotEmpty) Navigator.pop(context, value);
+                },
+                child: const Text('Отклонить'),
+              ),
+            ],
+          );
+        },
+      );
+      if (reason == null) return;
+    }
+
+    try {
+      await ref.read(timeTrackingRepositoryProvider).decideApproval(
+        id: entry.id,
+        action: action,
+        reason: reason,
+      );
+      if (!mounted) return;
+      setState(() => _future = _load());
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            action == 'approve' ? 'Трудозатраты подтверждены' : 'Запись отклонена',
+          ),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(UserMessage.fromError(error))),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<List<TimeEntryModel>>(
+      future: _future,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const LinearProgressIndicator();
+        }
+        if (snapshot.hasError) {
+          return Row(
+            children: [
+              Expanded(
+                child: Text(
+                  UserMessage.fromError(snapshot.error!),
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
+              ),
+              IconButton(
+                tooltip: 'Повторить загрузку',
+                onPressed: () => setState(() => _future = _load()),
+                icon: const Icon(Icons.refresh_rounded),
+              ),
+            ],
+          );
+        }
+        final entries = snapshot.data ?? const <TimeEntryModel>[];
+        if (entries.isEmpty) return const SizedBox.shrink();
+
+        return ProCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Ожидают подтверждения', style: AppTypography.h2(context)),
+              const SizedBox(height: 8),
+              ...entries.map(
+                (entry) => Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(entry.title, style: AppTypography.bodyLarge(context)),
+                      if (entry.workerLabel != null && entry.workerLabel!.isNotEmpty)
+                        Text(entry.workerLabel!, style: AppTypography.bodyMedium(context)),
+                      Text('${_formatDate(entry.workDate)} · ${_hoursText(entry.hoursWorked ?? 0)}'),
+                      Wrap(
+                        spacing: 8,
+                        children: [
+                          if (entry.canApprove)
+                            FilledButton.tonal(
+                              onPressed: () => _decide(entry, 'approve'),
+                              child: const Text('Подтвердить'),
+                            ),
+                          if (entry.canReject)
+                            OutlinedButton(
+                              onPressed: () => _decide(entry, 'reject'),
+                              child: const Text('Отклонить'),
+                            ),
+                        ],
+                      ),
+                      const Divider(),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }

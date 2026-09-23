@@ -105,3 +105,25 @@ final syncQueueServiceProvider = FutureProvider<SyncQueueService>((ref) async {
   );
   return service;
 });
+
+final syncQueueProvider =
+    StateNotifierProvider<SyncQueueNotifier, SyncQueueProcessResult?>((ref) {
+      return SyncQueueNotifier(ref.read(syncQueueServiceProvider.future));
+    });
+
+class SyncQueueNotifier extends StateNotifier<SyncQueueProcessResult?> {
+  SyncQueueNotifier(this._serviceFuture) : super(null);
+
+  final Future<SyncQueueService> _serviceFuture;
+  Future<SyncQueueProcessResult>? _pending;
+
+  Future<SyncQueueProcessResult> retryPending() {
+    return _pending ??= _retry().whenComplete(() => _pending = null);
+  }
+
+  Future<SyncQueueProcessResult> _retry() async {
+    final result = await (await _serviceFuture).retryDueOperations();
+    state = result;
+    return result;
+  }
+}

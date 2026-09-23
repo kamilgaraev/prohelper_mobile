@@ -1,7 +1,7 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 
 import 'package:prohelpers_mobile/core/design/pro_design_tokens.dart';
-import 'package:prohelpers_mobile/core/theme/app_typography.dart';
+import 'package:prohelpers_mobile/core/widgets/pro_page_scaffold.dart';
 
 class ProOperationalPage extends StatelessWidget {
   const ProOperationalPage({
@@ -30,42 +30,17 @@ class ProOperationalPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final content = ListView(padding: padding, children: children);
-
-    return Scaffold(
-      appBar: AppBar(
-        backgroundColor: theme.colorScheme.surface,
-        centerTitle: false,
-        scrolledUnderElevation: 0,
-        shape: Border(
-          bottom: BorderSide(
-            color: theme.colorScheme.outline.withValues(alpha: 0.22),
-            width: 0.5,
-          ),
-        ),
-        surfaceTintColor: Colors.transparent,
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(title, style: AppTypography.h2(context)),
-            if (subtitle != null)
-              Text(
-                subtitle!,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: AppTypography.caption(context),
-              ),
-          ],
-        ),
-        actions: actions,
-      ),
+    return ProPageScaffold(
+      title: title,
+      subtitle: subtitle,
+      actions: actions,
+      onRefresh: onRefresh,
       floatingActionButton: floatingActionButton,
-      body:
-          onRefresh == null
-              ? content
-              : RefreshIndicator(onRefresh: onRefresh!, child: content),
+      padding: padding,
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: children,
+      ),
     );
   }
 }

@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
@@ -7,7 +7,6 @@ import 'package:prohelpers_mobile/core/design/pro_status.dart';
 import 'package:prohelpers_mobile/core/navigation/mobile_action_recommendation.dart';
 import 'package:prohelpers_mobile/core/navigation/mobile_action_recommendation_provider.dart';
 import 'package:prohelpers_mobile/core/navigation/mobile_destination.dart';
-import 'package:prohelpers_mobile/core/navigation/mobile_navigation_registry.dart';
 import 'package:prohelpers_mobile/core/providers/module_provider.dart';
 import 'package:prohelpers_mobile/core/theme/app_typography.dart';
 import 'package:prohelpers_mobile/core/widgets/app_empty_state.dart';
@@ -66,13 +65,7 @@ class _MobileActionCenterScreenState
     final modulesState = ref.watch(modulesProvider);
     final modules = ref.watch(supportedMobileModulesProvider);
     final smartActions = ref.watch(mobileRecommendedActionsProvider);
-    final destinations = uniqueDestinations(
-      modules.map(
-        (module) =>
-            MobileNavigationRegistry.destinationForRoute(module.route) ??
-            MobileNavigationRegistry.destinationForRoute(module.slug),
-      ),
-    );
+    final destinations = visibleMobileDestinations(modules);
     final filteredDestinations = filterMobileActions(destinations, _query);
 
     return ProPageScaffold(
@@ -140,7 +133,7 @@ class MobileActionCenterContent extends StatelessWidget {
       return const AppEmptyState(
         icon: Icons.grid_view_rounded,
         title: 'Нет доступных действий',
-        description: 'Для вашей роли пока нет мобильных разделов.',
+        description: 'По вашим правам пока нет мобильных разделов.',
       );
     }
 
