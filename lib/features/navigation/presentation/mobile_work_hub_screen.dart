@@ -1,11 +1,10 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import 'package:prohelpers_mobile/core/design/pro_design_tokens.dart';
 import 'package:prohelpers_mobile/core/design/pro_status.dart';
 import 'package:prohelpers_mobile/core/navigation/mobile_destination.dart';
-import 'package:prohelpers_mobile/core/navigation/mobile_navigation_registry.dart';
 import 'package:prohelpers_mobile/core/providers/module_provider.dart';
 import 'package:prohelpers_mobile/core/theme/app_typography.dart';
 import 'package:prohelpers_mobile/core/widgets/app_empty_state.dart';
@@ -66,17 +65,9 @@ class _MobileWorkHubScreenState extends ConsumerState<MobileWorkHubScreen> {
     final modules = ref.watch(supportedMobileModulesProvider);
     final selectedProject = ref.watch(projectsProvider).selectedProject;
     final hasSelectedProject = selectedProject != null;
-    final allDestinations = uniqueDestinations(
-          modules.map(
-            (module) =>
-                MobileNavigationRegistry.destinationForRoute(module.route) ??
-                MobileNavigationRegistry.destinationForRoute(module.slug),
-          ),
-        )
+    final allDestinations = visibleMobileDestinations(modules)
         .where(
-          (destination) =>
-              _workGroups.contains(destination.group) &&
-              (!destination.requiresProject || hasSelectedProject),
+          (destination) => (!destination.requiresProject || hasSelectedProject),
         )
         .toList(growable: false);
     final filteredDestinations = filterMobileActions(allDestinations, _query);
@@ -99,8 +90,8 @@ class _MobileWorkHubScreenState extends ConsumerState<MobileWorkHubScreen> {
                 icon: const Icon(Icons.domain_rounded),
                 label: const Text('Выбрать объект'),
               ),
-            )
-          else if (modulesState.isLoading && allDestinations.isEmpty)
+            ),
+          if (modulesState.isLoading && allDestinations.isEmpty)
             const AppLoadingState(message: 'Загружаем рабочие разделы')
           else if (modulesState.error != null && allDestinations.isEmpty)
             AppErrorState(
@@ -138,11 +129,11 @@ class _MobileWorkHubScreenState extends ConsumerState<MobileWorkHubScreen> {
                         ),
               )
             else
-              for (final group in _workGroups)
+              for (final group in MobileAdminGroup.values)
                 _WorkGroup(
                   group: group,
                   destinations: filteredDestinations
-                      .where((destination) => destination.group == group)
+                      .where((destination) => destination.adminGroup == group)
                       .toList(growable: false),
                 ),
           ],
@@ -152,16 +143,10 @@ class _MobileWorkHubScreenState extends ConsumerState<MobileWorkHubScreen> {
   }
 }
 
-const _workGroups = <MobileModuleGroup>[
-  MobileModuleGroup.fieldWork,
-  MobileModuleGroup.warehouseAndSupply,
-  MobileModuleGroup.approvalsAndDocs,
-];
-
 class _WorkGroup extends StatelessWidget {
   const _WorkGroup({required this.group, required this.destinations});
 
-  final MobileModuleGroup group;
+  final MobileAdminGroup group;
   final List<MobileModuleDestination> destinations;
 
   @override

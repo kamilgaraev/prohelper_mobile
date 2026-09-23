@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -23,6 +23,7 @@ void main() {
       projectId: 9,
       status: 'draft',
       query: ' Tower ',
+      page: 3,
     );
 
     expect(request.method, 'GET');
@@ -30,6 +31,7 @@ void main() {
     expect(request.queryParameters['project_id'], 9);
     expect(request.queryParameters['status'], 'draft');
     expect(request.queryParameters['q'], 'Tower');
+    expect(request.queryParameters['page'], 3);
     expect(list.module.slug, 'change-management');
   });
 
@@ -62,6 +64,30 @@ void main() {
     expect(detail.item.id, 42);
     expect(actionDetail.item.status, 'active');
   });
+
+  test(
+    'posts executive document action to its confirmed workflow endpoint',
+    () async {
+      late RequestOptions request;
+      final dio = Dio(BaseOptions(baseUrl: 'https://api.example.test'));
+      dio.httpClientAdapter = _JsonAdapter((options) {
+        request = options;
+        return _responseData(
+          companionDetailJson(slug: 'executive-documentation'),
+        );
+      });
+
+      await CompanionModuleRepository(dio).executeExecutiveDocumentAction(
+        documentId: 7,
+        action: 'add_remark',
+        comment: 'Нужно исправить',
+      );
+
+      expect(request.method, 'POST');
+      expect(request.path, '/pto/executive-documents/7/actions/add_remark');
+      expect((request.data as Map)['comment'], 'Нужно исправить');
+    },
+  );
 }
 
 class _JsonAdapter implements HttpClientAdapter {

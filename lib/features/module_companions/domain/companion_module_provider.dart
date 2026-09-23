@@ -1,4 +1,4 @@
-﻿import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/error/user_message.dart';
 import '../../../core/network/api_exception.dart';
@@ -8,6 +8,7 @@ import '../data/companion_module_repository.dart';
 class CompanionModuleState {
   const CompanionModuleState({
     this.isLoading = false,
+    this.isLoadingMore = false,
     this.projectId,
     this.list,
     this.status,
@@ -18,6 +19,7 @@ class CompanionModuleState {
   });
 
   final bool isLoading;
+  final bool isLoadingMore;
   final int? projectId;
   final CompanionModuleListModel? list;
   final String? status;
@@ -28,6 +30,7 @@ class CompanionModuleState {
 
   CompanionModuleState copyWith({
     bool? isLoading,
+    bool? isLoadingMore,
     Object? projectId = _projectSentinel,
     Object? list = _listSentinel,
     Object? status = _statusSentinel,
@@ -38,6 +41,7 @@ class CompanionModuleState {
   }) {
     return CompanionModuleState(
       isLoading: isLoading ?? this.isLoading,
+      isLoadingMore: isLoadingMore ?? this.isLoadingMore,
       projectId:
           identical(projectId, _projectSentinel)
               ? this.projectId
@@ -74,12 +78,18 @@ class CompanionModuleNotifier extends StateNotifier<CompanionModuleState> {
       return;
     }
 
-    state = state.copyWith(projectId: projectId, list: null, error: null);
+    state = state.copyWith(
+      projectId: projectId,
+      list: null,
+      isLoadingMore: false,
+      error: null,
+    );
   }
 
   Future<void> load() async {
     state = state.copyWith(
       isLoading: true,
+      isLoadingMore: false,
       permissionDenied: false,
       malformedContract: false,
       error: null,
@@ -91,6 +101,7 @@ class CompanionModuleNotifier extends StateNotifier<CompanionModuleState> {
         projectId: state.projectId,
         status: state.status,
         query: state.query,
+        page: 1,
       );
       state = state.copyWith(isLoading: false, list: list);
     } catch (error) {
@@ -99,6 +110,38 @@ class CompanionModuleNotifier extends StateNotifier<CompanionModuleState> {
         list: null,
         permissionDenied: _isPermissionDenied(error),
         malformedContract: error is FormatException,
+        error: UserMessage.fromError(error),
+      );
+    }
+  }
+
+  Future<void> loadMore() async {
+    final current = state.list;
+    if (state.isLoading ||
+        state.isLoadingMore ||
+        current == null ||
+        current.meta.currentPage >= current.meta.lastPage) {
+      return;
+    }
+
+    state = state.copyWith(isLoadingMore: true, error: null);
+    try {
+      final next = await _repository.fetchList(
+        moduleSlug: _moduleSlug,
+        projectId: state.projectId,
+        status: state.status,
+        query: state.query,
+        page: current.meta.currentPage + 1,
+      );
+      if (state.list == current) {
+        state = state.copyWith(
+          isLoadingMore: false,
+          list: current.appendPage(next),
+        );
+      }
+    } catch (error) {
+      state = state.copyWith(
+        isLoadingMore: false,
         error: UserMessage.fromError(error),
       );
     }
@@ -132,6 +175,24 @@ class CompanionModuleNotifier extends StateNotifier<CompanionModuleState> {
       id: id,
       action: action,
       comment: comment,
+    );
+    await load();
+    return detail;
+  }
+
+  Future<CompanionModuleDetailModel> executeExecutiveDocumentAction({
+    required int documentId,
+    required String action,
+    String? comment,
+    int? versionId,
+    String? severity,
+  }) async {
+    final detail = await _repository.executeExecutiveDocumentAction(
+      documentId: documentId,
+      action: action,
+      comment: comment,
+      versionId: versionId,
+      severity: severity,
     );
     await load();
     return detail;

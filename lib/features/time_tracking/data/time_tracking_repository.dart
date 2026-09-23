@@ -70,6 +70,38 @@ class TimeTrackingRepository {
     }
   }
 
+  Future<List<TimeEntryModel>> fetchPendingApprovals({
+    required int projectId,
+  }) async {
+    try {
+      final response = await _dio.get(
+        '/time-tracking/pending-approvals',
+        queryParameters: {'project_id': projectId, 'per_page': 100},
+      );
+      return MobileApiResponse.dataList(response.data)
+          .map(TimeEntryModel.fromJson)
+          .toList(growable: false);
+    } on DioException catch (error) {
+      throw ApiException.fromDio(error);
+    }
+  }
+
+  Future<TimeEntryModel> decideApproval({
+    required int id,
+    required String action,
+    String? reason,
+  }) async {
+    try {
+      final response = await _dio.post(
+        '/time-tracking/entries/$id/$action',
+        data: reason == null ? null : {'reason': reason},
+      );
+      return TimeEntryModel.fromJson(MobileApiResponse.dataMap(response.data));
+    } on DioException catch (error) {
+      throw ApiException.fromDio(error);
+    }
+  }
+
   Future<TimeEntryModel> startTimer({
     required int projectId,
     required String workDate,

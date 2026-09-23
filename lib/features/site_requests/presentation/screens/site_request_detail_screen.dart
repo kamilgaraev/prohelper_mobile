@@ -1,4 +1,6 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:prohelpers_mobile/core/theme/app_colors.dart';
 import 'package:prohelpers_mobile/core/theme/app_typography.dart';
@@ -11,6 +13,7 @@ import 'package:prohelpers_mobile/core/widgets/pro_card.dart';
 import 'package:prohelpers_mobile/features/site_requests/data/site_request_model.dart';
 import 'package:prohelpers_mobile/features/site_requests/domain/site_request_detail_provider.dart';
 import 'package:prohelpers_mobile/features/site_requests/domain/site_requests_provider.dart';
+import 'package:prohelpers_mobile/features/site_requests/data/site_requests_repository.dart';
 import 'package:prohelpers_mobile/features/site_requests/presentation/screens/site_request_form_screen.dart';
 
 class SiteRequestDetailScreen extends ConsumerWidget {
@@ -179,14 +182,14 @@ class SiteRequestDetailScreen extends ConsumerWidget {
   }
 }
 
-class _SiteRequestDetailContent extends StatelessWidget {
+class _SiteRequestDetailContent extends ConsumerWidget {
   const _SiteRequestDetailContent({required this.request, this.onEdit});
 
   final SiteRequestModel request;
   final Future<void> Function()? onEdit;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -198,7 +201,14 @@ class _SiteRequestDetailContent extends StatelessWidget {
           const SizedBox(height: 16),
           _RequestContextCard(request: request),
           const SizedBox(height: 16),
-          _RequestActorsCard(request: request),
+          _RequestActorsCard(
+            request: request,
+            onAssign:
+                request.canBeAssigned
+                    ? () => _assignRequest(context, ref, request.serverId)
+                    : null,
+          ),
+          _RequestFilesCard(requestId: request.serverId),
           if (onEdit != null) ...[
             const SizedBox(height: 16),
             Align(
@@ -388,10 +398,185 @@ class _RequestContextCard extends StatelessWidget {
   }
 }
 
+Future<void> _assignRequest(
+  BuildContext context,
+  WidgetRef ref,
+  int requestId,
+) async {
+  try {
+    final repository = ref.read(siteRequestsRepositoryProvider);
+    final assignees = await repository.fetchAssignees(requestId);
+    if (!context.mounted) return;
+    final selectedId = await showModalBottomSheet<int?>(
+      context: context,
+      builder:
+          (sheetContext) => SafeArea(
+            child: ListView(
+              children: [
+                ListTile(
+                  title: const Text('Снять исполнителя'),
+                  onTap: () => Navigator.pop(sheetContext, -1),
+                ),
+                ...assignees.map((user) {
+                  final id = int.tryParse(user['id']?.toString() ?? '');
+                  return ListTile(
+                    title: Text(user['name']?.toString() ?? 'Сотрудник'),
+                    onTap:
+                        id == null
+                            ? null
+                            : () => Navigator.pop(sheetContext, id),
+                  );
+                }),
+              ],
+            ),
+          ),
+    );
+    if (selectedId == null) return;
+    await repository.assignSiteRequest(
+      requestId,
+      selectedId == -1 ? null : selectedId,
+    );
+    await ref.read(siteRequestDetailProvider(requestId).notifier).loadDetails();
+  } catch (error) {
+    if (context.mounted) AppErrorNotice.show(context, error);
+  }
+}
+
+class _RequestFilesCard extends ConsumerStatefulWidget {
+  const _RequestFilesCard({required this.requestId});
+  final int requestId;
+
+  @override
+  ConsumerState<_RequestFilesCard> createState() => _RequestFilesCardState();
+}
+
+class _RequestFilesCardState extends ConsumerState<_RequestFilesCard> {
+  late Future<List<Map<String, dynamic>>> _files;
+  bool _uploading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  void _load() =>
+      _files = ref
+          .read(siteRequestsRepositoryProvider)
+          .fetchFiles(widget.requestId);
+
+  Future<void> _takePhoto() async {
+    final photo = await ImagePicker().pickImage(
+      source: ImageSource.camera,
+      imageQuality: 85,
+    );
+    if (photo == null) return;
+    setState(() => _uploading = true);
+    try {
+      await ref
+          .read(siteRequestsRepositoryProvider)
+          .uploadFile(widget.requestId, photo.path);
+      if (mounted) setState(_load);
+    } catch (error) {
+      if (mounted) AppErrorNotice.show(context, error);
+    } finally {
+      if (mounted) setState(() => _uploading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ProCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text('Файлы и фото', style: AppTypography.h2(context)),
+              ),
+              IconButton(
+                onPressed: _uploading ? null : _takePhoto,
+                icon: const Icon(Icons.add_a_photo_outlined),
+                tooltip: 'Добавить фото',
+              ),
+            ],
+          ),
+          if (_uploading) const LinearProgressIndicator(),
+          FutureBuilder<List<Map<String, dynamic>>>(
+            future: _files,
+            builder: (context, snapshot) {
+              if (snapshot.hasError) {
+                return const Text('Не удалось загрузить файлы заявки.');
+              }
+              if (!snapshot.hasData) {
+                return const Padding(
+                  padding: EdgeInsets.all(8),
+                  child: CircularProgressIndicator(),
+                );
+              }
+              if (snapshot.data!.isEmpty) {
+                return const Text('К заявке пока не приложены файлы.');
+              }
+              return Column(
+                children:
+                    snapshot.data!.map((file) {
+                      final url =
+                          file['download_url']?.toString() ??
+                          file['url']?.toString();
+                      final fileId = int.tryParse(file['id']?.toString() ?? '');
+                      return ListTile(
+                        dense: true,
+                        title: Text(file['name']?.toString() ?? 'Файл'),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.download_outlined),
+                              tooltip: 'Скачать файл',
+                              onPressed:
+                                  url == null
+                                      ? null
+                                      : () async {
+                                        final uri = Uri.tryParse(url);
+                                        if (uri != null) {
+                                          await launchUrl(
+                                            uri,
+                                            mode:
+                                                LaunchMode.externalApplication,
+                                          );
+                                        }
+                                      },
+                            ),
+                            if (file['can_delete'] == true && fileId != null)
+                              IconButton(
+                                icon: const Icon(Icons.delete_outline),
+                                tooltip: 'Удалить файл',
+                                onPressed: () async {
+                                  await ref
+                                      .read(siteRequestsRepositoryProvider)
+                                      .deleteFile(widget.requestId, fileId);
+                                  if (mounted) setState(_load);
+                                },
+                              ),
+                          ],
+                        ),
+                      );
+                    }).toList(),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _RequestActorsCard extends StatelessWidget {
-  const _RequestActorsCard({required this.request});
+  const _RequestActorsCard({required this.request, this.onAssign});
 
   final SiteRequestModel request;
+  final VoidCallback? onAssign;
 
   @override
   Widget build(BuildContext context) {
@@ -412,6 +597,15 @@ class _RequestActorsCard extends StatelessWidget {
               icon: Icons.assignment_ind_outlined,
               label: 'Исполнитель',
               value: request.assignedUserName!,
+            ),
+          if (onAssign != null)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: onAssign,
+                icon: const Icon(Icons.person_add_alt_1_outlined),
+                label: const Text('Назначить исполнителя'),
+              ),
             ),
           if ((request.userName ?? '').trim().isEmpty &&
               (request.assignedUserName ?? '').trim().isEmpty)

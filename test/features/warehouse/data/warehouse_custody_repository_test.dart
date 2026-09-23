@@ -13,6 +13,30 @@ import 'package:prohelpers_mobile/features/warehouse/data/warehouse_scan_model.d
 import 'package:prohelpers_mobile/features/warehouse/data/warehouse_summary_model.dart';
 
 void main() {
+  test('write-off sends a stable idempotency key with the operation', () async {
+    late RequestOptions request;
+    final dio = Dio(BaseOptions(baseUrl: 'https://api.example.test'));
+    dio.httpClientAdapter = _JsonAdapter((options) {
+      request = options;
+      return const <String, dynamic>{'success': true, 'data': {}};
+    });
+
+    await WarehouseRepository(dio).writeOff(
+      warehouseId: 5,
+      materialId: 19,
+      quantity: 2,
+      reason: 'Повреждение',
+    );
+
+    final payload = Map<String, dynamic>.from(request.data as Map);
+    expect(request.path, '/warehouse/operations/write-off');
+    expect(payload['warehouse_id'], 5);
+    expect(payload['material_id'], 19);
+    expect(payload['reason'], 'Повреждение');
+    expect(payload['idempotency_key'], matches(RegExp(r'^[0-9a-f-]{36}$')));
+    expect(request.headers['Idempotency-Key'], payload['idempotency_key']);
+  });
+
   test(
     'custody issue sends the same idempotency key in body and header',
     () async {

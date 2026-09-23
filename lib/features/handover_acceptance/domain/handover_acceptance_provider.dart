@@ -1,4 +1,4 @@
-﻿import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/error/user_message.dart';
 import '../../../core/network/api_exception.dart';
@@ -165,12 +165,14 @@ class HandoverAcceptanceNotifier
     int itemId, {
     required String status,
     String? comment,
+    List<String> photoPaths = const [],
   }) async {
     final selectedScopeId = state.selectedScope?.id;
     await _repository.reviewChecklistItem(
       itemId,
       status: status,
       comment: comment,
+      photoPaths: photoPaths,
     );
     await loadScopes();
     if (selectedScopeId != null) {
@@ -190,18 +192,24 @@ class HandoverAcceptanceNotifier
     }
   }
 
-  Future<void> createFinding(int sessionId, Map<String, dynamic> data) async {
-    await _repository.createFinding(sessionId, data);
+  Future<void> createFinding(
+    int sessionId,
+    Map<String, dynamic> data, {
+    List<String> photoPaths = const [],
+  }) async {
+    await _repository.createFinding(sessionId, data, photoPaths: photoPaths);
     await loadScopes();
   }
 
   Future<void> resolveFinding(
     int findingId, {
     required String resolutionComment,
+    List<String> photoPaths = const [],
   }) async {
     await _repository.resolveFinding(
       findingId,
       resolutionComment: resolutionComment,
+      photoPaths: photoPaths,
     );
     await loadScopes();
   }
@@ -216,8 +224,16 @@ class HandoverAcceptanceNotifier
     await loadScopes();
   }
 
-  Future<void> acceptScope(int scopeId, {String? comment}) async {
-    await _repository.acceptScope(scopeId, comment: comment);
+  Future<void> acceptScope(
+    int scopeId, {
+    String? comment,
+    List<String> photoPaths = const [],
+  }) async {
+    await _repository.acceptScope(
+      scopeId,
+      comment: comment,
+      photoPaths: photoPaths,
+    );
     await loadScopes();
   }
 
@@ -226,8 +242,16 @@ class HandoverAcceptanceNotifier
     await loadScopes();
   }
 
-  Future<void> rejectScope(int scopeId, {required String reason}) async {
-    await _repository.rejectScope(scopeId, reason: reason);
+  Future<void> rejectScope(
+    int scopeId, {
+    required String reason,
+    List<String> photoPaths = const [],
+  }) async {
+    await _repository.rejectScope(
+      scopeId,
+      reason: reason,
+      photoPaths: photoPaths,
+    );
     await loadScopes();
   }
 

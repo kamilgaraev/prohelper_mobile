@@ -1,4 +1,4 @@
-﻿import 'package:dio/dio.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -23,6 +23,10 @@ class _RecordingHandoverRepository extends HandoverAcceptanceRepository {
   int? uploadedDocumentId;
   String? uploadedDocumentPath;
   String? reviewedChecklistStatus;
+  List<String> reviewedChecklistPhotoPaths = const [];
+  List<String> findingPhotoPaths = const [];
+  List<String> resolutionPhotoPaths = const [];
+  List<String> rejectionPhotoPaths = const [];
 
   AcceptanceScopeModel get scope => const AcceptanceScopeModel(
     id: 5,
@@ -119,9 +123,11 @@ class _RecordingHandoverRepository extends HandoverAcceptanceRepository {
     int itemId, {
     required String status,
     String? comment,
+    List<String> photoPaths = const [],
   }) async {
     reviewedChecklistItemId = itemId;
     reviewedChecklistStatus = status;
+    reviewedChecklistPhotoPaths = photoPaths;
     return scope.checklists.single;
   }
 
@@ -138,9 +144,11 @@ class _RecordingHandoverRepository extends HandoverAcceptanceRepository {
   @override
   Future<AcceptanceFindingModel> createFinding(
     int sessionId,
-    Map<String, dynamic> data,
-  ) async {
+    Map<String, dynamic> data, {
+    List<String> photoPaths = const [],
+  }) async {
     findingPayload = Map<String, dynamic>.from(data);
+    findingPhotoPaths = photoPaths;
 
     return AcceptanceFindingModel(
       id: 12,
@@ -155,8 +163,10 @@ class _RecordingHandoverRepository extends HandoverAcceptanceRepository {
   Future<AcceptanceFindingModel> resolveFinding(
     int findingId, {
     required String resolutionComment,
+    List<String> photoPaths = const [],
   }) async {
     this.resolutionComment = resolutionComment;
+    resolutionPhotoPaths = photoPaths;
 
     return AcceptanceFindingModel(
       id: findingId,
@@ -171,9 +181,11 @@ class _RecordingHandoverRepository extends HandoverAcceptanceRepository {
   Future<AcceptanceScopeModel> rejectScope(
     int scopeId, {
     required String reason,
+    List<String> photoPaths = const [],
   }) async {
     rejectedScopeId = scopeId;
     rejectReason = reason;
+    rejectionPhotoPaths = photoPaths;
     return scope;
   }
 }
@@ -372,6 +384,8 @@ void main() {
 
     await tester.ensureVisible(find.text('Принять').last);
     await tester.pump();
+    await tester.tap(find.text('Принять').last);
+    await pumpUi(tester);
     await tester.tap(find.text('Принять').last);
     await pumpUi(tester);
 

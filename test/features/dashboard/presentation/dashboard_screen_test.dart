@@ -1,4 +1,4 @@
-﻿import 'package:dio/dio.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -16,6 +16,8 @@ import 'package:prohelpers_mobile/features/dashboard/presentation/controllers/da
 import 'package:prohelpers_mobile/features/dashboard/presentation/dashboard_screen.dart';
 import 'package:prohelpers_mobile/features/notifications/data/notification_model.dart';
 import 'package:prohelpers_mobile/features/notifications/data/notifications_repository.dart';
+import 'package:prohelpers_mobile/features/modules/data/mobile_module_model.dart';
+import 'package:prohelpers_mobile/features/modules/data/modules_repository.dart';
 import 'package:prohelpers_mobile/features/project_management/presentation/project_management_screen.dart';
 import 'package:prohelpers_mobile/features/projects/data/project_model.dart';
 import 'package:prohelpers_mobile/features/projects/data/projects_repository.dart';
@@ -87,6 +89,26 @@ class _TestDashboardController extends DashboardController {
   _TestDashboardController(List<DashboardWidgetModel> widgets)
     : super(_TestDashboardRepository(widgets), canLoad: false) {
     state = DashboardState(isLoading: false, widgets: widgets, error: null);
+  }
+}
+
+class _TestModulesNotifier extends ModulesNotifier {
+  _TestModulesNotifier() : super(ModulesRepository(Dio()), canLoad: false) {
+    state = ModulesState(
+      isLoading: false,
+      modules: const [
+        MobileModuleModel(
+          slug: 'project-management',
+          title: 'Управление проектом',
+          description: '',
+          icon: 'project',
+          supportedOnMobile: true,
+          order: 1,
+          route: 'project-management',
+        ),
+      ],
+      error: null,
+    );
   }
 }
 
@@ -190,6 +212,7 @@ void main() {
         dashboardControllerProvider.overrideWith(
           (ref) => _TestDashboardController(widgets),
         ),
+        modulesProvider.overrideWith((ref) => _TestModulesNotifier()),
         notificationsRepositoryProvider.overrideWith(
           (ref) => _TestNotificationsRepository(unreadCount: unreadCount),
         ),

@@ -42,6 +42,44 @@ class ProcurementRepository extends SyncQueueAwareRepository {
     }
   }
 
+  Future<ProcurementPurchaseRequestModel> fetchPurchaseRequest(int id) async {
+    try {
+      final response = await _dio.get('/procurement/purchase-requests/$id');
+      return ProcurementPurchaseRequestModel.fromJson(
+        MobileApiResponse.dataMap(response.data),
+      );
+    } on DioException catch (error) {
+      throw ApiException.fromDio(
+        error,
+        fallbackMessage: 'Не удалось загрузить заявку на закупку.',
+      );
+    }
+  }
+
+  Future<ProcurementPurchaseRequestModel> createPurchaseRequest(
+    Map<String, dynamic> payload,
+  ) async {
+    try {
+      final response = await _dio.post(
+        '/procurement/purchase-requests',
+        data: payload,
+      );
+      final data = MobileApiResponse.dataMap(response.data);
+      final item = data['item'];
+      if (item is! Map) {
+        throw const FormatException('В ответе не найдена созданная заявка.');
+      }
+      return ProcurementPurchaseRequestModel.fromJson(
+        item.map((key, value) => MapEntry(key.toString(), value)),
+      );
+    } on DioException catch (error) {
+      throw ApiException.fromDio(
+        error,
+        fallbackMessage: 'Не удалось создать заявку на закупку.',
+      );
+    }
+  }
+
   Future<ProcurementOrderDetailModel> fetchOrder(int id) async {
     try {
       final response = await _dio.get('/procurement/purchase-orders/$id');

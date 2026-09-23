@@ -1,4 +1,4 @@
-﻿import 'package:dio/dio.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -6,6 +6,12 @@ import 'package:prohelpers_mobile/core/theme/app_typography.dart';
 import 'package:prohelpers_mobile/features/notifications/data/notification_model.dart';
 import 'package:prohelpers_mobile/features/notifications/data/notifications_repository.dart';
 import 'package:prohelpers_mobile/features/notifications/presentation/notification_detail_screen.dart';
+import 'package:prohelpers_mobile/features/payments/data/payment_document_model.dart';
+import 'package:prohelpers_mobile/features/payments/data/payments_repository.dart';
+import 'package:prohelpers_mobile/features/payments/presentation/payments_screen.dart';
+import 'package:prohelpers_mobile/features/procurement/data/procurement_model.dart';
+import 'package:prohelpers_mobile/features/procurement/data/procurement_repository.dart';
+import 'package:prohelpers_mobile/features/procurement/presentation/procurement_screen.dart';
 
 void main() {
   testWidgets(
@@ -73,17 +79,107 @@ void main() {
     expect(title.maxLines, 3);
     expect(title.overflow, TextOverflow.ellipsis);
   });
+
+  testWidgets('opens payment document detail from push record payload', (
+    tester,
+  ) async {
+    final notification = _notification(
+      type: 'payment_document_created',
+      data: const <String, dynamic>{
+        'target_type': 'payment_document',
+        'target_id': 640,
+      },
+    );
+    final repository = _NotificationsRepository(notification);
+    final payments = _FailedPaymentsRepository();
+
+    await tester.pumpWidget(
+      _buildDetail(
+        repository,
+        paymentsRepository: payments,
+        autoOpenTarget: true,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(PaymentDocumentDetailScreen), findsOneWidget);
+    expect(payments.requestedId, 640);
+    expect(find.text('Документ'), findsOneWidget);
+    expect(
+      find.text('Не удалось выполнить операцию. Проверьте связь и повторите.'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('reports missing record id and does not open a detail screen', (
+    tester,
+  ) async {
+    final notification = _notification(
+      type: 'quality_defect_created',
+      data: const <String, dynamic>{'target_type': 'quality_defect'},
+    );
+
+    await tester.pumpWidget(
+      _buildDetail(
+        _NotificationsRepository(notification),
+        autoOpenTarget: true,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('В уведомлении нет идентификатора записи.'), findsOne);
+    expect(
+      find.text('Карточка замечания по качеству не указана в уведомлении.'),
+      findsOne,
+    );
+  });
+
+  testWidgets('opens purchase request card from push payload', (tester) async {
+    final notification = _notification(
+      type: 'purchase_request_created',
+      data: const <String, dynamic>{
+        'target_type': 'purchase_request',
+        'target_id': 81,
+      },
+    );
+    final procurement = _FailedProcurementRepository();
+
+    await tester.pumpWidget(
+      _buildDetail(
+        _NotificationsRepository(notification),
+        procurementRepository: procurement,
+        autoOpenTarget: true,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(ProcurementPurchaseRequestDetailScreen), findsOneWidget);
+    expect(procurement.requestedId, 81);
+    expect(find.text('Не удалось загрузить заявку'), findsOneWidget);
+  });
 }
 
-Widget _buildDetail(_NotificationsRepository repository) {
+Widget _buildDetail(
+  _NotificationsRepository repository, {
+  PaymentsRepository? paymentsRepository,
+  ProcurementRepository? procurementRepository,
+  bool autoOpenTarget = false,
+}) {
   return ProviderScope(
     overrides: [
       notificationsRepositoryProvider.overrideWith((ref) => repository),
+      if (paymentsRepository != null)
+        paymentsRepositoryProvider.overrideWith((ref) => paymentsRepository),
+      if (procurementRepository != null)
+        procurementRepositoryProvider.overrideWith(
+          (ref) => procurementRepository,
+        ),
     ],
     child: MaterialApp(
       home: NotificationDetailScreen(
         notificationId: repository.notification.id,
         initialNotification: repository.notification,
+        autoOpenTarget: autoOpenTarget,
       ),
     ),
   );
@@ -116,6 +212,30 @@ class _NotificationsRepository extends NotificationsRepository {
 
   @override
   Future<int> fetchUnreadCount() async => notification.isUnread ? 1 : 0;
+}
+
+class _FailedPaymentsRepository extends PaymentsRepository {
+  _FailedPaymentsRepository() : super(Dio());
+
+  int? requestedId;
+
+  @override
+  Future<PaymentDocumentModel> detail(int id) async {
+    requestedId = id;
+    throw const FormatException('Не удалось загрузить документ.');
+  }
+}
+
+class _FailedProcurementRepository extends ProcurementRepository {
+  _FailedProcurementRepository() : super(Dio());
+
+  int? requestedId;
+
+  @override
+  Future<ProcurementPurchaseRequestModel> fetchPurchaseRequest(int id) async {
+    requestedId = id;
+    throw const FormatException('Заявка недоступна.');
+  }
 }
 
 NotificationModel _notification({

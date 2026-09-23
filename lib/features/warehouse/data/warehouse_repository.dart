@@ -198,6 +198,49 @@ class WarehouseRepository extends SyncQueueAwareRepository {
     );
   }
 
+  Future<void> writeOff({
+    required int warehouseId,
+    required int materialId,
+    required double quantity,
+    String? documentNumber,
+    required String reason,
+  }) async {
+    const endpoint = '/warehouse/operations/write-off';
+    final idempotencyKey = _newWarehouseIdempotencyKey();
+    final payload = <String, dynamic>{
+      'warehouse_id': warehouseId,
+      'material_id': materialId,
+      'quantity': quantity,
+      'reason': reason.trim(),
+      if ((documentNumber ?? '').trim().isNotEmpty)
+        'document_number': documentNumber!.trim(),
+      'idempotency_key': idempotencyKey,
+    };
+    try {
+      await _dio.post(
+        endpoint,
+        data: payload,
+        options: Options(headers: {'Idempotency-Key': idempotencyKey}),
+      );
+    } on DioException catch (error) {
+      if (SyncQueueService.shouldQueueDioException(error)) {
+        await queueAndThrow(
+          SyncQueueDraft(
+            moduleSlug: 'warehouse',
+            operationType: 'write_off',
+            method: 'POST',
+            endpoint: endpoint,
+            payload: payload,
+          ),
+        );
+      }
+      throw ApiException.fromDio(
+        error,
+        fallbackMessage: 'Не удалось списать материал.',
+      );
+    }
+  }
+
   Future<void> returnFromResponsible({
     required int projectId,
     required int custodyWarehouseId,

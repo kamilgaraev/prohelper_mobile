@@ -1,4 +1,4 @@
-﻿import 'package:dio/dio.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -22,6 +22,8 @@ import 'package:prohelpers_mobile/features/home/presentation/mobile_overview_scr
 import 'package:prohelpers_mobile/features/home/presentation/widgets/overview_project_header.dart';
 import 'package:prohelpers_mobile/features/home/presentation/widgets/overview_today_status.dart';
 import 'package:prohelpers_mobile/features/home/presentation/widgets/overview_work_summary.dart';
+import 'package:prohelpers_mobile/features/my_actions/data/my_action.dart';
+import 'package:prohelpers_mobile/features/my_actions/data/my_actions_repository.dart';
 import 'package:prohelpers_mobile/features/notifications/data/notification_model.dart';
 import 'package:prohelpers_mobile/features/notifications/data/notifications_repository.dart';
 import 'package:prohelpers_mobile/features/projects/data/project_model.dart';
@@ -37,6 +39,24 @@ class _TestSecureStorageService extends SecureStorageService {
 
   @override
   Future<void> savePinnedMobileActionIds(List<String> actionIds) async {}
+}
+
+class _TestMyActionsRepository extends MyActionsRepository {
+  _TestMyActionsRepository() : super(Dio());
+
+  @override
+  Future<MyActionsPage> fetch({
+    int? projectId,
+    int page = 1,
+    int perPage = 10,
+  }) async {
+    return MyActionsPage(
+      items: const [],
+      currentPage: page,
+      lastPage: page,
+      total: 0,
+    );
+  }
 }
 
 class _TestAuthRepository extends AuthRepository {
@@ -391,7 +411,7 @@ void main() {
       findsNothing,
     );
     expect(
-      find.text('1 быстрый вход под вашу роль и текущий объект.'),
+      find.text('1 быстрый вход по вашим правам и текущему объекту.'),
       findsOneWidget,
     );
   });
@@ -567,6 +587,9 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          myActionsRepositoryProvider.overrideWithValue(
+            _TestMyActionsRepository(),
+          ),
           authProvider.overrideWith((ref) => _TestAuthNotifier(user)),
           projectsProvider.overrideWith(
             (ref) => _TestProjectsNotifier(project),
@@ -626,6 +649,9 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
+            myActionsRepositoryProvider.overrideWithValue(
+              _TestMyActionsRepository(),
+            ),
             authProvider.overrideWith((ref) => _TestAuthNotifier(user)),
             projectsProvider.overrideWith(
               (ref) => _TestProjectsNotifier(project),
@@ -687,6 +713,9 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
+            myActionsRepositoryProvider.overrideWithValue(
+              _TestMyActionsRepository(),
+            ),
             authProvider.overrideWith((ref) => _TestAuthNotifier(user)),
             projectsProvider.overrideWith(
               (ref) => _TestProjectsNotifier(project),
@@ -747,6 +776,9 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
+            myActionsRepositoryProvider.overrideWithValue(
+              _TestMyActionsRepository(),
+            ),
             authProvider.overrideWith((ref) => _TestAuthNotifier(user)),
             projectsProvider.overrideWith(
               (ref) => _TestProjectsNotifier(project),
@@ -808,6 +840,9 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
+            myActionsRepositoryProvider.overrideWithValue(
+              _TestMyActionsRepository(),
+            ),
             authProvider.overrideWith((ref) => _TestAuthNotifier(user)),
             projectsProvider.overrideWith(
               (ref) => _TestProjectsNotifier(project),

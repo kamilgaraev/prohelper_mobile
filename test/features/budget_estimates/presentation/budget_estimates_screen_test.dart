@@ -1,4 +1,4 @@
-﻿import 'package:dio/dio.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -19,6 +19,37 @@ class _RecordingBudgetRepository extends BudgetEstimatesRepository {
   int? returnedEstimateId;
   String? approvedComment;
   String? returnComment;
+  String? loadedSearch;
+  String? loadedStatus;
+  int? loadedPage;
+
+  @override
+  Future<BudgetEstimatePage> fetchEstimates({
+    required int projectId,
+    int page = 1,
+    String? status,
+    String? search,
+  }) async {
+    loadedProjectId = projectId;
+    loadedSearch = search;
+    loadedStatus = status;
+    loadedPage = page;
+    final items =
+        _summary.estimates.where((estimate) {
+          return (status == null || estimate.status == status) &&
+              (search == null ||
+                  search.isEmpty ||
+                  '${estimate.number} ${estimate.name}'.toLowerCase().contains(
+                    search.toLowerCase(),
+                  ));
+        }).toList();
+    return BudgetEstimatePage(
+      items: items,
+      currentPage: page,
+      lastPage: 1,
+      total: items.length,
+    );
+  }
 
   @override
   Future<BudgetEstimateSummaryModel> fetchSummary({
@@ -96,6 +127,7 @@ void main() {
         budgetEstimatesProvider.overrideWith(
           (ref) => BudgetEstimatesNotifier(repository),
         ),
+        budgetEstimatesRepositoryProvider.overrideWithValue(repository),
       ],
       child: MaterialApp(home: child),
     );
@@ -132,7 +164,33 @@ void main() {
     expect(find.text('Каркас секции А'), findsWidgets);
     expect(find.text('Изменения бюджета'), findsOneWidget);
     expect(find.text('Уточнение марки бетона'), findsOneWidget);
+    expect(find.text('Основание: Проектное изменение'), findsOneWidget);
     expect(find.text('1 200 000 ₽'), findsWidgets);
+  });
+
+  testWidgets('filters estimates by search and status', (tester) async {
+    final repository = _RecordingBudgetRepository();
+    useLargeSurface(tester);
+    await tester.pumpWidget(
+      buildApp(
+        const BudgetEstimatesScreen(),
+        repository,
+        selectedProject: project(),
+      ),
+    );
+    await pumpUi(tester);
+
+    expect(find.text('Каркас секции А'), findsWidgets);
+    await tester.enterText(find.byType(TextField).first, 'нет такой сметы');
+    await pumpUi(tester);
+    expect(repository.loadedSearch, 'нет такой сметы');
+    expect(find.text('Сметы не найдены'), findsOneWidget);
+    await tester.enterText(find.byType(TextField).first, '');
+    await pumpUi(tester);
+    await tester.tap(find.text('Согласованы'));
+    await pumpUi(tester);
+    expect(repository.loadedStatus, 'approved');
+    expect(find.text('Сметы не найдены'), findsOneWidget);
   });
 
   testWidgets('shows explicit empty state without selected project', (

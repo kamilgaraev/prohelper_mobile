@@ -1,4 +1,6 @@
-﻿import 'package:flutter/material.dart';
+import 'dart:async';
+
+import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/error/user_message.dart';
@@ -12,6 +14,7 @@ import '../../../core/widgets/mesh_background.dart';
 import '../../../core/widgets/pro_card.dart';
 import '../../projects/domain/projects_provider.dart';
 import '../data/budget_estimate_model.dart';
+import '../data/budget_estimates_repository.dart';
 import '../domain/budget_estimates_provider.dart';
 
 class BudgetEstimatesScreen extends ConsumerStatefulWidget {
@@ -23,6 +26,25 @@ class BudgetEstimatesScreen extends ConsumerStatefulWidget {
 }
 
 class _BudgetEstimatesScreenState extends ConsumerState<BudgetEstimatesScreen> {
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
+  String? _statusFilter;
+  Timer? _searchTimer;
+  int? _listProjectId;
+  int _listRequest = 0;
+  BudgetEstimatePage? _estimatePage;
+  bool _listLoading = false;
+  bool _moreLoading = false;
+  String? _listError;
+
+  @override
+  void dispose() {
+    _searchTimer?.cancel();
+    _listRequest++;
+    _searchController.dispose();
+    super.dispose();
+  }
+
   @override
   void initState() {
     super.initState();
@@ -54,13 +76,7 @@ class _BudgetEstimatesScreenState extends ConsumerState<BudgetEstimatesScreen> {
           actions: [
             IconButton(
               tooltip: 'Обновить',
-              onPressed:
-                  projectId == null
-                      ? null
-                      : () =>
-                          ref
-                              .read(budgetEstimatesProvider.notifier)
-                              .loadSummary(),
+              onPressed: projectId == null ? null : _refresh,
               icon: const Icon(Icons.refresh_rounded),
             ),
           ],
@@ -92,7 +108,7 @@ class _BudgetEstimatesScreenState extends ConsumerState<BudgetEstimatesScreen> {
       return AppErrorState(
         title: _errorTitle(state),
         description: _errorDescription(state),
-        onRetry: () => ref.read(budgetEstimatesProvider.notifier).loadSummary(),
+        onRetry: _refresh,
       );
     }
 
@@ -102,7 +118,7 @@ class _BudgetEstimatesScreenState extends ConsumerState<BudgetEstimatesScreen> {
     }
 
     return RefreshIndicator(
-      onRefresh: () => ref.read(budgetEstimatesProvider.notifier).loadSummary(),
+      onRefresh: _refresh,
       child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
         children: [
@@ -135,28 +151,96 @@ class _BudgetEstimatesScreenState extends ConsumerState<BudgetEstimatesScreen> {
               ),
             ),
           ],
-          _SectionTitle(
-            title: 'Сметы объекта',
-            count: summary.estimates.length,
+          TextField(
+            controller: _searchController,
+            decoration: const InputDecoration(
+              prefixIcon: Icon(Icons.search),
+              labelText: 'Поиск по сметам',
+            ),
+            onChanged: (value) {
+              _searchTimer?.cancel();
+              _searchTimer = Timer(const Duration(milliseconds: 300), () {
+                if (!mounted) return;
+                setState(() => _searchQuery = value.trim());
+                _loadEstimates(projectId);
+              });
+            },
           ),
           const SizedBox(height: 8),
-          if (summary.estimates.isEmpty)
-            const AppEmptyState(
-              icon: Icons.calculate_outlined,
-              title: 'Смет пока нет',
-              description:
-                  'По выбранному объекту еще нет сметных данных для просмотра.',
-            )
-          else
-            ...summary.estimates.map(
-              (estimate) => Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: _BudgetEstimateCard(
-                  estimate: estimate,
-                  onTap: () => _openDetail(estimate.id),
-                ),
-              ),
-            ),
+          Wrap(
+            spacing: 8,
+            children: [
+              _statusChip('Все', null),
+              _statusChip('Черновики', 'draft'),
+              _statusChip('На согласовании', 'in_review'),
+              _statusChip('Согласованы', 'approved'),
+              _statusChip('Отменены', 'cancelled'),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Builder(
+            builder: (context) {
+              final estimates = _estimatePage?.items ?? <BudgetEstimateModel>[];
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _SectionTitle(
+                    title: 'Сметы объекта',
+                    count: _estimatePage?.total ?? 0,
+                  ),
+                  const SizedBox(height: 8),
+                  if (_listLoading && _estimatePage == null)
+                    const AppLoadingState(message: 'Загружаем сметы')
+                  else if (_listError != null && _estimatePage == null)
+                    AppErrorState(
+                      title: 'Список смет не загружен',
+                      description: _listError,
+                      onRetry: () => _loadEstimates(projectId),
+                    )
+                  else if (estimates.isEmpty)
+                    AppEmptyState(
+                      icon: Icons.calculate_outlined,
+                      title:
+                          _searchQuery.isEmpty && _statusFilter == null
+                              ? 'Смет пока нет'
+                              : 'Сметы не найдены',
+                      description:
+                          _searchQuery.isEmpty && _statusFilter == null
+                              ? 'По выбранному объекту еще нет сметных данных для просмотра.'
+                              : 'Измените текст поиска или фильтр статуса.',
+                    )
+                  else
+                    ...estimates.map(
+                      (estimate) => Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: _BudgetEstimateCard(
+                          estimate: estimate,
+                          onTap: () => _openDetail(estimate.id),
+                        ),
+                      ),
+                    ),
+                  if (_listError != null && _estimatePage != null)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Text(_listError!),
+                    ),
+                  if (_estimatePage != null &&
+                      _estimatePage!.currentPage < _estimatePage!.lastPage)
+                    Center(
+                      child: TextButton(
+                        onPressed:
+                            _moreLoading
+                                ? null
+                                : () => _loadEstimates(projectId, more: true),
+                        child: Text(
+                          _moreLoading ? 'Загружаем…' : 'Показать ещё',
+                        ),
+                      ),
+                    ),
+                ],
+              );
+            },
+          ),
           if (summary.linkedChangeRequests.isNotEmpty) ...[
             const SizedBox(height: 4),
             _SectionTitle(
@@ -176,6 +260,18 @@ class _BudgetEstimatesScreenState extends ConsumerState<BudgetEstimatesScreen> {
     );
   }
 
+  Widget _statusChip(String label, String? value) {
+    return ChoiceChip(
+      label: Text(label),
+      selected: _statusFilter == value,
+      onSelected: (_) {
+        setState(() => _statusFilter = value);
+        final projectId = ref.read(projectsProvider).selectedProject?.serverId;
+        if (projectId != null) _loadEstimates(projectId);
+      },
+    );
+  }
+
   void _syncAndLoad() {
     final selectedProject = ref.read(projectsProvider).selectedProject;
     final notifier = ref.read(budgetEstimatesProvider.notifier);
@@ -183,6 +279,73 @@ class _BudgetEstimatesScreenState extends ConsumerState<BudgetEstimatesScreen> {
 
     if (selectedProject?.serverId != null) {
       notifier.loadSummary();
+      if (_listProjectId != selectedProject!.serverId) {
+        _loadEstimates(selectedProject.serverId);
+      }
+    } else {
+      _listRequest++;
+      setState(() {
+        _listProjectId = null;
+        _estimatePage = null;
+        _listError = null;
+      });
+    }
+  }
+
+  Future<void> _refresh() async {
+    final projectId = ref.read(projectsProvider).selectedProject?.serverId;
+    if (projectId == null) return;
+    await Future.wait([
+      ref.read(budgetEstimatesProvider.notifier).loadSummary(),
+      _loadEstimates(projectId),
+    ]);
+  }
+
+  Future<void> _loadEstimates(int projectId, {bool more = false}) async {
+    if (more && (_estimatePage == null || _moreLoading)) return;
+    final request = ++_listRequest;
+    final nextPage = more ? _estimatePage!.currentPage + 1 : 1;
+    setState(() {
+      _listProjectId = projectId;
+      _listError = null;
+      if (more) {
+        _moreLoading = true;
+      } else {
+        _estimatePage = null;
+        _listLoading = true;
+      }
+    });
+    try {
+      final page = await ref
+          .read(budgetEstimatesRepositoryProvider)
+          .fetchEstimates(
+            projectId: projectId,
+            page: nextPage,
+            status: _statusFilter,
+            search: _searchQuery,
+          );
+      if (!mounted || request != _listRequest) return;
+      setState(() {
+        _estimatePage =
+            more
+                ? BudgetEstimatePage(
+                  items: [...?_estimatePage?.items, ...page.items],
+                  currentPage: page.currentPage,
+                  lastPage: page.lastPage,
+                  total: page.total,
+                )
+                : page;
+      });
+    } catch (error) {
+      if (!mounted || request != _listRequest) return;
+      setState(() => _listError = UserMessage.fromError(error));
+    } finally {
+      if (mounted && request == _listRequest) {
+        setState(() {
+          _listLoading = false;
+          _moreLoading = false;
+        });
+      }
     }
   }
 
@@ -222,6 +385,7 @@ class _BudgetEstimatesScreenState extends ConsumerState<BudgetEstimatesScreen> {
       }
 
       _message(context, approve ? 'Смета согласована' : 'Смета возвращена');
+      await _refresh();
     } catch (error) {
       if (!context.mounted) {
         return;
@@ -793,6 +957,20 @@ class _BudgetChangeCard extends StatelessWidget {
               context,
             ).copyWith(color: theme.colorScheme.onSurfaceVariant),
           ),
+          const SizedBox(height: 8),
+          Text(
+            'Основание: ${change.reason}',
+            style: AppTypography.bodyMedium(context),
+          ),
+          if (change.requiresEstimateRevision) ...[
+            const SizedBox(height: 6),
+            Text(
+              'Требуется пересмотр сметы',
+              style: AppTypography.caption(
+                context,
+              ).copyWith(color: theme.colorScheme.error),
+            ),
+          ],
           const SizedBox(height: 10),
           Row(
             children: [

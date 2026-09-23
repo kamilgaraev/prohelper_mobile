@@ -84,7 +84,8 @@ class _TestModulesRepository extends ModulesRepository {
   _TestModulesRepository() : super(Dio());
 
   @override
-  Future<List<MobileModuleModel>> fetchModules() async => const [];
+  Future<List<MobileModuleModel>> fetchModules({int? projectId}) async =>
+      const [];
 }
 
 class _TestModulesNotifier extends ModulesNotifier {

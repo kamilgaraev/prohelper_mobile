@@ -1,4 +1,4 @@
-﻿import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_test/flutter_test.dart';
 import 'package:prohelpers_mobile/features/module_companions/data/companion_module_model.dart';
 
 import '../companion_module_test_data.dart';
@@ -24,6 +24,11 @@ void main() {
     expect(detail.item.actions.single.key, 'submit');
     expect(detail.sections.single.rows.first.label, 'Номер');
     expect(detail.relatedItems.single.statusLabel, 'Активно');
+    expect(detail.result.single.value, 'Принято');
+    expect(detail.files.single.uriFor('download')?.scheme, 'https');
+    expect(detail.comments.single.body, 'Проверено');
+    expect(detail.workflowHistory.single.title, 'Передано на проверку');
+    expect(detail.relatedItems.single.actions.single.key, 'approve');
   });
 
   test('rejects malformed required fields', () {

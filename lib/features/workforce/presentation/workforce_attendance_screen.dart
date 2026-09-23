@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 
 import 'package:prohelpers_mobile/core/widgets/pro_operational_page.dart';
 import 'package:prohelpers_mobile/core/widgets/pro_record_card.dart';
@@ -7,6 +7,7 @@ import 'attendance_history_screen.dart';
 import 'attendance_scan_screen.dart';
 import 'employee_attendance_qr_screen.dart';
 import 'self_attendance_screen.dart';
+import '../../field_catalog/presentation/workforce_roster_screen.dart';
 
 class WorkforceAttendanceScreen extends StatelessWidget {
   const WorkforceAttendanceScreen({super.key});
@@ -21,6 +22,18 @@ class WorkforceAttendanceScreen extends StatelessWidget {
           title: 'Быстрые сценарии',
           subtitle: 'Выберите действие без перехода через лишние меню.',
           children: [
+            ProRecordCard(
+              icon: Icons.groups_outlined,
+              title: 'Состав сотрудников, отсутствия и наряды',
+              subtitle:
+                  'Найдите сотрудника, проверьте его карточку, отсутствия и наряды.',
+              onTap:
+                  () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const WorkforceRosterScreen(),
+                    ),
+                  ),
+            ),
             ProRecordCard(
               icon: Icons.how_to_reg_rounded,
               title: 'Отметить мою явку',

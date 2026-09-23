@@ -1,9 +1,10 @@
-﻿import 'dart:async';
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/error/user_message.dart';
 import '../../../core/theme/app_colors.dart';
@@ -25,11 +26,13 @@ class CompanionModuleScreen extends ConsumerStatefulWidget {
     required this.moduleSlug,
     required this.title,
     required this.icon,
+    this.requiresProject = false,
   });
 
   final String moduleSlug;
   final String title;
   final IconData icon;
+  final bool requiresProject;
 
   @override
   ConsumerState<CompanionModuleScreen> createState() =>
@@ -49,7 +52,9 @@ class _CompanionModuleScreenState extends ConsumerState<CompanionModuleScreen> {
         companionModuleProvider(widget.moduleSlug).notifier,
       );
       notifier.syncProject(projectId);
-      notifier.load();
+      if (projectId != null || !widget.requiresProject) {
+        notifier.load();
+      }
     });
   }
 
@@ -72,11 +77,14 @@ class _CompanionModuleScreenState extends ConsumerState<CompanionModuleScreen> {
       Future.microtask(() {
         final notifier = ref.read(provider.notifier);
         notifier.syncProject(selectedProjectId);
-        notifier.load();
+        if (selectedProjectId != null || !widget.requiresProject) {
+          notifier.load();
+        }
       });
     }
 
-    final list = state.list;
+    final projectChanged = state.projectId != selectedProjectId;
+    final list = projectChanged ? null : state.list;
     final title = list?.module.title ?? widget.title;
 
     return Scaffold(
@@ -86,7 +94,9 @@ class _CompanionModuleScreenState extends ConsumerState<CompanionModuleScreen> {
           IconButton(
             tooltip: 'Обновить список',
             onPressed:
-                state.isLoading
+                state.isLoading ||
+                        projectChanged ||
+                        (widget.requiresProject && selectedProjectId == null)
                     ? null
                     : () => ref.read(provider.notifier).load(),
             icon: const Icon(
@@ -97,7 +107,13 @@ class _CompanionModuleScreenState extends ConsumerState<CompanionModuleScreen> {
         ],
       ),
       body: RefreshIndicator(
-        onRefresh: () => ref.read(provider.notifier).load(),
+        onRefresh: () async {
+          if (projectChanged ||
+              (widget.requiresProject && selectedProjectId == null)) {
+            return;
+          }
+          await ref.read(provider.notifier).load();
+        },
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
           children: [
@@ -107,43 +123,92 @@ class _CompanionModuleScreenState extends ConsumerState<CompanionModuleScreen> {
               icon: widget.icon,
             ),
             const SizedBox(height: 16),
-            _SearchAndFilters(
-              controller: _searchController,
-              statuses: list?.statuses ?? const [],
-              selectedStatus: state.status,
-              onSearchChanged: _scheduleSearch,
-              onStatusChanged:
-                  (status) => ref.read(provider.notifier).setStatus(status),
-            ),
-            const SizedBox(height: 16),
-            if (state.isLoading && list == null)
-              const AppLoadingState(message: 'Загружаем раздел')
-            else if (state.permissionDenied)
-              AppPermissionState(
-                title: list?.permissionState.title ?? 'Раздел недоступен',
-                description:
-                    list?.permissionState.description ??
-                    'У вашей роли нет доступа к этому разделу.',
-              )
-            else if (state.error != null && list == null)
-              AppErrorState(
-                title: 'Не удалось загрузить раздел',
-                description: state.error,
-                onRetry: () => ref.read(provider.notifier).load(),
-              )
-            else if (list == null || list.items.isEmpty)
-              AppEmptyState(
-                icon: widget.icon,
-                title: list?.emptyState.title ?? 'Нет записей',
-                description: list?.emptyState.description,
+            if (widget.requiresProject && selectedProjectId == null)
+              const AppEmptyState(
+                icon: Icons.domain_disabled_outlined,
+                title: 'Выберите объект',
+                description: 'Записи показываются для выбранного объекта.',
               )
             else ...[
-              for (final item in list.items) ...[
-                _CompanionItemCard(
-                  item: item,
-                  onTap: () => _openDetail(context, item.id),
+              if (projectChanged)
+                const AppLoadingState(message: 'Обновляем выбранный объект')
+              else ...[
+                _SearchAndFilters(
+                  controller: _searchController,
+                  statuses: list?.statuses ?? const [],
+                  selectedStatus: state.status,
+                  onSearchChanged: _scheduleSearch,
+                  onStatusChanged:
+                      (status) => ref.read(provider.notifier).setStatus(status),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 16),
+                if (state.isLoading && list == null)
+                  const AppLoadingState(message: 'Загружаем раздел')
+                else if (state.permissionDenied)
+                  AppPermissionState(
+                    title: list?.permissionState.title ?? 'Раздел недоступен',
+                    description:
+                        list?.permissionState.description ??
+                        'У вас нет прав на просмотр этого раздела.',
+                  )
+                else if (state.error != null && list == null)
+                  AppErrorState(
+                    title: 'Не удалось загрузить раздел',
+                    description: state.error,
+                    onRetry: () => ref.read(provider.notifier).load(),
+                  )
+                else if (list == null || list.items.isEmpty)
+                  AppEmptyState(
+                    icon: widget.icon,
+                    title: list?.emptyState.title ?? 'Нет записей',
+                    description: list?.emptyState.description,
+                  )
+                else ...[
+                  if (list.meta.total > 0)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: Text(
+                        'Показано ${list.items.length} из ${list.meta.total}',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ),
+                  for (final item in list.items) ...[
+                    _CompanionItemCard(
+                      item: item,
+                      onTap: () => _openDetail(context, item.id),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+                  if (list.meta.currentPage < list.meta.lastPage)
+                    OutlinedButton.icon(
+                      onPressed:
+                          state.isLoadingMore
+                              ? null
+                              : () => ref.read(provider.notifier).loadMore(),
+                      icon:
+                          state.isLoadingMore
+                              ? const SizedBox.square(
+                                dimension: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                              : const Icon(Icons.expand_more_rounded),
+                      label: Text(
+                        state.isLoadingMore ? 'Загружаем' : 'Загрузить ещё',
+                      ),
+                    ),
+                  if (state.error != null && list.items.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Text(
+                        'Не удалось загрузить следующую страницу: ${state.error}',
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.error,
+                        ),
+                      ),
+                    ),
+                ],
               ],
             ],
           ],
@@ -171,6 +236,8 @@ class _CompanionModuleScreenState extends ConsumerState<CompanionModuleScreen> {
               title: widget.title,
               icon: widget.icon,
               itemId: id,
+              requiresProject: widget.requiresProject,
+              projectId: ref.read(projectsProvider).selectedProject?.serverId,
             ),
       ),
     );
@@ -184,12 +251,16 @@ class CompanionModuleDetailScreen extends ConsumerStatefulWidget {
     required this.title,
     required this.icon,
     required this.itemId,
+    this.requiresProject = false,
+    this.projectId,
   });
 
   final String moduleSlug;
   final String title;
   final IconData icon;
   final int itemId;
+  final bool requiresProject;
+  final int? projectId;
 
   @override
   ConsumerState<CompanionModuleDetailScreen> createState() =>
@@ -214,64 +285,126 @@ class _CompanionModuleDetailScreenState
 
   @override
   Widget build(BuildContext context) {
+    final provider = companionModuleProvider(widget.moduleSlug);
+    final state = ref.watch(provider);
+    final selectedProjectId = ref.watch(
+      projectsProvider.select((value) => value.selectedProject?.serverId),
+    );
+    final projectMatches =
+        !widget.requiresProject ||
+        (selectedProjectId != null && widget.projectId == selectedProjectId);
+    if (widget.requiresProject && state.projectId != selectedProjectId) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final notifier = ref.read(provider.notifier);
+        notifier.syncProject(selectedProjectId);
+        if (selectedProjectId != null) notifier.load();
+      });
+    }
     return Scaffold(
       appBar: AppBar(title: Text(widget.title)),
-      body: FutureBuilder<CompanionModuleDetailModel>(
-        future: _future,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState != ConnectionState.done) {
-            return const AppLoadingState(message: 'Загружаем запись');
-          }
+      body:
+          !projectMatches
+              ? AppEmptyState(
+                icon: Icons.domain_disabled_outlined,
+                title:
+                    selectedProjectId == null
+                        ? 'Выберите объект'
+                        : 'Объект изменился',
+                description:
+                    selectedProjectId == null
+                        ? 'Вернитесь к списку после выбора объекта.'
+                        : 'Вернитесь к списку и откройте запись выбранного объекта.',
+              )
+              : FutureBuilder<CompanionModuleDetailModel>(
+                future: _future,
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState != ConnectionState.done) {
+                    return const AppLoadingState(message: 'Загружаем запись');
+                  }
 
-          if (snapshot.hasError) {
-            return AppErrorState(
-              title: 'Не удалось загрузить запись',
-              description: UserMessage.fromError(snapshot.error!),
-              onRetry:
-                  () => setState(() {
-                    _future = _load();
-                  }),
-            );
-          }
+                  if (snapshot.hasError) {
+                    return AppErrorState(
+                      title: 'Не удалось загрузить запись',
+                      description: UserMessage.fromError(snapshot.error!),
+                      onRetry:
+                          () => setState(() {
+                            _future = _load();
+                          }),
+                    );
+                  }
 
-          final detail = snapshot.requireData;
+                  final detail = snapshot.requireData;
 
-          return RefreshIndicator(
-            onRefresh: () async {
-              setState(() {
-                _future = _load();
-              });
-              await _future;
-            },
-            child: ListView(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
-              children: [
-                _CompanionDetailHeader(item: detail.item, icon: widget.icon),
-                const SizedBox(height: 16),
-                if (detail.item.actions.isNotEmpty) ...[
-                  _ActionPanel(
-                    actions: detail.item.actions,
-                    onAction: (action) => _runAction(action),
-                  ),
-                  const SizedBox(height: 16),
-                ],
-                for (final section in detail.sections) ...[
-                  _SectionCard(section: section),
-                  const SizedBox(height: 12),
-                ],
-                if (detail.relatedItems.isNotEmpty) ...[
-                  _RelatedItemsCard(items: detail.relatedItems),
-                  const SizedBox(height: 12),
-                ],
-              ],
-            ),
-          );
-        },
-      ),
+                  return RefreshIndicator(
+                    onRefresh: () async {
+                      setState(() {
+                        _future = _load();
+                      });
+                      await _future;
+                    },
+                    child: ListView(
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+                      children: [
+                        _CompanionDetailHeader(
+                          item: detail.item,
+                          icon: widget.icon,
+                        ),
+                        const SizedBox(height: 16),
+                        if (detail.item.actions.isNotEmpty &&
+                            projectMatches) ...[
+                          _ActionPanel(
+                            actions: detail.item.actions,
+                            onAction: (action) => _runAction(action),
+                          ),
+                          const SizedBox(height: 16),
+                        ],
+                        for (final section in detail.sections) ...[
+                          _SectionCard(section: section),
+                          const SizedBox(height: 12),
+                        ],
+                        if (detail.result.isNotEmpty) ...[
+                          _SectionCard(
+                            section: CompanionSection(
+                              title: 'Результат',
+                              rows: detail.result,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                        ],
+                        if (detail.files.isNotEmpty) ...[
+                          _FilesCard(files: detail.files, onOpen: _openFile),
+                          const SizedBox(height: 12),
+                        ],
+                        if (detail.comments.isNotEmpty) ...[
+                          _CommentsCard(comments: detail.comments),
+                          const SizedBox(height: 12),
+                        ],
+                        if (detail.workflowHistory.isNotEmpty) ...[
+                          _HistoryCard(entries: detail.workflowHistory),
+                          const SizedBox(height: 12),
+                        ],
+                        if (detail.relatedItems.isNotEmpty) ...[
+                          _RelatedItemsCard(
+                            items: detail.relatedItems,
+                            title:
+                                widget.moduleSlug == 'executive-documentation'
+                                    ? 'Исполнительные документы'
+                                    : 'Связанные записи',
+                            onAction: _runRelatedAction,
+                            showActions: projectMatches,
+                          ),
+                          const SizedBox(height: 12),
+                        ],
+                      ],
+                    ),
+                  );
+                },
+              ),
     );
   }
 
   Future<void> _runAction(CompanionAction action) async {
+    if (!_projectContextCurrent) return;
     final comment = await showModalBottomSheet<String>(
       context: context,
       isScrollControlled: true,
@@ -285,6 +418,7 @@ class _CompanionModuleDetailScreenState
     if (!mounted) {
       return;
     }
+    if (!_projectContextCurrent) return;
 
     if (comment == null && action.requiresComment) {
       return;
@@ -316,6 +450,63 @@ class _CompanionModuleDetailScreenState
 
       AppErrorNotice.show(context, error);
     }
+  }
+
+  Future<void> _runRelatedAction(
+    CompanionRelatedItem item,
+    CompanionAction action,
+  ) async {
+    if (widget.moduleSlug != 'executive-documentation' ||
+        !_projectContextCurrent) {
+      return;
+    }
+    final comment = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      builder:
+          (_) => _ActionBottomSheet(
+            action: action,
+            requiresComment: action.requiresComment,
+          ),
+    );
+    if (!mounted || (comment == null && action.requiresComment)) return;
+    if (!_projectContextCurrent) return;
+    try {
+      await ref
+          .read(companionModuleProvider(widget.moduleSlug).notifier)
+          .executeExecutiveDocumentAction(
+            documentId: item.id,
+            action: action.key,
+            comment: comment,
+          );
+      if (!mounted) return;
+      setState(() => _future = _load());
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Действие выполнено')));
+    } catch (error) {
+      if (mounted) AppErrorNotice.show(context, error);
+    }
+  }
+
+  Future<void> _openFile(CompanionFile file, String purpose) async {
+    if (!_projectContextCurrent) return;
+    final uri = file.uriFor(purpose);
+    if (uri == null) return;
+    try {
+      if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+        throw StateError('companion_file_open_failed');
+      }
+    } catch (error) {
+      if (mounted) AppErrorNotice.show(context, error);
+    }
+  }
+
+  bool get _projectContextCurrent {
+    if (!widget.requiresProject) return true;
+    final selectedProjectId =
+        ref.read(projectsProvider).selectedProject?.serverId;
+    return selectedProjectId != null && selectedProjectId == widget.projectId;
   }
 }
 
@@ -636,9 +827,17 @@ class _SectionCard extends StatelessWidget {
 }
 
 class _RelatedItemsCard extends StatelessWidget {
-  const _RelatedItemsCard({required this.items});
+  const _RelatedItemsCard({
+    required this.items,
+    required this.title,
+    required this.onAction,
+    required this.showActions,
+  });
 
   final List<CompanionRelatedItem> items;
+  final String title;
+  final void Function(CompanionRelatedItem, CompanionAction) onAction;
+  final bool showActions;
 
   @override
   Widget build(BuildContext context) {
@@ -649,7 +848,7 @@ class _RelatedItemsCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Связанные записи',
+            title,
             style: AppTypography.bodyLarge(context).copyWith(
               color: theme.colorScheme.onSurface,
               fontWeight: FontWeight.w900,
@@ -669,6 +868,11 @@ class _RelatedItemsCard extends StatelessWidget {
                         color: theme.colorScheme.primary,
                       ),
             ),
+            if (showActions && item.actions.isNotEmpty)
+              _ActionPanel(
+                actions: item.actions,
+                onAction: (action) => onAction(item, action),
+              ),
             if (item != items.last) const Divider(height: 8),
           ],
         ],
@@ -676,6 +880,122 @@ class _RelatedItemsCard extends StatelessWidget {
     );
   }
 }
+
+class _FilesCard extends StatelessWidget {
+  const _FilesCard({required this.files, required this.onOpen});
+
+  final List<CompanionFile> files;
+  final Future<void> Function(CompanionFile, String) onOpen;
+
+  @override
+  Widget build(BuildContext context) => IndustrialCard(
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Файлы',
+          style: AppTypography.bodyLarge(
+            context,
+          ).copyWith(fontWeight: FontWeight.w900),
+        ),
+        const SizedBox(height: 8),
+        for (final file in files)
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.description_outlined),
+            title: Text(file.name),
+            subtitle: file.mimeType == null ? null : Text(file.mimeType!),
+            trailing: Wrap(
+              children: [
+                if (file.uriFor('preview') != null)
+                  IconButton(
+                    tooltip: 'Просмотреть',
+                    onPressed: () => onOpen(file, 'preview'),
+                    icon: const Icon(Icons.visibility_outlined),
+                  ),
+                if (file.uriFor('download') != null)
+                  IconButton(
+                    tooltip: 'Скачать',
+                    onPressed: () => onOpen(file, 'download'),
+                    icon: const Icon(Icons.download_outlined),
+                  ),
+              ],
+            ),
+          ),
+      ],
+    ),
+  );
+}
+
+class _CommentsCard extends StatelessWidget {
+  const _CommentsCard({required this.comments});
+
+  final List<CompanionComment> comments;
+
+  @override
+  Widget build(BuildContext context) => IndustrialCard(
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Комментарии',
+          style: AppTypography.bodyLarge(
+            context,
+          ).copyWith(fontWeight: FontWeight.w900),
+        ),
+        const SizedBox(height: 8),
+        for (final comment in comments)
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            title: Text(comment.author),
+            subtitle: Text(
+              [
+                comment.body,
+                if (comment.status != null) comment.status!,
+                if (comment.createdAt != null) _formatDate(comment.createdAt!),
+              ].join('\n'),
+            ),
+          ),
+      ],
+    ),
+  );
+}
+
+class _HistoryCard extends StatelessWidget {
+  const _HistoryCard({required this.entries});
+
+  final List<CompanionHistoryEntry> entries;
+
+  @override
+  Widget build(BuildContext context) => IndustrialCard(
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'История',
+          style: AppTypography.bodyLarge(
+            context,
+          ).copyWith(fontWeight: FontWeight.w900),
+        ),
+        const SizedBox(height: 8),
+        for (final entry in entries)
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            title: Text(entry.title),
+            subtitle: Text(
+              [
+                if (entry.description != null) entry.description!,
+                if (entry.createdAt != null) _formatDate(entry.createdAt!),
+              ].join('\n'),
+            ),
+          ),
+      ],
+    ),
+  );
+}
+
+String _formatDate(DateTime value) =>
+    '${value.day.toString().padLeft(2, '0')}.${value.month.toString().padLeft(2, '0')}.${value.year}';
 
 class _MetricBlock extends StatelessWidget {
   const _MetricBlock({

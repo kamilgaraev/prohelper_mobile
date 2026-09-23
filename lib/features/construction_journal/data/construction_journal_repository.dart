@@ -259,10 +259,10 @@ class ConstructionJournalRepository extends SyncQueueAwareRepository {
     bool? submitIntent,
     String? idempotencyKey,
   }) async {
-    final operationKey = idempotencyKey ?? _newIdempotencyKey();
+    idempotencyKey ??= _newIdempotencyKey();
     final shouldSubmit = submitIntent ?? submitAfterCreate;
     final payload = <String, dynamic>{
-      'idempotency_key': operationKey,
+      'idempotency_key': idempotencyKey,
       'journal_id': journalId,
       'submit_after_create': submitAfterCreate,
       'submit_intent': shouldSubmit,

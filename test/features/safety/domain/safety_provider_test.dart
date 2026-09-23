@@ -1,4 +1,4 @@
-﻿import 'package:dio/dio.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:prohelpers_mobile/core/network/api_exception.dart';
 import 'package:prohelpers_mobile/features/safety/data/safety_model.dart';
@@ -28,6 +28,8 @@ class _FakeSafetyRepository extends SafetyRepository {
   String? closeComment;
   Map<String, dynamic>? incidentData;
   Map<String, dynamic>? violationData;
+  List<String> violationPhotoPaths = const [];
+  List<String> resolutionPhotoPaths = const [];
 
   @override
   Future<SafetyDashboardModel> fetchDashboard({int? projectId}) async {
@@ -109,15 +111,22 @@ class _FakeSafetyRepository extends SafetyRepository {
 
   @override
   Future<SafetyViolationModel> createViolation(
-    Map<String, dynamic> data,
-  ) async {
+    Map<String, dynamic> data, {
+    List<String> photoPaths = const [],
+  }) async {
     violationData = data;
+    violationPhotoPaths = photoPaths;
     return _violation;
   }
 
   @override
-  Future<SafetyViolationModel> resolveViolation(int id, String comment) async {
+  Future<SafetyViolationModel> resolveViolation(
+    int id,
+    String comment, {
+    List<String> photoPaths = const [],
+  }) async {
     resolvedViolationId = id;
+    resolutionPhotoPaths = photoPaths;
     return _violation;
   }
 
@@ -277,8 +286,15 @@ void main() {
       final notifier = SafetyNotifier(repository)..syncProject(15);
 
       await notifier.createIncident({'project_id': 15, 'title': 'Инцидент'});
-      await notifier.createViolation({'project_id': 15, 'title': 'Нарушение'});
-      await notifier.resolveViolation(3, 'Устранено');
+      await notifier.createViolation(
+        {'project_id': 15, 'title': 'Нарушение'},
+        photoPaths: const ['violation.jpg'],
+      );
+      await notifier.resolveViolation(
+        3,
+        'Устранено',
+        photoPaths: const ['resolved.jpg'],
+      );
       await notifier.submitPermit(1);
       await notifier.approvePermit(1, approvalComment: 'Проверено');
       await notifier.activatePermit(1);
@@ -289,7 +305,9 @@ void main() {
 
       expect(repository.incidentData?['title'], 'Инцидент');
       expect(repository.violationData?['title'], 'Нарушение');
+      expect(repository.violationPhotoPaths, ['violation.jpg']);
       expect(repository.resolvedViolationId, 3);
+      expect(repository.resolutionPhotoPaths, ['resolved.jpg']);
       expect(repository.submittedPermitId, 1);
       expect(repository.approvedPermitId, 1);
       expect(repository.approvalComment, 'Проверено');

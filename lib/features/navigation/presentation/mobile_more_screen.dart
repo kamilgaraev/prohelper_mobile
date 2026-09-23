@@ -1,11 +1,10 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import 'package:prohelpers_mobile/core/design/pro_design_tokens.dart';
 import 'package:prohelpers_mobile/core/design/pro_status.dart';
 import 'package:prohelpers_mobile/core/navigation/mobile_destination.dart';
-import 'package:prohelpers_mobile/core/navigation/mobile_navigation_registry.dart';
 import 'package:prohelpers_mobile/core/providers/module_provider.dart';
 import 'package:prohelpers_mobile/core/theme/app_typography.dart';
 import 'package:prohelpers_mobile/core/widgets/pro_page_scaffold.dart';
@@ -29,13 +28,7 @@ class MobileMoreScreen extends ConsumerWidget {
     final authState = ref.watch(authProvider);
     final modules = ref.watch(supportedMobileModulesProvider);
     final hasSelectedProject = project != null;
-    final managementDestinations = uniqueDestinations(
-          modules.map(
-            (module) =>
-                MobileNavigationRegistry.destinationForRoute(module.route) ??
-                MobileNavigationRegistry.destinationForRoute(module.slug),
-          ),
-        )
+    final managementDestinations = visibleMobileDestinations(modules)
         .where(
           (destination) =>
               destination.group == MobileModuleGroup.management &&
@@ -110,8 +103,7 @@ class MobileMoreScreen extends ConsumerWidget {
           const SizedBox(height: 20),
           _MoreActionPanel(
             title: 'Помощь',
-            subtitle:
-                'Подсказки по работе в системе.',
+            subtitle: 'Подсказки по работе в системе.',
             items: [
               _MoreActionItem(
                 title: 'Помощник МОСТ',

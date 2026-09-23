@@ -1,4 +1,4 @@
-﻿import 'package:dio/dio.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -225,7 +225,8 @@ class TestModulesRepository extends ModulesRepository {
   final List<MobileModuleModel> _modules;
 
   @override
-  Future<List<MobileModuleModel>> fetchModules() async => _modules;
+  Future<List<MobileModuleModel>> fetchModules({int? projectId}) async =>
+      _modules;
 }
 
 class TestModulesNotifier extends ModulesNotifier {
@@ -371,8 +372,7 @@ List<Override> mostCoreOverrides({
       ),
     ),
     modulesProvider.overrideWith(
-      (ref) =>
-          TestModulesNotifier(MostTestData.mobileModules(resolvedModules)),
+      (ref) => TestModulesNotifier(MostTestData.mobileModules(resolvedModules)),
     ),
     activeModulesProvider.overrideWith((ref) => resolvedModules),
     permissionServiceProvider.overrideWith(

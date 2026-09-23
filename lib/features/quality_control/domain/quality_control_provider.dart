@@ -1,4 +1,4 @@
-﻿import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/error/user_message.dart';
 import '../../../core/network/api_exception.dart';
@@ -134,6 +134,18 @@ class QualityControlNotifier extends StateNotifier<QualityControlState> {
 
   Future<QualityDefectModel> fetchDefect(int id) {
     return _repository.fetchDefect(id);
+  }
+
+  Future<List<QualityAssigneeModel>> fetchAssignees(int defectId) =>
+      _repository.fetchAssignees(defectId);
+
+  Future<void> assignDefect(
+    int id, {
+    required int userId,
+    String? comment,
+  }) async {
+    await _repository.assignDefect(id, userId: userId, comment: comment);
+    await loadDefects();
   }
 
   Future<void> startDefect(int id, {String? comment}) async {

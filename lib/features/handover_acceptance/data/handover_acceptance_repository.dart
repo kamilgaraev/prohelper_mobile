@@ -1,4 +1,4 @@
-﻿import 'package:dio/dio.dart';
+import 'package:dio/dio.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/network/api_exception.dart';
@@ -68,15 +68,16 @@ class HandoverAcceptanceRepository extends SyncQueueAwareRepository {
     int itemId, {
     required String status,
     String? comment,
+    List<String> photoPaths = const [],
   }) async {
     try {
       final response = await _dio.post(
         '/handover-acceptance/checklist-items/$itemId/review',
-        data: {
+        data: await _withPhotos({
           'status': status,
           if (comment != null && comment.trim().isNotEmpty)
             'comment': comment.trim(),
-        },
+        }, photoPaths),
       );
       return AcceptanceChecklistModel.fromJson(
         MobileApiResponse.dataMap(response.data),
@@ -131,14 +132,16 @@ class HandoverAcceptanceRepository extends SyncQueueAwareRepository {
 
   Future<AcceptanceFindingModel> createFinding(
     int sessionId,
-    Map<String, dynamic> data,
-  ) async {
+    Map<String, dynamic> data, {
+    List<String> photoPaths = const [],
+  }) async {
     final payload = Map<String, dynamic>.from(data);
+    final attachments = _photoAttachments(photoPaths);
 
     try {
       final response = await _dio.post(
         '/handover-acceptance/sessions/$sessionId/findings',
-        data: data,
+        data: await _withPhotos(data, photoPaths),
       );
       return AcceptanceFindingModel.fromJson(
         MobileApiResponse.dataMap(response.data),
@@ -152,6 +155,7 @@ class HandoverAcceptanceRepository extends SyncQueueAwareRepository {
             method: 'POST',
             endpoint: '/handover-acceptance/sessions/$sessionId/findings',
             payload: payload,
+            attachments: attachments,
           ),
         );
       }
@@ -163,11 +167,14 @@ class HandoverAcceptanceRepository extends SyncQueueAwareRepository {
   Future<AcceptanceFindingModel> resolveFinding(
     int findingId, {
     required String resolutionComment,
+    List<String> photoPaths = const [],
   }) async {
     try {
       final response = await _dio.post(
         '/handover-acceptance/findings/$findingId/resolve',
-        data: {'resolution_comment': resolutionComment},
+        data: await _withPhotos({
+          'resolution_comment': resolutionComment,
+        }, photoPaths),
       );
       return AcceptanceFindingModel.fromJson(
         MobileApiResponse.dataMap(response.data),
@@ -206,14 +213,15 @@ class HandoverAcceptanceRepository extends SyncQueueAwareRepository {
   Future<AcceptanceScopeModel> acceptScope(
     int scopeId, {
     String? comment,
+    List<String> photoPaths = const [],
   }) async {
     try {
       final response = await _dio.post(
         '/handover-acceptance/scopes/$scopeId/accept',
-        data: {
+        data: await _withPhotos({
           if (comment != null && comment.trim().isNotEmpty)
             'comment': comment.trim(),
-        },
+        }, photoPaths),
       );
       return AcceptanceScopeModel.fromJson(
         MobileApiResponse.dataMap(response.data),
@@ -239,8 +247,14 @@ class HandoverAcceptanceRepository extends SyncQueueAwareRepository {
   Future<AcceptanceScopeModel> rejectScope(
     int scopeId, {
     required String reason,
+    List<String> photoPaths = const [],
   }) async {
-    return _scopeDecision(scopeId, path: 'reject', reason: reason);
+    return _scopeDecision(
+      scopeId,
+      path: 'reject',
+      reason: reason,
+      photoPaths: photoPaths,
+    );
   }
 
   Future<AcceptanceScopeModel> reopenScope(
@@ -254,11 +268,12 @@ class HandoverAcceptanceRepository extends SyncQueueAwareRepository {
     int scopeId, {
     required String path,
     required String reason,
+    List<String> photoPaths = const [],
   }) async {
     try {
       final response = await _dio.post(
         '/handover-acceptance/scopes/$scopeId/$path',
-        data: {'reason': reason.trim()},
+        data: await _withPhotos({'reason': reason.trim()}, photoPaths),
       );
       return AcceptanceScopeModel.fromJson(
         MobileApiResponse.dataMap(response.data),
@@ -267,6 +282,46 @@ class HandoverAcceptanceRepository extends SyncQueueAwareRepository {
       throw ApiException.fromDio(error);
     }
   }
+
+  Future<Object> _withPhotos(
+    Map<String, dynamic> data,
+    List<String> photoPaths,
+  ) async {
+    if (photoPaths.isEmpty) return data;
+
+    final formData = FormData();
+    for (final entry in data.entries) {
+      if (entry.value != null) {
+        final value = entry.value;
+        formData.fields.add(
+          MapEntry(
+            entry.key,
+            value is bool ? (value ? '1' : '0') : value.toString(),
+          ),
+        );
+      }
+    }
+    for (final path in photoPaths.take(5)) {
+      formData.files.add(
+        MapEntry(
+          'photos[]',
+          await MultipartFile.fromFile(path, filename: _fileName(path)),
+        ),
+      );
+    }
+    return formData;
+  }
+
+  List<SyncAttachmentRef> _photoAttachments(List<String> paths) => paths
+      .take(5)
+      .map(
+        (path) => SyncAttachmentRef(
+          field: 'photos[]',
+          path: path,
+          filename: _fileName(path),
+        ),
+      )
+      .toList(growable: false);
 }
 
 String _fileName(String path) {

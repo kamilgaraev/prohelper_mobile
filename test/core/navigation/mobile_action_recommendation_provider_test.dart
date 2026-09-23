@@ -1,4 +1,4 @@
-﻿import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_test/flutter_test.dart';
 import 'package:prohelpers_mobile/core/models/user_context.dart';
 import 'package:prohelpers_mobile/core/navigation/mobile_action_recommendation.dart';
 import 'package:prohelpers_mobile/core/navigation/mobile_navigation_registry.dart';
@@ -17,6 +17,14 @@ void main() {
           AppModule.qualityControl,
           AppModule.workflowManagement,
           AppModule.timeTracking,
+        },
+        grantedPermissions: const {
+          'site_requests.approve',
+          'schedule.view',
+          'budget-estimates.view',
+          'quality-control.defects.view',
+          'completed_works.view',
+          'time_tracking.view',
         },
       ),
       userContext: UserContext.office,
@@ -52,6 +60,15 @@ void main() {
           AppModule.productionLabor,
           AppModule.machineryOperations,
           AppModule.timeTracking,
+        },
+        grantedPermissions: const {
+          'warehouse.receipts',
+          'site_requests.create',
+          'schedule.view',
+          'workforce.attendance.self',
+          'production-labor.view',
+          'machinery-operations.shifts.create',
+          'time_tracking.view',
         },
       ),
       userContext: UserContext.field,

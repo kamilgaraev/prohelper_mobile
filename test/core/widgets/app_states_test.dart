@@ -1,7 +1,7 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:prohelpers_mobile/core/theme/app_theme.dart';
+import 'package:prohelpers_mobile/core/theme/pro_theme.dart';
 import 'package:prohelpers_mobile/core/widgets/app_action_buttons.dart';
 import 'package:prohelpers_mobile/core/widgets/app_empty_state.dart';
 import 'package:prohelpers_mobile/core/widgets/app_error_state.dart';
@@ -13,7 +13,11 @@ import 'package:prohelpers_mobile/core/widgets/pro_surface.dart';
 
 void main() {
   Widget buildWidget(Widget child) {
-    return MaterialApp(theme: AppTheme.lightTheme, home: Scaffold(body: child));
+    return MaterialApp(
+      theme: MostTheme.lightTheme,
+      darkTheme: MostTheme.darkTheme,
+      home: Scaffold(body: child),
+    );
   }
 
   testWidgets('empty state uses business copy', (tester) async {

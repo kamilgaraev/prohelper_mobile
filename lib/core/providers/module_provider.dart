@@ -1,9 +1,10 @@
-﻿import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../error/user_message.dart';
 import '../../features/auth/domain/auth_provider.dart';
 import '../../features/modules/data/mobile_module_model.dart';
 import '../../features/modules/data/modules_repository.dart';
+import '../../features/projects/domain/projects_provider.dart';
 
 enum AppModule {
   basicWarehouse,
@@ -11,14 +12,27 @@ enum AppModule {
   scheduleManagement,
   constructionJournal,
   aiAssistant,
+  crm,
+  tenders,
+  actReporting,
+  payments,
+  fileManagement,
+  reportTemplates,
+  budgeting,
+  oneCExchange,
+  accessRecertification,
+  rateManagement,
+  systemLogs,
   budgetEstimates,
   procurement,
   contractManagement,
+  designManagement,
   changeManagement,
   executiveDocumentation,
   projectManagement,
   catalogManagement,
   brigades,
+  contractorMarketplace,
   videoMonitoring,
   timeTracking,
   workflowManagement,
@@ -38,14 +52,27 @@ extension AppModuleX on AppModule {
       AppModule.scheduleManagement => 'schedule-management',
       AppModule.constructionJournal => 'construction-journal',
       AppModule.aiAssistant => 'ai-assistant',
+      AppModule.crm => 'crm',
+      AppModule.tenders => 'tenders',
+      AppModule.actReporting => 'act-reporting',
+      AppModule.payments => 'payments',
+      AppModule.fileManagement => 'file-management',
+      AppModule.reportTemplates => 'report-templates',
+      AppModule.budgeting => 'budgeting',
+      AppModule.oneCExchange => 'one-c-basic-exchange',
+      AppModule.accessRecertification => 'access_recertification',
+      AppModule.rateManagement => 'rate-management',
+      AppModule.systemLogs => 'system-logs',
       AppModule.budgetEstimates => 'budget-estimates',
       AppModule.procurement => 'procurement',
       AppModule.contractManagement => 'contract-management',
+      AppModule.designManagement => 'design-management',
       AppModule.changeManagement => 'change-management',
       AppModule.executiveDocumentation => 'executive-documentation',
       AppModule.projectManagement => 'project-management',
       AppModule.catalogManagement => 'catalog-management',
       AppModule.brigades => 'brigades',
+      AppModule.contractorMarketplace => 'contractor-marketplace',
       AppModule.videoMonitoring => 'video-monitoring',
       AppModule.timeTracking => 'time-tracking',
       AppModule.workflowManagement => 'workflow-management',
@@ -96,7 +123,7 @@ class ModulesState {
 }
 
 class ModulesNotifier extends StateNotifier<ModulesState> {
-  ModulesNotifier(this._repository, {required bool canLoad})
+  ModulesNotifier(this._repository, {required bool canLoad, this.projectId})
     : super(const ModulesState()) {
     if (canLoad) {
       loadModules();
@@ -104,12 +131,13 @@ class ModulesNotifier extends StateNotifier<ModulesState> {
   }
 
   final ModulesRepository _repository;
+  final int? projectId;
 
   Future<void> loadModules() async {
     state = state.copyWith(isLoading: true, error: null);
 
     try {
-      final modules = await _repository.fetchModules();
+      final modules = await _repository.fetchModules(projectId: projectId);
       state = state.copyWith(isLoading: false, modules: modules);
     } catch (error) {
       state = state.copyWith(
@@ -125,10 +153,12 @@ final modulesProvider = StateNotifierProvider<ModulesNotifier, ModulesState>((
   ref,
 ) {
   final authState = ref.watch(authProvider);
+  final projectId = ref.watch(projectsProvider).selectedProject?.serverId;
 
   return ModulesNotifier(
     ref.read(modulesRepositoryProvider),
     canLoad: authState is AuthAuthenticated,
+    projectId: projectId,
   );
 });
 

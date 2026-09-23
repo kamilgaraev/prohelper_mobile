@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 
 import 'package:prohelpers_mobile/core/widgets/app_state_layout.dart';
 
@@ -7,7 +7,7 @@ class AppPermissionState extends StatelessWidget {
     super.key,
     this.title = 'Раздел недоступен',
     this.description =
-        'Для вашей роли нет доступа к этому действию. Обратитесь к администратору.',
+        'У вас нет права на это действие. Обратитесь к администратору.',
     this.minHeight = 260,
   });
 

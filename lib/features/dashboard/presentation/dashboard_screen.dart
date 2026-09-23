@@ -1,9 +1,10 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import 'package:prohelpers_mobile/core/error/user_message.dart';
 import 'package:prohelpers_mobile/core/navigation/mobile_navigation_registry.dart';
+import 'package:prohelpers_mobile/core/providers/module_provider.dart';
 import 'package:prohelpers_mobile/core/theme/app_colors.dart';
 import 'package:prohelpers_mobile/core/theme/app_typography.dart';
 import 'package:prohelpers_mobile/core/widgets/app_empty_state.dart';
@@ -12,6 +13,7 @@ import 'package:prohelpers_mobile/core/widgets/app_loading_state.dart';
 import 'package:prohelpers_mobile/core/widgets/industrial_card.dart';
 import 'package:prohelpers_mobile/core/widgets/smart_action_strip.dart';
 import 'package:prohelpers_mobile/features/auth/domain/auth_provider.dart';
+import 'package:prohelpers_mobile/features/actions/presentation/mobile_action_search.dart';
 import 'package:prohelpers_mobile/features/auth/presentation/widgets/profile_pill.dart';
 import 'package:prohelpers_mobile/features/auth/presentation/widgets/user_profile_bottom_sheet.dart';
 import 'package:prohelpers_mobile/features/dashboard/data/dashboard_widget_model.dart';
@@ -59,7 +61,7 @@ class DashboardScreen extends ConsumerWidget {
                 icon: Icons.dashboard_customize_outlined,
                 title: 'Пока нет доступных разделов',
                 description:
-                    'Для вашей роли еще не назначены разделы для работы в приложении.',
+                    'По вашим правам пока нет разделов для работы в приложении.',
               ),
             )
           else ...[
@@ -71,7 +73,7 @@ class DashboardScreen extends ConsumerWidget {
 
                   return Padding(
                     padding: const EdgeInsets.only(bottom: 16),
-                    child: _buildDashboardCard(context, dashboardWidget),
+                    child: _buildDashboardCard(context, ref, dashboardWidget),
                   );
                 }, childCount: dashboardState.widgets.length),
               ),
@@ -179,11 +181,12 @@ class DashboardScreen extends ConsumerWidget {
 
   Widget _buildDashboardCard(
     BuildContext context,
+    WidgetRef ref,
     DashboardWidgetModel dashboardWidget,
   ) {
     final theme = Theme.of(context);
     final color = _colorForStatus(context, dashboardWidget.status);
-    final target = _screenForRoute(context, dashboardWidget.route);
+    final target = _screenForRoute(context, ref, dashboardWidget.route);
 
     return IndustrialCard(
       onTap:
@@ -316,7 +319,15 @@ class DashboardScreen extends ConsumerWidget {
     };
   }
 
-  Widget? _screenForRoute(BuildContext context, String route) {
-    return MobileNavigationRegistry.screenForRoute(route, context);
+  Widget? _screenForRoute(BuildContext context, WidgetRef ref, String route) {
+    final destinations = visibleMobileDestinations(
+      ref.watch(supportedMobileModulesProvider),
+    );
+    for (final destination in destinations) {
+      if (destination.matches(route)) {
+        return destination.builder(context);
+      }
+    }
+    return null;
   }
 }

@@ -1,10 +1,12 @@
 import 'dart:async';
 
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'core/localization/most_localizations.dart';
 import 'core/storage/encrypted_local_file_cache.dart';
+import 'core/sync/sync_queue_provider.dart';
 import 'core/widgets/app_loading_state.dart';
 import 'core/widgets/mobile_app_shell.dart';
 import 'core/theme/pro_theme.dart';
@@ -48,9 +50,12 @@ class MostApp extends ConsumerStatefulWidget {
 }
 
 class _MostAppState extends ConsumerState<MostApp> with WidgetsBindingObserver {
+  final Connectivity _connectivity = Connectivity();
   late final MobilePushService _pushService;
   StreamSubscription<PushMessage>? _foregroundPushSubscription;
   StreamSubscription<PushMessage>? _openedPushSubscription;
+  StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
+  bool? _connectivityAvailable;
   PushMessage? _pendingOpenedMessage;
   bool _pushNavigationScheduled = false;
   bool _pushNavigationInProgress = false;
@@ -68,12 +73,43 @@ class _MostAppState extends ConsumerState<MostApp> with WidgetsBindingObserver {
     _openedPushSubscription = _pushService.openedMessages.listen(_onOpenedPush);
     ref.listenManual<AuthState>(authProvider, (_, state) {
       unawaited(_pushService.setAuthenticated(state is AuthAuthenticated));
-      if (state is AuthAuthenticated) _scheduleOpenPendingPush();
+      if (state is AuthAuthenticated) {
+        unawaited(_retryOfflineQueue());
+        _scheduleOpenPendingPush();
+      }
     });
     ref.listenManual<ProjectsState>(projectsProvider, (_, state) {
       if (state.selectedProject != null) _scheduleOpenPendingPush();
     });
     unawaited(_pushService.start(pushReady: widget.pushReady));
+    unawaited(_watchConnectivity());
+  }
+
+  Future<void> _watchConnectivity() async {
+    try {
+      final initial = await _connectivity.checkConnectivity();
+      if (!mounted) return;
+      _connectivityAvailable = _hasNetwork(initial);
+      _connectivitySubscription = _connectivity.onConnectivityChanged.listen((
+        results,
+      ) {
+        final available = _hasNetwork(results);
+        if (_connectivityAvailable == false && available) {
+          unawaited(_retryOfflineQueue());
+        }
+        _connectivityAvailable = available;
+      });
+    } catch (_) {}
+  }
+
+  bool _hasNetwork(List<ConnectivityResult> results) =>
+      results.any((result) => result != ConnectivityResult.none);
+
+  Future<void> _retryOfflineQueue() async {
+    if (ref.read(authProvider) is! AuthAuthenticated) return;
+    try {
+      await ref.read(syncQueueProvider.notifier).retryPending();
+    } catch (_) {}
   }
 
   void _onForegroundPush(PushMessage message) {
@@ -256,6 +292,7 @@ class _MostAppState extends ConsumerState<MostApp> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       unawaited(_pushService.start(pushReady: widget.pushReady));
+      unawaited(_retryOfflineQueue());
       if (ref.read(authProvider) is AuthAuthenticated) {
         unawaited(_pushService.setAuthenticated(true));
       }
@@ -268,6 +305,7 @@ class _MostAppState extends ConsumerState<MostApp> with WidgetsBindingObserver {
     WidgetsBinding.instance.removeObserver(this);
     unawaited(_foregroundPushSubscription?.cancel());
     unawaited(_openedPushSubscription?.cancel());
+    unawaited(_connectivitySubscription?.cancel());
     unawaited(_pushService.dispose());
     super.dispose();
   }

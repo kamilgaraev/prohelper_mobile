@@ -31,6 +31,34 @@ void main() {
     expect(summary.purchaseOrders.single.orderNumber, 'PO-61');
   });
 
+  test(
+    'creates a purchase request with linked site request and line items',
+    () async {
+      late RequestOptions request;
+      late Map<String, dynamic> payload;
+      final dio = Dio(BaseOptions(baseUrl: 'https://api.example.test'));
+      dio.httpClientAdapter = _JsonAdapter((options) {
+        request = options;
+        payload = Map<String, dynamic>.from(options.data as Map);
+        return _responseData({'item': procurementPurchaseRequestJson()});
+      });
+
+      final created = await ProcurementRepository(dio).createPurchaseRequest({
+        'site_request_id': 31,
+        'budget_currency': 'RUB',
+        'lines': [
+          {'name': 'Бетон М300', 'quantity': 5, 'unit': 'м3'},
+        ],
+      });
+
+      expect(request.method, 'POST');
+      expect(request.path, '/procurement/purchase-requests');
+      expect(payload['site_request_id'], 31);
+      expect((payload['lines'] as List).single['name'], 'Бетон М300');
+      expect(created.requestNumber, 'PR-12');
+    },
+  );
+
   test('fetches purchase order detail', () async {
     late RequestOptions request;
     final dio = Dio(BaseOptions(baseUrl: 'https://api.example.test'));

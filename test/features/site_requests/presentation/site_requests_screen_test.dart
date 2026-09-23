@@ -41,6 +41,11 @@ class _FakeSiteRequestsRepository extends SiteRequestsRepository {
     String? status,
     int? projectId,
     String? search,
+    bool urgentOnly = false,
+    int? assignedUserId,
+    String? requestType,
+    DateTime? requiredFrom,
+    DateTime? requiredTo,
     SiteRequestsScope scope = SiteRequestsScope.own,
   }) async {
     return _requests;

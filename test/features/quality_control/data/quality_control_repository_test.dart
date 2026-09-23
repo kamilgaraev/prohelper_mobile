@@ -1,4 +1,4 @@
-﻿import 'dart:io';
+import 'dart:io';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -7,6 +7,29 @@ import 'package:prohelpers_mobile/features/quality_control/data/quality_control_
 import '../../../helpers/mobile_integration_test_helpers.dart';
 
 void main() {
+  test('loads assignment candidates and assigns a defect', () async {
+    final queue =
+        TestDioResponseQueue()
+          ..respond('GET', '/quality-control/defects/7/assignees', {
+            'success': true,
+            'data': [
+              {'id': 14, 'name': 'Иван Петров', 'email': 'ivan@example.test'},
+            ],
+          })
+          ..respond('POST', '/quality-control/defects/7/assign', {
+            'success': true,
+            'data': {},
+          });
+    final repository = QualityControlRepository(queue.buildDio());
+
+    final users = await repository.fetchAssignees(7);
+    await repository.assignDefect(7, userId: users.single.id);
+
+    expect(users.single.name, 'Иван Петров');
+    expect(queue.requests.last.path, '/quality-control/defects/7/assign');
+    expect((queue.requests.last.data as Map)['assigned_to'], 14);
+  });
+
   test(
     'sends before photos as multipart attachments when creating defect',
     () async {

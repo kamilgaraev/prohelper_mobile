@@ -1,4 +1,6 @@
-﻿import 'package:dio/dio.dart';
+import 'dart:math';
+
+import 'package:dio/dio.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/network/api_exception.dart';
@@ -32,6 +34,11 @@ class SiteRequestsRepository extends SyncQueueAwareRepository {
     String? status,
     int? projectId,
     String? search,
+    bool urgentOnly = false,
+    int? assignedUserId,
+    String? requestType,
+    DateTime? requiredFrom,
+    DateTime? requiredTo,
     SiteRequestsScope scope = SiteRequestsScope.own,
   }) async {
     try {
@@ -42,6 +49,14 @@ class SiteRequestsRepository extends SyncQueueAwareRepository {
         if (status != null) 'status': status,
         if (projectId != null) 'project_id': projectId,
         if (search != null && search.trim().isNotEmpty) 'search': search.trim(),
+        if (urgentOnly) 'urgent': 1,
+        if (assignedUserId != null) 'assigned_user_id': assignedUserId,
+        if (requestType != null && requestType.isNotEmpty)
+          'request_type': requestType,
+        if (requiredFrom != null)
+          'required_from': requiredFrom.toIso8601String().split('T').first,
+        if (requiredTo != null)
+          'required_to': requiredTo.toIso8601String().split('T').first,
       };
 
       final response = await _dio.get(
@@ -83,9 +98,15 @@ class SiteRequestsRepository extends SyncQueueAwareRepository {
 
   Future<SiteRequestModel> createSiteRequest(Map<String, dynamic> data) async {
     final payload = Map<String, dynamic>.from(data);
+    final idempotencyKey =
+        payload.putIfAbsent('idempotency_key', _newIdempotencyKey).toString();
 
     try {
-      final response = await _dio.post('/site-requests', data: data);
+      final response = await _dio.post(
+        '/site-requests',
+        data: payload,
+        options: Options(headers: {'Idempotency-Key': idempotencyKey}),
+      );
       return _parseSiteRequestResponse(
         MobileApiResponse.payload(response.data),
       );
@@ -107,6 +128,80 @@ class SiteRequestsRepository extends SyncQueueAwareRepository {
         fallbackMessage: 'Не удалось создать заявку.',
       );
     }
+  }
+
+  Future<List<Map<String, dynamic>>> fetchAssignees(int requestId) async {
+    try {
+      final response = await _dio.get('/site-requests/$requestId/assignees');
+      return MobileApiResponse.dataList(response.data);
+    } on DioException catch (error) {
+      throw ApiException.fromDio(
+        error,
+        fallbackMessage: 'Не удалось загрузить список исполнителей.',
+      );
+    }
+  }
+
+  Future<SiteRequestModel> assignSiteRequest(int requestId, int? userId) async {
+    try {
+      final response = await _dio.put(
+        '/site-requests/$requestId/assignee',
+        data: {'assigned_user_id': userId},
+      );
+      return SiteRequestModel.fromJson(
+        MobileApiResponse.dataMap(response.data),
+      );
+    } on DioException catch (error) {
+      throw ApiException.fromDio(
+        error,
+        fallbackMessage: 'Не удалось назначить исполнителя.',
+      );
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> fetchFiles(int requestId) async {
+    try {
+      final response = await _dio.get('/site-requests/$requestId/files');
+      return MobileApiResponse.dataList(response.data);
+    } on DioException catch (error) {
+      throw ApiException.fromDio(
+        error,
+        fallbackMessage: 'Не удалось загрузить файлы заявки.',
+      );
+    }
+  }
+
+  Future<void> uploadFile(int requestId, String path) async {
+    try {
+      await _dio.post(
+        '/site-requests/$requestId/files',
+        data: FormData.fromMap({'file': await MultipartFile.fromFile(path)}),
+      );
+    } on DioException catch (error) {
+      throw ApiException.fromDio(
+        error,
+        fallbackMessage: 'Не удалось загрузить файл.',
+      );
+    }
+  }
+
+  Future<void> deleteFile(int requestId, int fileId) async {
+    try {
+      await _dio.delete('/site-requests/$requestId/files/$fileId');
+    } on DioException catch (error) {
+      throw ApiException.fromDio(
+        error,
+        fallbackMessage: 'Не удалось удалить файл.',
+      );
+    }
+  }
+
+  String _newIdempotencyKey() {
+    final random = Random.secure();
+    return List.generate(
+      32,
+      (_) => random.nextInt(16).toRadixString(16),
+    ).join();
   }
 
   Future<SiteRequestModel> updateSiteRequest(

@@ -3,16 +3,29 @@ import 'package:flutter/material.dart';
 import 'package:prohelpers_mobile/core/models/user_context.dart';
 import 'package:prohelpers_mobile/core/providers/module_provider.dart';
 import 'package:prohelpers_mobile/features/ai_assistant/presentation/ai_assistant_home_screen.dart';
-import 'package:prohelpers_mobile/features/brigades/presentation/brigades_screen.dart';
+import 'package:prohelpers_mobile/features/acts/presentation/acts_screen.dart';
 import 'package:prohelpers_mobile/features/budget_estimates/presentation/budget_estimates_screen.dart';
 import 'package:prohelpers_mobile/features/catalog_management/presentation/catalog_management_screen.dart';
 import 'package:prohelpers_mobile/features/change_management/presentation/change_management_screen.dart';
 import 'package:prohelpers_mobile/features/construction_journal/presentation/construction_journal_screen.dart';
 import 'package:prohelpers_mobile/features/contract_management/presentation/contract_management_screen.dart';
+import 'package:prohelpers_mobile/features/design_management/presentation/design_management_screen.dart';
 import 'package:prohelpers_mobile/features/executive_documentation/presentation/executive_documentation_screen.dart';
+import 'package:prohelpers_mobile/features/field_catalog/presentation/crm_screen.dart';
+import 'package:prohelpers_mobile/features/field_catalog/presentation/tenders_screen.dart';
+import 'package:prohelpers_mobile/features/field_catalog/presentation/published_reports_screen.dart';
+import 'package:prohelpers_mobile/features/field_catalog/presentation/template_library_screen.dart';
+import 'package:prohelpers_mobile/features/field_catalog/presentation/project_participants_screen.dart';
+import 'package:prohelpers_mobile/features/field_catalog/presentation/project_files_screen.dart';
+import 'package:prohelpers_mobile/features/field_catalog/presentation/budgeting_screen.dart';
+import 'package:prohelpers_mobile/features/field_catalog/presentation/brigades_screen.dart'
+    as field_brigades;
+import 'package:prohelpers_mobile/features/field_catalog/presentation/contractor_marketplace_screen.dart';
+import 'package:prohelpers_mobile/features/field_catalog/presentation/workforce_roster_screen.dart';
 import 'package:prohelpers_mobile/features/handover_acceptance/presentation/handover_acceptance_screen.dart';
 import 'package:prohelpers_mobile/features/knowledge_hub/presentation/knowledge_hub_screen.dart';
 import 'package:prohelpers_mobile/features/machinery_operations/presentation/machinery_operations_screen.dart';
+import 'package:prohelpers_mobile/features/payments/presentation/payments_screen.dart';
 import 'package:prohelpers_mobile/features/production_labor/presentation/production_labor_screen.dart';
 import 'package:prohelpers_mobile/features/procurement/presentation/procurement_screen.dart';
 import 'package:prohelpers_mobile/features/project_management/presentation/project_management_screen.dart';
@@ -21,6 +34,9 @@ import 'package:prohelpers_mobile/features/safety/presentation/safety_screen.dar
 import 'package:prohelpers_mobile/features/schedule/presentation/schedule_screen.dart';
 import 'package:prohelpers_mobile/features/site_requests/domain/site_requests_scope.dart';
 import 'package:prohelpers_mobile/features/site_requests/presentation/screens/site_requests_screen.dart';
+import 'package:prohelpers_mobile/features/site_requests/calendar/work_calendar_screen.dart';
+import 'package:prohelpers_mobile/features/system_field/presentation/one_c_exchange_screen.dart';
+import 'package:prohelpers_mobile/features/system_field/presentation/system_field_list_screens.dart';
 import 'package:prohelpers_mobile/features/time_tracking/presentation/time_tracking_screen.dart';
 import 'package:prohelpers_mobile/features/warehouse/presentation/warehouse_screen.dart';
 import 'package:prohelpers_mobile/features/video_monitoring/presentation/video_monitoring_screen.dart';
@@ -36,6 +52,7 @@ class MobileNavigationRegistry {
   destinations = <MobileModuleDestination>[
     MobileModuleDestination(
       route: 'site_requests',
+      adminGroup: MobileAdminGroup.resources,
       slug: 'site_requests',
       title: 'Заявки объекта',
       shortTitle: 'Заявки',
@@ -51,7 +68,21 @@ class MobileNavigationRegistry {
       aliases: <String>['site-requests'],
     ),
     MobileModuleDestination(
+      route: 'site_requests_calendar',
+      adminGroup: MobileAdminGroup.resources,
+      slug: 'site_requests_calendar',
+      title: 'Календарь заявок',
+      shortTitle: 'Календарь',
+      icon: Icons.calendar_month_outlined,
+      group: MobileModuleGroup.fieldWork,
+      appModule: AppModule.siteRequests,
+      viewPermissions: <String>['site_requests.calendar.view'],
+      isSecondary: true,
+      builder: (_) => const WorkCalendarScreen(),
+    ),
+    MobileModuleDestination(
       route: 'site_request_approvals',
+      adminGroup: MobileAdminGroup.resources,
       slug: 'site_request_approvals',
       title: 'Согласование заявок',
       shortTitle: 'Согласования',
@@ -59,6 +90,13 @@ class MobileNavigationRegistry {
       group: MobileModuleGroup.approvalsAndDocs,
       isPrimaryAction: true,
       appModule: AppModule.siteRequests,
+      viewPermissions: <String>[
+        'site_requests.approve',
+        'site_requests.assign',
+        'site_requests.change_status',
+        'site_requests.statistics',
+      ],
+      isSecondary: true,
       actionId: 'approve_request',
       basePriority: 220,
       recommendedReason: 'Есть решения на согласование',
@@ -68,6 +106,7 @@ class MobileNavigationRegistry {
     ),
     MobileModuleDestination(
       route: 'warehouse',
+      adminGroup: MobileAdminGroup.resources,
       slug: 'warehouse',
       title: 'Склад',
       shortTitle: 'Склад',
@@ -84,6 +123,7 @@ class MobileNavigationRegistry {
     ),
     MobileModuleDestination(
       route: 'schedule',
+      adminGroup: MobileAdminGroup.construction,
       slug: 'schedule',
       title: 'График работ',
       shortTitle: 'График',
@@ -98,6 +138,7 @@ class MobileNavigationRegistry {
     ),
     MobileModuleDestination(
       route: 'quality_control',
+      adminGroup: MobileAdminGroup.construction,
       slug: 'quality_control',
       title: 'Контроль качества',
       shortTitle: 'Качество',
@@ -114,6 +155,7 @@ class MobileNavigationRegistry {
     ),
     MobileModuleDestination(
       route: 'safety_management',
+      adminGroup: MobileAdminGroup.construction,
       slug: 'safety_management',
       title: 'Охрана труда',
       shortTitle: 'Безопасность',
@@ -128,6 +170,7 @@ class MobileNavigationRegistry {
     ),
     MobileModuleDestination(
       route: 'machinery_operations',
+      adminGroup: MobileAdminGroup.resources,
       slug: 'machinery_operations',
       title: 'Техника и оборудование',
       shortTitle: 'Техника',
@@ -143,6 +186,7 @@ class MobileNavigationRegistry {
     ),
     MobileModuleDestination(
       route: 'production_labor',
+      adminGroup: MobileAdminGroup.personnel,
       slug: 'production_labor',
       title: 'Выработка',
       shortTitle: 'Выработка',
@@ -158,6 +202,7 @@ class MobileNavigationRegistry {
     ),
     MobileModuleDestination(
       route: 'workforce_management',
+      adminGroup: MobileAdminGroup.personnel,
       slug: 'workforce_management',
       title: 'Явка сотрудников',
       shortTitle: 'Явка',
@@ -174,6 +219,7 @@ class MobileNavigationRegistry {
     ),
     MobileModuleDestination(
       route: 'time_tracking',
+      adminGroup: MobileAdminGroup.construction,
       slug: 'time_tracking',
       title: 'Учет времени',
       shortTitle: 'Время',
@@ -188,6 +234,7 @@ class MobileNavigationRegistry {
     ),
     MobileModuleDestination(
       route: 'procurement',
+      adminGroup: MobileAdminGroup.resources,
       slug: 'procurement',
       title: 'Снабжение',
       shortTitle: 'Снабжение',
@@ -201,6 +248,7 @@ class MobileNavigationRegistry {
     ),
     MobileModuleDestination(
       route: 'budget_estimates',
+      adminGroup: MobileAdminGroup.pto,
       slug: 'budget_estimates',
       title: 'Сметы',
       shortTitle: 'Сметы',
@@ -215,6 +263,7 @@ class MobileNavigationRegistry {
     ),
     MobileModuleDestination(
       route: 'handover_acceptance',
+      adminGroup: MobileAdminGroup.construction,
       slug: 'handover_acceptance',
       title: 'Сдача-приемка',
       shortTitle: 'Приемка',
@@ -229,6 +278,7 @@ class MobileNavigationRegistry {
     ),
     MobileModuleDestination(
       route: 'construction_journal',
+      adminGroup: MobileAdminGroup.construction,
       slug: 'construction_journal',
       title: 'Журнал работ',
       shortTitle: 'Журнал',
@@ -243,6 +293,7 @@ class MobileNavigationRegistry {
     ),
     MobileModuleDestination(
       route: 'workflow_management',
+      adminGroup: MobileAdminGroup.pto,
       slug: 'workflow_management',
       title: 'Рабочие процессы',
       shortTitle: 'Процессы',
@@ -258,6 +309,7 @@ class MobileNavigationRegistry {
     ),
     MobileModuleDestination(
       route: 'ai_assistant',
+      adminGroup: MobileAdminGroup.main,
       slug: 'ai_assistant',
       title: 'AI-ассистент',
       shortTitle: 'Ассистент',
@@ -270,7 +322,106 @@ class MobileNavigationRegistry {
       requiresProject: false,
     ),
     MobileModuleDestination(
+      route: 'crm',
+      slug: 'crm',
+      title: 'CRM',
+      shortTitle: 'CRM',
+      icon: Icons.business_center_outlined,
+      group: MobileModuleGroup.management,
+      adminGroup: MobileAdminGroup.main,
+      appModule: AppModule.crm,
+      viewPermissions: <String>[
+        'crm.companies.view',
+        'crm.contacts.view',
+        'crm.leads.view',
+        'crm.deals.view',
+        'crm.activities.view',
+      ],
+      builder: (_) => const CrmScreen(),
+      requiresProject: false,
+    ),
+    MobileModuleDestination(
+      route: 'tenders',
+      slug: 'tenders',
+      title: 'Тендеры',
+      shortTitle: 'Тендеры',
+      icon: Icons.gavel_rounded,
+      group: MobileModuleGroup.management,
+      adminGroup: MobileAdminGroup.main,
+      appModule: AppModule.tenders,
+      viewPermissions: <String>['tenders.view'],
+      builder: (_) => const TendersScreen(),
+      requiresProject: false,
+    ),
+    MobileModuleDestination(
+      route: 'acts',
+      slug: 'act-reporting',
+      title: 'Акты',
+      shortTitle: 'Акты',
+      icon: Icons.description_outlined,
+      group: MobileModuleGroup.approvalsAndDocs,
+      adminGroup: MobileAdminGroup.pto,
+      appModule: AppModule.actReporting,
+      viewPermissions: <String>['act_reports.view'],
+      builder: (_) => const ActsScreen(),
+    ),
+    MobileModuleDestination(
+      route: 'payments',
+      slug: 'payments',
+      title: 'Финансовые документы',
+      shortTitle: 'Документы',
+      icon: Icons.payments_outlined,
+      group: MobileModuleGroup.approvalsAndDocs,
+      adminGroup: MobileAdminGroup.finance,
+      appModule: AppModule.payments,
+      viewPermissions: <String>[
+        'payments.invoice.view',
+        'payments.invoice.view_all',
+      ],
+      builder: (_) => const PaymentsScreen(),
+    ),
+    MobileModuleDestination(
+      route: 'published_reports',
+      slug: 'file-management',
+      title: 'Опубликованные отчёты',
+      shortTitle: 'Отчёты',
+      icon: Icons.summarize_outlined,
+      group: MobileModuleGroup.management,
+      adminGroup: MobileAdminGroup.dataAndReports,
+      appModule: AppModule.fileManagement,
+      viewPermissions: <String>['report_files.view'],
+      builder: (_) => const PublishedReportsScreen(),
+      requiresProject: false,
+    ),
+    MobileModuleDestination(
+      route: 'project_files',
+      slug: 'project_files',
+      title: 'Файлы объекта',
+      shortTitle: 'Файлы',
+      icon: Icons.folder_outlined,
+      group: MobileModuleGroup.management,
+      adminGroup: MobileAdminGroup.dataAndReports,
+      appModule: AppModule.projectManagement,
+      viewPermissions: <String>['projects.view'],
+      isSecondary: true,
+      builder: (_) => const ProjectFilesScreen(),
+    ),
+    MobileModuleDestination(
+      route: 'template_library',
+      slug: 'report-templates',
+      title: 'Библиотека шаблонов',
+      shortTitle: 'Шаблоны',
+      icon: Icons.article_outlined,
+      group: MobileModuleGroup.management,
+      adminGroup: MobileAdminGroup.dataAndReports,
+      appModule: AppModule.reportTemplates,
+      viewPermissions: <String>['report_templates.view'],
+      builder: (_) => const TemplateLibraryScreen(),
+      requiresProject: false,
+    ),
+    MobileModuleDestination(
       route: 'knowledge_hub',
+      adminGroup: MobileAdminGroup.main,
       slug: 'knowledge_hub',
       title: 'Помощник МОСТ',
       shortTitle: 'Помощник',
@@ -285,6 +436,7 @@ class MobileNavigationRegistry {
     ),
     MobileModuleDestination(
       route: 'project_overview',
+      adminGroup: MobileAdminGroup.main,
       slug: 'project_overview',
       title: 'Проект',
       shortTitle: 'Проект',
@@ -302,6 +454,7 @@ class MobileNavigationRegistry {
     ),
     MobileModuleDestination(
       route: 'contract_management',
+      adminGroup: MobileAdminGroup.pto,
       slug: 'contract_management',
       title: 'Договоры',
       shortTitle: 'Договоры',
@@ -313,7 +466,21 @@ class MobileNavigationRegistry {
       aliases: <String>['contract-management'],
     ),
     MobileModuleDestination(
+      route: 'design_management',
+      adminGroup: MobileAdminGroup.pto,
+      slug: 'design-management',
+      title: 'ПИР',
+      shortTitle: 'ПИР',
+      icon: Icons.architecture_outlined,
+      group: MobileModuleGroup.approvalsAndDocs,
+      appModule: AppModule.designManagement,
+      viewPermissions: <String>['design-management.view'],
+      builder: (_) => const DesignManagementScreen(),
+      aliases: <String>['design-management'],
+    ),
+    MobileModuleDestination(
       route: 'change_management',
+      adminGroup: MobileAdminGroup.pto,
       slug: 'change_management',
       title: 'Изменения',
       shortTitle: 'Изменения',
@@ -326,6 +493,7 @@ class MobileNavigationRegistry {
     ),
     MobileModuleDestination(
       route: 'executive_documentation',
+      adminGroup: MobileAdminGroup.pto,
       slug: 'executive_documentation',
       title: 'Исполнительная документация',
       shortTitle: 'Документы',
@@ -338,6 +506,7 @@ class MobileNavigationRegistry {
     ),
     MobileModuleDestination(
       route: 'catalog_management',
+      adminGroup: MobileAdminGroup.resources,
       slug: 'catalog_management',
       title: 'Справочники',
       shortTitle: 'Справочники',
@@ -350,18 +519,134 @@ class MobileNavigationRegistry {
       requiresProject: false,
     ),
     MobileModuleDestination(
+      route: 'budgeting',
+      slug: 'budgeting',
+      title: 'Исполнение бюджета',
+      shortTitle: 'Бюджет',
+      icon: Icons.account_balance_wallet_outlined,
+      group: MobileModuleGroup.management,
+      adminGroup: MobileAdminGroup.finance,
+      appModule: AppModule.budgeting,
+      viewPermissions: <String>['reports.project_control.view'],
+      builder: (_) => const BudgetingScreen(),
+    ),
+    MobileModuleDestination(
+      route: 'project_participants',
+      adminGroup: MobileAdminGroup.team,
+      slug: 'project_participants',
+      title: 'Участники объекта',
+      shortTitle: 'Участники',
+      icon: Icons.group_outlined,
+      group: MobileModuleGroup.management,
+      appModule: AppModule.projectManagement,
+      viewPermissions: <String>['projects.view'],
+      isSecondary: true,
+      builder: (_) => const ProjectParticipantsScreen(),
+    ),
+    MobileModuleDestination(
+      route: 'workforce_roster',
+      adminGroup: MobileAdminGroup.personnel,
+      slug: 'workforce_roster',
+      title: 'Состав на объекте',
+      shortTitle: 'Состав',
+      icon: Icons.badge_outlined,
+      group: MobileModuleGroup.management,
+      appModule: AppModule.workforceManagement,
+      viewPermissions: <String>['workforce.view'],
+      isSecondary: true,
+      builder: (_) => const WorkforceRosterScreen(),
+    ),
+    MobileModuleDestination(
       route: 'brigades',
+      adminGroup: MobileAdminGroup.team,
       slug: 'brigades',
       title: 'Бригады',
       shortTitle: 'Бригады',
       icon: Icons.groups_2_outlined,
       group: MobileModuleGroup.management,
       appModule: AppModule.brigades,
+      viewPermissions: <String>[
+        'brigades.catalog.view',
+        'brigades.requests.view',
+        'brigades.invitations.view',
+      ],
       basePriority: 86,
-      builder: (_) => const BrigadesScreen(),
+      builder: (_) => const field_brigades.BrigadesScreen(),
+    ),
+    MobileModuleDestination(
+      route: 'contractors',
+      adminGroup: MobileAdminGroup.team,
+      slug: 'contractor-marketplace',
+      title: 'Подрядчики',
+      shortTitle: 'Подрядчики',
+      icon: Icons.handshake_outlined,
+      group: MobileModuleGroup.management,
+      appModule: AppModule.contractorMarketplace,
+      viewPermissions: <String>['contractor_marketplace.search.view'],
+      builder: (_) => const ContractorMarketplaceScreen(),
+      requiresProject: false,
+    ),
+    MobileModuleDestination(
+      route: 'one_c_exchange',
+      adminGroup: MobileAdminGroup.system,
+      slug: 'one-c-basic-exchange',
+      title: 'Обмен с 1С',
+      shortTitle: 'Обмен с 1С',
+      icon: Icons.sync_outlined,
+      group: MobileModuleGroup.management,
+      appModule: AppModule.oneCExchange,
+      viewPermissions: <String>[
+        'one_c_exchange.view',
+        'one_c_exchange.history.view',
+      ],
+      builder: (_) => const OneCExchangeScreen(),
+      requiresProject: false,
+    ),
+    MobileModuleDestination(
+      route: 'access_recertification',
+      adminGroup: MobileAdminGroup.system,
+      slug: 'access_recertification',
+      title: 'Пересмотр доступов',
+      shortTitle: 'Доступы',
+      icon: Icons.verified_user_outlined,
+      group: MobileModuleGroup.management,
+      appModule: AppModule.accessRecertification,
+      viewPermissions: <String>[
+        'access_recertification.campaigns.view',
+        'access_recertification.reviews.view',
+      ],
+      builder: (_) => const AccessRecertificationScreen(),
+      requiresProject: false,
+    ),
+    MobileModuleDestination(
+      route: 'rate_coefficients',
+      adminGroup: MobileAdminGroup.system,
+      slug: 'rate-management',
+      title: 'Коэффициенты',
+      shortTitle: 'Коэффициенты',
+      icon: Icons.calculate_outlined,
+      group: MobileModuleGroup.management,
+      appModule: AppModule.rateManagement,
+      viewPermissions: <String>['rate_coefficients.view'],
+      builder: (_) => const RateCoefficientsScreen(),
+      requiresProject: false,
+    ),
+    MobileModuleDestination(
+      route: 'system_events',
+      adminGroup: MobileAdminGroup.system,
+      slug: 'system-logs',
+      title: 'Журнал событий',
+      shortTitle: 'События',
+      icon: Icons.history_outlined,
+      group: MobileModuleGroup.management,
+      appModule: AppModule.systemLogs,
+      viewPermissions: <String>['system-logs.system.view'],
+      builder: (_) => const SystemEventsScreen(),
+      requiresProject: false,
     ),
     MobileModuleDestination(
       route: 'video_monitoring',
+      adminGroup: MobileAdminGroup.construction,
       slug: 'video_monitoring',
       title: 'Видеонаблюдение',
       shortTitle: 'Видео',

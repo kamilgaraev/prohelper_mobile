@@ -16,7 +16,7 @@ void main() {
     expect(repository, contains("'idempotency_key': operationKey"));
     expect(repository, contains("'submit_after_create': submitAfterCreate"));
     expect(repository, contains("'create_and_submit_entry'"));
-    expect(form, contains('submitIntent: !isDraft'));
+    expect(form, contains('submitAfterCreate: !isDraft'));
     expect(form, isNot(contains('await repository.submitEntry(entry.id)')));
   });
 

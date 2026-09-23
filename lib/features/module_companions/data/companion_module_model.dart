@@ -1,4 +1,4 @@
-﻿class CompanionModuleInfo {
+class CompanionModuleInfo {
   const CompanionModuleInfo({
     required this.slug,
     required this.title,
@@ -41,6 +41,21 @@ class CompanionModuleListModel {
   final CompanionStateText permissionState;
   final CompanionPagination meta;
 
+  CompanionModuleListModel appendPage(CompanionModuleListModel next) {
+    final existingIds = items.map((item) => item.id).toSet();
+    return CompanionModuleListModel(
+      module: module,
+      items: <CompanionListItem>[
+        ...items,
+        ...next.items.where((item) => existingIds.add(item.id)),
+      ],
+      statuses: statuses,
+      emptyState: emptyState,
+      permissionState: permissionState,
+      meta: next.meta,
+    );
+  }
+
   factory CompanionModuleListModel.fromJson(Map<String, dynamic> json) {
     final filters = _map(json['filters']);
 
@@ -69,6 +84,10 @@ class CompanionModuleDetailModel {
     required this.relatedItems,
     required this.emptyState,
     required this.permissionState,
+    this.result = const [],
+    this.files = const [],
+    this.comments = const [],
+    this.workflowHistory = const [],
   });
 
   final CompanionModuleInfo module;
@@ -77,6 +96,10 @@ class CompanionModuleDetailModel {
   final List<CompanionRelatedItem> relatedItems;
   final CompanionStateText emptyState;
   final CompanionStateText permissionState;
+  final List<CompanionFieldRow> result;
+  final List<CompanionFile> files;
+  final List<CompanionComment> comments;
+  final List<CompanionHistoryEntry> workflowHistory;
 
   factory CompanionModuleDetailModel.fromJson(Map<String, dynamic> json) {
     return CompanionModuleDetailModel(
@@ -92,8 +115,103 @@ class CompanionModuleDetailModel {
       permissionState: CompanionStateText.fromJson(
         _map(json['permission_state']),
       ),
+      result: _resultRows(json['result']),
+      files: _list(
+        json['files'],
+      ).map(CompanionFile.fromJson).toList(growable: false),
+      comments: _list(
+        json['comments'],
+      ).map(CompanionComment.fromJson).toList(growable: false),
+      workflowHistory: _list(
+        json['workflow_history'],
+      ).map(CompanionHistoryEntry.fromJson).toList(growable: false),
     );
   }
+}
+
+class CompanionFile {
+  const CompanionFile({
+    required this.id,
+    required this.name,
+    this.mimeType,
+    this.previewUrl,
+    this.downloadUrl,
+  });
+
+  final int id;
+  final String name;
+  final String? mimeType;
+  final String? previewUrl;
+  final String? downloadUrl;
+
+  Uri? uriFor(String purpose) {
+    final value = switch (purpose) {
+      'preview' => previewUrl,
+      'download' => downloadUrl,
+      _ => null,
+    };
+    final uri = value == null ? null : Uri.tryParse(value);
+    return uri != null && uri.scheme == 'https' && uri.host.isNotEmpty
+        ? uri
+        : null;
+  }
+
+  factory CompanionFile.fromJson(Map<String, dynamic> json) => CompanionFile(
+    id: _optionalInt(json['id']) ?? 0,
+    name:
+        _optionalString(json, 'name') ??
+        _optionalString(json, 'file_name') ??
+        'Файл',
+    mimeType: _optionalString(json, 'mime_type'),
+    previewUrl: _optionalString(json, 'preview_url'),
+    downloadUrl: _optionalString(json, 'download_url'),
+  );
+}
+
+class CompanionComment {
+  const CompanionComment({
+    required this.author,
+    required this.body,
+    this.status,
+    this.createdAt,
+  });
+
+  final String author;
+  final String body;
+  final String? status;
+  final DateTime? createdAt;
+
+  factory CompanionComment.fromJson(Map<String, dynamic> json) =>
+      CompanionComment(
+        author: _optionalString(json, 'author') ?? 'Участник проекта',
+        body: _optionalString(json, 'body') ?? '',
+        status: _optionalString(json, 'status'),
+        createdAt: _dateTime(json['created_at']),
+      );
+}
+
+class CompanionHistoryEntry {
+  const CompanionHistoryEntry({
+    required this.title,
+    this.description,
+    this.createdAt,
+  });
+
+  final String title;
+  final String? description;
+  final DateTime? createdAt;
+
+  factory CompanionHistoryEntry.fromJson(Map<String, dynamic> json) =>
+      CompanionHistoryEntry(
+        title:
+            _optionalString(json, 'title') ??
+            _optionalString(json, 'action') ??
+            'Изменение статуса',
+        description:
+            _optionalString(json, 'description') ??
+            _optionalString(json, 'comment'),
+        createdAt: _dateTime(json['created_at']),
+      );
 }
 
 class CompanionListItem {
@@ -118,6 +236,7 @@ class CompanionListItem {
   final String? subtitle;
   final String? status;
   final String? statusLabel;
+  final List<CompanionAction> actions;
   final String? statusTone;
   final String? projectName;
   final String primaryLabel;
@@ -125,7 +244,6 @@ class CompanionListItem {
   final String secondaryLabel;
   final String? secondaryValue;
   final String? updatedAt;
-  final List<CompanionAction> actions;
 
   factory CompanionListItem.fromJson(Map<String, dynamic> json) {
     return CompanionListItem(
@@ -256,6 +374,8 @@ class CompanionRelatedItem {
     this.subtitle,
     this.status,
     this.statusLabel,
+    this.actions = const [],
+    this.actionsEndpoint,
   });
 
   final int id;
@@ -263,6 +383,8 @@ class CompanionRelatedItem {
   final String? subtitle;
   final String? status;
   final String? statusLabel;
+  final List<CompanionAction> actions;
+  final String? actionsEndpoint;
 
   factory CompanionRelatedItem.fromJson(Map<String, dynamic> json) {
     return CompanionRelatedItem(
@@ -271,6 +393,10 @@ class CompanionRelatedItem {
       subtitle: _optionalString(json, 'subtitle'),
       status: _optionalString(json, 'status'),
       statusLabel: _optionalString(json, 'status_label'),
+      actions: _list(
+        json['available_actions'],
+      ).map(CompanionAction.fromJson).toList(growable: false),
+      actionsEndpoint: _optionalString(json, 'actions_endpoint'),
     );
   }
 }
@@ -286,6 +412,55 @@ Map<String, dynamic> _map(dynamic value) {
 
   throw const FormatException('Некорректный формат данных раздела');
 }
+
+List<CompanionFieldRow> _resultRows(Object? value) {
+  if (value is String && value.trim().isNotEmpty) {
+    return [CompanionFieldRow(label: 'Результат', value: value.trim())];
+  }
+  if (value is List) {
+    return _list(value).map(CompanionFieldRow.fromJson).toList(growable: false);
+  }
+  final result = value is Map ? _map(value) : const <String, dynamic>{};
+  if (result['rows'] is List) {
+    return _list(
+      result['rows'],
+    ).map(CompanionFieldRow.fromJson).toList(growable: false);
+  }
+  if (result.containsKey('value') || result.containsKey('description')) {
+    final row = CompanionFieldRow(
+      label:
+          _optionalString(result, 'title') ??
+          _optionalString(result, 'label') ??
+          'Результат',
+      value:
+          _optionalString(result, 'value') ??
+          _optionalString(result, 'description') ??
+          '',
+    );
+    return row.value.isEmpty ? const [] : [row];
+  }
+  return result.entries
+      .where(
+        (entry) =>
+            entry.value != null && entry.value is! Map && entry.value is! List,
+      )
+      .map(
+        (entry) => CompanionFieldRow(
+          label: entry.key.replaceAll('_', ' '),
+          value: entry.value.toString(),
+        ),
+      )
+      .toList(growable: false);
+}
+
+int? _optionalInt(Object? value) {
+  if (value is int) return value;
+  if (value is num) return value.toInt();
+  return value == null ? null : int.tryParse('$value');
+}
+
+DateTime? _dateTime(Object? value) =>
+    value is String ? DateTime.tryParse(value) : null;
 
 List<Map<String, dynamic>> _list(dynamic value) {
   if (value is! List) {

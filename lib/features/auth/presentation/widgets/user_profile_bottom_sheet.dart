@@ -53,31 +53,6 @@ class UserProfileBottomSheet extends ConsumerWidget {
                       user.name,
                       style: AppTypography.h2(context).copyWith(fontSize: 20),
                     ),
-                    const SizedBox(height: 4),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.primary.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                          color: theme.colorScheme.primary.withValues(
-                            alpha: 0.3,
-                          ),
-                        ),
-                      ),
-                      child: Text(
-                        user.displayRoles.isEmpty
-                            ? 'Без роли'
-                            : user.displayRoles.join(', ').toUpperCase(),
-                        style: AppTypography.caption(context).copyWith(
-                          color: theme.colorScheme.primary,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
                   ],
                 ),
               ),

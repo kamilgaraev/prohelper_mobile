@@ -1,4 +1,4 @@
-﻿import 'package:dio/dio.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:prohelpers_mobile/features/construction_journal/data/construction_journal_models.dart';
@@ -502,6 +502,7 @@ class _FieldHandoverAcceptanceRepository extends HandoverAcceptanceRepository {
     int itemId, {
     required String status,
     String? comment,
+    List<String> photoPaths = const [],
   }) async {
     accepted = status == 'accepted';
     return _acceptanceScope(accepted: accepted).checklists.single;

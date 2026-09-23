@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'app_colors.dart';
 
@@ -11,6 +11,31 @@ class MostTheme {
   static const double glassOpacity = 0.72;
   static const double glassBorderOpacity = 0.12;
   static final Color borderColor = const Color(0xFF2C2C2E);
+
+  static Color statusNeutralColor(Brightness brightness) =>
+      brightness == Brightness.dark
+          ? const Color(0xFFC2C4CC)
+          : const Color(0xFF5D6470);
+
+  static Color statusInfoColor(Brightness brightness) =>
+      brightness == Brightness.dark
+          ? const Color(0xFF5EB1FF)
+          : const Color(0xFF0056B3);
+
+  static Color statusSuccessColor(Brightness brightness) =>
+      brightness == Brightness.dark
+          ? const Color(0xFF53D88A)
+          : const Color(0xFF087A3B);
+
+  static Color statusWarningColor(Brightness brightness) =>
+      brightness == Brightness.dark
+          ? const Color(0xFFFFC15A)
+          : const Color(0xFF8A5200);
+
+  static Color statusDangerColor(Brightness brightness) =>
+      brightness == Brightness.dark
+          ? const Color(0xFFFF746B)
+          : const Color(0xFFB42318);
   static final SystemUiOverlayStyle lightSystemOverlayStyle =
       SystemUiOverlayStyle.dark.copyWith(
         statusBarColor: Colors.transparent,

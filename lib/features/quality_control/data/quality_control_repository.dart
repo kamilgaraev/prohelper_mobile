@@ -1,4 +1,4 @@
-﻿import 'package:dio/dio.dart';
+import 'package:dio/dio.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/network/api_exception.dart';
@@ -124,6 +124,43 @@ class QualityControlRepository extends SyncQueueAwareRepository {
     }
   }
 
+  Future<List<QualityAssigneeModel>> fetchAssignees(int defectId) async {
+    try {
+      final response = await _dio.get(
+        '/quality-control/defects/$defectId/assignees',
+      );
+      return MobileApiResponse.dataList(
+        response.data,
+      ).map(QualityAssigneeModel.fromJson).toList();
+    } on DioException catch (error) {
+      throw ApiException.fromDio(
+        error,
+        fallbackMessage: 'Не удалось загрузить список сотрудников.',
+      );
+    }
+  }
+
+  Future<void> assignDefect(
+    int id, {
+    required int userId,
+    String? comment,
+  }) async {
+    try {
+      await _dio.post(
+        '/quality-control/defects/$id/assign',
+        data: {
+          'assigned_to': userId,
+          if ((comment ?? '').trim().isNotEmpty) 'comment': comment!.trim(),
+        },
+      );
+    } on DioException catch (error) {
+      throw ApiException.fromDio(
+        error,
+        fallbackMessage: 'Не удалось назначить ответственного.',
+      );
+    }
+  }
+
   Future<QualityDefectModel> startDefect(int id, {String? comment}) async {
     try {
       final response = await _dio.post(
@@ -239,6 +276,24 @@ class QualityControlRepository extends SyncQueueAwareRepository {
       throw ApiException.fromDio(error);
     }
   }
+}
+
+class QualityAssigneeModel {
+  const QualityAssigneeModel({
+    required this.id,
+    required this.name,
+    this.email,
+  });
+  final int id;
+  final String name;
+  final String? email;
+
+  factory QualityAssigneeModel.fromJson(Map<String, dynamic> json) =>
+      QualityAssigneeModel(
+        id: (json['id'] as num).toInt(),
+        name: (json['name'] ?? '').toString(),
+        email: json['email']?.toString(),
+      );
 }
 
 Object? _formValue(Object? value) {

@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/error/user_message.dart';
@@ -13,6 +13,8 @@ import '../../../core/widgets/industrial_card.dart';
 import '../../../core/widgets/pro_action_tile.dart';
 import '../../../core/widgets/pro_metric_tile.dart';
 import '../../../core/widgets/pro_status_banner.dart';
+import '../../auth/domain/auth_provider.dart';
+import '../../projects/domain/projects_provider.dart';
 import '../data/warehouse_media_picker.dart';
 import '../data/warehouse_repository.dart';
 import '../data/warehouse_summary_model.dart';
@@ -21,6 +23,7 @@ import 'warehouse_receipt_sheet.dart';
 import 'warehouse_scan_screen.dart';
 import 'warehouse_tasks_screen.dart';
 import 'project_material_deliveries_screen.dart';
+import 'project_resource_analytics_screen.dart';
 import 'warehouse_custody_screen.dart';
 
 enum _MovementFilter {
@@ -74,6 +77,7 @@ class _WarehouseScreenState extends ConsumerState<WarehouseScreen> {
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(warehouseProvider);
+    final selectedProject = ref.watch(projectsProvider).selectedProject;
     final data = state.data;
     final filteredMovements =
         data == null
@@ -171,6 +175,26 @@ class _WarehouseScreenState extends ConsumerState<WarehouseScreen> {
                   ),
                 ),
               ),
+              if (selectedProject != null)
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                  sliver: SliverToBoxAdapter(
+                    child: _ResourceAnalyticsEntryCard(
+                      projectName: selectedProject.name,
+                      onTap: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder:
+                                (_) => ProjectResourceAnalyticsScreen(
+                                  projectId: selectedProject.serverId,
+                                  projectName: selectedProject.name,
+                                ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ),
               SliverPadding(
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
                 sliver: SliverToBoxAdapter(
@@ -530,6 +554,28 @@ class _ProjectDeliveriesEntryCard extends StatelessWidget {
       title: 'Материалы на объект',
       subtitle: 'Поставки из склада и закупок, приемка доставки на объекте.',
       icon: Icons.local_shipping_outlined,
+      tone: ProStatusTone.success,
+      onTap: onTap,
+    );
+  }
+}
+
+class _ResourceAnalyticsEntryCard extends StatelessWidget {
+  const _ResourceAnalyticsEntryCard({
+    required this.projectName,
+    required this.onTap,
+  });
+
+  final String projectName;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return ProActionTile(
+      title: 'Остатки и расход объекта',
+      subtitle:
+          'Материалы, доступный остаток и расход по журналу: $projectName.',
+      icon: Icons.analytics_outlined,
       tone: ProStatusTone.success,
       onTap: onTap,
     );
@@ -1025,8 +1071,125 @@ class _WarehouseBalancesSheetState
     });
   }
 
+  Future<void> _writeOff(WarehouseBalanceModel balance) async {
+    final quantity = TextEditingController();
+    final document = TextEditingController();
+    final reason = TextEditingController();
+    final formKey = GlobalKey<FormState>();
+    final values = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder:
+          (dialogContext) => AlertDialog(
+            title: Text('Списание · ${balance.materialName}'),
+            content: Form(
+              key: formKey,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'Доступно: ${balance.availableQuantity} ${balance.measurementUnit ?? ''}',
+                  ),
+                  TextFormField(
+                    controller: quantity,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    decoration: const InputDecoration(labelText: 'Количество'),
+                    validator: (value) {
+                      final amount = double.tryParse(
+                        (value ?? '').replaceAll(',', '.'),
+                      );
+                      if (amount == null || amount <= 0) {
+                        return 'Укажите количество больше нуля';
+                      }
+                      if (amount > balance.availableQuantity) {
+                        return 'Количество превышает остаток';
+                      }
+                      return null;
+                    },
+                  ),
+                  TextFormField(
+                    controller: document,
+                    decoration: const InputDecoration(
+                      labelText: 'Номер документа (необязательно)',
+                    ),
+                  ),
+                  TextFormField(
+                    controller: reason,
+                    decoration: const InputDecoration(labelText: 'Основание'),
+                    maxLines: 2,
+                    validator:
+                        (value) =>
+                            value == null || value.trim().isEmpty
+                                ? 'Укажите основание списания'
+                                : null,
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('Отмена'),
+              ),
+              FilledButton(
+                onPressed: () {
+                  if (formKey.currentState!.validate()) {
+                    Navigator.pop(dialogContext, {
+                      'quantity': double.parse(
+                        quantity.text.replaceAll(',', '.'),
+                      ),
+                      'document': document.text.trim(),
+                      'reason': reason.text.trim(),
+                    });
+                  }
+                },
+                child: const Text('Списать'),
+              ),
+            ],
+          ),
+    );
+    quantity.dispose();
+    document.dispose();
+    reason.dispose();
+    if (values == null || !mounted) {
+      return;
+    }
+    try {
+      await ref
+          .read(warehouseRepositoryProvider)
+          .writeOff(
+            warehouseId: balance.warehouseId,
+            materialId: balance.materialId,
+            quantity: values['quantity'] as double,
+            documentNumber: values['document'] as String,
+            reason: values['reason'] as String,
+          );
+      await _refreshBalances();
+      await ref.read(warehouseProvider.notifier).load();
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Списание проведено.')));
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(UserMessage.fromError(error))));
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final canWriteOff =
+        ref
+            .watch(authProvider)
+            .user
+            ?.grantedPermissions
+            .contains('warehouse.manage_stock') ??
+        false;
     return FractionallySizedBox(
       heightFactor: 0.92,
       child: Padding(
@@ -1108,6 +1271,8 @@ class _WarehouseBalancesSheetState
 
                       return _BalanceCard(
                         balance: balance,
+                        onWriteOff:
+                            canWriteOff ? () => _writeOff(balance) : null,
                         onOpenGallery: () async {
                           await showModalBottomSheet<void>(
                             context: context,
@@ -1155,10 +1320,15 @@ class _WarehouseBalancesSheetState
 }
 
 class _BalanceCard extends StatelessWidget {
-  const _BalanceCard({required this.balance, required this.onOpenGallery});
+  const _BalanceCard({
+    required this.balance,
+    required this.onOpenGallery,
+    required this.onWriteOff,
+  });
 
   final WarehouseBalanceModel balance;
   final VoidCallback onOpenGallery;
+  final VoidCallback? onWriteOff;
 
   @override
   Widget build(BuildContext context) {
@@ -1251,14 +1421,25 @@ class _BalanceCard extends StatelessWidget {
             emptyText: 'Нет фотографий позиции',
           ),
           const SizedBox(height: 12),
-          OutlinedButton.icon(
-            onPressed: onOpenGallery,
-            icon: const Icon(Icons.photo_library_outlined),
-            label: Text(
-              balance.effectivePhotoGallery.isEmpty
-                  ? 'Галерея'
-                  : 'Галерея (${balance.effectivePhotoGallery.length})',
-            ),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              OutlinedButton.icon(
+                onPressed: onOpenGallery,
+                icon: const Icon(Icons.photo_library_outlined),
+                label: Text(
+                  balance.effectivePhotoGallery.isEmpty
+                      ? 'Галерея'
+                      : 'Галерея (${balance.effectivePhotoGallery.length})',
+                ),
+              ),
+              OutlinedButton.icon(
+                onPressed: balance.availableQuantity > 0 ? onWriteOff : null,
+                icon: const Icon(Icons.remove_circle_outline_rounded),
+                label: const Text('Списать'),
+              ),
+            ],
           ),
         ],
       ),

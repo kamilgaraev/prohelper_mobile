@@ -38,6 +38,15 @@ void main() {
     expect(entry.approvalSummary.rejectionReason, 'Не совпали часы');
   });
 
+  test('exposes only approval actions returned by the server', () {
+    final entry = TimeEntryModel.fromJson(
+      _entryJson(status: 'submitted', actions: ['approve']),
+    );
+
+    expect(entry.canApprove, isTrue);
+    expect(entry.canReject, isFalse);
+  });
+
   test('rejects unknown status and missing actions', () {
     final unknownStatus = _entryJson(status: 'waiting');
     expect(() => TimeEntryModel.fromJson(unknownStatus), throwsFormatException);

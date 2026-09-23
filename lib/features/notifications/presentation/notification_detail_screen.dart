@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/design/pro_status.dart';
@@ -8,7 +8,12 @@ import '../../../core/widgets/app_loading_state.dart';
 import '../../../core/widgets/industrial_card.dart';
 import '../../construction_journal/presentation/construction_journal_screen.dart';
 import '../../construction_journal/presentation/journal_entry_detail_screen.dart';
+import '../../acts/presentation/acts_screen.dart';
+import '../../payments/presentation/payments_screen.dart';
+import '../../procurement/presentation/procurement_screen.dart';
+import '../../quality_control/presentation/quality_defect_detail_screen.dart';
 import '../../schedule/presentation/schedule_details_screen.dart';
+import '../../schedule/presentation/schedule_task_detail_screen.dart';
 import '../../schedule/presentation/schedule_screen.dart';
 import '../../site_requests/presentation/screens/site_request_detail_screen.dart';
 import '../../site_requests/presentation/screens/site_requests_screen.dart';
@@ -23,10 +28,12 @@ class NotificationDetailScreen extends ConsumerStatefulWidget {
     super.key,
     required this.notificationId,
     this.initialNotification,
+    this.autoOpenTarget = false,
   });
 
   final String notificationId;
   final NotificationModel? initialNotification;
+  final bool autoOpenTarget;
 
   @override
   ConsumerState<NotificationDetailScreen> createState() =>
@@ -36,6 +43,7 @@ class NotificationDetailScreen extends ConsumerStatefulWidget {
 class _NotificationDetailScreenState
     extends ConsumerState<NotificationDetailScreen> {
   bool _markReadRequested = false;
+  bool _autoOpenTargetRequested = false;
 
   @override
   Widget build(BuildContext context) {
@@ -49,6 +57,17 @@ class _NotificationDetailScreenState
           ref
               .read(notificationDetailProvider(widget.notificationId).notifier)
               .markAsRead();
+        }
+      });
+    }
+
+    if (widget.autoOpenTarget &&
+        !_autoOpenTargetRequested &&
+        state.notification != null) {
+      _autoOpenTargetRequested = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _openTarget(context, state.notification!);
         }
       });
     }
@@ -170,6 +189,68 @@ class _NotificationDetailScreenState
           );
         }
         return;
+      case NotificationTargetType.scheduleTask:
+        if (target.scheduleTaskId == null) {
+          _showUnavailableTarget(context);
+          return;
+        }
+        await navigator.push(
+          MaterialPageRoute(
+            builder:
+                (_) => ScheduleTaskDetailScreen(taskId: target.scheduleTaskId!),
+          ),
+        );
+        return;
+      case NotificationTargetType.qualityDefect:
+        if (target.qualityDefectId == null) {
+          _showUnavailableTarget(context);
+          return;
+        }
+        await navigator.push(
+          MaterialPageRoute(
+            builder:
+                (_) => QualityDefectDetailScreen(
+                  defectId: target.qualityDefectId!,
+                ),
+          ),
+        );
+        return;
+      case NotificationTargetType.paymentDocument:
+        if (target.paymentDocumentId == null) {
+          _showUnavailableTarget(context);
+          return;
+        }
+        await navigator.push(
+          MaterialPageRoute(
+            builder:
+                (_) =>
+                    PaymentDocumentDetailScreen(id: target.paymentDocumentId!),
+          ),
+        );
+        return;
+      case NotificationTargetType.act:
+        if (target.actId == null) {
+          _showUnavailableTarget(context);
+          return;
+        }
+        await navigator.push(
+          MaterialPageRoute(builder: (_) => ActDetailScreen(id: target.actId!)),
+        );
+        return;
+      case NotificationTargetType.procurementPurchaseRequest:
+        if (target.purchaseRequestId == null) {
+          _showUnavailableTarget(context);
+          return;
+        }
+        await navigator.push(
+          MaterialPageRoute(
+            builder:
+                (_) => ProcurementPurchaseRequestDetailScreen(
+                  requestId: target.purchaseRequestId!,
+                ),
+          ),
+        );
+        return;
       case NotificationTargetType.warehouseTask:
         await _openWarehouseTarget(context, target);
         return;
@@ -180,6 +261,10 @@ class _NotificationDetailScreenState
         );
         return;
     }
+  }
+
+  void _showUnavailableTarget(BuildContext context) {
+    _showMessage(context, 'В уведомлении нет идентификатора записи.');
   }
 
   Future<void> _openWarehouseTarget(
@@ -445,6 +530,26 @@ String _targetDescription(NotificationNavigationTarget target) {
       target.scheduleId == null
           ? 'Откроется список графиков работ.'
           : 'Откроется график работ.',
+    NotificationTargetType.scheduleTask =>
+      target.scheduleTaskId == null
+          ? 'Карточка задачи не указана в уведомлении.'
+          : 'Откроется карточка задачи графика.',
+    NotificationTargetType.qualityDefect =>
+      target.qualityDefectId == null
+          ? 'Карточка замечания по качеству не указана в уведомлении.'
+          : 'Откроется карточка замечания по качеству.',
+    NotificationTargetType.paymentDocument =>
+      target.paymentDocumentId == null
+          ? 'Карточка финансового документа не указана в уведомлении.'
+          : 'Откроется карточка финансового документа.',
+    NotificationTargetType.act =>
+      target.actId == null
+          ? 'Карточка акта не указана в уведомлении.'
+          : 'Откроется карточка акта.',
+    NotificationTargetType.procurementPurchaseRequest =>
+      target.purchaseRequestId == null
+          ? 'Заявка на закупку не указана в уведомлении.'
+          : 'Откроется список закупок. Для заявки пока нет отдельной карточки.',
     NotificationTargetType.warehouseTask =>
       target.warehouseTaskId == null
           ? 'Откроется складской раздел.'

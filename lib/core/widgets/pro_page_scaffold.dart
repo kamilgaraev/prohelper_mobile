@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 
 import 'package:prohelpers_mobile/core/design/pro_design_tokens.dart';
 import 'package:prohelpers_mobile/core/theme/app_typography.dart';
@@ -11,6 +11,7 @@ class ProPageScaffold extends StatelessWidget {
     this.subtitle,
     this.actions,
     this.onRefresh,
+    this.floatingActionButton,
     this.padding = const EdgeInsets.fromLTRB(
       ProSpacing.pageHorizontal,
       ProSpacing.md,
@@ -24,6 +25,7 @@ class ProPageScaffold extends StatelessWidget {
   final Widget body;
   final List<Widget>? actions;
   final Future<void> Function()? onRefresh;
+  final Widget? floatingActionButton;
   final EdgeInsetsGeometry padding;
 
   @override
@@ -64,6 +66,7 @@ class ProPageScaffold extends StatelessWidget {
         ),
         actions: actions,
       ),
+      floatingActionButton: floatingActionButton,
       body:
           onRefresh == null
               ? content
@@ -83,10 +86,8 @@ double _toolbarHeight(BuildContext context, {required bool hasSubtitle}) {
               _scaledLineHeight(textScaler, AppTypography.caption(context))
           : 0;
 
-  return (titleHeight + subtitleHeight + verticalPadding).clamp(
-    kToolbarHeight,
-    96.0,
-  );
+  final contentHeight = titleHeight + subtitleHeight + verticalPadding;
+  return contentHeight < kToolbarHeight ? kToolbarHeight : contentHeight;
 }
 
 double _scaledLineHeight(TextScaler textScaler, TextStyle style) {
