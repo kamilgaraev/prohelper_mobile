@@ -366,7 +366,7 @@ class SyncQueueService {
     QueuedSyncOperation operation,
     int entryId,
   ) async {
-    final payload = operation.payload;
+    final payload = Map<String, dynamic>.from(operation.payload);
     final createKey =
         payload['create_idempotency_key'] ?? payload['idempotency_key'];
     operation

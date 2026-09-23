@@ -179,12 +179,14 @@ Map<String, dynamic> _page(
   required int syncMaxId,
 }) => {
   'success': true,
-  'data': {'data': documents},
-  'meta': {
-    'next_cursor': nextCursor,
-    'has_more': hasMore,
-    'sync_max_id': syncMaxId,
-    'per_page': 50,
+  'data': {
+    'data': documents,
+    'meta': {
+      'next_cursor': nextCursor,
+      'has_more': hasMore,
+      'sync_max_id': syncMaxId,
+      'per_page': 50,
+    },
   },
 };
 

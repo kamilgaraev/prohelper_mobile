@@ -537,6 +537,77 @@ void main() {
     expect(successResult.successCount, 1);
     expect(await store.get(queued.id), isNull);
   });
+
+  test(
+    'encrypted legal upload keeps owner and idempotency across retry',
+    () async {
+      final directory = await Directory.systemTemp.createTemp('legal-queue-');
+      final materialized = File('${directory.path}/materialized.pdf');
+      await materialized.writeAsBytes(<int>[1, 2, 3]);
+      final store = _MemorySyncQueueStore();
+      final adapter =
+          _QueueHttpAdapter()
+            ..responses.add(_AdapterResponse.networkError())
+            ..responses.add(
+              const _AdapterResponse(statusCode: 200, body: '{"ok":true}'),
+            );
+      var now = DateTime(2026, 8, 23, 10);
+      final owners = <String>[];
+      final service = SyncQueueService(
+        store: store,
+        dio: _dio(adapter),
+        now: () => now,
+        currentScope: () => '27:4:session-a',
+        onlineVerified: () => true,
+        verifyOnline: () async => true,
+        materializeAttachment: (attachment, ownerIdentity) async {
+          owners.add(ownerIdentity);
+          return materialized.path;
+        },
+      );
+      final queued = await service.enqueue(
+        SyncQueueDraft(
+          moduleSlug: 'legal_archive',
+          operationType: 'upload_paper_original',
+          method: 'POST',
+          endpoint: '/legal-archive/signature-requests/31/upload-original',
+          payload: const {
+            'idempotency_key': 'immutable-key',
+            'queue_scope': '27:4:session-a',
+            'queue_owner_identity': '27:4:session-a',
+            'signed_at': '2026-08-23T07:00:00.000Z',
+            'lock_version': 5,
+          },
+          attachments: [
+            SyncAttachmentRef(
+              field: 'file',
+              path: '/protected/upload.enc',
+              filename: 'signed.pdf',
+              encrypted: true,
+              context: 'upload:31:immutable-key',
+            ),
+          ],
+        ),
+      );
+
+      final first = await service.retryDueOperations();
+      expect(first.retryCount, 1);
+      final retained = await store.get(queued.id);
+      expect(retained?.payload['queue_owner_identity'], '27:4:session-a');
+      expect(
+        adapter.requests.single.headers['Idempotency-Key'],
+        'immutable-key',
+      );
+
+      now = now.add(const Duration(minutes: 2));
+      final second = await service.retryDueOperations();
+      expect(second.successCount, 1);
+      expect(owners, ['27:4:session-a', '27:4:session-a']);
+      expect(adapter.requests[1].headers['Idempotency-Key'], 'immutable-key');
+      expect(await store.get(queued.id), isNull);
+      await directory.delete(recursive: true);
+    },
+  );
 }
 
 SyncQueueDraft _siteRequestDraft() {

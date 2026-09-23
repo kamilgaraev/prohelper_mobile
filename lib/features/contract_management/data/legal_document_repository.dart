@@ -302,6 +302,13 @@ class LegalDocumentRepository {
             isComplete: false,
             nextCursor: cursor,
           );
+          if (isCurrent != null && !isCurrent()) {
+            await _deleteListSnapshots(projectId, identity);
+            throw DioException(
+              requestOptions: response.requestOptions,
+              type: DioExceptionType.cancel,
+            );
+          }
         }
       }
 
@@ -331,6 +338,13 @@ class LegalDocumentRepository {
         finalMaxId,
         clearPartial: true,
       );
+      if (isCurrent != null && !isCurrent()) {
+        await _deleteListSnapshots(projectId, identity);
+        throw DioException(
+          requestOptions: RequestOptions(path: '/legal-archive/documents'),
+          type: DioExceptionType.cancel,
+        );
+      }
       return LegalDocumentListResult(
         documents: documents,
         isPartial: false,
@@ -342,6 +356,9 @@ class LegalDocumentRepository {
       if (statusCode != null && statusCode < 500) {
         if (statusCode == 401 || statusCode == 403 || statusCode == 404) {
           await _deleteListSnapshots(projectId, identity);
+          if (statusCode == 401 || statusCode == 403) {
+            await _clearIdentityAfterAccessDenied(identity);
+          }
         }
         throw ApiException.fromDio(error);
       }
@@ -396,12 +413,22 @@ class LegalDocumentRepository {
       final payload = MobileApiResponse.dataMap(response.data);
       final document = LegalDocumentModel.fromJson(payload);
       await _writeDetailSnapshot(projectId, identity, id, payload);
+      if (isCurrent != null && !isCurrent()) {
+        await _deleteDetailSnapshot(projectId, identity, id);
+        throw DioException(
+          requestOptions: response.requestOptions,
+          type: DioExceptionType.cancel,
+        );
+      }
       return document;
     } on DioException catch (error) {
       if (CancelToken.isCancel(error)) rethrow;
       final statusCode = error.response?.statusCode;
       if (statusCode == 403 || statusCode == 404) {
         await _deleteDetailSnapshot(projectId, identity, id);
+        if (statusCode == 403) {
+          await _clearIdentityAfterAccessDenied(identity);
+        }
         throw ApiException.fromDio(error);
       }
       if (statusCode != null && statusCode < 500) {
@@ -692,6 +719,20 @@ class LegalDocumentRepository {
     });
   }
 
+  Future<void> _clearIdentityAfterAccessDenied(
+    LegalDocumentCacheIdentity? identity,
+  ) async {
+    if (identity == null) return;
+    await clearSnapshotScope(identity);
+    final scope =
+        '${identity.userId}:${identity.organizationId ?? 0}:${identity.sessionId}';
+    await _fileCache?.clearIdentity(scope);
+    final queueProvider = _syncQueueService;
+    if (queueProvider != null) {
+      await (await queueProvider()).clearScope(scope);
+    }
+  }
+
   Future<LegalDocumentModel> performAction({
     required int documentId,
     required LegalDocumentAction action,
@@ -804,6 +845,10 @@ class LegalDocumentRepository {
       await fileCache.deleteStagedUpload(stagedPath);
     } on DioException catch (error) {
       if (SyncQueueService.shouldQueueDioException(error)) {
+        if (_currentOwnerIdentity?.call() != identity) {
+          await fileCache.deleteStagedUpload(stagedPath);
+          throw StateError('Владелец данных изменился во время загрузки.');
+        }
         final service = await _requireQueueService();
         final queued = await service.enqueue(
           SyncQueueDraft(
@@ -834,8 +879,9 @@ class LegalDocumentRepository {
       await fileCache.deleteStagedUpload(stagedPath);
       throw ApiException.fromDio(error);
     } finally {
-      if (temporaryPath != null)
+      if (temporaryPath != null) {
         await fileCache.deleteStagedUpload(temporaryPath);
+      }
     }
   }
 
@@ -873,6 +919,9 @@ class LegalDocumentRepository {
             'Не удалось проверить целостность файла.',
           );
         }
+      }
+      if (_currentOwnerIdentity?.call() != identity) {
+        throw StateError('Владелец данных изменился во время загрузки.');
       }
       return cache.saveForOffline(
         ownerIdentity: identity,
@@ -944,8 +993,9 @@ class LegalDocumentRepository {
 
   String _requireOwnerIdentity() {
     final identity = _currentOwnerIdentity?.call();
-    if (identity == null || identity.isEmpty)
+    if (identity == null || identity.isEmpty) {
       throw StateError('Действие требует активной пользовательской сессии.');
+    }
     return identity;
   }
 
