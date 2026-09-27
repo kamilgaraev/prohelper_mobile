@@ -549,9 +549,24 @@ class _RequestFilesCardState extends ConsumerState<_RequestFilesCard> {
                           file['download_url']?.toString() ??
                           file['url']?.toString();
                       final fileId = int.tryParse(file['id']?.toString() ?? '');
+                      final fileName = file['name']?.toString() ?? 'Файл';
+                      final isCameraName =
+                          file['mime_type']?.toString().startsWith('image/') ==
+                              true &&
+                          RegExp(
+                            r'^scaled_[0-9a-f-]{24,}\.(?:jpe?g|png|webp)$',
+                            caseSensitive: false,
+                          ).hasMatch(fileName);
                       return ListTile(
                         dense: true,
-                        title: Text(file['name']?.toString() ?? 'Файл'),
+                        title: Tooltip(
+                          message: fileName,
+                          child: Text(
+                            isCameraName ? 'Фото' : fileName,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
                         trailing: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [

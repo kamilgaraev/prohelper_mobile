@@ -268,10 +268,17 @@ void main() {
   });
 
   testWidgets('после удаления файла список перечитывается', (tester) async {
+    const cameraFileName =
+        'scaled_418afa1e-638b-49a2-b4da-11392cb4411d208641228223852672.jpg';
     final repository = _FakeSiteRequestsRepository(
       _request,
       files: [
-        {'id': 11, 'name': 'qa-photo.jpg', 'can_delete': true},
+        {
+          'id': 11,
+          'name': cameraFileName,
+          'mime_type': 'image/jpeg',
+          'can_delete': true,
+        },
       ],
     );
 
@@ -279,11 +286,13 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
     await tester.scrollUntilVisible(
-      find.text('qa-photo.jpg'),
+      find.text('Фото'),
       300,
       scrollable: find.byType(Scrollable).first,
     );
     await tester.pumpAndSettle();
+    expect(find.byTooltip(cameraFileName), findsOneWidget);
+    expect(tester.widget<Text>(find.text('Фото')).maxLines, 2);
     await tester.tap(find.byTooltip('Удалить файл'));
     await tester.pumpAndSettle();
 
