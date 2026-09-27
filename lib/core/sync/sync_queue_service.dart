@@ -432,12 +432,26 @@ class SyncQueueService {
   }
 
   Future<SyncQueueProcessResult> retryDueOperations() {
-    return _processing ??= _verifyAndProcess().whenComplete(() {
+    return _startProcessing(ignoreBackoff: false);
+  }
+
+  Future<SyncQueueProcessResult> retryQueuedOperations() {
+    return _startProcessing(ignoreBackoff: true);
+  }
+
+  Future<SyncQueueProcessResult> _startProcessing({
+    required bool ignoreBackoff,
+  }) {
+    return _processing ??= _verifyAndProcess(
+      ignoreBackoff: ignoreBackoff,
+    ).whenComplete(() {
       _processing = null;
     });
   }
 
-  Future<SyncQueueProcessResult> _verifyAndProcess() async {
+  Future<SyncQueueProcessResult> _verifyAndProcess({
+    required bool ignoreBackoff,
+  }) async {
     final initialScope = currentScope;
     if ((_verifyOnline == null && _onlineVerified?.call() == false) ||
         (requiresScope && initialScope == null && _verifyOnline != null)) {
@@ -462,10 +476,12 @@ class SyncQueueService {
         blockedCount: 0,
       );
     }
-    return _processDueOperations();
+    return _processDueOperations(ignoreBackoff: ignoreBackoff);
   }
 
-  Future<SyncQueueProcessResult> _processDueOperations() async {
+  Future<SyncQueueProcessResult> _processDueOperations({
+    required bool ignoreBackoff,
+  }) async {
     final now = _now();
     final verifiedScope = currentScope;
     final operations = await _store.all();
@@ -503,7 +519,9 @@ class SyncQueueService {
         blockedCount++;
         break;
       }
-      if (operation.nextAttemptAt?.isAfter(now) ?? false) {
+      if ((!ignoreBackoff ||
+              operation.status != SyncOperationStatuses.queued) &&
+          (operation.nextAttemptAt?.isAfter(now) ?? false)) {
         retryCount++;
         break;
       }
