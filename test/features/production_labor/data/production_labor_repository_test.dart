@@ -7,6 +7,63 @@ import 'package:prohelpers_mobile/core/sync/sync_queue_store.dart';
 import 'package:prohelpers_mobile/features/production_labor/data/production_labor_repository.dart';
 
 void main() {
+  test('загружает все страницы нарядов с project_id', () async {
+    final requests = <RequestOptions>[];
+    final dio = _workOrdersDio(requests, (page) {
+      return {
+        'success': true,
+        'data': {
+          'data': [
+            {'id': page},
+          ],
+          'meta': {'last_page': '2'},
+        },
+      };
+    });
+    final repository = ProductionLaborRepository(dio);
+
+    final payloads = await repository.fetchWorkOrderPayloads(projectId: 42);
+
+    expect(payloads.map((payload) => payload['id']), [1, 2]);
+    expect(requests, hasLength(2));
+    for (var index = 0; index < requests.length; index++) {
+      expect(requests[index].queryParameters['page'], index + 1);
+      expect(requests[index].queryParameters['per_page'], 50);
+      expect(requests[index].queryParameters['project_id'], 42);
+    }
+  });
+
+  test('сохраняет первую страницу при пустой или неверной meta', () async {
+    for (final meta in [
+      null,
+      <String, dynamic>{},
+      {'last_page': 'bad'},
+    ]) {
+      final requests = <RequestOptions>[];
+      final dio = _workOrdersDio(
+        requests,
+        (_) => {
+          'success': true,
+          'data': {
+            'data': [
+              {'id': 7},
+            ],
+            if (meta != null) 'meta': meta,
+          },
+        },
+      );
+
+      final payloads = await ProductionLaborRepository(
+        dio,
+      ).fetchWorkOrderPayloads(projectId: 42);
+
+      expect(payloads, [
+        {'id': 7},
+      ]);
+      expect(requests, hasLength(1));
+    }
+  });
+
   test(
     'replays one offline output fact with the original idempotency key',
     () async {
@@ -75,6 +132,31 @@ void main() {
       expect(await store.all(), isEmpty);
     },
   );
+}
+
+Dio _workOrdersDio(
+  List<RequestOptions> requests,
+  Map<String, dynamic> Function(int page) responseForPage,
+) {
+  final dio = Dio(
+    BaseOptions(baseUrl: 'https://mobile-api.test/api/v1/mobile'),
+  );
+  dio.interceptors.add(
+    InterceptorsWrapper(
+      onRequest: (options, handler) {
+        requests.add(options);
+        final page = options.queryParameters['page'] as int;
+        handler.resolve(
+          Response<dynamic>(
+            requestOptions: options,
+            statusCode: 200,
+            data: responseForPage(page),
+          ),
+        );
+      },
+    ),
+  );
+  return dio;
 }
 
 Dio _failingDio(List<RequestOptions> requests) {

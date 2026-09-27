@@ -23,6 +23,9 @@ final constructionJournalRepositoryProvider =
       );
     });
 
+const _journalEntriesPerPage = 100;
+const _journalEntriesMaxPages = 100;
+
 class ConstructionJournalRepository extends SyncQueueAwareRepository {
   ConstructionJournalRepository(
     this._dio, {
@@ -114,22 +117,77 @@ class ConstructionJournalRepository extends SyncQueueAwareRepository {
       final journalResponse = await _dio.get(
         '/construction-journals/$journalId',
       );
-      final entriesResponse = await _dio.get(
-        '/construction-journals/$journalId/entries',
-      );
       final journalData = _extractMap(
         MobileApiResponse.payload(journalResponse.data),
       );
-      final entriesData = _extractMap(
-        MobileApiResponse.payload(entriesResponse.data),
-      );
+      final entries = <Map<String, dynamic>>[];
+      Map<String, dynamic>? entriesMeta;
+      Map<String, dynamic>? entriesSummary;
+      List<Map<String, dynamic>>? availableActions;
+      int? lastPage;
+      int? total;
+
+      for (var page = 1; ; page++) {
+        final entriesResponse = await _dio.get(
+          '/construction-journals/$journalId/entries',
+          queryParameters: {'page': page, 'per_page': _journalEntriesPerPage},
+        );
+        final pageData = _extractMap(
+          MobileApiResponse.payload(entriesResponse.data),
+        );
+        final pageItems = _extractList(pageData['items']);
+        final pageMeta = _extractMap(pageData['meta']);
+        final responsePage = _paginationValue(pageMeta['current_page']);
+        final responseLastPage = _paginationValue(pageMeta['last_page']);
+        final responseTotal = _paginationValue(
+          pageMeta['total'],
+          allowZero: true,
+        );
+        if (responsePage != page ||
+            responseLastPage == null ||
+            responseTotal == null) {
+          throw const ApiException(
+            'Не удалось загрузить все записи журнала: неверные данные страниц.',
+          );
+        }
+        if (page == 1) {
+          lastPage = responseLastPage;
+          total = responseTotal;
+          entriesMeta = pageMeta;
+          entriesSummary = _extractMap(pageData['summary']);
+          availableActions = _extractList(pageData['available_actions']);
+          if (lastPage > _journalEntriesMaxPages) {
+            throw const ApiException(
+              'В журнале слишком много страниц для полной загрузки.',
+            );
+          }
+        } else if (responseLastPage != lastPage || responseTotal != total) {
+          throw const ApiException(
+            'Не удалось загрузить все записи журнала: данные страниц изменились.',
+          );
+        }
+        if (pageItems.isEmpty && (page != 1 || total != 0 || lastPage != 1)) {
+          throw const ApiException(
+            'Не удалось загрузить все записи журнала: страница пуста.',
+          );
+        }
+        entries.addAll(pageItems);
+        if (page >= lastPage!) {
+          if (entries.length != total) {
+            throw const ApiException(
+              'Не удалось загрузить все записи журнала: число записей не совпадает с метаданными.',
+            );
+          }
+          break;
+        }
+      }
 
       return {
         'journal': journalData,
-        'entries': entriesData['items'] ?? const [],
-        'meta': entriesData['meta'],
-        'summary': entriesData['summary'],
-        'available_actions': entriesData['available_actions'] ?? const [],
+        'entries': entries,
+        'meta': entriesMeta,
+        'summary': entriesSummary,
+        'available_actions': availableActions,
         'project_id': journalData['project_id'],
         'updated_at': journalData['updated_at'],
       };
@@ -959,5 +1017,16 @@ class ConstructionJournalRepository extends SyncQueueAwareRepository {
     if (error is ApiException || error is FormatException) {
       throw error;
     }
+  }
+
+  int? _paginationValue(dynamic value, {bool allowZero = false}) {
+    final parsed = switch (value) {
+      int number => number,
+      String text => int.tryParse(text),
+      _ => null,
+    };
+    return parsed != null && (allowZero ? parsed >= 0 : parsed > 0)
+        ? parsed
+        : null;
   }
 }

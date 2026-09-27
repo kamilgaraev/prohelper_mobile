@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:math';
 
 import 'package:dio/dio.dart';
@@ -20,6 +21,8 @@ final safetyRepositoryProvider = Provider<SafetyRepository>((ref) {
 });
 
 class SafetyRepository extends SyncQueueAwareRepository {
+  static const _maxSafetyListPages = 1000;
+
   SafetyRepository(
     this._dio, {
     Future<SyncQueueService>? syncQueueServiceFuture,
@@ -173,15 +176,10 @@ class SafetyRepository extends SyncQueueAwareRepository {
     String? status,
   }) async {
     try {
-      final response = await _dio.get(
-        '/safety-management/incidents',
-        queryParameters: {
-          if (projectId != null) 'project_id': projectId,
-          if (status != null && status.isNotEmpty) 'status': status,
-        },
-      );
-
-      return _list(response.data);
+      return await _fetchAllPages('/safety-management/incidents', {
+        if (projectId != null) 'project_id': projectId,
+        if (status != null && status.isNotEmpty) 'status': status,
+      });
     } on DioException catch (error) {
       throw ApiException.fromDio(error);
     }
@@ -202,15 +200,10 @@ class SafetyRepository extends SyncQueueAwareRepository {
     String? status,
   }) async {
     try {
-      final response = await _dio.get(
-        '/safety-management/violations',
-        queryParameters: {
-          if (projectId != null) 'project_id': projectId,
-          if (status != null && status.isNotEmpty) 'status': status,
-        },
-      );
-
-      return _list(response.data);
+      return await _fetchAllPages('/safety-management/violations', {
+        if (projectId != null) 'project_id': projectId,
+        if (status != null && status.isNotEmpty) 'status': status,
+      });
     } on DioException catch (error) {
       throw ApiException.fromDio(error);
     }
@@ -231,15 +224,10 @@ class SafetyRepository extends SyncQueueAwareRepository {
     String? status,
   }) async {
     try {
-      final response = await _dio.get(
-        '/safety-management/inspections',
-        queryParameters: {
-          if (projectId != null) 'project_id': projectId,
-          if (status != null && status.isNotEmpty) 'status': status,
-        },
-      );
-
-      return _list(response.data);
+      return await _fetchAllPages('/safety-management/inspections', {
+        if (projectId != null) 'project_id': projectId,
+        if (status != null && status.isNotEmpty) 'status': status,
+      });
     } on DioException catch (error) {
       throw ApiException.fromDio(error);
     }
@@ -260,15 +248,10 @@ class SafetyRepository extends SyncQueueAwareRepository {
     String? status,
   }) async {
     try {
-      final response = await _dio.get(
-        '/safety-management/inspection-findings',
-        queryParameters: {
-          if (projectId != null) 'project_id': projectId,
-          if (status != null && status.isNotEmpty) 'status': status,
-        },
-      );
-
-      return _list(response.data);
+      return await _fetchAllPages('/safety-management/inspection-findings', {
+        if (projectId != null) 'project_id': projectId,
+        if (status != null && status.isNotEmpty) 'status': status,
+      });
     } on DioException catch (error) {
       throw ApiException.fromDio(error);
     }
@@ -519,6 +502,56 @@ class SafetyRepository extends SyncQueueAwareRepository {
 
   List<Map<String, dynamic>> _list(dynamic responseData) {
     return MobileApiResponse.dataList(responseData);
+  }
+
+  static const _listPageSize = 100;
+
+  Future<List<Map<String, dynamic>>> _fetchAllPages(
+    String path,
+    Map<String, dynamic> filters,
+  ) async {
+    final result = <Map<String, dynamic>>[];
+    final seenPages = <String>{};
+    var page = 1;
+
+    while (true) {
+      if (page > _maxSafetyListPages) {
+        throw const ApiException(
+          'Не удалось загрузить список: превышен предел страниц.',
+        );
+      }
+
+      final response = await _dio.get(
+        path,
+        queryParameters: {...filters, 'page': page, 'per_page': _listPageSize},
+      );
+      final parsed = MobileApiResponse.list(response.data);
+      final items = parsed.data;
+      if (items.isEmpty) break;
+
+      if (!seenPages.add(jsonEncode(items))) {
+        throw const ApiException(
+          'Сервер повторил страницу списка. Не удалось загрузить все записи.',
+        );
+      }
+      result.addAll(items);
+
+      final lastPage = _paginationValue(parsed.meta['last_page']);
+      if (lastPage != null) {
+        if (page >= lastPage) break;
+      } else if (items.length < _listPageSize) {
+        break;
+      }
+      page++;
+    }
+
+    return result;
+  }
+
+  int? _paginationValue(dynamic value) {
+    if (value is int && value > 0) return value;
+    if (value is String) return int.tryParse(value);
+    return null;
   }
 
   Map<String, dynamic> _object(dynamic responseData) {
