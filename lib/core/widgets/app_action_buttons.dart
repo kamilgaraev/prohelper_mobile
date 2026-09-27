@@ -146,11 +146,10 @@ class _ActionButtonContent extends StatelessWidget {
           else if (leading != null)
             leading!,
           if (isBusy || leading != null) const SizedBox(width: 10),
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 280),
+          Flexible(
             child: Text(
               label,
-              maxLines: 1,
+              maxLines: 2,
               overflow: TextOverflow.ellipsis,
               textAlign: TextAlign.center,
             ),
