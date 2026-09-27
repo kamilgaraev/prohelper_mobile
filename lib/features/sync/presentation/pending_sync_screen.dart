@@ -185,30 +185,35 @@ class _PendingSyncTile extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: Icon(
-                isConflict
-                    ? Icons.compare_arrows_rounded
-                    : Icons.cloud_upload_outlined,
-              ),
-              title: Text(
-                SyncOperationPresentation.operationLabel(operation),
-                style: AppTypography.bodyMedium(
-                  context,
-                ).copyWith(fontWeight: FontWeight.w800),
-              ),
-              subtitle: Text(
+            Row(
+              children: [
+                Icon(
+                  isConflict
+                      ? Icons.compare_arrows_rounded
+                      : Icons.cloud_upload_outlined,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    SyncOperationPresentation.operationLabel(operation),
+                    style: AppTypography.bodyMedium(
+                      context,
+                    ).copyWith(fontWeight: FontWeight.w800),
+                  ),
+                ),
+                if (onRetry != null)
+                  IconButton(
+                    tooltip: 'Повторить отправку',
+                    onPressed: onRetry,
+                    icon: const Icon(Icons.sync_rounded),
+                  ),
+              ],
+            ),
+            SizedBox(
+              width: double.infinity,
+              child: Text(
                 SyncOperationPresentation.statusLabel(operation.status),
               ),
-              trailing:
-                  onRetry == null
-                      ? null
-                      : IconButton(
-                        tooltip: 'Повторить отправку',
-                        onPressed: onRetry,
-                        icon: const Icon(Icons.sync_rounded),
-                      ),
             ),
             if (operation.lastBusinessError != null)
               Text(
@@ -231,10 +236,14 @@ class _PendingSyncTile extends StatelessWidget {
                 ),
               ),
             if (onDiscard != null)
-              TextButton.icon(
-                onPressed: onDiscard,
-                icon: const Icon(Icons.delete_outline_rounded),
-                label: const Text('Удалить с устройства'),
+              SizedBox(
+                width: double.infinity,
+                child: TextButton.icon(
+                  style: const ButtonStyle(alignment: Alignment.centerLeft),
+                  onPressed: onDiscard,
+                  icon: const Icon(Icons.delete_outline_rounded),
+                  label: const Text('Удалить с устройства'),
+                ),
               ),
           ],
         ),
