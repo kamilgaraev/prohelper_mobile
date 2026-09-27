@@ -86,6 +86,10 @@ flutter:
   # the material Icons class.
   uses-material-design: true
 
+  assets:
+    - assets/brand/most-icon.svg
+    - assets/brand/most-icon-white.svg
+
   fonts:
     - family: IBM Plex Sans
       fonts:

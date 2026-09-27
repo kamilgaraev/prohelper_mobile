@@ -1,6 +1,7 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import 'package:prohelpers_mobile/core/design/pro_design_tokens.dart';
@@ -265,69 +266,20 @@ class _MostLogoMark extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final asset =
+        Theme.of(context).brightness == Brightness.dark
+            ? 'assets/brand/most-icon-white.svg'
+            : 'assets/brand/most-icon.svg';
     return Semantics(
       label: 'Логотип МОСТ',
       image: true,
-      child: Container(
+      child: SizedBox(
         width: size,
         height: size,
-        decoration: BoxDecoration(
-          color: const Color(0xFF0B0F14),
-          borderRadius: BorderRadius.circular(ProRadius.sm),
-        ),
-        child: CustomPaint(painter: _MostLogoPainter()),
+        child: SvgPicture.asset(asset, fit: BoxFit.contain),
       ),
     );
   }
-}
-
-class _MostLogoPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final scale = size.shortestSide / 100;
-    final whitePaint =
-        Paint()
-          ..color = Colors.white
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 12 * scale
-          ..strokeCap = StrokeCap.square
-          ..strokeJoin = StrokeJoin.miter;
-    final orangePaint =
-        Paint()
-          ..color = const Color(0xFFFF8A00)
-          ..style = PaintingStyle.fill;
-    final orangeLinePaint =
-        Paint()
-          ..color = const Color(0xFFFF8A00)
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 5 * scale
-          ..strokeCap = StrokeCap.square;
-
-    Offset point(double x, double y) => Offset(x * scale, y * scale);
-    Rect rect(double left, double top, double right, double bottom) =>
-        Rect.fromLTRB(
-          left * scale,
-          top * scale,
-          right * scale,
-          bottom * scale,
-        );
-
-    final mark =
-        Path()
-          ..moveTo(20 * scale, 69 * scale)
-          ..lineTo(20 * scale, 28 * scale)
-          ..lineTo(50 * scale, 50 * scale)
-          ..lineTo(80 * scale, 28 * scale)
-          ..lineTo(80 * scale, 69 * scale);
-
-    canvas.drawPath(mark, whitePaint);
-    canvas.drawRect(rect(13, 74, 27, 88), orangePaint);
-    canvas.drawRect(rect(73, 74, 87, 88), orangePaint);
-    canvas.drawLine(point(20, 81), point(80, 81), orangeLinePaint);
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
 class _LoginTextField extends StatelessWidget {
