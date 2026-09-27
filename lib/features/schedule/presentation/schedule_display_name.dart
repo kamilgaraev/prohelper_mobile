@@ -23,4 +23,8 @@ String? scheduleDisplayCode(String name) {
       ?.replaceAll('_', '.');
 }
 
+String scheduleTaskDisplayName(String name) {
+  return name.trim().replaceAll('_', ' ').replaceAll(RegExp(r'\s+'), ' ');
+}
+
 final _scheduleCodePattern = RegExp(r'^(\d+(?:_\d+)+)_');
