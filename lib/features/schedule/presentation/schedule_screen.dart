@@ -433,7 +433,7 @@ class _ScheduleOperationalBanner extends StatelessWidget {
     final description =
         hasAttention
             ? 'Графиков с риском: $attentionCount. Из них с просрочкой: $overdueSchedulesCount.'
-            : 'Все $totalSchedules графиков сейчас без критичных сигналов.';
+            : 'Критичных сигналов нет. Всего графиков: $totalSchedules.';
 
     return ProStatusBanner(
       title: title,

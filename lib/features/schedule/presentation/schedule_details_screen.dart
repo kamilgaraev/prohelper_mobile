@@ -615,7 +615,7 @@ class _TaskOperationalBanner extends StatelessWidget {
                 Text(
                   hasAttention
                       ? 'Просроченных задач: ${summary.overdueTasksCount}. Критических задач: $criticalCount.'
-                      : 'Просроченных и критических задач сейчас нет.',
+                      : 'Просроченных и критических задач нет.',
                   style: AppTypography.bodyMedium(
                     context,
                   ).copyWith(color: theme.colorScheme.onSurfaceVariant),

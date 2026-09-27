@@ -1644,7 +1644,7 @@ String _attentionDescription(SiteRequestModel request) {
 
   return switch (status) {
     'draft' => 'Чтобы заявка попала в работу, отправьте ее на согласование.',
-    'pending' || 'in_review' => 'Заявка сейчас ожидает решения или проверки.',
+    'pending' || 'in_review' => 'Заявка ожидает решения или проверки.',
     'approved' => 'Заявка уже согласована и должна перейти к исполнению.',
     'in_progress' => 'Исполнение уже началось, держите срок и обратную связь.',
     'fulfilled' =>
