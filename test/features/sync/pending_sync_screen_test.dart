@@ -119,7 +119,7 @@ void main() {
     await tester.ensureVisible(find.text('Удалить с устройства'));
     await tester.tap(find.text('Удалить с устройства'));
     await tester.pumpAndSettle();
-    expect(find.textContaining('Проверьте результат'), findsOneWidget);
+    expect(find.textContaining('На сервере ничего не удалится'), findsOneWidget);
     expect(notifier.discardedIds, isEmpty);
 
     await tester.tap(find.text('Отмена'));
