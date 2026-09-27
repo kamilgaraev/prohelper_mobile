@@ -24,6 +24,7 @@ class _RecordingTimeTrackingRepository extends TimeTrackingRepository {
   double? correctedHours;
   String? correctionReason;
   Object? startTimerError;
+  final List<String> startIdempotencyKeys = [];
 
   @override
   Future<DailyTimeSummaryModel> fetchDailySummary({
@@ -66,9 +67,12 @@ class _RecordingTimeTrackingRepository extends TimeTrackingRepository {
     required String startTime,
     required String title,
     required bool isBillable,
+    required String idempotencyKey,
     String? description,
   }) async {
+    startIdempotencyKeys.add(idempotencyKey);
     final error = startTimerError;
+    startTimerError = null;
     if (error != null) {
       throw error;
     }
@@ -85,6 +89,7 @@ class _RecordingTimeTrackingRepository extends TimeTrackingRepository {
     required double hoursWorked,
     required String title,
     required bool isBillable,
+    required String idempotencyKey,
     String? startTime,
     String? endTime,
     double? breakTime,
@@ -335,6 +340,61 @@ void main() {
     expect(find.text('Укажите время начала'), findsOneWidget);
     expect(find.text('Укажите работу и время начала'), findsNothing);
     expect(find.byType(SnackBar), findsNothing);
+  });
+
+  testWidgets('retries uncertain start with same key and preserves form', (
+    tester,
+  ) async {
+    final repository =
+        _RecordingTimeTrackingRepository()
+          ..startTimerError = const TimeTrackingWriteUncertainException();
+    useLargeSurface(tester);
+
+    await tester.pumpWidget(buildApp(const TimeTrackingScreen(), repository));
+    await pumpUi(tester);
+    await tester.tap(find.text('Запустить').first);
+    await pumpUi(tester);
+    await tester.enterText(find.byType(TextField).at(0), 'Армирование');
+    await tester.enterText(find.byType(TextField).at(1), '13:00');
+    await tester.tap(find.text('Запустить').last);
+    await pumpUi(tester);
+
+    expect(find.textContaining('проверьте таймер'), findsOneWidget);
+    expect(find.byType(TextField).at(0), findsOneWidget);
+    expect(repository.startIdempotencyKeys, hasLength(1));
+
+    await tester.tap(find.byTooltip('Закрыть сообщение'));
+    await tester.pump();
+    await tester.tap(find.text('Запустить').last);
+    await pumpUi(tester);
+    expect(repository.startIdempotencyKeys, hasLength(2));
+    expect(
+      repository.startIdempotencyKeys[1],
+      repository.startIdempotencyKeys[0],
+    );
+
+    repository.startTimerError = const TimeTrackingWriteUncertainException();
+    await tester.tap(find.text('Запустить').first);
+    await pumpUi(tester);
+    await tester.enterText(find.byType(TextField).at(0), 'Армирование');
+    await tester.enterText(find.byType(TextField).at(1), '13:00');
+    await tester.tap(find.text('Запустить').last);
+    await pumpUi(tester);
+    expect(repository.startIdempotencyKeys, hasLength(3));
+    expect(
+      repository.startIdempotencyKeys[2],
+      isNot(repository.startIdempotencyKeys[1]),
+    );
+    await tester.tap(find.byTooltip('Закрыть сообщение'));
+    await tester.pump();
+    await tester.enterText(find.byType(TextField).at(2), 'Новое описание');
+    await tester.tap(find.text('Запустить').last);
+    await pumpUi(tester);
+    expect(repository.startIdempotencyKeys, hasLength(4));
+    expect(
+      repository.startIdempotencyKeys[3],
+      isNot(repository.startIdempotencyKeys[2]),
+    );
   });
 
   testWidgets('start timer cleans technical submit errors', (tester) async {

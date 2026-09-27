@@ -1,4 +1,4 @@
-﻿import 'package:dio/dio.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -7,7 +7,9 @@ import 'package:prohelpers_mobile/features/workforce/data/workforce_repository.d
 import 'package:prohelpers_mobile/features/workforce/presentation/attendance_scan_screen.dart';
 
 class _FakeWorkforceRepository extends WorkforceRepository {
-  _FakeWorkforceRepository() : super(Dio());
+  _FakeWorkforceRepository({this.duplicate = false}) : super(Dio());
+
+  final bool duplicate;
 
   final List<String> scannedTokens = [];
 
@@ -17,6 +19,12 @@ class _FakeWorkforceRepository extends WorkforceRepository {
     String? deviceId,
   }) async {
     scannedTokens.add(qrToken);
+
+    if (duplicate) {
+      throw const WorkforceDuplicateScanException(
+        'Этот QR-код уже использован.',
+      );
+    }
 
     return AttendanceScanResultModel(
       scanEventId: 91,
@@ -55,5 +63,39 @@ void main() {
     expect(find.text('Явка подтверждена.'), findsOneWidget);
     expect(find.text('Иванов Иван'), findsOneWidget);
     expect(find.text('Объект Литейная'), findsOneWidget);
+  });
+
+  testWidgets('для дубликата предлагает проверить историю без подтверждения', (
+    tester,
+  ) async {
+    final repository = _FakeWorkforceRepository(duplicate: true);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [workforceRepositoryProvider.overrideWithValue(repository)],
+        child: const MaterialApp(
+          home: AttendanceScanScreen(initialQrToken: 'signed-token-value'),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Подтвердить явку'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Результат нужно проверить'), findsOneWidget);
+    expect(
+      find.textContaining('Предыдущая отметка могла сохраниться'),
+      findsOneWidget,
+    );
+    final historyButton = find.text('Проверить историю явки');
+    await tester.drag(find.byType(ListView), const Offset(0, -500));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(historyButton);
+    expect(historyButton, findsOneWidget);
+    expect(find.text('Явка подтверждена.'), findsNothing);
+
+    await tester.tap(historyButton);
+    await tester.pumpAndSettle();
+    expect(find.text('История явки'), findsOneWidget);
   });
 }

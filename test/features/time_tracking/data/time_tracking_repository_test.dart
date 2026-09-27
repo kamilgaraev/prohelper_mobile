@@ -55,22 +55,47 @@ void main() {
       startTime: '08:00',
       title: ' Монтаж опалубки ',
       isBillable: true,
+      idempotencyKey: 'start-key-1',
     );
     final stopped = await repository.stopTimer(
       id: 17,
       endTime: '12:00',
       breakTime: 0.5,
+      idempotencyKey: 'stop-key-1',
     );
 
     expect(requests.first.path, '/time-tracking/timer/start');
     expect(sent.first['title'], 'Монтаж опалубки');
     expect(sent.first['start_time'], '08:00');
     expect(sent.first['is_billable'], isTrue);
+    expect(requests.first.headers['Idempotency-Key'], 'start-key-1');
     expect(started.isActiveTimer, isTrue);
     expect(requests.last.path, '/time-tracking/entries/17/stop');
     expect(sent.last['end_time'], '12:00');
     expect(sent.last['break_time'], 0.5);
+    expect(requests.last.headers['Idempotency-Key'], 'stop-key-1');
     expect(stopped.hoursWorked, 3.5);
+  });
+
+  test('creates manual entry with idempotency header', () async {
+    late RequestOptions request;
+    final dio = Dio(BaseOptions(baseUrl: 'https://api.example.test'));
+    dio.httpClientAdapter = _JsonAdapter((options) {
+      request = options;
+      return _responseData(_entryJson());
+    });
+
+    await TimeTrackingRepository(dio).createManualEntry(
+      projectId: 9,
+      workDate: '2026-05-22',
+      hoursWorked: 2,
+      title: 'Проверка',
+      isBillable: true,
+      idempotencyKey: 'manual-key-1',
+    );
+
+    expect(request.path, '/time-tracking/entries');
+    expect(request.headers['Idempotency-Key'], 'manual-key-1');
   });
 
   test('submits correction with trimmed reason', () async {

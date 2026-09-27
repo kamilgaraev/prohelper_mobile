@@ -1023,6 +1023,8 @@ class _StartTimerSheetState extends ConsumerState<_StartTimerSheet> {
   var autovalidateMode = AutovalidateMode.disabled;
   var isBillable = true;
   var submitting = false;
+  String? idempotencyKey;
+  String? operationFingerprint;
 
   @override
   void dispose() {
@@ -1114,6 +1116,16 @@ class _StartTimerSheetState extends ConsumerState<_StartTimerSheet> {
       return;
     }
 
+    final fingerprint = [
+      startController.text.trim(),
+      titleController.text.trim(),
+      isBillable,
+      descriptionController.text.trim(),
+    ].join('|');
+    if (fingerprint != operationFingerprint) {
+      operationFingerprint = fingerprint;
+      idempotencyKey = newTimeTrackingIdempotencyKey();
+    }
     setState(() => submitting = true);
     try {
       await ref
@@ -1122,6 +1134,7 @@ class _StartTimerSheetState extends ConsumerState<_StartTimerSheet> {
             startTime: startController.text.trim(),
             title: titleController.text.trim(),
             isBillable: isBillable,
+            idempotencyKey: idempotencyKey!,
             description: descriptionController.text.trim(),
           );
       if (mounted) {
@@ -1148,6 +1161,8 @@ Future<void> _showManualEntrySheet(BuildContext context, WidgetRef ref) async {
   final descriptionController = TextEditingController();
   var isBillable = true;
   var submitting = false;
+  String? idempotencyKey;
+  String? operationFingerprint;
 
   await showModalBottomSheet<void>(
     context: context,
@@ -1246,6 +1261,20 @@ Future<void> _showManualEntrySheet(BuildContext context, WidgetRef ref) async {
                                     return;
                                   }
 
+                                  final fingerprint = [
+                                    titleController.text.trim(),
+                                    hours,
+                                    isBillable,
+                                    startController.text.trim(),
+                                    endController.text.trim(),
+                                    _parseNumber(breakController.text),
+                                    descriptionController.text.trim(),
+                                  ].join('|');
+                                  if (fingerprint != operationFingerprint) {
+                                    operationFingerprint = fingerprint;
+                                    idempotencyKey =
+                                        newTimeTrackingIdempotencyKey();
+                                  }
                                   setSheetState(() => submitting = true);
                                   try {
                                     await ref
@@ -1254,6 +1283,7 @@ Future<void> _showManualEntrySheet(BuildContext context, WidgetRef ref) async {
                                           hoursWorked: hours,
                                           title: titleController.text,
                                           isBillable: isBillable,
+                                          idempotencyKey: idempotencyKey!,
                                           startTime: startController.text,
                                           endTime: endController.text,
                                           breakTime: _parseNumber(
@@ -1296,6 +1326,8 @@ Future<void> _showStopTimerSheet(
   final breakController = TextEditingController();
   final notesController = TextEditingController();
   var submitting = false;
+  String? idempotencyKey;
+  String? operationFingerprint;
 
   await showModalBottomSheet<void>(
     context: context,
@@ -1360,6 +1392,17 @@ Future<void> _showStopTimerSheet(
                                   return;
                                 }
 
+                                final fingerprint = [
+                                  entry.id,
+                                  endController.text.trim(),
+                                  breakTime,
+                                  notesController.text.trim(),
+                                ].join('|');
+                                if (fingerprint != operationFingerprint) {
+                                  operationFingerprint = fingerprint;
+                                  idempotencyKey =
+                                      newTimeTrackingIdempotencyKey();
+                                }
                                 setSheetState(() => submitting = true);
                                 try {
                                   await ref
@@ -1368,6 +1411,7 @@ Future<void> _showStopTimerSheet(
                                         id: entry.id,
                                         endTime: endController.text,
                                         breakTime: breakTime,
+                                        idempotencyKey: idempotencyKey!,
                                         notes: notesController.text,
                                       );
                                   onDone?.call();
