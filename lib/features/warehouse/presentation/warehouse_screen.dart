@@ -749,7 +749,7 @@ class _OperationalHighlights extends StatelessWidget {
       description:
           hasAttention
               ? 'Низкий остаток: ${summary.lowStockCount}. В резерве: ${summary.reservedItemsCount}.'
-              : 'Критических складских сигналов сейчас нет.',
+              : 'Критических складских сигналов нет.',
       tone: hasAttention ? ProStatusTone.warning : ProStatusTone.success,
     );
   }
