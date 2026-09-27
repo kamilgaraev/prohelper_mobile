@@ -218,6 +218,7 @@ class TimeTrackingNotifier extends StateNotifier<TimeTrackingState> {
     required String startTime,
     required String title,
     required bool isBillable,
+    required String idempotencyKey,
     String? description,
   }) async {
     final date = _requireDate();
@@ -229,6 +230,7 @@ class TimeTrackingNotifier extends StateNotifier<TimeTrackingState> {
       startTime: startTime,
       title: title,
       isBillable: isBillable,
+      idempotencyKey: idempotencyKey,
       description: description,
     );
     await loadDailySummary();
@@ -238,6 +240,7 @@ class TimeTrackingNotifier extends StateNotifier<TimeTrackingState> {
     required double hoursWorked,
     required String title,
     required bool isBillable,
+    required String idempotencyKey,
     String? startTime,
     String? endTime,
     double? breakTime,
@@ -252,6 +255,7 @@ class TimeTrackingNotifier extends StateNotifier<TimeTrackingState> {
       hoursWorked: hoursWorked,
       title: title,
       isBillable: isBillable,
+      idempotencyKey: idempotencyKey,
       startTime: startTime,
       endTime: endTime,
       breakTime: breakTime,
@@ -264,12 +268,14 @@ class TimeTrackingNotifier extends StateNotifier<TimeTrackingState> {
     required int id,
     required String endTime,
     required double breakTime,
+    required String idempotencyKey,
     String? notes,
   }) async {
     await _repository.stopTimer(
       id: id,
       endTime: endTime,
       breakTime: breakTime,
+      idempotencyKey: idempotencyKey,
       notes: notes,
     );
     await loadDailySummary();

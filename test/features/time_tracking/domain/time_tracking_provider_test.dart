@@ -69,6 +69,7 @@ class _FakeTimeTrackingRepository extends TimeTrackingRepository {
     required String startTime,
     required String title,
     required bool isBillable,
+    required String idempotencyKey,
     String? description,
   }) async {
     startedTitle = title;
@@ -83,6 +84,7 @@ class _FakeTimeTrackingRepository extends TimeTrackingRepository {
     required double hoursWorked,
     required String title,
     required bool isBillable,
+    required String idempotencyKey,
     String? startTime,
     String? endTime,
     double? breakTime,
@@ -97,6 +99,7 @@ class _FakeTimeTrackingRepository extends TimeTrackingRepository {
     required int id,
     required String endTime,
     required double breakTime,
+    required String idempotencyKey,
     String? notes,
   }) async {
     stoppedEntryId = id;
@@ -195,13 +198,20 @@ void main() {
       startTime: '08:00',
       title: 'Монтаж опалубки',
       isBillable: true,
+      idempotencyKey: 'start-key-1',
     );
     await notifier.createManualEntry(
       hoursWorked: 2.5,
       title: 'Проверка геометрии',
       isBillable: false,
+      idempotencyKey: 'manual-key-1',
     );
-    await notifier.stopTimer(id: 18, endTime: '12:00', breakTime: 0.5);
+    await notifier.stopTimer(
+      id: 18,
+      endTime: '12:00',
+      breakTime: 0.5,
+      idempotencyKey: 'stop-key-1',
+    );
     await notifier.submitEntry(17);
     await notifier.submitCorrection(
       id: 17,

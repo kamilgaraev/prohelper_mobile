@@ -1,4 +1,6 @@
-﻿import 'package:dio/dio.dart';
+﻿import 'dart:math';
+
+import 'package:dio/dio.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/network/api_exception.dart';
@@ -119,6 +121,7 @@ class TimeTrackingRepository {
     required String startTime,
     required String title,
     required bool isBillable,
+    required String idempotencyKey,
     String? description,
   }) async {
     final trimmedTitle = title.trim();
@@ -137,10 +140,14 @@ class TimeTrackingRepository {
           'is_billable': isBillable,
           if (_hasText(description)) 'description': description!.trim(),
         },
+        options: Options(headers: {'Idempotency-Key': idempotencyKey}),
       );
 
       return TimeEntryModel.fromJson(MobileApiResponse.dataMap(response.data));
     } on DioException catch (error) {
+      if (_isAmbiguousWriteFailure(error)) {
+        throw const TimeTrackingWriteUncertainException();
+      }
       throw ApiException.fromDio(error);
     }
   }
@@ -151,6 +158,7 @@ class TimeTrackingRepository {
     required double hoursWorked,
     required String title,
     required bool isBillable,
+    required String idempotencyKey,
     String? startTime,
     String? endTime,
     double? breakTime,
@@ -175,10 +183,14 @@ class TimeTrackingRepository {
           if (breakTime != null) 'break_time': breakTime,
           if (_hasText(description)) 'description': description!.trim(),
         },
+        options: Options(headers: {'Idempotency-Key': idempotencyKey}),
       );
 
       return TimeEntryModel.fromJson(MobileApiResponse.dataMap(response.data));
     } on DioException catch (error) {
+      if (_isAmbiguousWriteFailure(error)) {
+        throw const TimeTrackingWriteUncertainException();
+      }
       throw ApiException.fromDio(error);
     }
   }
@@ -187,6 +199,7 @@ class TimeTrackingRepository {
     required int id,
     required String endTime,
     required double breakTime,
+    required String idempotencyKey,
     String? notes,
   }) async {
     try {
@@ -197,10 +210,14 @@ class TimeTrackingRepository {
           'break_time': breakTime,
           if (_hasText(notes)) 'notes': notes!.trim(),
         },
+        options: Options(headers: {'Idempotency-Key': idempotencyKey}),
       );
 
       return TimeEntryModel.fromJson(MobileApiResponse.dataMap(response.data));
     } on DioException catch (error) {
+      if (_isAmbiguousWriteFailure(error)) {
+        throw const TimeTrackingWriteUncertainException();
+      }
       throw ApiException.fromDio(error);
     }
   }
@@ -236,6 +253,31 @@ class TimeTrackingRepository {
       throw ApiException.fromDio(error);
     }
   }
+}
+
+class TimeTrackingWriteUncertainException extends ApiException {
+  const TimeTrackingWriteUncertainException()
+    : super(
+        'Не удалось подтвердить результат. Обновите список записей и проверьте таймер перед повторной отправкой.',
+      );
+}
+
+bool _isAmbiguousWriteFailure(DioException error) =>
+    error.response == null &&
+    (error.type == DioExceptionType.connectionTimeout ||
+        error.type == DioExceptionType.sendTimeout ||
+        error.type == DioExceptionType.receiveTimeout ||
+        error.type == DioExceptionType.connectionError ||
+        error.type == DioExceptionType.unknown);
+
+String newTimeTrackingIdempotencyKey() {
+  final random = Random.secure();
+  final bytes = List<int>.generate(16, (_) => random.nextInt(256));
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  final hex =
+      bytes.map((byte) => byte.toRadixString(16).padLeft(2, '0')).join();
+  return '${hex.substring(0, 8)}-${hex.substring(8, 12)}-${hex.substring(12, 16)}-${hex.substring(16, 20)}-${hex.substring(20)}';
 }
 
 bool _hasText(String? value) {

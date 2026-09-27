@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/theme/app_typography.dart';
@@ -9,6 +9,7 @@ import '../../../core/widgets/pro_card.dart';
 import '../../warehouse/presentation/warehouse_camera_scanner_screen.dart';
 import '../data/workforce_attendance_model.dart';
 import '../domain/workforce_attendance_provider.dart';
+import 'attendance_history_screen.dart';
 
 class AttendanceScanScreen extends ConsumerStatefulWidget {
   const AttendanceScanScreen({super.key, this.initialQrToken});
@@ -105,13 +106,24 @@ class _AttendanceScanScreenState extends ConsumerState<AttendanceScanScreen> {
                       AppErrorState(
                         title:
                             state.duplicateScan
-                                ? 'QR уже использован'
+                                ? 'Результат нужно проверить'
                                 : state.permissionDenied
                                 ? 'Нет доступа к подтверждению'
                                 : 'Явка не подтверждена',
-                        description: state.error!,
+                        description:
+                            state.duplicateScan
+                                ? 'Сервер сообщает, что этот QR уже использован. Предыдущая отметка могла сохраниться, но подтвердить это не удалось. Проверьте историю явки.'
+                                : state.error!,
                         minHeight: 180,
                       ),
+                      if (state.duplicateScan) ...[
+                        const SizedBox(height: 8),
+                        OutlinedButton.icon(
+                          onPressed: _openAttendanceHistory,
+                          icon: const Icon(Icons.history_rounded),
+                          label: const Text('Проверить историю явки'),
+                        ),
+                      ],
                     ],
                   ],
                 ),
@@ -148,6 +160,12 @@ class _AttendanceScanScreenState extends ConsumerState<AttendanceScanScreen> {
 
   Future<void> _scan(String token) async {
     await ref.read(workforceAttendanceProvider.notifier).scanQr(token);
+  }
+
+  Future<void> _openAttendanceHistory() async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(builder: (_) => const AttendanceHistoryScreen()),
+    );
   }
 
   void _reset() {
