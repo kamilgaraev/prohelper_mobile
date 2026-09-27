@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 
 import 'package:prohelpers_mobile/core/design/pro_design_tokens.dart';
 import 'package:prohelpers_mobile/core/theme/app_typography.dart';
@@ -37,73 +37,93 @@ class OverviewProjectHeader extends StatelessWidget {
         organizationName: organizationName,
         address: projectAddress,
       ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: ProTouchTarget.min,
-            height: ProTouchTarget.min,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: theme.colorScheme.surface.withValues(alpha: 0.74),
-              borderRadius: BorderRadius.circular(ProRadius.sm),
-            ),
-            child: Icon(Icons.domain_rounded, color: theme.colorScheme.primary),
-          ),
-          const SizedBox(width: ProSpacing.sm),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  [
-                    'Текущий объект',
-                    if (organizationName != null && organizationName.isNotEmpty)
-                      organizationName,
-                  ].join(' · '),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppTypography.caption(context),
-                ),
-                const SizedBox(height: ProSpacing.xxs),
-                Text(
-                  hasProject ? projectName : 'Объект не выбран',
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppTypography.bodyLarge(context).copyWith(
-                    fontSize: 17,
-                    fontWeight: FontWeight.w800,
-                    height: 1.15,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final compact = constraints.maxWidth < 320;
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: ProTouchTarget.min,
+                    height: ProTouchTarget.min,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.surface.withValues(alpha: 0.74),
+                      borderRadius: BorderRadius.circular(ProRadius.sm),
+                    ),
+                    child: Icon(
+                      Icons.domain_rounded,
+                      color: theme.colorScheme.primary,
+                    ),
                   ),
-                ),
-                if (hasAddress) ...[
-                  const SizedBox(height: ProSpacing.xs),
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Icon(
-                        Icons.place_outlined,
-                        size: 16,
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
-                      const SizedBox(width: ProSpacing.xs),
-                      Expanded(
-                        child: Text(
-                          projectAddress,
-                          maxLines: 2,
+                  const SizedBox(width: ProSpacing.sm),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          [
+                            'Текущий объект',
+                            if (organizationName != null &&
+                                organizationName.isNotEmpty)
+                              organizationName,
+                          ].join(' · '),
+                          maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: AppTypography.caption(context),
                         ),
-                      ),
-                    ],
+                        const SizedBox(height: ProSpacing.xxs),
+                        Text(
+                          hasProject ? projectName : 'Объект не выбран',
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppTypography.bodyLarge(context).copyWith(
+                            fontSize: 17,
+                            fontWeight: FontWeight.w800,
+                            height: 1.15,
+                          ),
+                        ),
+                        if (hasAddress) ...[
+                          const SizedBox(height: ProSpacing.xs),
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Icon(
+                                Icons.place_outlined,
+                                size: 16,
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
+                              const SizedBox(width: ProSpacing.xs),
+                              Expanded(
+                                child: Text(
+                                  projectAddress,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: AppTypography.caption(context),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ],
+                    ),
                   ),
+                  if (!compact) ...[
+                    const SizedBox(width: ProSpacing.sm),
+                    const _SwitchProjectPill(),
+                  ],
                 ],
+              ),
+              if (compact) ...[
+                const SizedBox(height: ProSpacing.sm),
+                const _SwitchProjectPill(),
               ],
-            ),
-          ),
-          const SizedBox(width: ProSpacing.sm),
-          const _SwitchProjectPill(),
-        ],
+            ],
+          );
+        },
       ),
     );
   }

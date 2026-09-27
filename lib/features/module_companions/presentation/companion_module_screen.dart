@@ -524,37 +524,49 @@ class _HeaderCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-
-    return IndustrialCard(
-      child: Row(
-        children: [
-          _IconBadge(icon: icon, color: theme.colorScheme.primary),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: AppTypography.h2(context).copyWith(
-                    color: theme.colorScheme.onSurface,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-                if (description != null) ...[
-                  const SizedBox(height: 6),
-                  Text(
-                    description!,
-                    style: AppTypography.bodyMedium(
-                      context,
-                    ).copyWith(color: theme.colorScheme.onSurfaceVariant),
-                  ),
-                ],
-              ],
-            ),
+    final compact =
+        MediaQuery.sizeOf(context).width < 400 &&
+        MediaQuery.textScalerOf(context).scale(1) > 1.15;
+    final content = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: AppTypography.h2(context).copyWith(
+            color: theme.colorScheme.onSurface,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+        if (description != null) ...[
+          const SizedBox(height: 6),
+          Text(
+            description!,
+            style: AppTypography.bodyMedium(
+              context,
+            ).copyWith(color: theme.colorScheme.onSurfaceVariant),
           ),
         ],
-      ),
+      ],
+    );
+
+    return IndustrialCard(
+      child:
+          compact
+              ? Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _IconBadge(icon: icon, color: theme.colorScheme.primary),
+                  const SizedBox(height: 12),
+                  content,
+                ],
+              )
+              : Row(
+                children: [
+                  _IconBadge(icon: icon, color: theme.colorScheme.primary),
+                  const SizedBox(width: 14),
+                  Expanded(child: content),
+                ],
+              ),
     );
   }
 }

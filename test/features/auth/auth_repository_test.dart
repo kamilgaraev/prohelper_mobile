@@ -78,7 +78,7 @@ void main() {
             .having(
               (error) => error.message,
               'message',
-              'Email или пароль не подошли. Проверьте данные и попробуйте еще раз.',
+              'Адрес электронной почты или пароль не подошли. Проверьте данные и попробуйте еще раз.',
             )
             .having((error) => error.statusCode, 'statusCode', 401),
       ),

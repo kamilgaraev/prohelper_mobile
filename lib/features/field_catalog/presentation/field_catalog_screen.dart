@@ -107,7 +107,13 @@ class _FieldCatalogScreenState extends ConsumerState<FieldCatalogScreen> {
     }
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.title),
+        title: Text(
+          widget.catalog == 'templates' &&
+                  (MediaQuery.sizeOf(context).width < 390 ||
+                      MediaQuery.textScalerOf(context).scale(1) > 1.15)
+              ? 'Шаблоны'
+              : widget.title,
+        ),
         actions: [
           if (widget.appBarAction != null) widget.appBarAction!,
           if (widget.appBarActionBuilder != null)
@@ -205,7 +211,9 @@ class _FieldCatalogScreenState extends ConsumerState<FieldCatalogScreen> {
               for (final entry in _page!.items) ...[
                 ProRecordCard(
                   title: entry.title,
-                  subtitle: entry.subtitle ?? 'Открыть карточку записи',
+                  subtitle:
+                      _catalogSubtitle(widget.catalog, entry) ??
+                      'Открыть карточку записи',
                   icon: widget.icon,
                   onTap:
                       _entityOption?.hasDetail == false
@@ -436,6 +444,13 @@ class _FieldCatalogDetailScreenState
         }
         final entry = snapshot.requireData;
         final theme = Theme.of(context);
+        final compact =
+            MediaQuery.sizeOf(context).width < 390 ||
+            MediaQuery.textScalerOf(context).scale(1) > 1.15;
+        final subtitle =
+            widget.catalog == 'templates'
+                ? null
+                : _catalogSubtitle(widget.catalog, entry);
         final canCreateCrmActivity =
             widget.catalog == 'crm' &&
             const {
@@ -453,8 +468,14 @@ class _FieldCatalogDetailScreenState
             Card(
               child: ListTile(
                 leading: Icon(widget.icon, color: theme.colorScheme.primary),
-                title: Text(entry.title, style: theme.textTheme.titleLarge),
-                subtitle: entry.subtitle == null ? null : Text(entry.subtitle!),
+                title: Text(
+                  entry.title,
+                  style:
+                      compact
+                          ? theme.textTheme.bodyLarge
+                          : theme.textTheme.titleLarge,
+                ),
+                subtitle: subtitle == null ? null : Text(subtitle),
               ),
             ),
             const SizedBox(height: 12),
@@ -498,12 +519,12 @@ class _FieldCatalogDetailScreenState
                 ),
               ),
             for (final item in entry.fields.entries)
-              if (item.key != 'download_url' &&
-                  _displayValue(item.value) != null)
+              if (_catalogField(widget.catalog, item.key, item.value)
+                  case final field?)
                 Card(
                   child: ListTile(
-                    title: Text(_fieldLabel(item.key)),
-                    subtitle: Text(_displayValue(item.value)!),
+                    title: Text(field.label),
+                    subtitle: Text(field.value),
                   ),
                 ),
           ],
@@ -710,6 +731,169 @@ class _CrmActivityFormScreenState extends ConsumerState<CrmActivityFormScreen> {
 
 String _formatDate(DateTime value) =>
     '${value.day.toString().padLeft(2, '0')}.${value.month.toString().padLeft(2, '0')}.${value.year}';
+
+const _crmStatusLabels = <String, String>{
+  'active': 'Активна',
+  'archived': 'В архиве',
+  'cancelled': 'Отменена',
+  'converted': 'Преобразована',
+  'done': 'Завершена',
+  'in_work': 'В работе',
+  'inactive': 'Неактивна',
+  'lost': 'Проиграна',
+  'merged': 'Объединена',
+  'new': 'Новая',
+  'open': 'Открыта',
+  'overdue': 'Просрочена',
+  'paused': 'Приостановлена',
+  'planned': 'Запланирована',
+  'qualified': 'Квалифицирована',
+  'won': 'Выиграна',
+};
+
+const _crmFieldLabels = <String, String>{
+  'legal_name': 'Юридическое название',
+  'company_type': 'Тип компании',
+  'status': 'Статус',
+  'inn': 'ИНН',
+  'kpp': 'КПП',
+  'ogrn': 'ОГРН',
+  'phone': 'Телефон',
+  'email': 'Электронная почта',
+  'website': 'Сайт',
+  'legal_address': 'Юридический адрес',
+  'actual_address': 'Фактический адрес',
+  'position': 'Должность',
+  'is_primary': 'Основной контакт',
+  'company': 'Компания',
+  'contact': 'Контакт',
+  'primary_contact': 'Основной контакт',
+  'owner': 'Ответственный',
+  'source': 'Источник',
+  'title': 'Название',
+  'priority': 'Приоритет',
+  'estimated_amount': 'Планируемая сумма',
+  'amount': 'Сумма',
+  'currency': 'Валюта',
+  'expected_start_date': 'Планируемое начало',
+  'expected_close_at': 'Планируемое закрытие',
+  'need_description': 'Потребность',
+  'lost_reason': 'Причина отказа',
+  'project': 'Проект',
+  'contract': 'Договор',
+  'pipeline': 'Воронка',
+  'stage': 'Этап',
+  'probability': 'Вероятность',
+  'next_activity_at': 'Следующее действие',
+  'last_activity_at': 'Последнее действие',
+  'notes': 'Заметки',
+  'tags': 'Метки',
+};
+
+const _templateReportTypeLabels = <String, String>{
+  'material_usage': 'Расход материалов',
+  'work_completion': 'Выполнение работ',
+  'foreman_activity': 'Работа прораба',
+  'project_status_summary': 'Состояние объекта',
+  'contractor_summary': 'Подрядчики: сводка',
+  'contractor_detail': 'Подрядчики: детализация',
+};
+
+String? _catalogSubtitle(String catalog, FieldCatalogEntry entry) {
+  if (catalog == 'templates') {
+    return _templateReportTypeLabels[_displayValue(
+      entry.fields['report_type'],
+    )];
+  }
+  if (catalog != 'crm') return entry.subtitle;
+  final statusLabel = _displayValue(entry.fields['status_label']);
+  if (statusLabel != null) return statusLabel;
+  final status = _displayValue(entry.fields['status']);
+  if (status != null) {
+    final label = _crmStatusLabels[status];
+    if (label != null) return label;
+  }
+  return _displayValue(entry.fields['email']) ??
+      _displayValue(entry.fields['phone']);
+}
+
+({String label, String value})? _catalogField(
+  String catalog,
+  String key,
+  dynamic value,
+) {
+  if (key == 'download_url') return null;
+  if (catalog == 'templates') {
+    if (key == 'report_type') {
+      final type = _displayValue(value);
+      return type == null
+          ? null
+          : (
+            label: 'Тип отчёта',
+            value: _templateReportTypeLabels[type] ?? 'Другой тип',
+          );
+    }
+    if (key == 'is_default' && value is bool) {
+      return (label: 'Стандартный шаблон', value: value ? 'Да' : 'Нет');
+    }
+    if (key == 'columns_config' && value is List) {
+      final headers =
+          value
+              .whereType<Map>()
+              .map((column) => _displayValue(column['header']))
+              .whereType<String>()
+              .toList();
+      return headers.isEmpty
+          ? null
+          : (label: 'Столбцы', value: headers.join(', '));
+    }
+    return null;
+  }
+  if (catalog != 'crm') {
+    final text = _displayValue(value);
+    if (text == null) return null;
+    return (label: _fieldLabel(key), value: text);
+  }
+  final label = _crmFieldLabels[key];
+  if (label == null || value == null) return null;
+  String? text;
+  if (key == 'status') {
+    text = _crmStatusLabels[value.toString()];
+  } else if (key == 'company_type') {
+    text =
+        const {
+          'legal_entity': 'Юридическое лицо',
+          'individual': 'Физическое лицо',
+          'holding': 'Холдинг',
+          'partner': 'Партнёр',
+        }[value.toString()];
+  } else if (key == 'priority') {
+    text =
+        const {
+          'low': 'Низкий',
+          'normal': 'Обычный',
+          'high': 'Высокий',
+          'urgent': 'Срочный',
+        }[value.toString()];
+  } else if (value is bool) {
+    text = value ? 'Да' : 'Нет';
+  } else if (value is Map) {
+    for (final field in const ['name', 'full_name', 'title', 'number']) {
+      text = _displayValue(value[field]);
+      if (text != null) break;
+    }
+  } else if (value is List) {
+    if (key == 'tags') {
+      text = value
+          .whereType<String>()
+          .where((tag) => tag.isNotEmpty)
+          .join(', ');
+    }
+  } else {
+    text = _displayValue(value);
+  }
+  return text == null || text.isEmpty ? null : (label: label, value: text);
+}
 
 String? _displayValue(dynamic value) {
   if (value == null) return null;

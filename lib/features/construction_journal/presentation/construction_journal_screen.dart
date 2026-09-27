@@ -1,12 +1,14 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_typography.dart';
+import '../../../core/design/pro_status.dart';
 import '../../../core/widgets/app_empty_state.dart';
 import '../../../core/widgets/app_error_state.dart';
 import '../../../core/widgets/app_loading_state.dart';
 import '../../../core/widgets/industrial_card.dart';
+import '../../../core/widgets/pro_status_banner.dart';
 import '../../projects/domain/projects_provider.dart';
 import '../data/construction_journal_models.dart';
 import '../domain/construction_journal_provider.dart';
@@ -37,28 +39,34 @@ class _ConstructionJournalScreenState
   Widget build(BuildContext context) {
     final state = ref.watch(constructionJournalProvider);
     final selectedProject = ref.watch(projectsProvider).selectedProject;
+    final canCreate =
+        state.availableActions.hasAction(
+          ConstructionJournalActionKeys.create,
+        ) &&
+        selectedProject != null;
+    final compactAction =
+        MediaQuery.sizeOf(context).width < 400 &&
+        MediaQuery.textScalerOf(context).scale(1) > 1.15;
+
+    Future<void> createJournal() async {
+      if (selectedProject == null) return;
+      final created = await Navigator.of(context).push<bool>(
+        MaterialPageRoute(builder: (_) => const JournalFormScreen()),
+      );
+
+      if (created == true && mounted) {
+        await ref
+            .read(constructionJournalProvider.notifier)
+            .load(projectId: selectedProject.serverId);
+      }
+    }
 
     return Scaffold(
       appBar: AppBar(title: const Text('Журнал работ')),
       floatingActionButton:
-          state.availableActions.hasAction(
-                    ConstructionJournalActionKeys.create,
-                  ) &&
-                  selectedProject != null
+          canCreate && !compactAction
               ? FloatingActionButton.extended(
-                onPressed: () async {
-                  final created = await Navigator.of(context).push<bool>(
-                    MaterialPageRoute(
-                      builder: (_) => const JournalFormScreen(),
-                    ),
-                  );
-
-                  if (created == true && mounted) {
-                    await ref
-                        .read(constructionJournalProvider.notifier)
-                        .load(projectId: selectedProject.serverId);
-                  }
-                },
+                onPressed: createJournal,
                 icon: const Icon(Icons.add_rounded),
                 label: const Text('Новый журнал'),
               )
@@ -96,6 +104,37 @@ class _ConstructionJournalScreenState
                 ),
               )
             else ...[
+              if (state.fromCache || state.hasDirtyLocal)
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                  sliver: SliverToBoxAdapter(
+                    child: ProStatusBanner(
+                      title:
+                          state.hasDirtyLocal
+                              ? 'Есть локальные изменения'
+                              : 'Показаны сохранённые данные',
+                      description:
+                          state.error ??
+                          'Актуальность данных не подтверждена сетью.',
+                      tone:
+                          state.hasDirtyLocal
+                              ? ProStatusTone.warning
+                              : ProStatusTone.info,
+                      fullText: true,
+                    ),
+                  ),
+                ),
+              if (canCreate && compactAction)
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                  sliver: SliverToBoxAdapter(
+                    child: FilledButton.icon(
+                      onPressed: createJournal,
+                      icon: const Icon(Icons.add_rounded),
+                      label: const Text('Новый журнал'),
+                    ),
+                  ),
+                ),
               SliverPadding(
                 padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
                 sliver: SliverToBoxAdapter(
@@ -142,6 +181,7 @@ class _ConstructionJournalScreenState
                                   builder:
                                       (_) => ConstructionJournalDetailScreen(
                                         journalId: journal.id,
+                                        projectId: selectedProject.serverId,
                                       ),
                                 ),
                               ),

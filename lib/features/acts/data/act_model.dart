@@ -7,12 +7,15 @@ class ActModel {
       (values['capabilities'] as Map)['can_field_confirm'] == true;
   String get title =>
       _text(values['number']).isNotEmpty ? _text(values['number']) : 'Акт №$id';
-  String get status =>
-      _text(values['status_label']).isNotEmpty
-          ? _text(values['status_label'])
-          : _text(values['status']).isNotEmpty
-          ? _text(values['status'])
-          : 'Без статуса';
+  String get status {
+    final label = _text(values['status_label']);
+    final code = _text(values['status']);
+    return _statusLabels[label] ??
+        (label.isNotEmpty
+            ? label
+            : _statusLabels[code] ?? (code.isNotEmpty ? code : 'Без статуса'));
+  }
+
   factory ActModel.fromJson(Map<String, dynamic> json) {
     final rawId = json['id'];
     final id = rawId is int ? rawId : int.tryParse('$rawId');
@@ -24,3 +27,12 @@ class ActModel {
 }
 
 String _text(dynamic value) => value?.toString().trim() ?? '';
+
+const _statusLabels = {
+  'draft': 'Черновик',
+  'pending_approval': 'На согласовании',
+  'approved': 'Утвержден',
+  'rejected': 'Отклонен',
+  'signed': 'Подписан',
+  'annulled': 'Аннулирован',
+};

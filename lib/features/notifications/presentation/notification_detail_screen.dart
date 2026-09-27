@@ -120,6 +120,30 @@ class _NotificationDetailScreenState
               )
               : _NotificationDetailContent(
                 notification: notification!,
+                loadError: state.error,
+                markReadError: state.markReadError,
+                onRetryLoad:
+                    state.isLoading
+                        ? null
+                        : () =>
+                            ref
+                                .read(
+                                  notificationDetailProvider(
+                                    widget.notificationId,
+                                  ).notifier,
+                                )
+                                .load(),
+                onRetryMarkRead:
+                    state.isMarkingRead
+                        ? null
+                        : () =>
+                            ref
+                                .read(
+                                  notificationDetailProvider(
+                                    widget.notificationId,
+                                  ).notifier,
+                                )
+                                .markAsRead(),
                 onOpenTarget: () => _openTarget(context, notification),
                 onRefresh:
                     () =>
@@ -314,11 +338,19 @@ class _NotificationDetailScreenState
 class _NotificationDetailContent extends StatelessWidget {
   const _NotificationDetailContent({
     required this.notification,
+    required this.loadError,
+    required this.markReadError,
+    required this.onRetryLoad,
+    required this.onRetryMarkRead,
     required this.onOpenTarget,
     required this.onRefresh,
   });
 
   final NotificationModel notification;
+  final String? loadError;
+  final String? markReadError;
+  final VoidCallback? onRetryLoad;
+  final VoidCallback? onRetryMarkRead;
   final VoidCallback onOpenTarget;
   final Future<void> Function() onRefresh;
 
@@ -333,6 +365,24 @@ class _NotificationDetailContent extends StatelessWidget {
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.all(16),
         children: [
+          if (loadError != null) ...[
+            AppErrorState(
+              title: 'Не удалось обновить уведомление',
+              description: loadError,
+              onRetry: onRetryLoad,
+              minHeight: 120,
+            ),
+            const SizedBox(height: 12),
+          ],
+          if (markReadError != null) ...[
+            AppErrorState(
+              title: 'Не удалось отметить уведомление прочитанным',
+              description: markReadError,
+              onRetry: onRetryMarkRead,
+              minHeight: 120,
+            ),
+            const SizedBox(height: 12),
+          ],
           IndustrialCard(
             borderColor:
                 notification.isUnread

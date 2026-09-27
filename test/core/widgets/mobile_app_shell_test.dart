@@ -23,6 +23,7 @@ import 'package:prohelpers_mobile/features/notifications/data/notifications_repo
 import 'package:prohelpers_mobile/features/projects/data/project_model.dart';
 import 'package:prohelpers_mobile/features/projects/data/projects_repository.dart';
 import 'package:prohelpers_mobile/features/projects/domain/projects_provider.dart';
+import 'package:prohelpers_mobile/features/sync/domain/pending_sync_provider.dart';
 
 class _TestSecureStorageService extends SecureStorageService {
   @override
@@ -142,10 +143,17 @@ class _TestNotificationsRepository extends NotificationsRepository {
   Future<int> fetchUnreadCount() async => 0;
 }
 
+class _EmptyPending extends PendingSyncNotifier {
+  _EmptyPending(super.ref);
+
+  @override
+  Future<void> load() async {
+    state = const PendingSyncState();
+  }
+}
+
 void main() {
-  testWidgets('shell keeps primary tabs and quick action sections available', (
-    tester,
-  ) async {
+  testWidgets('shell keeps Главная, Разделы and Я available', (tester) async {
     final user =
         User()
           ..serverId = 1
@@ -215,6 +223,7 @@ void main() {
           myActionsRepositoryProvider.overrideWithValue(
             _TestMyActionsRepository(),
           ),
+          pendingSyncProvider.overrideWith((ref) => _EmptyPending(ref)),
         ],
         child: const MaterialApp(home: MobileAppShell()),
       ),
@@ -222,10 +231,9 @@ void main() {
 
     await tester.pump();
 
-    expect(find.text('Обзор'), findsWidgets);
-    expect(find.text('Работа'), findsOneWidget);
-    expect(find.text('Действия'), findsOneWidget);
-    expect(find.text('Ещё'), findsOneWidget);
+    expect(find.text('Главная'), findsWidgets);
+    expect(find.text('Разделы'), findsOneWidget);
+    expect(find.text('Я'), findsOneWidget);
     expect(find.byTooltip('Действие'), findsNothing);
     expect(find.byIcon(Icons.add_rounded), findsNothing);
     expect(find.byType(NavigationBar), findsOneWidget);
@@ -255,16 +263,16 @@ void main() {
     expect(navigationDecoration.boxShadow, isNotNull);
     expect(navigationDecoration.boxShadow, isNotEmpty);
 
-    await tester.tap(find.text('Работа'));
+    await tester.tap(find.text('Разделы'));
     await tester.pumpAndSettle();
 
     expect(find.byType(NavigationBar), findsOneWidget);
     expect(find.text('Найти раздел'), findsOneWidget);
     expect(find.text('Доступно разделов: 2'), findsOneWidget);
-    expect(find.text('Стройка'), findsOneWidget);
+    expect(find.text('Полевые работы'), findsOneWidget);
     expect(
       find.ancestor(
-        of: find.text('Стройка'),
+        of: find.text('Полевые работы'),
         matching: find.byType(ProSurface),
       ),
       findsOneWidget,
@@ -275,23 +283,15 @@ void main() {
     );
     expect(find.text('Следующие в работе'), findsNothing);
 
-    await tester.tap(find.text('Ещё'));
+    await tester.tap(find.text('Я'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Управление, справочники и профиль'), findsOneWidget);
+    expect(find.text('Профиль, объект и настройки'), findsOneWidget);
 
-    await tester.tap(find.text('Действия'));
+    await tester.tap(find.text('Главная'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Действия'), findsWidgets);
-    expect(find.text('Найти действие или раздел'), findsOneWidget);
-    expect(find.text('Рекомендуемые'), findsWidgets);
-    expect(find.text('Все разделы'), findsOneWidget);
-
-    await tester.tap(find.text('Обзор'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('Внимание: 1'), findsWidgets);
+    expect(find.text('Ваши задачи и быстрые действия'), findsOneWidget);
   });
 
   testWidgets('shell meets core mobile accessibility guidelines', (
@@ -349,6 +349,7 @@ void main() {
             secureStorageProvider.overrideWithValue(
               _TestSecureStorageService(),
             ),
+            pendingSyncProvider.overrideWith((ref) => _EmptyPending(ref)),
           ],
           child: MaterialApp(
             theme: MostTheme.lightTheme,

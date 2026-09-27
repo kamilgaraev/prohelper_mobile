@@ -279,15 +279,11 @@ class _LegalDocumentDetailScreenState
             reason: action.requiresReason ? comment : null,
           );
       _reload();
-    } on SyncQueuedException {
+    } on SyncQueuedException catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Действие сохранено и будет отправлено после проверки связи',
-            ),
-          ),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(error.message)));
         _reload();
       }
     } on ApiException catch (error) {
@@ -506,13 +502,9 @@ class _LegalDocumentDetailScreenState
       if (mounted) {
         if (error is SyncQueuedException) {
           attempt.markQueued();
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                'Скан сохранён и будет отправлен после проверки связи',
-              ),
-            ),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text(error.message)));
           _reload();
         } else if (attempt.wasCancelled) {
           attempt.markCancelled();

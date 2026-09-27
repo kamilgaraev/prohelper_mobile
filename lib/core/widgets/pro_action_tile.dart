@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 
 import 'package:prohelpers_mobile/core/design/pro_design_tokens.dart';
 import 'package:prohelpers_mobile/core/design/pro_status.dart';
@@ -15,6 +15,7 @@ class ProActionTile extends StatelessWidget {
     this.badge,
     this.tone = ProStatusTone.info,
     this.trailing,
+    this.fullText = false,
   });
 
   final String title;
@@ -24,6 +25,7 @@ class ProActionTile extends StatelessWidget {
   final VoidCallback? onTap;
   final ProStatusTone tone;
   final Widget? trailing;
+  final bool fullText;
 
   @override
   Widget build(BuildContext context) {
@@ -55,8 +57,11 @@ class ProActionTile extends StatelessWidget {
                     Expanded(
                       child: Text(
                         title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                        maxLines: fullText ? null : 2,
+                        overflow:
+                            fullText
+                                ? TextOverflow.visible
+                                : TextOverflow.ellipsis,
                         style: AppTypography.bodyMedium(
                           context,
                         ).copyWith(fontWeight: FontWeight.w800),
@@ -72,8 +77,9 @@ class ProActionTile extends StatelessWidget {
                   const SizedBox(height: ProSpacing.xxs),
                   Text(
                     subtitle!,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
+                    maxLines: fullText ? null : 3,
+                    overflow:
+                        fullText ? TextOverflow.visible : TextOverflow.ellipsis,
                     style: AppTypography.caption(context),
                   ),
                 ],

@@ -1,4 +1,4 @@
-﻿class WarehouseSummaryModel {
+class WarehouseSummaryModel {
   const WarehouseSummaryModel({
     required this.summary,
     required this.warehouses,
@@ -17,9 +17,20 @@
     return WarehouseSummaryModel(
       summary: WarehouseSummaryData.fromJson(summaryJson),
       warehouses: warehousesJson.map(WarehouseCardModel.fromJson).toList(),
-      recentMovements:
-          movementsJson.map(WarehouseMovementModel.fromJson).toList(),
+      recentMovements: [
+        for (final movement in movementsJson)
+          if (_tryParseMovement(movement) case final parsed?) parsed,
+      ],
     );
+  }
+}
+
+WarehouseMovementModel? _tryParseMovement(Object? json) {
+  if (json is! Map<String, dynamic>) return null;
+  try {
+    return WarehouseMovementModel.fromJson(json);
+  } on FormatException {
+    return null;
   }
 }
 
@@ -143,11 +154,13 @@ class WarehouseMovementModel {
     return WarehouseMovementModel(
       id: _requiredInt(json, 'id'),
       movementType: movementType,
-      movementTypeLabel: _requiredCleanLabel(json, 'movement_type_label'),
+      movementTypeLabel:
+          _cleanLabel(json['movement_type_label']) ??
+          _movementTypeLabels[movementType]!,
       quantity: _requiredDouble(json, 'quantity'),
       price: _requiredDouble(json, 'price'),
-      warehouseName: _requiredString(json, 'warehouse_name'),
-      materialName: _requiredString(json, 'material_name'),
+      warehouseName: _asNullableString(json['warehouse_name']),
+      materialName: _asNullableString(json['material_name']),
       measurementUnit: _asNullableString(json['measurement_unit']),
       projectName: _asNullableString(json['project_name']),
       documentNumber: _asNullableString(json['document_number']),
@@ -540,15 +553,6 @@ String? _cleanLabel(dynamic value) {
   return text;
 }
 
-String _requiredCleanLabel(Map<String, dynamic> json, String key) {
-  final label = _cleanLabel(json[key]);
-  if (label == null) {
-    throw FormatException('Warehouse field "$key" must be readable.');
-  }
-
-  return label;
-}
-
 const _movementTypes = {
   'receipt',
   'write_off',
@@ -556,4 +560,19 @@ const _movementTypes = {
   'transfer_out',
   'adjustment',
   'return',
+  'reservation',
+  'unreservation',
+  'reserved_issue',
+};
+
+const _movementTypeLabels = {
+  'receipt': 'Приход',
+  'write_off': 'Списание',
+  'transfer_in': 'Перемещение на склад',
+  'transfer_out': 'Перемещение со склада',
+  'adjustment': 'Корректировка',
+  'return': 'Возврат',
+  'reservation': 'Резервирование',
+  'unreservation': 'Снятие резерва',
+  'reserved_issue': 'Выдача из резерва',
 };

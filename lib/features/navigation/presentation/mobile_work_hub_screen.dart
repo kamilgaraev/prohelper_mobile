@@ -6,6 +6,7 @@ import 'package:prohelpers_mobile/core/design/pro_design_tokens.dart';
 import 'package:prohelpers_mobile/core/design/pro_status.dart';
 import 'package:prohelpers_mobile/core/navigation/mobile_destination.dart';
 import 'package:prohelpers_mobile/core/providers/module_provider.dart';
+import 'package:prohelpers_mobile/core/services/permission_service.dart';
 import 'package:prohelpers_mobile/core/theme/app_typography.dart';
 import 'package:prohelpers_mobile/core/widgets/app_empty_state.dart';
 import 'package:prohelpers_mobile/core/widgets/app_error_state.dart';
@@ -14,6 +15,7 @@ import 'package:prohelpers_mobile/core/widgets/pro_empty_states.dart';
 import 'package:prohelpers_mobile/core/widgets/pro_page_scaffold.dart';
 import 'package:prohelpers_mobile/core/widgets/pro_search_filter_bar.dart';
 import 'package:prohelpers_mobile/core/widgets/pro_section.dart';
+import 'package:prohelpers_mobile/core/widgets/pro_status_banner.dart';
 import 'package:prohelpers_mobile/core/widgets/pro_surface.dart';
 import 'package:prohelpers_mobile/features/actions/presentation/mobile_action_search.dart';
 import 'package:prohelpers_mobile/features/projects/domain/projects_provider.dart';
@@ -63,17 +65,28 @@ class _MobileWorkHubScreenState extends ConsumerState<MobileWorkHubScreen> {
   Widget build(BuildContext context) {
     final modulesState = ref.watch(modulesProvider);
     final modules = ref.watch(supportedMobileModulesProvider);
-    final selectedProject = ref.watch(projectsProvider).selectedProject;
+    final projectsState = ref.watch(projectsProvider);
+    final selectedProject = projectsState.selectedProject;
     final hasSelectedProject = selectedProject != null;
+    final permissions = ref.watch(permissionServiceProvider);
     final allDestinations = visibleMobileDestinations(modules)
-        .where(
-          (destination) => (!destination.requiresProject || hasSelectedProject),
-        )
+        .where((destination) {
+          final module = destination.appModule;
+          if (module != null && !permissions.canAccessModule(module)) {
+            return false;
+          }
+          if (destination.viewPermissions.isNotEmpty &&
+              permissions.grantedPermissions.isNotEmpty &&
+              !permissions.hasAnyPermission(destination.viewPermissions)) {
+            return false;
+          }
+          return !destination.requiresProject || hasSelectedProject;
+        })
         .toList(growable: false);
     final filteredDestinations = filterMobileActions(allDestinations, _query);
 
     return ProPageScaffold(
-      title: 'Работа',
+      title: 'Разделы',
       subtitle: selectedProject?.name ?? 'Объект не выбран',
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -90,8 +103,8 @@ class _MobileWorkHubScreenState extends ConsumerState<MobileWorkHubScreen> {
                 icon: const Icon(Icons.domain_rounded),
                 label: const Text('Выбрать объект'),
               ),
-            ),
-          if (modulesState.isLoading && allDestinations.isEmpty)
+            )
+          else if (modulesState.isLoading && allDestinations.isEmpty)
             const AppLoadingState(message: 'Загружаем рабочие разделы')
           else if (modulesState.error != null && allDestinations.isEmpty)
             AppErrorState(
@@ -100,6 +113,15 @@ class _MobileWorkHubScreenState extends ConsumerState<MobileWorkHubScreen> {
               onRetry: () => ref.read(modulesProvider.notifier).loadModules(),
             )
           else ...[
+            if (projectsState.fromCache || modulesState.fromCache) ...[
+              const ProStatusBanner(
+                title: 'Данные сохранены на устройстве',
+                description: 'Проверьте обновления при появлении связи.',
+                compact: true,
+                fullText: true,
+              ),
+              const SizedBox(height: 12),
+            ],
             ProSearchFilterBar<String>(
               controller: _searchController,
               hintText: 'Найти раздел',
@@ -129,11 +151,11 @@ class _MobileWorkHubScreenState extends ConsumerState<MobileWorkHubScreen> {
                         ),
               )
             else
-              for (final group in MobileAdminGroup.values)
+              for (final group in MobileModuleGroup.values)
                 _WorkGroup(
                   group: group,
                   destinations: filteredDestinations
-                      .where((destination) => destination.adminGroup == group)
+                      .where((destination) => destination.group == group)
                       .toList(growable: false),
                 ),
           ],
@@ -146,7 +168,7 @@ class _MobileWorkHubScreenState extends ConsumerState<MobileWorkHubScreen> {
 class _WorkGroup extends StatelessWidget {
   const _WorkGroup({required this.group, required this.destinations});
 
-  final MobileAdminGroup group;
+  final MobileModuleGroup group;
   final List<MobileModuleDestination> destinations;
 
   @override
@@ -235,7 +257,7 @@ class _WorkDestinationRow extends StatelessWidget {
                   children: [
                     Text(
                       destination.shortTitle,
-                      maxLines: 1,
+                      maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: AppTypography.bodyMedium(
                         context,
@@ -244,7 +266,7 @@ class _WorkDestinationRow extends StatelessWidget {
                     const SizedBox(height: ProSpacing.xxs),
                     Text(
                       subtitle,
-                      maxLines: 2,
+                      maxLines: 3,
                       overflow: TextOverflow.ellipsis,
                       style: AppTypography.caption(context),
                     ),

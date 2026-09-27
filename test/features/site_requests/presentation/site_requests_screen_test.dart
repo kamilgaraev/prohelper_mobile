@@ -1,4 +1,4 @@
-﻿import 'package:dio/dio.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -58,13 +58,14 @@ class _FakeSiteRequestsNotifier extends SiteRequestsNotifier {
     required SiteRequestsScope scope,
     bool permissionDenied = false,
     String? error,
+    bool isLoading = false,
   }) : super(
          _FakeSiteRequestsRepository(),
          initialProjectId: 15,
          initialScope: scope,
        ) {
     state = SiteRequestsState(
-      isLoading: false,
+      isLoading: isLoading,
       requests: requests,
       currentPage: 2,
       hasMore: false,
@@ -143,6 +144,7 @@ void main() {
     List<SiteRequestModel>? requests,
     bool permissionDenied = false,
     String? error,
+    bool isLoading = false,
     bool hasProject = true,
   }) {
     final project = hasProject ? buildProject() : null;
@@ -164,6 +166,7 @@ void main() {
             scope: scope,
             permissionDenied: permissionDenied,
             error: error,
+            isLoading: isLoading,
           ),
         ),
       ],
@@ -180,7 +183,7 @@ void main() {
     await tester.pumpWidget(createWidget());
     await tester.pump();
 
-    expect(find.text('Есть заявки, требующие реакции'), findsOneWidget);
+    expect(find.text('Ждут решения'), findsOneWidget);
     expect(find.text('Найдено: 3 из 3'), findsOneWidget);
     expect(find.text('Срочные'), findsOneWidget);
 
@@ -208,6 +211,35 @@ void main() {
     expect(find.text('Срочно нужен бетон'), findsOneWidget);
     expect(find.text('Вывод бригады каменщиков'), findsNothing);
     expect(find.text('Автокран на разгрузку'), findsNothing);
+  });
+
+  testWidgets('до загрузки не показывает нулевой счётчик заявок', (
+    tester,
+  ) async {
+    await tester.pumpWidget(createWidget(requests: const [], isLoading: true));
+    await tester.pump();
+
+    expect(find.text('Загружаем заявки'), findsOneWidget);
+    expect(find.textContaining('Всего заявок: 0'), findsNothing);
+    expect(find.text('Найдено: 0 из 0'), findsNothing);
+  });
+
+  testWidgets('одобренная заявка ещё не считается работой', (tester) async {
+    final approvedRequest = _buildRequest(
+      serverId: 3001,
+      title: 'Одобрена закупка',
+      status: 'approved',
+      statusLabel: 'Одобрена',
+      priority: 'medium',
+      priorityLabel: 'Средний',
+      requestType: 'material_request',
+      requestTypeLabel: 'Материалы',
+      createdAt: DateTime(2026, 3, 12),
+    );
+    await tester.pumpWidget(createWidget(requests: [approvedRequest]));
+    await tester.pump();
+
+    expect(find.text('Всего заявок: 1. Активных в работе: 0.'), findsOneWidget);
   });
 
   testWidgets('в режиме согласования показывает быстрые действия по workflow', (
@@ -255,7 +287,7 @@ void main() {
     );
     await tester.pump();
 
-    expect(find.text('Нуждаются в рассмотрении'), findsOneWidget);
+    expect(find.text('Согласование'), findsOneWidget);
     expect(find.text('Взять в рассмотрение'), findsOneWidget);
     await tester.scrollUntilVisible(
       find.text('Кран на монтаж'),

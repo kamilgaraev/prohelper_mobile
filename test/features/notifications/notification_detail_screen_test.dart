@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:prohelpers_mobile/core/network/api_exception.dart';
 import 'package:prohelpers_mobile/core/theme/app_typography.dart';
 import 'package:prohelpers_mobile/features/notifications/data/notification_model.dart';
 import 'package:prohelpers_mobile/features/notifications/data/notifications_repository.dart';
@@ -78,6 +79,70 @@ void main() {
     );
     expect(title.maxLines, 3);
     expect(title.overflow, TextOverflow.ellipsis);
+  });
+
+  testWidgets('shows and retries a failed mark-read action in detail', (
+    tester,
+  ) async {
+    final repository = _ReadFailureNotificationsRepository(
+      _notification(unread: true),
+    );
+
+    await tester.pumpWidget(_buildDetail(repository));
+    await tester.pumpAndSettle();
+
+    expect(repository.markReadAttempts, 1);
+    expect(find.text('Вход с нового устройства'), findsOneWidget);
+    expect(
+      find.text('Нет соединения с сервером. Проверьте интернет.'),
+      findsOneWidget,
+    );
+    expect(find.text('Повторить'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    await tester.tap(find.text('Повторить'));
+    await tester.pumpAndSettle();
+
+    expect(repository.markReadAttempts, 2);
+    expect(find.text('Прочитано'), findsOneWidget);
+    expect(
+      find.text('Нет соединения с сервером. Проверьте интернет.'),
+      findsNothing,
+    );
+  });
+
+  testWidgets('shows refresh failure over saved detail and retries loading', (
+    tester,
+  ) async {
+    final repository = _DetailRefreshFailureNotificationsRepository(
+      _notification(),
+    );
+
+    await tester.pumpWidget(_buildDetail(repository));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Вход с нового устройства'), findsOneWidget);
+
+    await tester.drag(find.byType(ListView), const Offset(0, 450));
+    await tester.pumpAndSettle();
+
+    expect(repository.detailFetchAttempts, 2);
+    expect(find.text('Вход с нового устройства'), findsOneWidget);
+    expect(
+      find.text('Сервер временно недоступен. Попробуйте позже.'),
+      findsOneWidget,
+    );
+    expect(find.text('Повторить'), findsOneWidget);
+
+    await tester.tap(find.text('Повторить'));
+    await tester.pumpAndSettle();
+
+    expect(repository.detailFetchAttempts, 3);
+    expect(find.text('Вход с нового устройства'), findsOneWidget);
+    expect(
+      find.text('Сервер временно недоступен. Попробуйте позже.'),
+      findsNothing,
+    );
   });
 
   testWidgets('opens payment document detail from push record payload', (
@@ -214,6 +279,41 @@ class _NotificationsRepository extends NotificationsRepository {
   Future<int> fetchUnreadCount() async => notification.isUnread ? 1 : 0;
 }
 
+class _ReadFailureNotificationsRepository extends _NotificationsRepository {
+  _ReadFailureNotificationsRepository(super.notification);
+
+  int markReadAttempts = 0;
+
+  @override
+  Future<NotificationModel> markAsRead(String id) async {
+    markReadAttempts++;
+    if (markReadAttempts == 1) {
+      throw const ApiException(
+        'Нет соединения с сервером. Проверьте интернет.',
+      );
+    }
+
+    return notification.copyWith(readAt: DateTime(2026, 7, 2, 9));
+  }
+}
+
+class _DetailRefreshFailureNotificationsRepository
+    extends _NotificationsRepository {
+  _DetailRefreshFailureNotificationsRepository(super.notification);
+
+  int detailFetchAttempts = 0;
+
+  @override
+  Future<NotificationModel> fetchNotification(String id) async {
+    detailFetchAttempts++;
+    if (detailFetchAttempts == 2) {
+      throw const ApiException('Сервер временно недоступен. Попробуйте позже.');
+    }
+
+    return notification;
+  }
+}
+
 class _FailedPaymentsRepository extends PaymentsRepository {
   _FailedPaymentsRepository() : super(Dio());
 
@@ -243,6 +343,7 @@ NotificationModel _notification({
   String title = 'Вход с нового устройства',
   String message = 'В аккаунт выполнен вход с устройства Windows.',
   Map<String, dynamic> data = const <String, dynamic>{},
+  bool unread = false,
 }) {
   return NotificationModel(
     id: 'n1',
@@ -254,7 +355,7 @@ NotificationModel _notification({
     category: 'security',
     data: data,
     actions: const <NotificationActionModel>[],
-    readAt: DateTime(2026, 7, 2, 9),
+    readAt: unread ? null : DateTime(2026, 7, 2, 9),
     createdAt: DateTime(2026, 7, 2, 8, 45),
   );
 }

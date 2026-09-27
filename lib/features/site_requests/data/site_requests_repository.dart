@@ -39,7 +39,36 @@ class SiteRequestsRepository extends SyncQueueAwareRepository {
     String? requestType,
     DateTime? requiredFrom,
     DateTime? requiredTo,
-    SiteRequestsScope scope = SiteRequestsScope.own,
+    SiteRequestsScope scope = SiteRequestsScope.all,
+  }) async {
+    final payloads = await fetchSiteRequestPayloads(
+      page: page,
+      perPage: perPage,
+      status: status,
+      projectId: projectId,
+      search: search,
+      urgentOnly: urgentOnly,
+      assignedUserId: assignedUserId,
+      requestType: requestType,
+      requiredFrom: requiredFrom,
+      requiredTo: requiredTo,
+      scope: scope,
+    );
+    return payloads.map(SiteRequestModel.fromJson).toList();
+  }
+
+  Future<List<Map<String, dynamic>>> fetchSiteRequestPayloads({
+    int page = 1,
+    int perPage = 20,
+    String? status,
+    int? projectId,
+    String? search,
+    bool urgentOnly = false,
+    int? assignedUserId,
+    String? requestType,
+    DateTime? requiredFrom,
+    DateTime? requiredTo,
+    SiteRequestsScope scope = SiteRequestsScope.all,
   }) async {
     try {
       final queryParams = {
@@ -64,16 +93,7 @@ class SiteRequestsRepository extends SyncQueueAwareRepository {
         queryParameters: queryParams,
       );
 
-      final list = MobileApiResponse.dataList(response.data);
-
-      return list
-          .whereType<Map>()
-          .map(
-            (item) => SiteRequestModel.fromJson(
-              item.map((key, value) => MapEntry(key.toString(), value)),
-            ),
-          )
-          .toList();
+      return MobileApiResponse.dataList(response.data);
     } on DioException catch (error) {
       throw ApiException.fromDio(
         error,
@@ -83,11 +103,13 @@ class SiteRequestsRepository extends SyncQueueAwareRepository {
   }
 
   Future<SiteRequestModel> fetchSiteRequestDetails(int id) async {
+    return SiteRequestModel.fromJson(await fetchSiteRequestDetailsPayload(id));
+  }
+
+  Future<Map<String, dynamic>> fetchSiteRequestDetailsPayload(int id) async {
     try {
       final response = await _dio.get('/site-requests/$id');
-      return SiteRequestModel.fromJson(
-        MobileApiResponse.dataMap(response.data),
-      );
+      return MobileApiResponse.dataMap(response.data);
     } on DioException catch (error) {
       throw ApiException.fromDio(
         error,
@@ -120,6 +142,7 @@ class SiteRequestsRepository extends SyncQueueAwareRepository {
             endpoint: '/site-requests',
             payload: payload,
           ),
+          cause: error,
         );
       }
 

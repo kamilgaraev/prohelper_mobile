@@ -1,6 +1,6 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 
-import 'package:prohelpers_mobile/core/theme/pro_theme.dart';
+import 'most_color_tokens.dart';
 
 enum ProStatusTone { neutral, info, success, warning, danger }
 
@@ -19,14 +19,18 @@ class ProStatusStyle {
 }
 
 ProStatusStyle proStatusStyle(BuildContext context, ProStatusTone tone) {
-  final brightness = Theme.of(context).brightness;
-  final foreground = switch (tone) {
-    ProStatusTone.neutral => MostTheme.statusNeutralColor(brightness),
-    ProStatusTone.info => MostTheme.statusInfoColor(brightness),
-    ProStatusTone.success => MostTheme.statusSuccessColor(brightness),
-    ProStatusTone.warning => MostTheme.statusWarningColor(brightness),
-    ProStatusTone.danger => MostTheme.statusDangerColor(brightness),
+  final scheme = Theme.of(context).colorScheme;
+  final isDark = Theme.of(context).brightness == Brightness.dark;
+
+  final tokens = isDark ? MostColorTokens.dark : MostColorTokens.light;
+  final color = switch (tone) {
+    ProStatusTone.neutral => scheme.onSurfaceVariant,
+    ProStatusTone.info => tokens.info,
+    ProStatusTone.success => tokens.success,
+    ProStatusTone.warning => tokens.warning,
+    ProStatusTone.danger => tokens.danger,
   };
+
   final icon = switch (tone) {
     ProStatusTone.neutral => Icons.info_outline_rounded,
     ProStatusTone.info => Icons.auto_awesome_rounded,
@@ -36,9 +40,9 @@ ProStatusStyle proStatusStyle(BuildContext context, ProStatusTone tone) {
   };
 
   return ProStatusStyle(
-    foreground: foreground,
-    background: foreground.withValues(alpha: 0.1),
-    border: foreground.withValues(alpha: 0.22),
+    foreground: color,
+    background: color.withValues(alpha: 0.1),
+    border: color.withValues(alpha: 0.22),
     icon: icon,
   );
 }

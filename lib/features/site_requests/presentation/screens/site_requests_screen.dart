@@ -31,7 +31,7 @@ class _FilterOption {
 }
 
 class SiteRequestsScreen extends ConsumerStatefulWidget {
-  const SiteRequestsScreen({super.key, this.scope = SiteRequestsScope.own});
+  const SiteRequestsScreen({super.key, this.scope = SiteRequestsScope.all});
 
   final SiteRequestsScope scope;
 
@@ -241,9 +241,7 @@ class _SiteRequestsScreenState extends ConsumerState<SiteRequestsScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                _isApprovalsMode
-                    ? 'Нуждаются в рассмотрении'
-                    : 'Заявки с объекта',
+                _isApprovalsMode ? 'Согласование' : 'Заявки',
                 style: AppTypography.h1(context),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -305,7 +303,22 @@ class _SiteRequestsScreenState extends ConsumerState<SiteRequestsScreen> {
                             .loadRequests(refresh: true),
                   ),
                 )
+              else if (state.isLoading && state.requests.isEmpty)
+                const SliverFillRemaining(
+                  child: AppLoadingState(message: 'Загружаем заявки'),
+                )
               else ...[
+                if (state.fromCache)
+                  SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+                    sliver: SliverToBoxAdapter(
+                      child: ProStatusBanner(
+                        title: 'Сохранённые данные',
+                        description: 'Данные с устройства.',
+                        tone: ProStatusTone.info,
+                      ),
+                    ),
+                  ),
                 SliverPadding(
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
                   sliver: SliverToBoxAdapter(
@@ -343,10 +356,7 @@ class _SiteRequestsScreenState extends ConsumerState<SiteRequestsScreen> {
                       resultCount: filteredRequests.length,
                       totalCount: state.requests.length,
                       options: filterOptions,
-                      searchHint:
-                          _isApprovalsMode
-                              ? 'Поиск по заявкам, материалам и исполнителям'
-                              : 'Поиск по заявкам, материалам и статусам',
+                      searchHint: 'Поиск заявок',
                       onFilterChanged: (filter) {
                         setState(() {
                           _selectedFilter = filter;
@@ -529,7 +539,7 @@ bool _matchesFilter(
     _RequestFilter.inWork => _isInWork(request.status),
     _RequestFilter.urgent => _isUrgentRequest(request),
     _RequestFilter.done =>
-      scope == SiteRequestsScope.own && _isDone(request.status),
+      scope != SiteRequestsScope.approvals && _isDone(request.status),
   };
 }
 
@@ -643,11 +653,9 @@ class _RequestsOperationalBanner extends StatelessWidget {
     final title =
         scope == SiteRequestsScope.approvals
             ? (hasAttention
-                ? 'Есть заявки, которые ждут решения'
+                ? 'Ждут решения'
                 : 'Очередь согласования под контролем')
-            : (hasAttention
-                ? 'Есть заявки, требующие реакции'
-                : 'Поток заявок под контролем');
+            : (hasAttention ? 'Ждут решения' : 'Поток заявок под контролем');
 
     final description =
         scope == SiteRequestsScope.approvals
@@ -751,9 +759,7 @@ bool _isInReview(SiteRequestModel request) {
 
 bool _isInWork(String status) {
   final normalized = status.trim().toLowerCase();
-  return normalized == 'approved' ||
-      normalized == 'in_progress' ||
-      normalized == 'fulfilled';
+  return normalized == 'in_progress';
 }
 
 bool _isDone(String status) {

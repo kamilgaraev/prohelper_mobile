@@ -1,5 +1,7 @@
 ﻿import 'package:hooks_riverpod/hooks_riverpod.dart';
 
+import 'dart:async';
+
 import '../../../core/error/user_message.dart';
 import '../../auth/domain/auth_provider.dart';
 import '../data/notification_model.dart';
@@ -70,17 +72,26 @@ class NotificationsState {
 
 final notificationsProvider =
     StateNotifierProvider<NotificationsNotifier, NotificationsState>((ref) {
-      ref.watch(authProvider);
+      ref.watch(
+        authProvider.select(
+          (state) => state is AuthAuthenticated ? state.sessionIdentity : null,
+        ),
+      );
       return NotificationsNotifier(ref.read(notificationsRepositoryProvider));
     });
 
 class NotificationsNotifier extends StateNotifier<NotificationsState> {
-  NotificationsNotifier(this._repository) : super(const NotificationsState()) {
+  NotificationsNotifier(
+    this._repository, {
+    this.requestTimeout = const Duration(seconds: 32),
+  }) : super(const NotificationsState()) {
     load(refresh: true);
     refreshUnreadCount();
   }
 
   final NotificationsRepository _repository;
+  final Duration requestTimeout;
+  Timer? _loadTimeoutTimer;
 
   Future<void> load({bool refresh = false}) async {
     if (state.isLoading || state.isRefreshing) {
@@ -96,13 +107,10 @@ class NotificationsNotifier extends StateNotifier<NotificationsState> {
       isLoading: !refresh,
       isRefreshing: refresh,
       error: null,
-      currentPage: refresh ? 1 : state.currentPage,
-      lastPage: refresh ? 1 : state.lastPage,
-      items: refresh ? const <NotificationModel>[] : null,
     );
 
     try {
-      final result = await _repository.fetchNotifications(
+      final result = await _fetchNotifications(
         page: nextPage,
         perPage: state.perPage,
         filter: state.filter,
@@ -125,6 +133,17 @@ class NotificationsNotifier extends StateNotifier<NotificationsState> {
         error: null,
       );
       await refreshUnreadCount();
+    } on TimeoutException {
+      _repository.cancelPendingFetch();
+      if (!mounted) {
+        return;
+      }
+
+      state = state.copyWith(
+        isLoading: false,
+        isRefreshing: false,
+        error: 'Сервер не ответил вовремя. Проверьте связь и повторите.',
+      );
     } catch (error) {
       if (!mounted) {
         return;
@@ -147,6 +166,63 @@ class NotificationsNotifier extends StateNotifier<NotificationsState> {
 
       state = state.copyWith(unreadCount: count);
     } catch (_) {}
+  }
+
+  Future<NotificationsPageResult> _fetchNotifications({
+    required int page,
+    required int perPage,
+    required NotificationFilter filter,
+  }) {
+    final request = _repository.fetchNotifications(
+      page: page,
+      perPage: perPage,
+      filter: filter,
+    );
+    final result = Completer<NotificationsPageResult>();
+    late final Timer timeoutTimer;
+    timeoutTimer = Timer(requestTimeout, () {
+      if (identical(_loadTimeoutTimer, timeoutTimer)) {
+        _loadTimeoutTimer = null;
+      }
+      if (!result.isCompleted) {
+        result.completeError(
+          TimeoutException('Загрузка уведомлений превысила время ожидания.'),
+        );
+      }
+    });
+    _loadTimeoutTimer = timeoutTimer;
+
+    request.then<void>(
+      (value) {
+        _cancelLoadTimeout(timeoutTimer);
+        if (!result.isCompleted) {
+          result.complete(value);
+        }
+      },
+      onError: (Object error, StackTrace stackTrace) {
+        _cancelLoadTimeout(timeoutTimer);
+        if (!result.isCompleted) {
+          result.completeError(error, stackTrace);
+        }
+      },
+    );
+
+    return result.future;
+  }
+
+  void _cancelLoadTimeout(Timer timer) {
+    timer.cancel();
+    if (identical(_loadTimeoutTimer, timer)) {
+      _loadTimeoutTimer = null;
+    }
+  }
+
+  @override
+  void dispose() {
+    _loadTimeoutTimer?.cancel();
+    _loadTimeoutTimer = null;
+    _repository.cancelPendingFetch();
+    super.dispose();
   }
 
   Future<void> setFilter(NotificationFilter filter) async {
@@ -190,10 +266,7 @@ class NotificationsNotifier extends StateNotifier<NotificationsState> {
         return;
       }
 
-      state = state.copyWith(
-        isActionLoading: false,
-        error: UserMessage.fromError(error),
-      );
+      state = state.copyWith(isActionLoading: false, error: null);
       rethrow;
     }
   }
@@ -255,10 +328,7 @@ class NotificationsNotifier extends StateNotifier<NotificationsState> {
         return;
       }
 
-      state = state.copyWith(
-        isActionLoading: false,
-        error: UserMessage.fromError(error),
-      );
+      state = state.copyWith(isActionLoading: false, error: null);
       rethrow;
     }
   }
@@ -270,18 +340,21 @@ class NotificationDetailState {
     this.isMarkingRead = false,
     this.notification,
     this.error,
+    this.markReadError,
   });
 
   final bool isLoading;
   final bool isMarkingRead;
   final NotificationModel? notification;
   final String? error;
+  final String? markReadError;
 
   NotificationDetailState copyWith({
     bool? isLoading,
     bool? isMarkingRead,
     NotificationModel? notification,
     Object? error = _notificationsSentinel,
+    Object? markReadError = _notificationsSentinel,
   }) {
     return NotificationDetailState(
       isLoading: isLoading ?? this.isLoading,
@@ -291,6 +364,10 @@ class NotificationDetailState {
           identical(error, _notificationsSentinel)
               ? this.error
               : error as String?,
+      markReadError:
+          identical(markReadError, _notificationsSentinel)
+              ? this.markReadError
+              : markReadError as String?,
     );
   }
 }
@@ -350,7 +427,7 @@ class NotificationDetailNotifier
       return;
     }
 
-    state = state.copyWith(isMarkingRead: true, error: null);
+    state = state.copyWith(isMarkingRead: true, markReadError: null);
 
     try {
       final updated = await _repository.markAsRead(current.id);
@@ -361,7 +438,7 @@ class NotificationDetailNotifier
       state = state.copyWith(
         isMarkingRead: false,
         notification: updated,
-        error: null,
+        markReadError: null,
       );
       _listNotifier.applyRead(updated);
     } catch (error) {
@@ -371,7 +448,7 @@ class NotificationDetailNotifier
 
       state = state.copyWith(
         isMarkingRead: false,
-        error: UserMessage.fromError(error),
+        markReadError: UserMessage.fromError(error),
       );
     }
   }

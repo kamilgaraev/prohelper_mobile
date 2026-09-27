@@ -45,6 +45,32 @@ void main() {
     expect(restoredPath, endsWith('.pdf'));
   });
 
+  test('stages a queued upload encrypted beyond the picker file lifetime', () async {
+    final content = List<int>.generate(90000, (index) => index % 241);
+    final source = File('${directory.path}${Platform.pathSeparator}picked.jpg');
+    await source.writeAsBytes(content);
+
+    final encryptedPath = await cache.stageQueuedAttachment(
+      ownerIdentity: '27:4:session-a',
+      context: 'sync-queue:warehouse:create_receipt:1',
+      sourcePath: source.path,
+    );
+    final encryptedBytes = await File(encryptedPath).readAsBytes();
+    expect(encryptedBytes, isNot(equals(content)));
+
+    await source.delete();
+    final restoredPath = await cache.materialize(
+      ownerIdentity: '27:4:session-a',
+      encryptedPath: encryptedPath,
+      context: 'sync-queue:warehouse:create_receipt:1',
+      fileName: 'picked.jpg',
+    );
+
+    expect(await File(restoredPath).readAsBytes(), content);
+    await cache.deleteStagedUpload(encryptedPath);
+    expect(await File(encryptedPath).exists(), isFalse);
+  });
+
   test('rejects ciphertext tampering and removes partial plaintext', () async {
     final source = File('${directory.path}${Platform.pathSeparator}source.bin');
     await source.writeAsBytes(

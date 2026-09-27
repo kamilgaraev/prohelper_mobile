@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/error/user_message.dart';
+import '../../../core/sync/sync_queue_service.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../core/widgets/app_empty_state.dart';
@@ -41,6 +42,9 @@ class _ProcurementScreenState extends ConsumerState<ProcurementScreen> {
     final state = ref.watch(procurementProvider);
     final selectedProject = ref.watch(projectsProvider).selectedProject;
     final projectId = selectedProject?.serverId;
+    final compactAction =
+        MediaQuery.sizeOf(context).width < 390 ||
+        MediaQuery.textScalerOf(context).scale(1) > 1.15;
 
     if (state.projectId != projectId && !state.isLoading) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -64,25 +68,18 @@ class _ProcurementScreenState extends ConsumerState<ProcurementScreen> {
             ),
           ],
         ),
-        body: _buildBody(context, state, selectedProject?.name),
+        body: _buildBody(
+          context,
+          state,
+          selectedProject?.name,
+          projectId,
+          compactAction,
+        ),
         floatingActionButton:
-            projectId == null
+            projectId == null || compactAction
                 ? null
                 : FloatingActionButton.extended(
-                  onPressed: () async {
-                    final created = await Navigator.of(context).push<bool>(
-                      MaterialPageRoute(
-                        builder:
-                            (_) =>
-                                PurchaseRequestFormScreen(projectId: projectId),
-                      ),
-                    );
-                    if (created == true && context.mounted) {
-                      await ref
-                          .read(procurementProvider.notifier)
-                          .loadSummary();
-                    }
-                  },
+                  onPressed: () => _openCreateRequest(projectId),
                   icon: const Icon(Icons.add),
                   label: const Text('Заявка на закупку'),
                 ),
@@ -94,6 +91,8 @@ class _ProcurementScreenState extends ConsumerState<ProcurementScreen> {
     BuildContext context,
     ProcurementState state,
     String? projectName,
+    int? projectId,
+    bool compactAction,
   ) {
     if (state.isLoading && state.summary == null) {
       return const AppLoadingState(message: 'Загружаем закупки');
@@ -119,6 +118,17 @@ class _ProcurementScreenState extends ConsumerState<ProcurementScreen> {
         children: [
           _ProcurementHeader(summary: summary, projectName: projectName),
           const SizedBox(height: 12),
+          if (projectId != null && compactAction) ...[
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: () => _openCreateRequest(projectId),
+                icon: const Icon(Icons.add),
+                label: const Text('Заявка на закупку'),
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
           _ProcurementSummaryStrip(counters: summary.counters),
           const SizedBox(height: 12),
           if (summary.isEmpty)
@@ -195,6 +205,17 @@ class _ProcurementScreenState extends ConsumerState<ProcurementScreen> {
     final notifier = ref.read(procurementProvider.notifier);
     notifier.syncProject(selectedProject?.serverId);
     notifier.loadSummary();
+  }
+
+  Future<void> _openCreateRequest(int projectId) async {
+    final created = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => PurchaseRequestFormScreen(projectId: projectId),
+      ),
+    );
+    if (created == true && mounted) {
+      await ref.read(procurementProvider.notifier).loadSummary();
+    }
   }
 
   void _openPurchaseRequest(int requestId) {
@@ -422,6 +443,11 @@ class _ProcurementOrderDetailScreenState
 
       _reload();
       _message(context, 'Материалы приняты на склад');
+    } on SyncQueuedException catch (error) {
+      if (!mounted) {
+        return;
+      }
+      _message(context, error.message);
     } catch (error) {
       if (!mounted) {
         return;
@@ -526,6 +552,44 @@ class _ProcurementSummaryStrip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final compact =
+        MediaQuery.sizeOf(context).width < 390 ||
+        MediaQuery.textScalerOf(context).scale(1) > 1.15;
+
+    if (compact) {
+      return Column(
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: _MetricTile(
+                  label: 'Заявки',
+                  value: counters.purchaseRequestsCount.toString(),
+                  color: theme.colorScheme.secondary,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _MetricTile(
+                  label: 'В работе',
+                  value: counters.pendingRequestsCount.toString(),
+                  color: AppColors.warning,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          SizedBox(
+            width: double.infinity,
+            child: _MetricTile(
+              label: 'Заказы',
+              value: counters.purchaseOrdersCount.toString(),
+              color: AppColors.success,
+            ),
+          ),
+        ],
+      );
+    }
 
     return Row(
       children: [

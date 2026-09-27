@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/theme/app_typography.dart';
@@ -20,14 +20,6 @@ class AiAssistantHomeScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(title: const Text('AI-ассистент')),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed:
-            () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const AiAssistantChatScreen()),
-            ),
-        icon: const Icon(Icons.add_comment_outlined),
-        label: const Text('Новый чат'),
-      ),
       body: RefreshIndicator(
         onRefresh: () => ref.read(aiAssistantHomeProvider.notifier).load(),
         child: CustomScrollView(
@@ -57,7 +49,7 @@ class AiAssistantHomeScreen extends ConsumerWidget {
                       ),
                       const SizedBox(height: 10),
                       Text(
-                        'Используйте историю диалогов как рабочий контекст и быстро возвращайтесь к прошлым разбором.',
+                        'Используйте историю диалогов как рабочий контекст и быстро возвращайтесь к прошлым разборам.',
                         style: AppTypography.bodyMedium(
                           context,
                         ).copyWith(color: theme.colorScheme.onSurfaceVariant),
@@ -67,17 +59,38 @@ class AiAssistantHomeScreen extends ConsumerWidget {
                 ),
               ),
             ),
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+              sliver: SliverToBoxAdapter(
+                child: FilledButton.icon(
+                  onPressed:
+                      () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const AiAssistantChatScreen(),
+                        ),
+                      ),
+                  icon: const Icon(Icons.add_comment_outlined),
+                  label: const Text('Новый чат'),
+                ),
+              ),
+            ),
             if (state.isLoading && state.home == null)
-              const SliverFillRemaining(
-                child: AppLoadingState(message: 'Загружаем AI-ассистента'),
+              const SliverPadding(
+                padding: EdgeInsets.all(16),
+                sliver: SliverToBoxAdapter(
+                  child: AppLoadingState(message: 'Загружаем AI-ассистента'),
+                ),
               )
             else if (state.error != null && state.home == null)
-              SliverFillRemaining(
-                child: AppErrorState(
-                  title: 'Не удалось загрузить AI-ассистента',
-                  description: state.error,
-                  onRetry:
-                      () => ref.read(aiAssistantHomeProvider.notifier).load(),
+              SliverPadding(
+                padding: const EdgeInsets.all(16),
+                sliver: SliverToBoxAdapter(
+                  child: AppErrorState(
+                    title: 'Не удалось загрузить AI-ассистента',
+                    description: state.error,
+                    onRetry:
+                        () => ref.read(aiAssistantHomeProvider.notifier).load(),
+                  ),
                 ),
               )
             else ...[
@@ -110,7 +123,7 @@ class AiAssistantHomeScreen extends ConsumerWidget {
                 ),
               ),
               SliverPadding(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 120),
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
                 sliver: SliverList(
                   delegate: SliverChildBuilderDelegate((context, index) {
                     final conversation = state.home!.conversations[index];
@@ -135,7 +148,7 @@ class AiAssistantHomeScreen extends ConsumerWidget {
               ),
               if ((state.home?.conversations.isEmpty ?? true))
                 const SliverPadding(
-                  padding: EdgeInsets.fromLTRB(16, 8, 16, 120),
+                  padding: EdgeInsets.fromLTRB(16, 8, 16, 24),
                   sliver: SliverToBoxAdapter(child: _EmptyHistoryCard()),
                 ),
             ],

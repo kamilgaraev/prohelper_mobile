@@ -106,6 +106,7 @@ class MachineryOperationsRepository extends SyncQueueAwareRepository {
             endpoint: action.endpoint,
             payload: payload,
           ),
+          cause: error,
         );
       }
       throw ApiException.fromDio(error);
@@ -151,6 +152,7 @@ class MachineryOperationsRepository extends SyncQueueAwareRepository {
             endpoint: '/machinery-operations/shift-reports',
             payload: payload,
           ),
+          cause: error,
         );
       }
 

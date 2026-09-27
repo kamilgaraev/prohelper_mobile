@@ -97,7 +97,7 @@ class MobileOverviewScreen extends ConsumerWidget {
             onOpenActionCenter:
                 () => ref
                     .read(mobileNavigationProvider.notifier)
-                    .setTab(MobileNavTab.actions),
+                    .setTab(MobileNavTab.now),
           ),
           const SizedBox(height: 20),
           OverviewWorkSummary(
@@ -120,7 +120,7 @@ class MobileOverviewScreen extends ConsumerWidget {
         ).where((destination) => destination.group == group).toList();
     final destination = destinations.isEmpty ? null : destinations.first;
     if (destination == null) {
-      ref.read(mobileNavigationProvider.notifier).setTab(MobileNavTab.work);
+      ref.read(mobileNavigationProvider.notifier).setTab(MobileNavTab.sections);
       return;
     }
 

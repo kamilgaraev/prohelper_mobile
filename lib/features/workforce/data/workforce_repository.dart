@@ -109,6 +109,20 @@ class WorkforceRepository {
     required DateTime dateTo,
     int? projectId,
   }) async {
+    return AttendanceHistoryModel.fromJson(
+      await fetchAttendanceHistoryPayload(
+        dateFrom: dateFrom,
+        dateTo: dateTo,
+        projectId: projectId,
+      ),
+    );
+  }
+
+  Future<Map<String, dynamic>> fetchAttendanceHistoryPayload({
+    required DateTime dateFrom,
+    required DateTime dateTo,
+    int? projectId,
+  }) async {
     try {
       final response = await _dio.get(
         '/workforce/attendance/history',
@@ -119,9 +133,7 @@ class WorkforceRepository {
         },
       );
 
-      return AttendanceHistoryModel.fromJson(
-        workforceDataMap(response.data, 'workforce attendance history'),
-      );
+      return workforceDataMap(response.data, 'workforce attendance history');
     } on DioException catch (error) {
       throw _attendanceException(
         error,

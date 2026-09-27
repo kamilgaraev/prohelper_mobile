@@ -35,6 +35,24 @@ class QualityControlRepository extends SyncQueueAwareRepository {
     String? severity,
     bool overdueOnly = false,
   }) async {
+    return (await fetchDefectPayloads(
+      page: page,
+      perPage: perPage,
+      projectId: projectId,
+      status: status,
+      severity: severity,
+      overdueOnly: overdueOnly,
+    )).map(QualityDefectModel.fromJson).toList();
+  }
+
+  Future<List<Map<String, dynamic>>> fetchDefectPayloads({
+    int page = 1,
+    int perPage = 50,
+    int? projectId,
+    String? status,
+    String? severity,
+    bool overdueOnly = false,
+  }) async {
     try {
       final response = await _dio.get(
         '/quality-control/defects',
@@ -48,9 +66,7 @@ class QualityControlRepository extends SyncQueueAwareRepository {
         },
       );
 
-      return MobileApiResponse.dataList(
-        response.data,
-      ).map(QualityDefectModel.fromJson).toList();
+      return MobileApiResponse.dataList(response.data);
     } on DioException catch (error) {
       throw ApiException.fromDio(error);
     }
@@ -105,6 +121,7 @@ class QualityControlRepository extends SyncQueueAwareRepository {
             payload: payload,
             attachments: attachments,
           ),
+          cause: error,
         );
       }
 
@@ -113,12 +130,14 @@ class QualityControlRepository extends SyncQueueAwareRepository {
   }
 
   Future<QualityDefectModel> fetchDefect(int id) async {
+    return QualityDefectModel.fromJson(await fetchDefectPayload(id));
+  }
+
+  Future<Map<String, dynamic>> fetchDefectPayload(int id) async {
     try {
       final response = await _dio.get('/quality-control/defects/$id');
 
-      return QualityDefectModel.fromJson(
-        MobileApiResponse.dataMap(response.data),
-      );
+      return MobileApiResponse.dataMap(response.data);
     } on DioException catch (error) {
       throw ApiException.fromDio(error);
     }
@@ -236,6 +255,7 @@ class QualityControlRepository extends SyncQueueAwareRepository {
             payload: payload,
             attachments: attachments,
           ),
+          cause: error,
         );
       }
 

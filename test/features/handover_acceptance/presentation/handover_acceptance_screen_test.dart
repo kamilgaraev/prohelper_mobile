@@ -2,6 +2,8 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:prohelpers_mobile/core/theme/pro_theme.dart';
+import 'package:prohelpers_mobile/core/sync/sync_queue_service.dart';
 import 'package:prohelpers_mobile/features/handover_acceptance/data/handover_acceptance_model.dart';
 import 'package:prohelpers_mobile/features/handover_acceptance/data/handover_document_picker.dart';
 import 'package:prohelpers_mobile/features/handover_acceptance/data/handover_acceptance_repository.dart';
@@ -27,6 +29,7 @@ class _RecordingHandoverRepository extends HandoverAcceptanceRepository {
   List<String> findingPhotoPaths = const [];
   List<String> resolutionPhotoPaths = const [];
   List<String> rejectionPhotoPaths = const [];
+  bool queueFindingCreation = false;
 
   AcceptanceScopeModel get scope => const AcceptanceScopeModel(
     id: 5,
@@ -149,6 +152,9 @@ class _RecordingHandoverRepository extends HandoverAcceptanceRepository {
   }) async {
     findingPayload = Map<String, dynamic>.from(data);
     findingPhotoPaths = photoPaths;
+    if (queueFindingCreation) {
+      throw const SyncQueuedException(queueId: 1);
+    }
 
     return AcceptanceFindingModel(
       id: 12,
@@ -266,6 +272,47 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
   }
 
+  testWidgets('filters fit at large text scale on a phone viewport', (
+    tester,
+  ) async {
+    final repository = _RecordingHandoverRepository();
+    tester.view.physicalSize = const Size(720, 1280);
+    tester.view.devicePixelRatio = 2;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          projectsProvider.overrideWith(
+            (ref) => _TestProjectsNotifier(project()),
+          ),
+          handoverAcceptanceProvider.overrideWith(
+            (ref) => _TestHandoverNotifier(repository),
+          ),
+          handoverDocumentPickerProvider.overrideWith(
+            (ref) => _FakeHandoverDocumentPicker(),
+          ),
+        ],
+        child: MaterialApp(
+          theme: MostTheme.darkTheme,
+          builder:
+              (context, child) => MediaQuery(
+                data: MediaQuery.of(
+                  context,
+                ).copyWith(textScaler: const TextScaler.linear(1.3)),
+                child: child!,
+              ),
+          home: const HandoverAcceptanceScreen(),
+        ),
+      ),
+    );
+    await pumpUi(tester);
+
+    final exception = tester.takeException();
+    expect(exception, isNull);
+  });
+
   testWidgets('submits explicit severity and quality-defect decision', (
     tester,
   ) async {
@@ -302,6 +349,41 @@ void main() {
       repository.findingPayload?['quality_defect_inspection_required'],
       isFalse,
     );
+  });
+
+  testWidgets('shows queued finding as saved and closes the form', (
+    tester,
+  ) async {
+    final repository =
+        _RecordingHandoverRepository()..queueFindingCreation = true;
+    useLargeSurface(tester);
+
+    await tester.pumpWidget(buildScreen(repository));
+    await pumpUi(tester);
+
+    await tester.tap(find.byIcon(Icons.add_comment_outlined));
+    await pumpUi(tester);
+    await tester.enterText(find.byType(TextField).first, 'Неровная плитка');
+    await tester.tap(find.byType(DropdownButtonFormField<String>).last);
+    await pumpUi(tester);
+    await tester.tap(find.text('Средняя').last);
+    await pumpUi(tester);
+    await tester.tap(find.byType(DropdownButtonFormField<bool>));
+    await pumpUi(tester);
+    await tester.tap(find.text('Не создавать').last);
+    await pumpUi(tester);
+    await tester.ensureVisible(find.byType(FilledButton).last);
+    await tester.pump();
+    await tester.tap(find.byType(FilledButton).last);
+    await pumpUi(tester);
+
+    expect(find.text('Новое замечание'), findsNothing);
+    expect(
+      find.text('Будет отправлено при восстановлении связи'),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('app-error-notice')), findsNothing);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('requires resolution comment before resolving finding', (

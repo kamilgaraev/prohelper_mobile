@@ -33,6 +33,10 @@ class WarehouseRepository extends SyncQueueAwareRepository {
   final Dio _dio;
 
   Future<WarehouseSummaryModel> fetchWarehouseSummary() async {
+    return WarehouseSummaryModel.fromJson(await fetchWarehouseSummaryPayload());
+  }
+
+  Future<Map<String, dynamic>> fetchWarehouseSummaryPayload() async {
     try {
       final response = await _dio.get('/warehouse');
       final payload = _extractData(response.data);
@@ -41,7 +45,7 @@ class WarehouseRepository extends SyncQueueAwareRepository {
         throw const ApiException('Сервер вернул пустой ответ по складу.');
       }
 
-      return WarehouseSummaryModel.fromJson(payload);
+      return payload;
     } on DioException catch (error) {
       throw ApiException.fromDio(
         error,
@@ -232,6 +236,7 @@ class WarehouseRepository extends SyncQueueAwareRepository {
             endpoint: endpoint,
             payload: payload,
           ),
+          cause: error,
         );
       }
       throw ApiException.fromDio(
@@ -386,6 +391,7 @@ class WarehouseRepository extends SyncQueueAwareRepository {
             payload: receiptPayload,
             attachments: attachments,
           ),
+          cause: error,
         );
       }
 
@@ -612,6 +618,7 @@ class WarehouseRepository extends SyncQueueAwareRepository {
             payload: const <String, dynamic>{},
             attachments: attachments,
           ),
+          cause: error,
         );
       }
 

@@ -23,4 +23,35 @@ void main() {
       expect(act.canFieldConfirm, isFalse);
     },
   );
+
+  test('shows act workflow statuses in Russian', () {
+    for (final entry
+        in {
+          'draft': 'Черновик',
+          'pending_approval': 'На согласовании',
+          'approved': 'Утвержден',
+          'rejected': 'Отклонен',
+          'signed': 'Подписан',
+          'annulled': 'Аннулирован',
+        }.entries) {
+      final act = ActModel.fromJson({'id': 24, 'status': entry.key});
+      expect(act.status, entry.value);
+    }
+  });
+
+  test('translates a raw status label and preserves a readable label', () {
+    final raw = ActModel.fromJson({
+      'id': 25,
+      'status': 'approved',
+      'status_label': 'approved',
+    });
+    final readable = ActModel.fromJson({
+      'id': 26,
+      'status': 'approved',
+      'status_label': 'Утверждён руководителем',
+    });
+
+    expect(raw.status, 'Утвержден');
+    expect(readable.status, 'Утверждён руководителем');
+  });
 }

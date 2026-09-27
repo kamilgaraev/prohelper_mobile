@@ -1,7 +1,8 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/theme/app_typography.dart';
+import '../../../core/sync/sync_queue_service.dart';
 import '../../../core/widgets/app_error_notice.dart';
 import '../data/warehouse_custody_model.dart';
 import '../domain/warehouse_provider.dart';
@@ -127,6 +128,13 @@ class _WarehouseReturnSheetState extends ConsumerState<WarehouseReturnSheet> {
       if (mounted) {
         Navigator.of(context).pop(true);
       }
+    } on SyncQueuedException catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(error.message)));
+        Navigator.of(context).pop(false);
+      }
     } catch (error) {
       if (mounted) {
         AppErrorNotice.show(context, error);
@@ -165,7 +173,6 @@ class _WarehouseReturnSheetState extends ConsumerState<WarehouseReturnSheet> {
 
     return double.tryParse(text.replaceAll(',', '.'));
   }
-
 }
 
 String _formatQuantity(double value) {

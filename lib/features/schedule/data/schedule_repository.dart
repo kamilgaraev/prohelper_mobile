@@ -26,6 +26,14 @@ class ScheduleRepository extends SyncQueueAwareRepository {
   final Dio _dio;
 
   Future<ScheduleOverviewModel> fetchSchedules({required int projectId}) async {
+    return ScheduleOverviewModel.fromJson(
+      await fetchSchedulesPayload(projectId: projectId),
+    );
+  }
+
+  Future<Map<String, dynamic>> fetchSchedulesPayload({
+    required int projectId,
+  }) async {
     try {
       final response = await _dio.get(
         '/schedule',
@@ -34,7 +42,7 @@ class ScheduleRepository extends SyncQueueAwareRepository {
       final payload = MobileApiResponse.dataMap(response.data);
 
       if (payload.isNotEmpty) {
-        return ScheduleOverviewModel.fromJson(payload);
+        return payload;
       }
 
       throw const ApiException('Сервер вернул пустой ответ по графикам работ.');
@@ -53,12 +61,20 @@ class ScheduleRepository extends SyncQueueAwareRepository {
   }
 
   Future<ScheduleDetailsModel> fetchScheduleDetails(int scheduleId) async {
+    return ScheduleDetailsModel.fromJson(
+      await fetchScheduleDetailsPayload(scheduleId),
+    );
+  }
+
+  Future<Map<String, dynamic>> fetchScheduleDetailsPayload(
+    int scheduleId,
+  ) async {
     try {
       final response = await _dio.get('/schedule/$scheduleId');
       final payload = MobileApiResponse.dataMap(response.data);
 
       if (payload.isNotEmpty) {
-        return ScheduleDetailsModel.fromJson(payload);
+        return payload;
       }
 
       throw const ApiException('Сервер вернул пустой ответ по графику работ.');
@@ -120,14 +136,20 @@ class ScheduleRepository extends SyncQueueAwareRepository {
   Future<List<DailyWorkPlanModel>> fetchDailyWorkPlans({
     required int projectId,
   }) async {
+    return (await fetchDailyWorkPlanPayloads(
+      projectId: projectId,
+    )).map(DailyWorkPlanModel.fromJson).toList();
+  }
+
+  Future<List<Map<String, dynamic>>> fetchDailyWorkPlanPayloads({
+    required int projectId,
+  }) async {
     try {
       final response = await _dio.get(
         '/schedule/daily-plans',
         queryParameters: {'project_id': projectId},
       );
-      return MobileApiResponse.dataList(
-        response.data,
-      ).map(DailyWorkPlanModel.fromJson).toList();
+      return MobileApiResponse.dataList(response.data);
     } on DioException catch (error) {
       throw ApiException.fromDio(
         error,
@@ -172,6 +194,7 @@ class ScheduleRepository extends SyncQueueAwareRepository {
             endpoint: '/schedule/daily-plan-assignments/$assignmentId/fact',
             payload: requestPayload,
           ),
+          cause: error,
         );
       }
 

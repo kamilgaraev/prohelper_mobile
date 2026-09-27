@@ -14,6 +14,7 @@ class ProStatusBanner extends StatelessWidget {
     this.surfaceTone = ProSurfaceTone.subtle,
     this.action,
     this.compact = false,
+    this.fullText = false,
   });
 
   final String title;
@@ -22,6 +23,7 @@ class ProStatusBanner extends StatelessWidget {
   final ProSurfaceTone surfaceTone;
   final Widget? action;
   final bool compact;
+  final bool fullText;
 
   @override
   Widget build(BuildContext context) {
@@ -58,7 +60,11 @@ class ProStatusBanner extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
                       Expanded(
-                        child: _StatusTitle(title: title, compact: true),
+                        child: _StatusTitle(
+                          title: title,
+                          compact: true,
+                          fullText: fullText,
+                        ),
                       ),
                       const SizedBox(width: ProSpacing.xs),
                       Flexible(
@@ -71,13 +77,18 @@ class ProStatusBanner extends StatelessWidget {
                     ],
                   )
                 else
-                  _StatusTitle(title: title, compact: compact),
+                  _StatusTitle(
+                    title: title,
+                    compact: compact,
+                    fullText: fullText,
+                  ),
                 if (description != null) ...[
                   const SizedBox(height: ProSpacing.xxs),
                   Text(
                     description!,
-                    maxLines: compact ? 2 : 3,
-                    overflow: TextOverflow.ellipsis,
+                    maxLines: fullText ? null : (compact ? 2 : 3),
+                    overflow:
+                        fullText ? TextOverflow.visible : TextOverflow.ellipsis,
                     style: AppTypography.bodyMedium(context).copyWith(
                       color: Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
@@ -97,17 +108,22 @@ class ProStatusBanner extends StatelessWidget {
 }
 
 class _StatusTitle extends StatelessWidget {
-  const _StatusTitle({required this.title, required this.compact});
+  const _StatusTitle({
+    required this.title,
+    required this.compact,
+    required this.fullText,
+  });
 
   final String title;
   final bool compact;
+  final bool fullText;
 
   @override
   Widget build(BuildContext context) {
     return Text(
       title,
-      maxLines: compact ? 1 : 2,
-      overflow: TextOverflow.ellipsis,
+      maxLines: fullText ? null : (compact ? 1 : 2),
+      overflow: fullText ? TextOverflow.visible : TextOverflow.ellipsis,
       style: AppTypography.bodyLarge(
         context,
       ).copyWith(fontWeight: FontWeight.w800, height: compact ? 1.12 : null),

@@ -1,4 +1,7 @@
+import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
+import 'dart:math';
 
 import 'package:dio/dio.dart';
 
@@ -11,13 +14,22 @@ class SyncQueueMessages {
   static const queuedForNetwork = 'Будет отправлено при восстановлении связи';
   static const permissionDenied =
       'Недостаточно прав для отправки сохраненной операции.';
+  static const unknownOutcome =
+      'Неизвестно, выполнено ли действие на сервере. Проверьте его перед повторной отправкой.';
+  static const attachmentUnavailable =
+      'Не удалось открыть вложение. Прикрепите файл повторно.';
 }
 
 class SyncQueuedException extends ApiException {
-  const SyncQueuedException({this.queueId})
-    : super(SyncQueueMessages.queuedForNetwork);
+  const SyncQueuedException({this.queueId, this.requiresReview = false})
+    : super(
+        requiresReview
+            ? SyncQueueMessages.unknownOutcome
+            : SyncQueueMessages.queuedForNetwork,
+      );
 
   final int? queueId;
+  final bool requiresReview;
 }
 
 class SyncQueueProcessResult {
@@ -39,6 +51,12 @@ class SyncQueueService {
     DateTime Function()? now,
     String? Function()? currentScope,
     bool Function()? onlineVerified,
+    Future<String> Function(
+      SyncAttachmentRef attachment,
+      String ownerIdentity,
+      String context,
+    )?
+    stageQueuedAttachment,
     Future<String> Function(SyncAttachmentRef attachment, String ownerIdentity)?
     materializeAttachment,
     Future<void> Function(String path)? deleteMaterializedAttachment,
@@ -49,6 +67,7 @@ class SyncQueueService {
        _now = now ?? DateTime.now,
        _currentScope = currentScope,
        _onlineVerified = onlineVerified,
+       _stageQueuedAttachment = stageQueuedAttachment,
        _materializeAttachment = materializeAttachment,
        _deleteMaterializedAttachment = deleteMaterializedAttachment,
        _deleteQueuedAttachment = deleteQueuedAttachment,
@@ -62,16 +81,36 @@ class SyncQueueService {
   final Future<String> Function(
     SyncAttachmentRef attachment,
     String ownerIdentity,
+    String context,
+  )?
+  _stageQueuedAttachment;
+  final Future<String> Function(
+    SyncAttachmentRef attachment,
+    String ownerIdentity,
   )?
   _materializeAttachment;
   final Future<void> Function(String path)? _deleteMaterializedAttachment;
   final Future<void> Function(SyncAttachmentRef attachment)?
   _deleteQueuedAttachment;
   final Future<bool> Function()? _verifyOnline;
+  final StreamController<int> _changes = StreamController<int>.broadcast();
+  var _changeVersion = 0;
   Future<SyncQueueProcessResult>? _processing;
 
   String? get currentScope => _currentScope?.call();
   bool get requiresScope => _currentScope != null;
+  Stream<int> get changes => _changes.stream;
+
+  Future<QueuedSyncOperation> _save(QueuedSyncOperation operation) async {
+    final stored = await _store.put(operation);
+    _changes.add(++_changeVersion);
+    return stored;
+  }
+
+  Future<void> _remove(int id) async {
+    await _store.delete(id);
+    _changes.add(++_changeVersion);
+  }
 
   static bool shouldQueueDioException(DioException error) {
     if (_isNetworkError(error)) {
@@ -82,10 +121,100 @@ class SyncQueueService {
     return statusCode != null && statusCode >= 500;
   }
 
-  Future<QueuedSyncOperation> enqueue(SyncQueueDraft draft) async {
-    final operation = QueuedSyncOperation.fromDraft(draft, createdAt: _now());
+  Future<QueuedSyncOperation> enqueue(
+    SyncQueueDraft draft, {
+    DioException? initialFailure,
+  }) async {
+    final scope = currentScope;
+    if (requiresScope && (scope == null || scope.isEmpty)) {
+      throw const ApiException(SyncQueueMessages.permissionDenied);
+    }
+    final draftScope = draft.payload['queue_scope']?.toString();
+    if (requiresScope &&
+        draftScope != null &&
+        draftScope.isNotEmpty &&
+        draftScope != scope) {
+      throw const ApiException(SyncQueueMessages.permissionDenied);
+    }
+    final scopedDraft =
+        scope == null
+            ? draft
+            : SyncQueueDraft(
+              moduleSlug: draft.moduleSlug,
+              operationType: draft.operationType,
+              method: draft.method,
+              endpoint: draft.endpoint,
+              payload: {...draft.payload, 'queue_scope': scope},
+              attachments: draft.attachments,
+            );
+    final (preparedDraft, stagedAttachments) = await _stageDraftAttachments(
+      scopedDraft,
+      ownerIdentity: scope,
+    );
+    try {
+      if (requiresScope && scope != currentScope) {
+        throw const ApiException(SyncQueueMessages.permissionDenied);
+      }
+      final operation = QueuedSyncOperation.fromDraft(
+        preparedDraft,
+        createdAt: _now(),
+      );
+      if (initialFailure != null) {
+        _recordInitialFailure(operation, initialFailure);
+      }
+      final stored = await _save(operation);
+      if (requiresScope && scope != currentScope) {
+        await _remove(stored.id);
+        throw const ApiException(SyncQueueMessages.permissionDenied);
+      }
+      return stored;
+    } catch (_) {
+      await _deleteQueuedAttachments(stagedAttachments);
+      rethrow;
+    }
+  }
 
-    return _store.put(operation);
+  Future<QueuedSyncOperation?> recordInitialFailure(
+    int operationId,
+    DioException error,
+  ) async {
+    final operation = await _store.get(operationId);
+    if (operation == null) return null;
+
+    final scope = currentScope;
+    final operationScope = operation.payload['queue_scope']?.toString();
+    if (requiresScope &&
+        (scope == null || scope.isEmpty || operationScope != scope)) {
+      throw const ApiException(SyncQueueMessages.permissionDenied);
+    }
+
+    _recordInitialFailure(operation, error, incrementAttempt: true);
+    return _save(operation);
+  }
+
+  Future<QueuedSyncOperation?> markOperationSending(int operationId) async {
+    final operation = await _store.get(operationId);
+    if (operation == null || operation.status != SyncOperationStatuses.queued) {
+      return null;
+    }
+
+    final scope = currentScope;
+    final operationScope = operation.payload['queue_scope']?.toString();
+    if (requiresScope &&
+        (scope == null || scope.isEmpty || operationScope != scope)) {
+      throw const ApiException(SyncQueueMessages.permissionDenied);
+    }
+    if (requiresScope && scope != currentScope) {
+      throw const ApiException(SyncQueueMessages.permissionDenied);
+    }
+
+    operation
+      ..status = SyncOperationStatuses.sending
+      ..attemptCount = operation.attemptCount + 1
+      ..lastAttemptAt = _now()
+      ..nextAttemptAt = null
+      ..lastBusinessError = null;
+    return _save(operation);
   }
 
   Future<List<QueuedSyncOperation>> all() {
@@ -97,19 +226,114 @@ class SyncQueueService {
   }
 
   Future<void> delete(int id) {
-    return _store.delete(id);
+    return _deleteOperation(id);
+  }
+
+  Future<void> _deleteOperation(int id) async {
+    final operation = await _store.get(id);
+    await _remove(id);
+    if (operation != null) {
+      await _deleteQueuedAttachments(operation.attachments);
+    }
   }
 
   Future<void> clearScope(String ownerIdentity) async {
+    final processing = _processing;
+    if (processing != null) {
+      try {
+        await processing;
+      } catch (_) {}
+    }
     for (final operation in await _store.all()) {
       if (operation.payload['queue_scope']?.toString() == ownerIdentity) {
-        await _store.delete(operation.id);
+        await _deleteOperation(operation.id);
       }
     }
   }
 
+  Future<(SyncQueueDraft, List<SyncAttachmentRef>)> _stageDraftAttachments(
+    SyncQueueDraft draft, {
+    required String? ownerIdentity,
+  }) async {
+    final stageAttachment = _stageQueuedAttachment;
+    if (stageAttachment == null ||
+        ownerIdentity == null ||
+        ownerIdentity.isEmpty ||
+        draft.attachments.isEmpty) {
+      return (draft, const <SyncAttachmentRef>[]);
+    }
+
+    final attachments = <SyncAttachmentRef>[];
+    final staged = <SyncAttachmentRef>[];
+    try {
+      for (var index = 0; index < draft.attachments.length; index++) {
+        final attachment = draft.attachments[index];
+        if (attachment.encrypted) {
+          attachments.add(attachment);
+          continue;
+        }
+        final context = _newAttachmentContext(draft, index);
+        final encrypted = SyncAttachmentRef(
+          field: attachment.field,
+          path: await stageAttachment(attachment, ownerIdentity, context),
+          filename: attachment.filename,
+          encrypted: true,
+          context: context,
+        );
+        attachments.add(encrypted);
+        staged.add(encrypted);
+      }
+    } catch (_) {
+      await _deleteQueuedAttachments(staged);
+      rethrow;
+    }
+
+    return (
+      SyncQueueDraft(
+        moduleSlug: draft.moduleSlug,
+        operationType: draft.operationType,
+        method: draft.method,
+        endpoint: draft.endpoint,
+        payload: draft.payload,
+        attachments: attachments,
+      ),
+      staged,
+    );
+  }
+
+  String _newAttachmentContext(SyncQueueDraft draft, int index) {
+    final idempotencyKey = draft.payload['idempotency_key']?.toString();
+    final uniqueOperation =
+        idempotencyKey != null && idempotencyKey.isNotEmpty
+            ? idempotencyKey
+            : '${_now().microsecondsSinceEpoch}-${Random.secure().nextInt(0x7fffffff)}';
+    return 'sync-queue:${draft.moduleSlug}:${draft.operationType}:$uniqueOperation:$index';
+  }
+
+  Future<void> _deleteQueuedAttachments(
+    Iterable<SyncAttachmentRef> attachments,
+  ) async {
+    final deleteAttachment = _deleteQueuedAttachment;
+    if (deleteAttachment == null) return;
+    for (final attachment in attachments) {
+      if (!attachment.encrypted) continue;
+      try {
+        await deleteAttachment(attachment);
+      } catch (_) {}
+    }
+  }
+
+  Future<List<QueuedSyncOperation>> forCurrentOwner() async {
+    final scope = currentScope;
+    if (scope == null || scope.isEmpty) return const [];
+    final operations = await _store.all();
+    return operations
+        .where((operation) => operation.payload['queue_scope'] == scope)
+        .toList();
+  }
+
   Future<void> update(QueuedSyncOperation operation) {
-    return _store.put(operation);
+    return _save(operation);
   }
 
   Future<void> replaceDraftPayload(
@@ -121,27 +345,62 @@ class SyncQueueService {
     if (operation == null) {
       throw const FormatException('Queued operation was not found.');
     }
+    final operationScope = operation.payload['queue_scope']?.toString();
+    final replacementScope = payload['queue_scope']?.toString();
+    final scope = currentScope;
+    if (requiresScope &&
+        (scope == null ||
+            scope.isEmpty ||
+            operationScope != scope ||
+            (replacementScope != null && replacementScope != operationScope))) {
+      throw const ApiException(SyncQueueMessages.permissionDenied);
+    }
 
     final draft = SyncQueueDraft(
       moduleSlug: operation.moduleSlug,
       operationType: operation.operationType,
       method: operation.method,
       endpoint: operation.endpoint,
-      payload: payload,
+      payload:
+          operationScope == null
+              ? payload
+              : {...payload, 'queue_scope': operationScope},
       attachments: attachments,
     );
+    final previousAttachments = operation.attachments;
+    final (preparedDraft, stagedAttachments) = await _stageDraftAttachments(
+      draft,
+      ownerIdentity: operationScope,
+    );
+    try {
+      if (requiresScope && scope != currentScope) {
+        throw const ApiException(SyncQueueMessages.permissionDenied);
+      }
+      operation
+        ..payloadJson = preparedDraft.encodePayload()
+        ..attachmentsJson = preparedDraft.encodeAttachments()
+        ..localAttachments = preparedDraft.localAttachments
+        ..status = SyncOperationStatuses.queued
+        ..attemptCount = 0
+        ..lastAttemptAt = null
+        ..nextAttemptAt = null
+        ..lastBusinessError = null;
 
-    operation
-      ..payloadJson = draft.encodePayload()
-      ..attachmentsJson = draft.encodeAttachments()
-      ..localAttachments = draft.localAttachments
-      ..status = SyncOperationStatuses.queued
-      ..attemptCount = 0
-      ..lastAttemptAt = null
-      ..nextAttemptAt = null
-      ..lastBusinessError = null;
+      await _save(operation);
+      if (requiresScope && scope != currentScope) {
+        await _remove(operation.id);
+        throw const ApiException(SyncQueueMessages.permissionDenied);
+      }
+    } catch (_) {
+      await _deleteQueuedAttachments(stagedAttachments);
+      rethrow;
+    }
 
-    await _store.put(operation);
+    final retainedPaths =
+        preparedDraft.attachments.map((item) => item.path).toSet();
+    await _deleteQueuedAttachments(
+      previousAttachments.where((item) => !retainedPaths.contains(item.path)),
+    );
   }
 
   Future<SyncQueueProcessResult> retryDueOperations() {
@@ -187,15 +446,32 @@ class SyncQueueService {
     var blockedCount = 0;
 
     for (final operation in operations) {
-      final interruptedJournal =
-          operation.moduleSlug == 'construction_journal' &&
-          operation.status == SyncOperationStatuses.sending;
-      final interruptedLegalAction =
-          operation.moduleSlug == 'legal_archive' &&
-          operation.status == SyncOperationStatuses.sending;
+      final operationScope = operation.payload['queue_scope']?.toString();
+      if (requiresScope &&
+          (operationScope == null ||
+              operationScope.isEmpty ||
+              operationScope != verifiedScope)) {
+        if (operationScope == null || operationScope.isEmpty) {
+          operation
+            ..status = SyncOperationStatuses.permissionDenied
+            ..lastBusinessError = SyncQueueMessages.permissionDenied;
+          await _save(operation);
+        }
+        blockedCount++;
+        continue;
+      }
+      final hasConfirmedIdempotency = _hasConfirmedIdempotencyContract(
+        operation,
+      );
       if (operation.status != SyncOperationStatuses.queued &&
-          !interruptedJournal &&
-          !interruptedLegalAction) {
+          !(operation.status == SyncOperationStatuses.sending &&
+              hasConfirmedIdempotency)) {
+        if (operation.status == SyncOperationStatuses.sending) {
+          operation
+            ..status = SyncOperationStatuses.conflict
+            ..lastBusinessError = SyncQueueMessages.unknownOutcome;
+          await _save(operation);
+        }
         blockedCount++;
         break;
       }
@@ -238,22 +514,20 @@ class SyncQueueService {
       operation
         ..status = SyncOperationStatuses.permissionDenied
         ..lastBusinessError = SyncQueueMessages.permissionDenied;
-      await _store.put(operation);
+      await _save(operation);
       return _RetryOutcome.blocked;
     }
     if ((requiresScope &&
-            [
-              'construction_journal',
-              'legal_archive',
-            ].contains(operation.moduleSlug) &&
-            operationScope == null) ||
+            (operationScope == null ||
+                operationScope.isEmpty ||
+                operationScope != currentScope)) ||
         (operationScope != null &&
             operationScope.isNotEmpty &&
-            (currentScope == null || operationScope != currentScope))) {
+            operationScope != currentScope)) {
       operation
         ..status = SyncOperationStatuses.permissionDenied
         ..lastBusinessError = SyncQueueMessages.permissionDenied;
-      await _store.put(operation);
+      await _save(operation);
       return _RetryOutcome.blocked;
     }
     operation
@@ -261,7 +535,7 @@ class SyncQueueService {
       ..attemptCount = operation.attemptCount + 1
       ..lastAttemptAt = _now()
       ..lastBusinessError = null;
-    await _store.put(operation);
+    await _save(operation);
 
     final temporaryAttachments = <String>[];
     try {
@@ -285,7 +559,7 @@ class SyncQueueService {
         operation
           ..status = SyncOperationStatuses.queued
           ..lastBusinessError = SyncQueueMessages.permissionDenied;
-        await _store.put(operation);
+        await _save(operation);
         return _RetryOutcome.blocked;
       }
       final response = await _dio.request<dynamic>(
@@ -303,7 +577,7 @@ class SyncQueueService {
         operation
           ..status = SyncOperationStatuses.queued
           ..lastBusinessError = SyncQueueMessages.permissionDenied;
-        await _store.put(operation);
+        await _save(operation);
         return _RetryOutcome.blocked;
       }
       if (journalCreate && operation.payload['submit_intent'] == true) {
@@ -324,12 +598,8 @@ class SyncQueueService {
           return _retryOperation(operation, verifiedScope: verifiedScope);
         }
       }
-      for (final attachment in operation.attachments) {
-        if (attachment.encrypted) {
-          await _deleteQueuedAttachment?.call(attachment);
-        }
-      }
-      await _store.delete(operation.id);
+      await _remove(operation.id);
+      await _deleteQueuedAttachments(operation.attachments);
       return _RetryOutcome.success;
     } on DioException catch (error) {
       final statusCode = error.response?.statusCode;
@@ -339,7 +609,7 @@ class SyncQueueService {
             r'^/journal-entries/\d+/submit$',
           ).hasMatch(operation.endpoint) &&
           await _submitWasAlreadyApplied(operation.endpoint)) {
-        await _store.delete(operation.id);
+        await _deleteOperation(operation.id);
         return _RetryOutcome.success;
       }
       await _recordRetryFailure(operation, error);
@@ -353,11 +623,19 @@ class SyncQueueService {
       operation
         ..status = SyncOperationStatuses.needsEdit
         ..lastBusinessError = error.message;
-      await _store.put(operation);
+      await _save(operation);
+      return _RetryOutcome.blocked;
+    } on FileSystemException {
+      operation
+        ..status = SyncOperationStatuses.needsEdit
+        ..lastBusinessError = SyncQueueMessages.attachmentUnavailable;
+      await _save(operation);
       return _RetryOutcome.blocked;
     } finally {
       for (final path in temporaryAttachments) {
-        await _deleteMaterializedAttachment?.call(path);
+        try {
+          await _deleteMaterializedAttachment?.call(path);
+        } catch (_) {}
       }
     }
   }
@@ -381,7 +659,7 @@ class SyncQueueService {
         'create_idempotency_key': createKey,
         'idempotency_key': '$createKey:submit',
       });
-    await _store.put(operation);
+    await _save(operation);
   }
 
   Future<bool> _submitWasAlreadyApplied(String submitEndpoint) async {
@@ -406,11 +684,19 @@ class SyncQueueService {
   ) async {
     final statusCode = error.response?.statusCode;
     if (_isNetworkError(error) || (statusCode != null && statusCode >= 500)) {
-      operation
-        ..status = SyncOperationStatuses.queued
-        ..nextAttemptAt = _now().add(_backoff(operation.attemptCount))
-        ..lastBusinessError = SyncQueueMessages.queuedForNetwork;
-      await _store.put(operation);
+      if (error.type == DioExceptionType.connectionTimeout ||
+          _hasConfirmedIdempotencyContract(operation)) {
+        operation
+          ..status = SyncOperationStatuses.queued
+          ..nextAttemptAt = _now().add(_backoff(operation.attemptCount))
+          ..lastBusinessError = SyncQueueMessages.queuedForNetwork;
+      } else {
+        operation
+          ..status = SyncOperationStatuses.conflict
+          ..nextAttemptAt = null
+          ..lastBusinessError = SyncQueueMessages.unknownOutcome;
+      }
+      await _save(operation);
       return;
     }
 
@@ -419,7 +705,7 @@ class SyncQueueService {
         ..status = SyncOperationStatuses.permissionDenied
         ..nextAttemptAt = null
         ..lastBusinessError = SyncQueueMessages.permissionDenied;
-      await _store.put(operation);
+      await _save(operation);
       return;
     }
 
@@ -428,7 +714,7 @@ class SyncQueueService {
         ..status = SyncOperationStatuses.conflict
         ..nextAttemptAt = null
         ..lastBusinessError = ApiException.fromDio(error).message;
-      await _store.put(operation);
+      await _save(operation);
       return;
     }
 
@@ -436,7 +722,118 @@ class SyncQueueService {
       ..status = SyncOperationStatuses.needsEdit
       ..nextAttemptAt = null
       ..lastBusinessError = ApiException.fromDio(error).message;
-    await _store.put(operation);
+    await _save(operation);
+  }
+
+  void _recordInitialFailure(
+    QueuedSyncOperation operation,
+    DioException error, {
+    bool incrementAttempt = false,
+  }) {
+    final statusCode = error.response?.statusCode;
+    final attemptedAt = _now();
+    final wasSending = operation.status == SyncOperationStatuses.sending;
+    operation
+      ..attemptCount =
+          wasSending
+              ? operation.attemptCount
+              : incrementAttempt
+              ? operation.attemptCount + 1
+              : 1
+      ..lastAttemptAt = operation.lastAttemptAt ?? attemptedAt;
+
+    if (_isNetworkError(error) || (statusCode != null && statusCode >= 500)) {
+      if (error.type == DioExceptionType.connectionTimeout ||
+          _hasConfirmedIdempotencyContract(operation)) {
+        operation
+          ..status = SyncOperationStatuses.queued
+          ..nextAttemptAt = attemptedAt.add(_backoff(operation.attemptCount))
+          ..lastBusinessError = SyncQueueMessages.queuedForNetwork;
+      } else {
+        operation
+          ..status = SyncOperationStatuses.conflict
+          ..nextAttemptAt = null
+          ..lastBusinessError = SyncQueueMessages.unknownOutcome;
+      }
+      return;
+    }
+
+    if (statusCode == 403) {
+      operation
+        ..status = SyncOperationStatuses.permissionDenied
+        ..nextAttemptAt = null
+        ..lastBusinessError = SyncQueueMessages.permissionDenied;
+      return;
+    }
+
+    operation
+      ..status =
+          statusCode == 409
+              ? SyncOperationStatuses.conflict
+              : SyncOperationStatuses.needsEdit
+      ..nextAttemptAt = null
+      ..lastBusinessError = ApiException.fromDio(error).message;
+  }
+
+  bool _hasConfirmedIdempotencyContract(QueuedSyncOperation operation) {
+    final key = operation.payload['idempotency_key']?.toString().trim();
+    if (key == null ||
+        key.isEmpty ||
+        operation.method.toUpperCase() != 'POST') {
+      return false;
+    }
+
+    final path = Uri.tryParse(operation.endpoint)?.path ?? operation.endpoint;
+    return switch ((operation.moduleSlug, operation.operationType)) {
+      ('site_requests', 'create_site_request') => path == '/site-requests',
+      ('machinery_operations', 'start_shift') =>
+        path == '/machinery-operations/shift-reports',
+      ('machinery_operations', 'finish_shift') => RegExp(
+        r'^/machinery-operations/shift-reports/\d+/finish$',
+      ).hasMatch(path),
+      ('machinery_operations', 'submit_shift') => RegExp(
+        r'^/machinery-operations/shift-reports/\d+/submit$',
+      ).hasMatch(path),
+      ('machinery_operations', 'record_downtime') =>
+        path == '/machinery-operations/downtimes',
+      ('machinery_operations', 'record_fuel') =>
+        path == '/machinery-operations/fuel-issues',
+      ('machinery_operations', 'complete_maintenance') => RegExp(
+        r'^/machinery-operations/maintenance-orders/\d+/complete$',
+      ).hasMatch(path),
+      ('machinery_operations', 'issue_asset') =>
+        path == '/warehouse/custody/issue',
+      ('production_labor', 'record_output') =>
+        path == '/production-labor/output-entries',
+      ('safety', 'create_incident') => path == '/safety-management/incidents',
+      ('safety', 'create_violation') => path == '/safety-management/violations',
+      ('safety', 'create_inspection_finding') =>
+        path == '/safety-management/inspection-findings',
+      ('warehouse', 'custody_issue') => path == '/warehouse/custody/issue',
+      ('warehouse', 'write_off') => path == '/warehouse/operations/write-off',
+      ('warehouse', 'custody_return') => path == '/warehouse/custody/return',
+      ('warehouse', 'receive_project_delivery') => RegExp(
+        r'^/warehouse/project-material-deliveries/\d+/receive$',
+      ).hasMatch(path),
+      ('warehouse', 'create_receipt') =>
+        path == '/warehouse/operations/receipt',
+      ('warehouse', 'create_transfer') =>
+        path == '/warehouse/operations/transfer',
+      ('procurement', 'receive_materials') => RegExp(
+        r'^/procurement/purchase-orders/\d+/receive-materials$',
+      ).hasMatch(path),
+      ('legal_archive', 'upload_paper_original') => RegExp(
+        r'^/legal-archive/signature-requests/\d+/upload-original$',
+      ).hasMatch(path),
+      ('legal_archive', final action) =>
+        RegExp(
+              r'^/legal-archive/documents/\d+/actions/[^/]+$',
+            ).hasMatch(path) &&
+            path.endsWith('/actions/$action'),
+      ('construction_journal', 'create_entry' || 'create_and_submit_entry') =>
+        RegExp(r'^/construction-journals/\d+/entries$').hasMatch(path),
+      _ => false,
+    };
   }
 
   Future<Object?> _requestData(
@@ -445,6 +842,13 @@ class SyncQueueService {
   ) async {
     final attachments = operation.attachments;
     final payload = operation.payload;
+    payload.remove('queue_scope');
+    payload.remove('queue_owner_identity');
+    payload.remove('queue_session_id');
+    payload.remove('queue_user_id');
+    payload.remove('queue_organization_id');
+    payload.remove('queue_document_id');
+    payload.remove('queue_encrypted_attachment');
     if (operation.moduleSlug == 'construction_journal') {
       if (RegExp(
         r'^/journal-entries/\d+/submit$',
@@ -514,7 +918,9 @@ class SyncQueueService {
     List<String> temporaryAttachments,
   ) async {
     final callback = _materializeAttachment;
-    final ownerIdentity = operation.payload['queue_owner_identity']?.toString();
+    final ownerIdentity =
+        operation.payload['queue_owner_identity']?.toString() ??
+        operation.payload['queue_scope']?.toString();
     if (callback == null || ownerIdentity == null || ownerIdentity.isEmpty) {
       throw const FormatException('Не удалось открыть файл для отправки.');
     }

@@ -1,4 +1,4 @@
-﻿import 'package:dio/dio.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -256,6 +256,38 @@ void main() {
     await tester.testTextInput.receiveAction(TextInputAction.search);
     await pumpUi(tester);
     expect(repository.loadedSearch, 'бетон');
+  });
+
+  testWidgets('places workflow status below title on a compact scaled screen', (
+    tester,
+  ) async {
+    final repository = _RecordingWorkflowRepository();
+    tester.view.devicePixelRatio = 2;
+    tester.view.physicalSize = const Size(720, 1280);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      buildApp(
+        const MediaQuery(
+          data: MediaQueryData(
+            size: Size(360, 640),
+            textScaler: TextScaler.linear(1.3),
+          ),
+          child: WorkflowManagementScreen(),
+        ),
+        repository,
+      ),
+    );
+    await pumpUi(tester);
+
+    final title = find.text('Бетонирование').first;
+    final status = find.text('Ожидает согласования').first;
+    expect(
+      tester.getTopLeft(status).dy,
+      greaterThan(tester.getBottomLeft(title).dy),
+    );
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('keeps workflow search semantics separate from filter chips', (

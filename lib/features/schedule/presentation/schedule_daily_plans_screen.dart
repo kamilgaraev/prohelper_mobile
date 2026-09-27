@@ -1,13 +1,15 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/error/user_message.dart';
+import '../../../core/design/pro_status.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../core/widgets/app_empty_state.dart';
 import '../../../core/widgets/app_error_notice.dart';
 import '../../../core/widgets/app_error_state.dart';
 import '../../../core/widgets/app_loading_state.dart';
 import '../../../core/widgets/industrial_card.dart';
+import '../../../core/widgets/pro_status_banner.dart';
 import '../../projects/domain/projects_provider.dart';
 import '../data/schedule_model.dart';
 import '../domain/schedule_provider.dart';
@@ -55,6 +57,19 @@ class _ScheduleDailyPlansScreenState
         child: CustomScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           slivers: [
+            if (selectedProject != null && state.fromCache)
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+                sliver: SliverToBoxAdapter(
+                  child: ProStatusBanner(
+                    title: 'Сохранённый дневной план',
+                    description:
+                        state.error ??
+                        'Показаны данные с устройства. Они могут быть неактуальны.',
+                    tone: ProStatusTone.info,
+                  ),
+                ),
+              ),
             if (selectedProject == null)
               const SliverFillRemaining(
                 child: AppEmptyState(

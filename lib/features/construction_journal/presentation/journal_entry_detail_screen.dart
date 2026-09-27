@@ -4,13 +4,16 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_typography.dart';
+import '../../../core/design/pro_status.dart';
 import '../../../core/widgets/app_empty_state.dart';
 import '../../../core/widgets/app_error_state.dart';
 import '../../../core/widgets/app_loading_state.dart';
 import '../../../core/widgets/industrial_card.dart';
+import '../../../core/widgets/pro_status_banner.dart';
 import '../data/construction_journal_models.dart';
 import '../data/construction_journal_repository.dart';
 import '../domain/construction_journal_provider.dart';
+import '../../projects/domain/projects_provider.dart';
 import 'journal_entry_form_screen.dart';
 
 class JournalEntryDetailScreen extends ConsumerWidget {
@@ -18,16 +21,23 @@ class JournalEntryDetailScreen extends ConsumerWidget {
     super.key,
     required this.journalId,
     required this.entryId,
+    this.projectId,
   });
 
   final int journalId;
   final int entryId;
+  final int? projectId;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final state = ref.watch(constructionJournalEntryDetailProvider(entryId));
+    final scope = (
+      entryId: entryId,
+      projectId:
+          projectId ?? ref.watch(projectsProvider).selectedProject?.serverId,
+    );
+    final state = ref.watch(constructionJournalEntryDetailProvider(scope));
     final notifier = ref.read(
-      constructionJournalEntryDetailProvider(entryId).notifier,
+      constructionJournalEntryDetailProvider(scope).notifier,
     );
 
     if (state.isLoading && state.entry == null) {
@@ -73,6 +83,22 @@ class JournalEntryDetailScreen extends ConsumerWidget {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
+            if (state.fromCache || state.hasDirtyLocal)
+              ProStatusBanner(
+                title:
+                    state.hasDirtyLocal
+                        ? 'Есть локальные изменения'
+                        : 'Показаны сохранённые данные',
+                description:
+                    state.error ?? 'Актуальность данных не подтверждена сетью.',
+                tone:
+                    state.hasDirtyLocal
+                        ? ProStatusTone.warning
+                        : ProStatusTone.info,
+                fullText: true,
+              ),
+            if (state.fromCache || state.hasDirtyLocal)
+              const SizedBox(height: 12),
             IndustrialCard(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,

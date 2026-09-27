@@ -1,10 +1,11 @@
-﻿import 'package:dio/dio.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:prohelpers_mobile/core/storage/secure_storage_service.dart';
 import 'package:prohelpers_mobile/core/theme/pro_theme.dart';
 import 'package:prohelpers_mobile/features/auth/data/auth_repository.dart';
+import 'package:prohelpers_mobile/features/auth/data/auth_session_identity.dart';
 import 'package:prohelpers_mobile/features/auth/data/user_model.dart';
 import 'package:prohelpers_mobile/features/auth/domain/auth_provider.dart';
 import 'package:prohelpers_mobile/features/projects/data/project_model.dart';
@@ -13,6 +14,15 @@ import 'package:prohelpers_mobile/features/projects/domain/projects_provider.dar
 import 'package:prohelpers_mobile/features/projects/presentation/project_selection_screen.dart';
 
 class _TestSecureStorageService extends SecureStorageService {
+  @override
+  Future<int?> getSelectedProjectId() async => null;
+
+  @override
+  Future<Map<String, dynamic>?> getOfflineProjects() async => null;
+
+  @override
+  Future<void> saveOfflineProjects(Map<String, dynamic> value) async {}
+
   @override
   Future<String?> getToken() async => 'token';
 
@@ -28,12 +38,27 @@ class _TestAuthRepository extends AuthRepository {
 }
 
 class _TestAuthNotifier extends AuthNotifier {
-  _TestAuthNotifier(User user)
-    : super(_TestAuthRepository(), _TestSecureStorageService()) {
-    state = AuthAuthenticated(user);
+  _TestAuthNotifier(
+    User user, {
+    AuthSessionIdentity? sessionIdentity,
+    bool isOnlineVerified = false,
+  }) : super(
+         _TestAuthRepository(),
+         _TestSecureStorageService(),
+         autoCheckAuth: false,
+       ) {
+    state = AuthAuthenticated(
+      user,
+      sessionIdentity: sessionIdentity,
+      isOnlineVerified: isOnlineVerified,
+    );
   }
 
   int logoutCalls = 0;
+
+  void updateAuthState(AuthAuthenticated next) {
+    state = next;
+  }
 
   @override
   Future<void> logout() async {
@@ -59,6 +84,34 @@ class _TestProjectsRepository extends ProjectsRepository {
     }
 
     return projects;
+  }
+}
+
+class _OfflineThenEmptyProjectsRepository extends ProjectsRepository {
+  _OfflineThenEmptyProjectsRepository() : super(Dio());
+
+  int fetchCalls = 0;
+
+  @override
+  Future<List<Project>> fetchProjects() async {
+    fetchCalls += 1;
+    if (fetchCalls == 1) {
+      throw Exception('offline');
+    }
+
+    return const [];
+  }
+}
+
+class _OrganizationSwitchProjectsRepository extends ProjectsRepository {
+  _OrganizationSwitchProjectsRepository() : super(Dio());
+
+  int fetchCalls = 0;
+
+  @override
+  Future<List<Project>> fetchProjects() async {
+    fetchCalls += 1;
+    return [fetchCalls == 1 ? _project() : _otherProject()];
   }
 }
 
@@ -107,8 +160,9 @@ void main() {
   ProviderScope buildScope({
     required Widget child,
     _TestProjectsNotifier? projectState,
+    User? user,
   }) {
-    authNotifier = _TestAuthNotifier(_user());
+    authNotifier = _TestAuthNotifier(user ?? _user());
     projectsNotifier = projectState ?? _TestProjectsNotifier.loaded(_project());
 
     return ProviderScope(
@@ -120,9 +174,10 @@ void main() {
     );
   }
 
-  Widget buildScreen({_TestProjectsNotifier? projectState}) {
+  Widget buildScreen({_TestProjectsNotifier? projectState, User? user}) {
     return buildScope(
       projectState: projectState,
+      user: user,
       child: MaterialApp(
         theme: MostTheme.lightTheme,
         home: const ProjectSelectionScreen(),
@@ -189,6 +244,54 @@ void main() {
 
     expect(refreshIcon.semanticLabel, 'Обновить список объектов');
     expect(refreshButton.tooltip, 'Обновить список объектов');
+  });
+
+  testWidgets('профиль и организации доступны при пустом списке объектов', (
+    tester,
+  ) async {
+    final notifier = _TestProjectsNotifier.pending();
+    final user =
+        _user()
+          ..organizationsJson =
+              '[{"id":10,"name":"СТРОЙ-ТУР"},'
+              '{"id":11,"name":"Вторая организация"}]';
+
+    await tester.pumpWidget(buildScreen(projectState: notifier, user: user));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Нет доступных объектов'), findsOneWidget);
+    expect(find.byTooltip('Профиль и организации'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Профиль и организации'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Организация'), findsOneWidget);
+    expect(find.text('СТРОЙ-ТУР'), findsNWidgets(2));
+    expect(find.text('Вторая организация'), findsOneWidget);
+  });
+
+  testWidgets('выбор объекта помещается на компактном экране', (tester) async {
+    tester.view.physicalSize = const Size(270, 460);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      buildScreen(projectState: _TestProjectsNotifier.pending()),
+    );
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.byTooltip('Профиль и организации'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('Нет доступных объектов'),
+      100,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Нет доступных объектов'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('выход с выбора объекта требует подтверждения', (tester) async {
@@ -285,6 +388,119 @@ void main() {
     expect(find.textContaining('payload'), findsNothing);
   });
 
+  testWidgets(
+    'ошибка и повтор остаются после потери online-подтверждения сессии',
+    (tester) async {
+      final user = _user();
+      const identity = AuthSessionIdentity(
+        userId: 1,
+        organizationId: 10,
+        sessionId: 'session-1',
+      );
+      final auth = _TestAuthNotifier(
+        user,
+        sessionIdentity: identity,
+        isOnlineVerified: true,
+      );
+      final repository = _OfflineThenEmptyProjectsRepository();
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            authProvider.overrideWith((ref) => auth),
+            projectsRepositoryProvider.overrideWithValue(repository),
+            secureStorageProvider.overrideWith(
+              (ref) => _TestSecureStorageService(),
+            ),
+          ],
+          child: MaterialApp(
+            theme: MostTheme.lightTheme,
+            home: const ProjectSelectionScreen(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(repository.fetchCalls, 1);
+      expect(find.text('Не удалось загрузить объекты'), findsOneWidget);
+      expect(find.text('Повторить'), findsOneWidget);
+
+      auth.updateAuthState(
+        AuthAuthenticated(
+          user,
+          sessionIdentity: const AuthSessionIdentity(
+            userId: 1,
+            organizationId: 10,
+            sessionId: 'session-1',
+          ),
+          isOnlineVerified: false,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Не удалось загрузить объекты'), findsOneWidget);
+      expect(find.text('Повторить'), findsOneWidget);
+      expect(repository.fetchCalls, 1);
+
+      await tester.tap(find.text('Повторить'));
+      await tester.pumpAndSettle();
+
+      expect(repository.fetchCalls, 2);
+      expect(find.text('Нет доступных объектов'), findsOneWidget);
+    },
+  );
+
+  testWidgets('список объектов обновляется после смены организации', (
+    tester,
+  ) async {
+    final user = _user();
+    const identity = AuthSessionIdentity(
+      userId: 1,
+      organizationId: 10,
+      sessionId: 'session-1',
+    );
+    final auth = _TestAuthNotifier(user, sessionIdentity: identity);
+    final repository = _OrganizationSwitchProjectsRepository();
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authProvider.overrideWith((ref) => auth),
+          projectsRepositoryProvider.overrideWithValue(repository),
+          secureStorageProvider.overrideWith(
+            (ref) => _TestSecureStorageService(),
+          ),
+        ],
+        child: MaterialApp(
+          theme: MostTheme.lightTheme,
+          home: const ProjectSelectionScreen(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(repository.fetchCalls, 1);
+    expect(find.text('Строительство склада Литер А'), findsOneWidget);
+
+    final nextUser = _user()..currentOrganizationId = 11;
+    auth.updateAuthState(
+      AuthAuthenticated(
+        nextUser,
+        sessionIdentity: const AuthSessionIdentity(
+          userId: 1,
+          organizationId: 11,
+          sessionId: 'session-1',
+        ),
+        isOnlineVerified: true,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(repository.fetchCalls, 2);
+    expect(find.text('Объект второй организации'), findsOneWidget);
+    expect(find.text('Строительство склада Литер А'), findsNothing);
+  });
+
   testWidgets('карточка объекта имеет единое доступное действие', (
     tester,
   ) async {
@@ -331,5 +547,13 @@ Project _project() {
     ..serverId = 15
     ..name = 'Строительство склада Литер А'
     ..address = '420054, Респ Татарстан, г Казань'
+    ..myRole = 'Владелец';
+}
+
+Project _otherProject() {
+  return Project()
+    ..serverId = 16
+    ..name = 'Объект второй организации'
+    ..address = '420000, Казань'
     ..myRole = 'Владелец';
 }

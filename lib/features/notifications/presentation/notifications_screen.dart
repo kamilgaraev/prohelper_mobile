@@ -21,7 +21,10 @@ class NotificationsScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(notificationsProvider);
     final notifier = ref.read(notificationsProvider.notifier);
-    final markAllAsRead = state.isActionLoading ? null : notifier.markAllAsRead;
+    final VoidCallback? markAllAsRead =
+        state.isActionLoading
+            ? null
+            : () => _runActionWithRetry(context, notifier.markAllAsRead);
 
     return Scaffold(
       appBar: AppBar(
@@ -72,6 +75,18 @@ class NotificationsScreen extends ConsumerWidget {
                   ),
                 ),
               ),
+              if (state.error != null && state.items.isNotEmpty)
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                  sliver: SliverToBoxAdapter(
+                    child: AppErrorState(
+                      title: 'Не удалось обновить уведомления',
+                      description: state.error,
+                      onRetry: () => notifier.load(refresh: true),
+                      minHeight: 160,
+                    ),
+                  ),
+                ),
               if (state.isRefreshing && state.items.isEmpty)
                 const SliverFillRemaining(
                   child: AppLoadingState(message: 'Загружаем уведомления'),
@@ -126,7 +141,10 @@ class NotificationsScreen extends ConsumerWidget {
                               ),
                           onMarkRead:
                               notification.isUnread
-                                  ? () => notifier.markAsRead(notification.id)
+                                  ? () => _runActionWithRetry(
+                                    context,
+                                    () => notifier.markAsRead(notification.id),
+                                  )
                                   : null,
                         ),
                       );
@@ -231,6 +249,29 @@ class _LoadMoreButton extends StatelessWidget {
         onPressed: isLoading ? null : onPressed,
         leading: const Icon(Icons.expand_more_rounded),
         isBusy: isLoading,
+      ),
+    );
+  }
+}
+
+Future<void> _runActionWithRetry(
+  BuildContext context,
+  Future<void> Function() action,
+) async {
+  try {
+    await action();
+  } catch (error) {
+    if (!context.mounted) {
+      return;
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(UserMessage.fromError(error)),
+        action: SnackBarAction(
+          label: 'Повторить',
+          onPressed: () => _runActionWithRetry(context, action),
+        ),
       ),
     );
   }

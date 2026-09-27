@@ -35,7 +35,7 @@ class AuthRepository {
     } on DioException catch (error) {
       if (error.response?.statusCode == 401) {
         throw const ApiException(
-          'Email или пароль не подошли. Проверьте данные и попробуйте еще раз.',
+          'Адрес электронной почты или пароль не подошли. Проверьте данные и попробуйте еще раз.',
           statusCode: 401,
         );
       }

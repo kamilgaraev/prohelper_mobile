@@ -21,6 +21,8 @@ class MyAction {
   final DateTime? dueAt;
   final List<String> allowedActions;
 
+  String get statusLabel => myActionStatusLabel(status);
+
   factory MyAction.fromJson(Map<String, dynamic> json) {
     final rawId = json['id'];
     final rawProjectId = json['project_id'];
@@ -41,6 +43,29 @@ class MyAction {
           .toList(growable: false),
     );
   }
+}
+
+String myActionStatusLabel(String status) {
+  final normalized = status.trim().toLowerCase();
+
+  return switch (normalized) {
+    'draft' => 'Черновик',
+    'assigned' => 'Назначено',
+    'pending' ||
+    'pending_approval' ||
+    'in_review' ||
+    'awaiting_approval' => 'На согласовании',
+    'submitted' || 'under_review' => 'На проверке',
+    'approved' => 'Согласовано',
+    'rejected' => 'Отклонено',
+    'completed' || 'done' => 'Завершено',
+    'closed' => 'Закрыто',
+    'cancelled' || 'canceled' => 'Отменено',
+    'in_progress' || 'in-progress' || 'active' => 'В работе',
+    'overdue' => 'Просрочено',
+    'blocked' => 'Заблокировано',
+    _ => status.trim(),
+  };
 }
 
 class MyActionsPage {

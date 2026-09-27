@@ -4,13 +4,11 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import 'package:prohelpers_mobile/core/design/pro_design_tokens.dart';
 import 'package:prohelpers_mobile/core/design/pro_status.dart';
-import 'package:prohelpers_mobile/core/navigation/mobile_destination.dart';
-import 'package:prohelpers_mobile/core/providers/module_provider.dart';
 import 'package:prohelpers_mobile/core/theme/app_typography.dart';
+import 'package:prohelpers_mobile/core/theme/theme_mode_provider.dart';
 import 'package:prohelpers_mobile/core/widgets/pro_page_scaffold.dart';
 import 'package:prohelpers_mobile/core/widgets/pro_section.dart';
 import 'package:prohelpers_mobile/core/widgets/pro_surface.dart';
-import 'package:prohelpers_mobile/features/actions/presentation/mobile_action_search.dart';
 import 'package:prohelpers_mobile/features/auth/data/user_model.dart';
 import 'package:prohelpers_mobile/features/auth/domain/auth_provider.dart';
 import 'package:prohelpers_mobile/features/auth/presentation/widgets/logout_confirmation_dialog.dart';
@@ -18,6 +16,7 @@ import 'package:prohelpers_mobile/features/auth/presentation/widgets/user_profil
 import 'package:prohelpers_mobile/features/knowledge_hub/presentation/knowledge_hub_screen.dart';
 import 'package:prohelpers_mobile/features/projects/domain/projects_provider.dart';
 import 'package:prohelpers_mobile/features/projects/presentation/project_selection_screen.dart';
+import 'package:prohelpers_mobile/features/sync/presentation/pending_sync_screen.dart';
 
 class MobileMoreScreen extends ConsumerWidget {
   const MobileMoreScreen({super.key});
@@ -26,15 +25,7 @@ class MobileMoreScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final project = ref.watch(projectsProvider).selectedProject;
     final authState = ref.watch(authProvider);
-    final modules = ref.watch(supportedMobileModulesProvider);
-    final hasSelectedProject = project != null;
-    final managementDestinations = visibleMobileDestinations(modules)
-        .where(
-          (destination) =>
-              destination.group == MobileModuleGroup.management &&
-              (!destination.requiresProject || hasSelectedProject),
-        )
-        .toList(growable: false);
+    final themeMode = ref.watch(themeModeProvider);
 
     final user = authState is AuthAuthenticated ? authState.user : null;
     final projectTitle = project?.name ?? 'Объект не выбран';
@@ -46,8 +37,8 @@ class MobileMoreScreen extends ConsumerWidget {
             : 'Сменить текущий объект: $projectTitle. Адрес: $projectDescription';
 
     return ProPageScaffold(
-      title: 'Ещё',
-      subtitle: 'Управление, справочники и профиль',
+      title: 'Я',
+      subtitle: 'Профиль, объект и настройки',
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -118,28 +109,6 @@ class MobileMoreScreen extends ConsumerWidget {
               ),
             ],
           ),
-          if (managementDestinations.isNotEmpty) ...[
-            const SizedBox(height: 20),
-            _MoreActionPanel(
-              title: 'Управление',
-              subtitle: 'Вторичные разделы, настройки данных и контроль.',
-              items: [
-                for (final destination in managementDestinations)
-                  _MoreActionItem(
-                    title: destination.shortTitle,
-                    subtitle:
-                        destination.title == destination.shortTitle
-                            ? destination.recommendedReason
-                            : '${destination.title} · ${destination.recommendedReason}',
-                    icon: destination.icon,
-                    onTap:
-                        () => Navigator.of(
-                          context,
-                        ).push(MaterialPageRoute(builder: destination.builder)),
-                  ),
-              ],
-            ),
-          ],
           if (user != null) ...[
             const SizedBox(height: 20),
             _MoreActionPanel(
@@ -150,6 +119,23 @@ class MobileMoreScreen extends ConsumerWidget {
                   subtitle: 'Данные пользователя и организации',
                   icon: Icons.person_outline_rounded,
                   onTap: () => _showUserProfileBottomSheet(context, user),
+                ),
+                _MoreActionItem(
+                  title: 'Тема',
+                  subtitle: _themeModeLabel(themeMode),
+                  icon: Icons.brightness_6_outlined,
+                  onTap: () => _cycleTheme(ref, themeMode),
+                ),
+                _MoreActionItem(
+                  title: 'Операции',
+                  subtitle: 'Сохранённые действия и их статус',
+                  icon: Icons.cloud_off_outlined,
+                  onTap:
+                      () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const PendingSyncScreen(),
+                        ),
+                      ),
                 ),
                 _MoreActionItem(
                   title: 'Выйти',
@@ -182,6 +168,23 @@ class MobileMoreScreen extends ConsumerWidget {
   }
 }
 
+void _cycleTheme(WidgetRef ref, ThemeMode current) {
+  final next = switch (current) {
+    ThemeMode.system => ThemeMode.light,
+    ThemeMode.light => ThemeMode.dark,
+    ThemeMode.dark => ThemeMode.system,
+  };
+  ref.read(themeModeProvider.notifier).setMode(next);
+}
+
+String _themeModeLabel(ThemeMode mode) {
+  return switch (mode) {
+    ThemeMode.system => 'Как в системе',
+    ThemeMode.light => 'Светлая',
+    ThemeMode.dark => 'Тёмная',
+  };
+}
+
 class _MoreProjectContextCard extends StatelessWidget {
   const _MoreProjectContextCard({
     required this.title,
@@ -210,49 +213,70 @@ class _MoreProjectContextCard extends StatelessWidget {
       padding: const EdgeInsets.all(ProSpacing.sm),
       semanticLabel: semanticLabel,
       onTap: onTap,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 44,
-            height: 44,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: status.background,
-              borderRadius: BorderRadius.circular(ProRadius.sm),
-              border: Border.all(color: status.border),
-            ),
-            child: Icon(status.icon, color: status.foreground, size: 22),
-          ),
-          const SizedBox(width: ProSpacing.sm),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppTypography.bodyLarge(
-                    context,
-                  ).copyWith(fontWeight: FontWeight.w800, height: 1.15),
-                ),
-                const SizedBox(height: ProSpacing.xxs),
-                Text(
-                  description,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppTypography.bodyMedium(context).copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                    height: 1.25,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final compact = constraints.maxWidth < 320;
+          final switchPill = _MoreProjectSwitchPill(label: actionLabel);
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 44,
+                    height: 44,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: status.background,
+                      borderRadius: BorderRadius.circular(ProRadius.sm),
+                      border: Border.all(color: status.border),
+                    ),
+                    child: Icon(
+                      status.icon,
+                      color: status.foreground,
+                      size: 22,
+                    ),
                   ),
-                ),
+                  const SizedBox(width: ProSpacing.sm),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          title,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppTypography.bodyLarge(
+                            context,
+                          ).copyWith(fontWeight: FontWeight.w800, height: 1.15),
+                        ),
+                        const SizedBox(height: ProSpacing.xxs),
+                        Text(
+                          description,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppTypography.bodyMedium(context).copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                            height: 1.25,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (!compact) ...[
+                    const SizedBox(width: ProSpacing.sm),
+                    switchPill,
+                  ],
+                ],
+              ),
+              if (compact) ...[
+                const SizedBox(height: ProSpacing.sm),
+                switchPill,
               ],
-            ),
-          ),
-          const SizedBox(width: ProSpacing.sm),
-          _MoreProjectSwitchPill(label: actionLabel),
-        ],
+            ],
+          );
+        },
       ),
     );
   }
@@ -406,7 +430,7 @@ class _MoreActionRow extends StatelessWidget {
                     children: [
                       Text(
                         item.title,
-                        maxLines: 1,
+                        maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: AppTypography.bodyMedium(
                           context,
@@ -416,7 +440,7 @@ class _MoreActionRow extends StatelessWidget {
                         const SizedBox(height: ProSpacing.xxs),
                         Text(
                           item.subtitle!,
-                          maxLines: 2,
+                          maxLines: 3,
                           overflow: TextOverflow.ellipsis,
                           style: AppTypography.caption(context),
                         ),

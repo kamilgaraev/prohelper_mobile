@@ -5,6 +5,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:prohelpers_mobile/core/models/user_context.dart';
 import 'package:prohelpers_mobile/core/providers/module_provider.dart';
 import 'package:prohelpers_mobile/core/services/permission_service.dart';
+import 'package:prohelpers_mobile/core/sync/sync_queue_service.dart';
 import 'package:prohelpers_mobile/features/projects/data/project_model.dart';
 import 'package:prohelpers_mobile/features/projects/data/projects_repository.dart';
 import 'package:prohelpers_mobile/features/projects/domain/projects_provider.dart';
@@ -22,6 +23,7 @@ class _RecordingSafetyRepository extends SafetyRepository {
   String? incidentStatus;
   String? violationStatus;
   String? suspendReason;
+  bool queueIncidentCreation = false;
 
   @override
   Future<List<SafetyWorkPermitModel>> fetchPermits({
@@ -53,6 +55,9 @@ class _RecordingSafetyRepository extends SafetyRepository {
   @override
   Future<SafetyIncidentModel> createIncident(Map<String, dynamic> data) async {
     incidentPayload = Map<String, dynamic>.from(data);
+    if (queueIncidentCreation) {
+      throw const SyncQueuedException(queueId: 1);
+    }
 
     return const SafetyIncidentModel(
       id: 1,
@@ -220,6 +225,47 @@ void main() {
     expect(repository.incidentPayload?.containsKey('metadata'), isFalse);
   });
 
+  testWidgets('shows queued incident as saved and closes the form', (
+    tester,
+  ) async {
+    final repository =
+        _RecordingSafetyRepository()..queueIncidentCreation = true;
+    useLargeSurface(tester);
+
+    await tester.pumpWidget(buildScreen(repository));
+    await pumpUi(tester);
+
+    await tester.tap(find.byType(FloatingActionButton));
+    await pumpUi(tester);
+    await tester.enterText(find.byType(TextField).first, 'Нет ограждения');
+    await tester.tap(find.byType(DropdownButtonFormField<String>).first);
+    await pumpUi(tester);
+    await tester.tap(find.text('Серьезная').last);
+    await pumpUi(tester);
+    await tester.tap(find.byType(DropdownButtonFormField<String>).last);
+    await pumpUi(tester);
+    await tester.tap(find.text('Опасное условие').last);
+    await pumpUi(tester);
+    await tester.tap(find.text('Когда произошло'));
+    await pumpUi(tester);
+    await tester.tap(find.text('OK').last);
+    await pumpUi(tester);
+    await tester.tap(find.text('OK').last);
+    await pumpUi(tester);
+    await tester.ensureVisible(find.byType(FilledButton).last);
+    await tester.pump();
+    await tester.tap(find.byType(FilledButton).last);
+    await pumpUi(tester);
+
+    expect(find.text('Новая запись охраны труда'), findsNothing);
+    expect(
+      find.text('Будет отправлено при восстановлении связи'),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('app-error-notice')), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('opens permit detail and submits suspension reason', (
     tester,
   ) async {
@@ -285,5 +331,25 @@ void main() {
     expect(repository.permitStatus, 'active');
     expect(repository.incidentStatus, 'reported');
     expect(repository.violationStatus, 'open');
+  });
+
+  testWidgets('large text on compact screen keeps severity field scrollable', (
+    tester,
+  ) async {
+    final repository = _RecordingSafetyRepository();
+    tester.view.devicePixelRatio = 2;
+    tester.view.physicalSize = const Size(720, 1280);
+    tester.view.platformDispatcher.textScaleFactorTestValue = 1.3;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.platformDispatcher.clearTextScaleFactorTestValue);
+
+    await tester.pumpWidget(buildScreen(repository));
+    await pumpUi(tester);
+    await tester.tap(find.text('Новая запись'));
+    await pumpUi(tester);
+
+    expect(find.text('Тяжесть'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 }

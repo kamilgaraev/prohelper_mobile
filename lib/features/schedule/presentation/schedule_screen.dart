@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/theme/app_colors.dart';
@@ -157,6 +157,19 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
                 ),
               )
             else ...[
+              if (state.fromCache)
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+                  sliver: SliverToBoxAdapter(
+                    child: ProStatusBanner(
+                      title: 'Сохранённые данные',
+                      description:
+                          state.error ??
+                          'Показаны данные с устройства. Они могут быть неактуальны.',
+                      tone: ProStatusTone.info,
+                    ),
+                  ),
+                ),
               SliverPadding(
                 padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
                 sliver: SliverToBoxAdapter(

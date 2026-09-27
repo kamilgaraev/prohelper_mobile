@@ -16,12 +16,21 @@ class NotificationsRepository {
   NotificationsRepository(this._dio);
 
   final Dio _dio;
+  CancelToken? _activeNotificationsFetchToken;
+
+  void cancelPendingFetch() {
+    _activeNotificationsFetchToken?.cancel('Загрузка уведомлений отменена.');
+  }
 
   Future<NotificationsPageResult> fetchNotifications({
     int page = 1,
     int perPage = 20,
     NotificationFilter filter = NotificationFilter.all,
   }) async {
+    cancelPendingFetch();
+    final cancelToken = CancelToken();
+    _activeNotificationsFetchToken = cancelToken;
+
     try {
       final response = await _dio.get(
         '/notifications',
@@ -30,6 +39,7 @@ class NotificationsRepository {
           'per_page': perPage,
           if (filter.queryValue != null) 'filter': filter.queryValue,
         },
+        cancelToken: cancelToken,
       );
 
       return _parsePage(response.data, page: page, perPage: perPage);
@@ -44,6 +54,10 @@ class NotificationsRepository {
       }
 
       throw const ApiException('Не удалось загрузить уведомления.');
+    } finally {
+      if (identical(_activeNotificationsFetchToken, cancelToken)) {
+        _activeNotificationsFetchToken = null;
+      }
     }
   }
 

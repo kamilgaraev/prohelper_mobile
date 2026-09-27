@@ -31,9 +31,13 @@ class ProPageScaffold extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final compact =
+        MediaQuery.sizeOf(context).width < 390 ||
+        MediaQuery.textScalerOf(context).scale(1) > 1.15;
     final toolbarHeight = _toolbarHeight(
       context,
       hasSubtitle: subtitle != null,
+      compact: compact,
     );
     final content = ListView(padding: padding, children: [body]);
 
@@ -54,11 +58,16 @@ class ProPageScaffold extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(title, style: AppTypography.h2(context)),
+            Text(
+              title,
+              maxLines: compact ? 2 : 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppTypography.h2(context),
+            ),
             if (subtitle != null)
               Text(
                 subtitle!,
-                maxLines: 1,
+                maxLines: compact ? 2 : 1,
                 overflow: TextOverflow.ellipsis,
                 style: AppTypography.caption(context),
               ),
@@ -75,15 +84,22 @@ class ProPageScaffold extends StatelessWidget {
   }
 }
 
-double _toolbarHeight(BuildContext context, {required bool hasSubtitle}) {
+double _toolbarHeight(
+  BuildContext context, {
+  required bool hasSubtitle,
+  required bool compact,
+}) {
   const verticalPadding = ProSpacing.sm * 2;
   const subtitleGap = ProSpacing.xxs;
   final textScaler = MediaQuery.textScalerOf(context);
-  final titleHeight = _scaledLineHeight(textScaler, AppTypography.h2(context));
+  final titleHeight =
+      _scaledLineHeight(textScaler, AppTypography.h2(context)) *
+      (compact ? 2 : 1);
   final subtitleHeight =
       hasSubtitle
           ? subtitleGap +
-              _scaledLineHeight(textScaler, AppTypography.caption(context))
+              _scaledLineHeight(textScaler, AppTypography.caption(context)) *
+                  (compact ? 2 : 1)
           : 0;
 
   final contentHeight = titleHeight + subtitleHeight + verticalPadding;

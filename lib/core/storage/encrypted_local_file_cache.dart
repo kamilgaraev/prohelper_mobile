@@ -117,6 +117,30 @@ class EncryptedLocalFileCache {
     return target.path;
   }
 
+  Future<String> stageQueuedAttachment({
+    required String ownerIdentity,
+    required String context,
+    required String sourcePath,
+  }) async {
+    if (ownerIdentity.trim().isEmpty || context.trim().isEmpty) {
+      throw ArgumentError('Владелец и контекст файла обязательны.');
+    }
+    final source = File(sourcePath);
+    if (!await source.exists()) {
+      throw const FileSystemException('Исходный файл недоступен.');
+    }
+    final target = await _queuedAttachmentFile(ownerIdentity, context);
+    final temporary = File('${target.path}.tmp');
+    await _encryptFile(
+      source,
+      temporary,
+      ownerIdentity: ownerIdentity,
+      context: context,
+    );
+    await _replaceEncryptedFile(temporary, target);
+    return target.path;
+  }
+
   Future<bool> isSaved({
     required String ownerIdentity,
     required int documentId,
@@ -166,9 +190,14 @@ class EncryptedLocalFileCache {
 
   Future<void> clearIdentity(String ownerIdentity) async {
     _keyFutures.remove(_storageKey(ownerIdentity));
-    final folder = await _identityDirectory(ownerIdentity);
-    if (await folder.exists()) {
-      await folder.delete(recursive: true);
+    final folders = [
+      await _identityDirectory(ownerIdentity),
+      await _queuedAttachmentDirectory(ownerIdentity),
+    ];
+    for (final folder in folders) {
+      if (await folder.exists()) {
+        await folder.delete(recursive: true);
+      }
     }
     await _keyStore.delete(_storageKey(ownerIdentity));
     await clearTemporaryPlaintext();
@@ -379,6 +408,21 @@ class EncryptedLocalFileCache {
     final folder = await _identityDirectory(identity);
     if (!await folder.exists()) await folder.create(recursive: true);
     return File('${folder.path}${Platform.pathSeparator}$filename');
+  }
+
+  Future<File> _queuedAttachmentFile(String identity, String context) async {
+    final folder = await _queuedAttachmentDirectory(identity);
+    if (!await folder.exists()) await folder.create(recursive: true);
+    final filename = sha256.convert(utf8.encode(context)).toString();
+    return File('${folder.path}${Platform.pathSeparator}$filename.enc');
+  }
+
+  Future<Directory> _queuedAttachmentDirectory(String identity) async {
+    final root = await _directoryProvider();
+    final identityHash = sha256.convert(utf8.encode(identity));
+    return Directory(
+      '${root.path}${Platform.pathSeparator}sync_queue${Platform.pathSeparator}$identityHash',
+    );
   }
 
   Future<Directory> _identityDirectory(String identity) async {

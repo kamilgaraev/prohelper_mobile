@@ -1,9 +1,16 @@
+import 'dart:async';
+
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/error/user_message.dart';
 import '../../../core/network/api_exception.dart';
+import '../../../core/storage/entity_snapshot_provider.dart';
+import '../../../core/storage/snapshot_read.dart';
+import '../../../core/sync/sync_queue_provider.dart';
+import '../../auth/domain/auth_provider.dart';
 import '../data/safety_model.dart';
 import '../data/safety_repository.dart';
+import '../data/safety_snapshot_adapter.dart';
 
 const _errorSentinel = Object();
 const _projectFilterSentinel = Object();
@@ -27,6 +34,8 @@ class SafetyState {
     this.dashboard,
     this.myAdmission,
     this.permissionDenied = false,
+    this.fromCache = false,
+    this.hasDirtyLocal = false,
     this.error,
   });
 
@@ -44,6 +53,8 @@ class SafetyState {
   final SafetyDashboardModel? dashboard;
   final SafetyAdmissionModel? myAdmission;
   final bool permissionDenied;
+  final bool fromCache;
+  final bool hasDirtyLocal;
   final String? error;
 
   SafetyState copyWith({
@@ -61,6 +72,8 @@ class SafetyState {
     Object? dashboard = _dashboardSentinel,
     Object? myAdmission = _admissionSentinel,
     bool? permissionDenied,
+    bool? fromCache,
+    bool? hasDirtyLocal,
     Object? error = _errorSentinel,
   }) {
     return SafetyState(
@@ -96,15 +109,27 @@ class SafetyState {
               ? this.myAdmission
               : myAdmission as SafetyAdmissionModel?,
       permissionDenied: permissionDenied ?? this.permissionDenied,
+      fromCache: fromCache ?? this.fromCache,
+      hasDirtyLocal: hasDirtyLocal ?? this.hasDirtyLocal,
       error: identical(error, _errorSentinel) ? this.error : error as String?,
     );
   }
 }
 
 class SafetyNotifier extends StateNotifier<SafetyState> {
-  SafetyNotifier(this._repository) : super(const SafetyState());
+  SafetyNotifier(
+    this._repository, {
+    SafetySnapshotAdapter? snapshotAdapter,
+    bool Function()? isOnline,
+  }) : _snapshotAdapter = snapshotAdapter,
+       _isOnline = isOnline,
+       super(const SafetyState());
 
   final SafetyRepository _repository;
+  final SafetySnapshotAdapter? _snapshotAdapter;
+  final bool Function()? _isOnline;
+
+  bool get isLoading => state.isLoading;
 
   void syncProject(int? projectId) {
     if (state.projectFilter == projectId) {
@@ -122,6 +147,8 @@ class SafetyNotifier extends StateNotifier<SafetyState> {
       dashboard: null,
       myAdmission: null,
       permissionDenied: false,
+      fromCache: false,
+      hasDirtyLocal: false,
       error: null,
     );
   }
@@ -161,6 +188,34 @@ class SafetyNotifier extends StateNotifier<SafetyState> {
     );
 
     try {
+      final snapshotAdapter = _snapshotAdapter;
+      if (snapshotAdapter != null) {
+        final read = await snapshotAdapter.load(
+          online: _isOnline?.call() ?? false,
+          projectId: state.projectFilter,
+          permitStatus: state.permitStatusFilter,
+          incidentStatus: state.incidentStatusFilter,
+          violationStatus: state.violationStatusFilter,
+        );
+        final denied = read.presence == SnapshotPresence.permissionDenied;
+        final data = denied ? null : read.data;
+        state = state.copyWith(
+          isLoading: false,
+          dashboard: data?.dashboard,
+          myAdmission: data?.admission,
+          permits: data?.permits ?? const [],
+          incidents: data?.incidents ?? const [],
+          violations: data?.violations ?? const [],
+          briefings: data?.briefings ?? const [],
+          inspections: data?.inspections ?? const [],
+          inspectionFindings: data?.inspectionFindings ?? const [],
+          permissionDenied: denied,
+          fromCache: !denied && read.fromCache,
+          hasDirtyLocal: !denied && read.hasDirtyLocal,
+          error: read.error,
+        );
+        return;
+      }
       final result = await Future.wait<Object?>([
         _repository.fetchDashboard(projectId: state.projectFilter),
         _repository.fetchMyAdmission(projectId: state.projectFilter),
@@ -194,11 +249,14 @@ class SafetyNotifier extends StateNotifier<SafetyState> {
         briefings: result[5] as List<SafetyBriefingModel>,
         inspections: result[6] as List<SafetyInspectionModel>,
         inspectionFindings: result[7] as List<SafetyInspectionFindingModel>,
+        fromCache: false,
+        hasDirtyLocal: false,
       );
     } catch (error) {
       state = state.copyWith(
         isLoading: false,
         permissionDenied: _isPermissionDenied(error),
+        fromCache: false,
         error: UserMessage.fromError(error),
       );
     }
@@ -278,10 +336,39 @@ class SafetyNotifier extends StateNotifier<SafetyState> {
   }
 }
 
+final safetySnapshotAdapterProvider = Provider<SafetySnapshotAdapter>((ref) {
+  return SafetySnapshotAdapter(
+    repository: ref.read(safetyRepositoryProvider),
+    snapshots: ref.read(entitySnapshotServiceProvider.future),
+    flushQueue: () async {
+      await ref.read(syncQueueProvider.notifier).retryPending();
+    },
+  );
+});
+
 final safetyProvider = StateNotifierProvider<SafetyNotifier, SafetyState>((
   ref,
 ) {
-  return SafetyNotifier(ref.read(safetyRepositoryProvider));
+  final notifier = SafetyNotifier(
+    ref.read(safetyRepositoryProvider),
+    snapshotAdapter: ref.read(safetySnapshotAdapterProvider),
+    isOnline: () {
+      final auth = ref.read(authProvider);
+      return auth is AuthAuthenticated && auth.isOnlineVerified;
+    },
+  );
+  ref.listen<AuthState>(authProvider, (previous, next) {
+    final wasOnline =
+        previous is AuthAuthenticated && previous.isOnlineVerified;
+    final isOnline = next is AuthAuthenticated && next.isOnlineVerified;
+    if (!wasOnline && isOnline && !notifier.isLoading) {
+      unawaited(notifier.load());
+    }
+  });
+  ref.listen(syncQueueProvider, (previous, next) {
+    if (next != null && !notifier.isLoading) unawaited(notifier.load());
+  });
+  return notifier;
 });
 
 bool _isPermissionDenied(Object error) {

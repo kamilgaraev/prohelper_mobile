@@ -1,7 +1,8 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/theme/app_typography.dart';
+import '../../../core/sync/sync_queue_service.dart';
 import '../../../core/widgets/app_error_notice.dart';
 import '../data/warehouse_repository.dart';
 import '../data/warehouse_scan_model.dart';
@@ -270,6 +271,13 @@ class _WarehouseTransferSheetState
       }
 
       Navigator.of(context).pop(true);
+    } on SyncQueuedException catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(error.message)));
+        Navigator.of(context).pop(false);
+      }
     } catch (error) {
       AppErrorNotice.show(context, error);
     } finally {

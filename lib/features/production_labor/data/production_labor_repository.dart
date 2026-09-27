@@ -1,4 +1,6 @@
-﻿import 'package:dio/dio.dart';
+import 'dart:math';
+
+import 'package:dio/dio.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/network/api_exception.dart';
@@ -28,13 +30,21 @@ class ProductionLaborRepository extends SyncQueueAwareRepository {
   final Dio _dio;
 
   Future<List<LaborWorkOrderModel>> fetchWorkOrders({int? projectId}) async {
+    return (await fetchWorkOrderPayloads(
+      projectId: projectId,
+    )).map(LaborWorkOrderModel.fromJson).toList();
+  }
+
+  Future<List<Map<String, dynamic>>> fetchWorkOrderPayloads({
+    int? projectId,
+  }) async {
     try {
       final response = await _dio.get(
         '/production-labor/work-orders',
         queryParameters: {if (projectId != null) 'project_id': projectId},
       );
 
-      return _list(response.data).map(LaborWorkOrderModel.fromJson).toList();
+      return _list(response.data);
     } on DioException catch (error) {
       throw ApiException.fromDio(error);
     } catch (_) {
@@ -47,9 +57,11 @@ class ProductionLaborRepository extends SyncQueueAwareRepository {
     required double quantity,
     required double hours,
     required String workDate,
+    required String idempotencyKey,
     String? comment,
   }) async {
     final payload = <String, dynamic>{
+      'idempotency_key': idempotencyKey,
       'work_order_line_id': workOrderLineId,
       'work_date': workDate,
       'quantity': quantity,
@@ -62,6 +74,7 @@ class ProductionLaborRepository extends SyncQueueAwareRepository {
       final response = await _dio.post(
         '/production-labor/output-entries',
         data: payload,
+        options: Options(headers: {'Idempotency-Key': idempotencyKey}),
       );
 
       return LaborOutputModel.fromJson(_object(response.data));
@@ -75,6 +88,7 @@ class ProductionLaborRepository extends SyncQueueAwareRepository {
             endpoint: '/production-labor/output-entries',
             payload: payload,
           ),
+          cause: error,
         );
       }
 
@@ -131,4 +145,9 @@ class ProductionLaborRepository extends SyncQueueAwareRepository {
   Map<String, dynamic> _object(dynamic responseData) {
     return MobileApiResponse.dataMap(responseData);
   }
+}
+
+String newProductionLaborOutputIdempotencyKey() {
+  final random = Random.secure();
+  return List.generate(32, (_) => random.nextInt(16).toRadixString(16)).join();
 }

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:isar/isar.dart';
@@ -9,6 +11,102 @@ import 'package:prohelpers_mobile/core/sync/sync_queue_draft.dart';
 import 'package:prohelpers_mobile/features/construction_journal/data/construction_journal_repository.dart';
 
 void main() {
+  test('persisted in-flight submit is reviewed after worker restart', () async {
+    final store = _MemorySyncQueueStore();
+    final firstDio = Dio();
+    final queue = SyncQueueService(
+      store: store,
+      dio: firstDio,
+      currentScope: () => '9:3',
+    );
+    await queue.enqueue(
+      const SyncQueueDraft(
+        moduleSlug: 'construction_journal',
+        operationType: 'create_and_submit_entry',
+        method: 'POST',
+        endpoint: '/construction-journals/7/entries',
+        payload: {
+          'journal_id': 7,
+          'idempotency_key': 'create-key',
+          'created_entry_id': 42,
+          'submit_intent': true,
+        },
+      ),
+    );
+
+    final requestStarted = Completer<void>();
+    final releaseRequest = Completer<void>();
+    firstDio.interceptors.add(
+      InterceptorsWrapper(
+        onRequest: (options, handler) {
+          requestStarted.complete();
+          releaseRequest.future.then((_) {
+            handler.reject(
+              DioException(
+                requestOptions: options,
+                type: DioExceptionType.receiveTimeout,
+              ),
+            );
+          });
+        },
+      ),
+    );
+    final repository = ConstructionJournalRepository(
+      firstDio,
+      syncQueueServiceFuture: Future.value(queue),
+    );
+    final submitFuture = repository.submitEntry(
+      42,
+      idempotencyKey: 'submit-key',
+      journalId: 7,
+    );
+    await requestStarted.future;
+
+    expect((await store.all()).single.status, SyncOperationStatuses.sending);
+
+    var replayRequests = 0;
+    final restartedDio =
+        Dio()
+          ..interceptors.add(
+            InterceptorsWrapper(
+              onRequest: (options, handler) {
+                replayRequests++;
+                handler.resolve(
+                  Response(
+                    requestOptions: options,
+                    data: {'data': _entry(42, status: 'submitted')},
+                  ),
+                );
+              },
+            ),
+          );
+    final restartedWorker = SyncQueueService(
+      store: store,
+      dio: restartedDio,
+      currentScope: () => '9:3',
+    );
+    final restartResult = await restartedWorker.retryDueOperations();
+
+    expect(restartResult.blockedCount, 1);
+    expect(replayRequests, 0);
+    final afterRestart = (await store.all()).single;
+    expect(afterRestart.status, SyncOperationStatuses.conflict);
+    expect(afterRestart.lastBusinessError, SyncQueueMessages.unknownOutcome);
+
+    releaseRequest.complete();
+    await expectLater(
+      submitFuture,
+      throwsA(
+        isA<SyncQueuedException>().having(
+          (error) => error.requiresReview,
+          'requiresReview',
+          isTrue,
+        ),
+      ),
+    );
+    expect((await store.all()).single.status, SyncOperationStatuses.conflict);
+  });
+
   test(
     'a restored operation cannot be replayed after switching session',
     () async {
@@ -110,7 +208,7 @@ void main() {
     },
   );
   test(
-    'foreground and restarted worker share submit key and immutable create body',
+    'ambiguous submit outcome is reviewed without replaying the POST',
     () async {
       final store = _MemorySyncQueueStore();
       final requests = <RequestOptions>[];
@@ -177,101 +275,94 @@ void main() {
         dio: dio,
         currentScope: () => '9:3',
       );
-      expect((await restarted.retryDueOperations()).successCount, 1);
+      final replay = await restarted.retryDueOperations();
+      expect(replay.successCount, 0);
       expect(requests.map((r) => r.path), [
         '/construction-journals/7/entries',
         '/journal-entries/42/submit',
-        '/journal-entries/42/submit',
       ]);
-      expect(requests[1].data, requests[2].data);
-      expect(await store.all(), isEmpty);
+      expect((await store.all()).single.status, SyncOperationStatuses.conflict);
     },
   );
-  test(
-    'keeps created id and retries submit without creating a second entry',
-    () async {
-      final store = _MemorySyncQueueStore();
-      var createCalls = 0;
-      var submitCalls = 0;
-      final dio =
-          Dio()
-            ..interceptors.add(
-              InterceptorsWrapper(
-                onRequest: (options, handler) {
-                  if (options.path.contains('/entries') &&
-                      !options.path.contains('/submit')) {
-                    createCalls++;
-                    handler.resolve(
-                      Response(
-                        requestOptions: options,
-                        data: {'data': _entry(42)},
-                      ),
-                    );
-                    return;
-                  }
-                  if (options.path.endsWith('/submit')) {
-                    submitCalls++;
-                    if (submitCalls == 1) {
-                      handler.reject(
-                        DioException(
-                          requestOptions: options,
-                          type: DioExceptionType.connectionError,
-                        ),
-                      );
-                      return;
-                    }
-                    handler.resolve(
-                      Response(
-                        requestOptions: options,
-                        data: {'data': _entry(42, status: 'submitted')},
-                      ),
-                    );
-                    return;
-                  }
-                  handler.reject(
-                    DioException(
+  test('keeps created id and requires review after ambiguous submit', () async {
+    final store = _MemorySyncQueueStore();
+    var createCalls = 0;
+    var submitCalls = 0;
+    final dio =
+        Dio()
+          ..interceptors.add(
+            InterceptorsWrapper(
+              onRequest: (options, handler) {
+                if (options.path.contains('/entries') &&
+                    !options.path.contains('/submit')) {
+                  createCalls++;
+                  handler.resolve(
+                    Response(
                       requestOptions: options,
-                      type: DioExceptionType.unknown,
+                      data: {'data': _entry(42)},
                     ),
                   );
-                },
-              ),
-            );
-      final queue = SyncQueueService(store: store, dio: dio);
-      final repository = ConstructionJournalRepository(
-        dio,
-        syncQueueServiceFuture: Future.value(queue),
-      );
+                  return;
+                }
+                if (options.path.endsWith('/submit')) {
+                  submitCalls++;
+                  if (submitCalls == 1) {
+                    handler.reject(
+                      DioException(
+                        requestOptions: options,
+                        type: DioExceptionType.connectionError,
+                      ),
+                    );
+                    return;
+                  }
+                  handler.resolve(
+                    Response(
+                      requestOptions: options,
+                      data: {'data': _entry(42, status: 'submitted')},
+                    ),
+                  );
+                  return;
+                }
+                handler.reject(
+                  DioException(
+                    requestOptions: options,
+                    type: DioExceptionType.unknown,
+                  ),
+                );
+              },
+            ),
+          );
+    final queue = SyncQueueService(store: store, dio: dio);
+    final repository = ConstructionJournalRepository(
+      dio,
+      syncQueueServiceFuture: Future.value(queue),
+    );
 
-      final created = await repository.createEntry(
-        journalId: 7,
-        entryDate: '2026-09-20',
-        workDescription: 'Бетонирование стен',
-        idempotencyKey: 'journal-operation-1',
-      );
-      expect(created.id, 42);
+    final created = await repository.createEntry(
+      journalId: 7,
+      entryDate: '2026-09-20',
+      workDescription: 'Бетонирование стен',
+      idempotencyKey: 'journal-operation-1',
+    );
+    expect(created.id, 42);
 
-      await expectLater(
-        repository.submitEntry(
-          42,
-          idempotencyKey: 'journal-operation-1:submit',
-        ),
-        throwsA(isA<SyncQueuedException>()),
-      );
-      expect(createCalls, 1);
-      expect(submitCalls, 1);
-      expect(
-        (await store.all()).single.payload['idempotency_key'],
-        'journal-operation-1:submit',
-      );
+    await expectLater(
+      repository.submitEntry(42, idempotencyKey: 'journal-operation-1:submit'),
+      throwsA(isA<SyncQueuedException>()),
+    );
+    expect(createCalls, 1);
+    expect(submitCalls, 1);
+    expect(
+      (await store.all()).single.payload['idempotency_key'],
+      'journal-operation-1:submit',
+    );
 
-      final result = await queue.retryDueOperations();
-      expect(result.successCount, 1);
-      expect(createCalls, 1);
-      expect(submitCalls, 2);
-      expect(await store.all(), isEmpty);
-    },
-  );
+    final result = await queue.retryDueOperations();
+    expect(result.successCount, 0);
+    expect(createCalls, 1);
+    expect(submitCalls, 1);
+    expect((await store.all()).single.status, SyncOperationStatuses.conflict);
+  });
 
   test(
     'treats an already submitted entry as recovered after a 422 response',
@@ -409,17 +500,20 @@ void main() {
         dio: dio,
         currentScope: () => 'user-a:org-a',
       );
-      await queue.enqueue(
-        const SyncQueueDraft(
-          moduleSlug: 'construction_journal',
-          operationType: 'create_entry',
-          method: 'POST',
-          endpoint: '/construction-journals/7/entries',
-          payload: {
-            'idempotency_key': 'foreign-key',
-            'journal_id': 7,
-            'queue_scope': 'user-b:org-b',
-          },
+      await store.put(
+        QueuedSyncOperation.fromDraft(
+          const SyncQueueDraft(
+            moduleSlug: 'construction_journal',
+            operationType: 'create_entry',
+            method: 'POST',
+            endpoint: '/construction-journals/7/entries',
+            payload: {
+              'idempotency_key': 'foreign-key',
+              'journal_id': 7,
+              'queue_scope': 'user-b:org-b',
+            },
+          ),
+          createdAt: DateTime.utc(2026, 9, 20),
         ),
       );
       final repository = ConstructionJournalRepository(
@@ -429,59 +523,62 @@ void main() {
       expect(await repository.findPendingEntryOperation(7), isNull);
     },
   );
-  test('does not send confirmation or acting bypass fields on the wire', () async {
-    final store = _MemorySyncQueueStore();
-    Map<String, dynamic>? body;
-    final dio =
-        Dio()
-          ..interceptors.add(
-            InterceptorsWrapper(
-              onRequest: (options, handler) {
-                body = Map<String, dynamic>.from(options.data as Map);
-                handler.resolve(
-                  Response(
-                    requestOptions: options,
-                    data: {'data': _entry(42)},
-                  ),
-                );
-              },
-            ),
-          );
-    final queue = SyncQueueService(
-      store: store,
-      dio: dio,
-      currentScope: () => '9:3',
-    );
-    await queue.enqueue(
-      const SyncQueueDraft(
-        moduleSlug: 'construction_journal',
-        operationType: 'create_entry',
-        method: 'POST',
-        endpoint: '/construction-journals/7/entries',
-        payload: {
-          'queue_scope': '9:3',
-          'idempotency_key': 'legacy',
-          'journal_id': 7,
-          'entry_date': '2026-09-20',
-          'work_description': 'Монтаж',
-          'confirm': true,
-          'act': true,
-          'skip_readiness': true,
-        },
-      ),
-    );
-    final repo = ConstructionJournalRepository(
-      dio,
-      syncQueueServiceFuture: Future.value(queue),
-    );
-    final pending = (await repo.findPendingEntryOperation(7))!;
-    await repo.retryPendingCreate(pending);
-    expect(body, isNotNull);
-    expect(body!.containsKey('confirm'), isFalse);
-    expect(body!.containsKey('act'), isFalse);
-    expect(body!.containsKey('skip_readiness'), isFalse);
-    expect(body!.containsKey('queue_scope'), isFalse);
-  });
+  test(
+    'does not send confirmation or acting bypass fields on the wire',
+    () async {
+      final store = _MemorySyncQueueStore();
+      Map<String, dynamic>? body;
+      final dio =
+          Dio()
+            ..interceptors.add(
+              InterceptorsWrapper(
+                onRequest: (options, handler) {
+                  body = Map<String, dynamic>.from(options.data as Map);
+                  handler.resolve(
+                    Response(
+                      requestOptions: options,
+                      data: {'data': _entry(42)},
+                    ),
+                  );
+                },
+              ),
+            );
+      final queue = SyncQueueService(
+        store: store,
+        dio: dio,
+        currentScope: () => '9:3',
+      );
+      await queue.enqueue(
+        const SyncQueueDraft(
+          moduleSlug: 'construction_journal',
+          operationType: 'create_entry',
+          method: 'POST',
+          endpoint: '/construction-journals/7/entries',
+          payload: {
+            'queue_scope': '9:3',
+            'idempotency_key': 'legacy',
+            'journal_id': 7,
+            'entry_date': '2026-09-20',
+            'work_description': 'Монтаж',
+            'confirm': true,
+            'act': true,
+            'skip_readiness': true,
+          },
+        ),
+      );
+      final repo = ConstructionJournalRepository(
+        dio,
+        syncQueueServiceFuture: Future.value(queue),
+      );
+      final pending = (await repo.findPendingEntryOperation(7))!;
+      await repo.retryPendingCreate(pending);
+      expect(body, isNotNull);
+      expect(body!.containsKey('confirm'), isFalse);
+      expect(body!.containsKey('act'), isFalse);
+      expect(body!.containsKey('skip_readiness'), isFalse);
+      expect(body!.containsKey('queue_scope'), isFalse);
+    },
+  );
 }
 
 Map<String, dynamic> _entry(int id, {String status = 'draft'}) => {

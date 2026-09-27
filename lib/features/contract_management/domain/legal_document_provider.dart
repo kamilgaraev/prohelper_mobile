@@ -209,7 +209,11 @@ class LegalDocumentNotifier extends StateNotifier<LegalDocumentState> {
 
 final legalDocumentProvider =
     StateNotifierProvider<LegalDocumentNotifier, LegalDocumentState>((ref) {
-      final authState = ref.watch(authProvider);
+      final sessionIdentity = ref.watch(
+        authProvider.select(
+          (state) => state is AuthAuthenticated ? state.sessionIdentity : null,
+        ),
+      );
       final repository = ref.read(legalDocumentRepositoryProvider);
       ref.listen<AuthState>(authProvider, (previous, next) {
         final previousIdentity =
@@ -225,12 +229,8 @@ final legalDocumentProvider =
         }
       });
       final identity =
-          authState is AuthAuthenticated
-              ? authState.sessionIdentity == null
-                  ? null
-                  : LegalDocumentCacheIdentity.fromAuth(
-                    authState.sessionIdentity!,
-                  )
-              : null;
+          sessionIdentity == null
+              ? null
+              : LegalDocumentCacheIdentity.fromAuth(sessionIdentity);
       return LegalDocumentNotifier(repository, identity: identity);
     });

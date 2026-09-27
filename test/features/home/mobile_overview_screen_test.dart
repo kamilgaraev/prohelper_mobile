@@ -168,6 +168,42 @@ void main() {
     expect(retried, isTrue);
   });
 
+  testWidgets('today status keeps saved signal with refresh error', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 390,
+            child: OverviewTodayStatus(
+              widgets: [
+                _dashboardWidget(
+                  slug: 'quality_control',
+                  route: 'quality-control',
+                  status: DashboardWidgetStatus.critical,
+                ),
+              ],
+              unreadCount: 0,
+              isLoading: false,
+              error: 'Нет соединения с сервером.',
+              onRetry: () {},
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('Не удалось обновить сводку'), findsOneWidget);
+    expect(
+      find.text('Показаны последние данные. Нет соединения с сервером.'),
+      findsOneWidget,
+    );
+    expect(find.text('Нужны действия'), findsOneWidget);
+    expect(find.text('Повторить'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('today status makes notification-only warning actionable', (
     tester,
   ) async {
@@ -506,6 +542,53 @@ void main() {
     await tester.tap(find.text('Сменить'));
 
     expect(switchedProject, isTrue);
+  });
+
+  testWidgets('project header stays readable on a narrow large-text screen', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(274, 488);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final project =
+        Project()
+          ..serverId = 56
+          ..name = 'Строительство склада Литер А'
+          ..address = 'Казань, ул 2-я Гаражная, д 4';
+    final user =
+        User()
+          ..serverId = 61
+          ..email = 'owner@test.local'
+          ..name = 'Иван Иванов'
+          ..organizationName = 'СТРОЙ-ТУР';
+
+    await tester.pumpWidget(
+      MediaQuery(
+        data: const MediaQueryData(textScaler: TextScaler.linear(1.3)),
+        child: MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: OverviewProjectHeader(
+                  project: project,
+                  user: user,
+                  onSwitchProject: () {},
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(tester.takeException(), isNull);
+    expect(
+      tester.getSize(find.text('Строительство склада Литер А')).width,
+      greaterThan(120),
+    );
+    expect(find.text('Сменить'), findsOneWidget);
   });
 
   testWidgets('project header exposes whole card as switch action', (

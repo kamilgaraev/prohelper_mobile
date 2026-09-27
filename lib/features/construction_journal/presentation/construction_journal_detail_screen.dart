@@ -4,10 +4,12 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_typography.dart';
+import '../../../core/design/pro_status.dart';
 import '../../../core/widgets/app_empty_state.dart';
 import '../../../core/widgets/app_error_state.dart';
 import '../../../core/widgets/app_loading_state.dart';
 import '../../../core/widgets/industrial_card.dart';
+import '../../../core/widgets/pro_status_banner.dart';
 import '../data/construction_journal_models.dart';
 import '../data/construction_journal_repository.dart';
 import '../domain/construction_journal_provider.dart';
@@ -16,15 +18,21 @@ import 'journal_entry_form_screen.dart';
 import 'journal_form_screen.dart';
 
 class ConstructionJournalDetailScreen extends ConsumerWidget {
-  const ConstructionJournalDetailScreen({super.key, required this.journalId});
+  const ConstructionJournalDetailScreen({
+    super.key,
+    required this.journalId,
+    required this.projectId,
+  });
 
   final int journalId;
+  final int projectId;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final state = ref.watch(constructionJournalDetailProvider(journalId));
+    final scope = (journalId: journalId, projectId: projectId);
+    final state = ref.watch(constructionJournalDetailProvider(scope));
     final notifier = ref.read(
-      constructionJournalDetailProvider(journalId).notifier,
+      constructionJournalDetailProvider(scope).notifier,
     );
     Future<void> transition(String action) async {
       await ref
@@ -68,6 +76,26 @@ class ConstructionJournalDetailScreen extends ConsumerWidget {
                 ),
               )
             else ...[
+              if (state.fromCache || state.hasDirtyLocal)
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                  sliver: SliverToBoxAdapter(
+                    child: ProStatusBanner(
+                      title:
+                          state.hasDirtyLocal
+                              ? 'Есть локальные изменения'
+                              : 'Показаны сохранённые данные',
+                      description:
+                          state.error ??
+                          'Актуальность данных не подтверждена сетью.',
+                      tone:
+                          state.hasDirtyLocal
+                              ? ProStatusTone.warning
+                              : ProStatusTone.info,
+                      fullText: true,
+                    ),
+                  ),
+                ),
               SliverPadding(
                 padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
                 sliver: SliverToBoxAdapter(
@@ -279,6 +307,7 @@ class ConstructionJournalDetailScreen extends ConsumerWidget {
                                       (_) => JournalEntryDetailScreen(
                                         journalId: journalId,
                                         entryId: entry.id,
+                                        projectId: projectId,
                                       ),
                                 ),
                               ),

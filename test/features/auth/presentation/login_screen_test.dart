@@ -75,9 +75,9 @@ void main() {
     await tester.tap(find.text('Войти'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Введите email'), findsOneWidget);
+    expect(find.text('Введите адрес электронной почты'), findsOneWidget);
     expect(find.text('Введите пароль'), findsOneWidget);
-    expect(find.text('Введите email и пароль.'), findsNothing);
+    expect(find.text('Введите адрес электронной почты и пароль.'), findsNothing);
     expect(repository.loginCalls, 0);
   });
 
@@ -107,7 +107,7 @@ void main() {
     final repository =
         _FakeAuthRepository()
           ..loginError = const ApiException(
-            'Email или пароль не подошли. Проверьте данные и попробуйте еще раз.',
+            'Адрес электронной почты или пароль не подошли. Проверьте данные и попробуйте еще раз.',
             statusCode: 401,
           );
 
@@ -119,7 +119,7 @@ void main() {
 
     expect(
       find.text(
-        'Email или пароль не подошли. Проверьте данные и попробуйте еще раз.',
+        'Адрес электронной почты или пароль не подошли. Проверьте данные и попробуйте еще раз.',
       ),
       findsOneWidget,
     );
@@ -129,7 +129,7 @@ void main() {
 
     expect(
       find.text(
-        'Email или пароль не подошли. Проверьте данные и попробуйте еще раз.',
+        'Адрес электронной почты или пароль не подошли. Проверьте данные и попробуйте еще раз.',
       ),
       findsNothing,
     );
@@ -192,11 +192,14 @@ void main() {
     try {
       await _pumpLogin(tester, repository: repository);
 
-      expect(find.bySemanticsLabel('Поле ввода: Email'), findsOneWidget);
+      expect(
+        find.bySemanticsLabel('Поле ввода: Электронная почта'),
+        findsOneWidget,
+      );
       expect(find.bySemanticsLabel('Поле ввода: Пароль'), findsOneWidget);
 
       final emailNode = tester.getSemantics(
-        find.bySemanticsLabel('Поле ввода: Email'),
+        find.bySemanticsLabel('Поле ввода: Электронная почта'),
       );
       final passwordNode = tester.getSemantics(
         find.bySemanticsLabel('Поле ввода: Пароль'),

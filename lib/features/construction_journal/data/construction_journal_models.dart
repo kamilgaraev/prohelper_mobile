@@ -24,12 +24,38 @@ class ConstructionJournalActionModel {
   final String label;
 
   factory ConstructionJournalActionModel.fromJson(Map<String, dynamic> json) {
-    return ConstructionJournalActionModel(
-      action: _requiredString(json, 'action'),
-      label: _requiredCleanLabel(json, 'label'),
-    );
+    final action = _requiredString(json, 'action');
+    final rawLabel = _asNullableString(json['label']);
+    final label =
+        rawLabel == null ||
+                rawLabel.startsWith('construction_journal.') ||
+                rawLabel.startsWith('mobile_construction_journal.')
+            ? _journalActionLabels[action]
+            : rawLabel;
+    if (label == null) {
+      throw const FormatException(
+        'Construction journal action label is missing.',
+      );
+    }
+    return ConstructionJournalActionModel(action: action, label: label);
   }
 }
+
+const _journalActionLabels = <String, String>{
+  'view': 'Открыть',
+  'create': 'Создать журнал',
+  'update': 'Редактировать',
+  'delete': 'Удалить',
+  'export': 'Экспортировать',
+  'create_entry': 'Создать запись',
+  'submit': 'Отправить на согласование',
+  'approve': 'Утвердить',
+  'reject': 'Отклонить',
+  'export_daily_report': 'Сформировать дневной отчёт',
+  'close': 'Закрыть',
+  'archive': 'В архив',
+  'reopen': 'Открыть снова',
+};
 
 extension ConstructionJournalActionListX
     on Iterable<ConstructionJournalActionModel> {
@@ -751,7 +777,7 @@ class ConstructionJournalModel {
       id: _requiredInt(json, 'id'),
       projectId: _requiredInt(json, 'project_id'),
       name: _requiredString(json, 'name'),
-      journalNumber: _requiredText(json, 'journal_number', allowEmpty: true),
+      journalNumber: _asNullableString(json['journal_number']) ?? '',
       startDate: _requiredString(json, 'start_date'),
       endDate: _asNullableString(json['end_date']),
       status: _requiredKnownString(json, 'status', _journalStatuses),

@@ -1,9 +1,10 @@
-﻿import 'package:isar/isar.dart';
+import 'package:isar/isar.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import '../../features/auth/data/user_model.dart';
 import '../../features/contract_management/data/legal_document_snapshot.dart';
 import '../sync/queued_sync_operation.dart';
+import 'cached_entity.dart';
 
 final isarProvider = FutureProvider<Isar>((ref) async {
   final dir = await getApplicationDocumentsDirectory();
@@ -11,6 +12,7 @@ final isarProvider = FutureProvider<Isar>((ref) async {
     UserSchema,
     QueuedSyncOperationSchema,
     LegalDocumentSnapshotSchema,
+    CachedEntitySchema,
   ], directory: dir.path);
 });
 

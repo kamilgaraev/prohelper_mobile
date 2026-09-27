@@ -55,7 +55,7 @@ void main() {
     await tester.pumpWidget(_buildScreen());
     await tester.pumpAndSettle();
 
-    expect(find.text('Работа'), findsOneWidget);
+    expect(find.text('Разделы'), findsOneWidget);
     expect(find.text('Строительство склада Литер А'), findsOneWidget);
     expect(find.text('Найти раздел'), findsOneWidget);
     final searchBar = tester.widget<ProSearchFilterBar<String>>(
@@ -65,7 +65,11 @@ void main() {
     expect(searchBar.density, ProSearchFilterDensity.compact);
     expect(find.text('Доступно разделов: 3'), findsOneWidget);
 
-    for (final title in const ['Персонал', 'Ресурсы', 'ПТО']) {
+    for (final title in const [
+      'Полевые работы',
+      'Склад и снабжение',
+      'Согласования и документы',
+    ]) {
       expect(
         find.ancestor(of: find.text(title), matching: find.byType(ProSurface)),
         findsOneWidget,
@@ -94,7 +98,7 @@ void main() {
     expect(find.text('Процессы'), findsNothing);
     expect(
       find.ancestor(
-        of: find.text('Ресурсы'),
+        of: find.text('Склад и снабжение'),
         matching: find.byType(ProSurface),
       ),
       findsOneWidget,

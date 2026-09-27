@@ -37,6 +37,8 @@ class UserMessage {
     return normalized.contains('apiexception') ||
         normalized.contains('formatexception') ||
         normalized.contains('dioexception') ||
+        normalized.contains('isarerror') ||
+        normalized.contains('schemaerror') ||
         normalized.contains('exception:') ||
         normalized.contains('payload') ||
         normalized.contains('fallback') ||

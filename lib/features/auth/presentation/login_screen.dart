@@ -125,7 +125,7 @@ class LoginScreen extends HookConsumerWidget {
                                   _LoginTextField(
                                     controller: emailController,
                                     focusNode: emailFocusNode,
-                                    label: 'Email',
+                                    label: 'Электронная почта',
                                     icon: Icons.mail_outline_rounded,
                                     keyboardType: TextInputType.emailAddress,
                                     textInputAction: TextInputAction.next,
@@ -142,7 +142,7 @@ class LoginScreen extends HookConsumerWidget {
                                     validator:
                                         (value) =>
                                             (value ?? '').trim().isEmpty
-                                                ? 'Введите email'
+                                                ? 'Введите адрес электронной почты'
                                                 : null,
                                   ),
                                   const SizedBox(height: 14),

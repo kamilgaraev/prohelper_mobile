@@ -1,7 +1,8 @@
-﻿import 'package:dio/dio.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:prohelpers_mobile/core/sync/sync_queue_service.dart';
 import 'package:prohelpers_mobile/core/theme/pro_theme.dart';
 import 'package:prohelpers_mobile/features/projects/data/project_model.dart';
 import 'package:prohelpers_mobile/features/projects/data/projects_repository.dart';
@@ -98,6 +99,31 @@ class _FakeSiteRequestsNotifier extends SiteRequestsNotifier {
   Future<void> loadRequests({bool refresh = false}) async {}
 }
 
+class _SiteRequestFormLauncher extends StatefulWidget {
+  const _SiteRequestFormLauncher();
+
+  @override
+  State<_SiteRequestFormLauncher> createState() =>
+      _SiteRequestFormLauncherState();
+}
+
+class _SiteRequestFormLauncherState extends State<_SiteRequestFormLauncher> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Navigator.of(context).push(
+        MaterialPageRoute<void>(builder: (_) => const SiteRequestFormScreen()),
+      );
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return const Scaffold(body: Center(child: Text('Список заявок')));
+  }
+}
+
 void main() {
   Project buildProject() {
     return Project()
@@ -146,7 +172,11 @@ void main() {
       ];
   }
 
-  Widget createWidget({SiteRequestModel? initialRequest, Object? createError}) {
+  Widget createWidget({
+    SiteRequestModel? initialRequest,
+    Object? createError,
+    bool pushForm = false,
+  }) {
     final project = buildProject();
     const meta = {
       'request_types': [
@@ -180,7 +210,10 @@ void main() {
         enabled: false,
         child: MaterialApp(
           theme: MostTheme.lightTheme,
-          home: SiteRequestFormScreen(initialRequest: initialRequest),
+          home:
+              pushForm
+                  ? const _SiteRequestFormLauncher()
+                  : SiteRequestFormScreen(initialRequest: initialRequest),
         ),
       ),
     );
@@ -315,6 +348,48 @@ void main() {
     );
     expect(find.textContaining('FormatException'), findsNothing);
   });
+
+  testWidgets(
+    'закрывает форму и подтверждает сохранение поставленной в очередь заявки',
+    (tester) async {
+      await tester.pumpWidget(
+        createWidget(
+          createError: const SyncQueuedException(queueId: 12),
+          pushForm: true,
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+      await tester.pump();
+
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Заголовок заявки'),
+        'Материалы на фундамент',
+      );
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Наименование материала'),
+        'Бетон М300',
+      );
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Количество'),
+        '12',
+      );
+      await tester.ensureVisible(find.byType(DropdownButtonFormField<String>));
+      await tester.pump();
+      await tester.tap(find.byType(DropdownButtonFormField<String>).first);
+      await tester.pump();
+      await tester.tap(find.text('м3').last);
+      await tester.pump();
+      await tester.ensureVisible(find.text('Создать заявку'));
+      await tester.pump();
+      await tester.tap(find.text('Создать заявку'));
+      await tester.pump();
+
+      expect(find.text('Список заявок'), findsOneWidget);
+      expect(find.text(SyncQueueMessages.queuedForNetwork), findsOneWidget);
+      expect(find.text('Создать заявку'), findsNothing);
+    },
+  );
 
   testWidgets('форма заявки проходит базовые accessibility guidelines', (
     tester,

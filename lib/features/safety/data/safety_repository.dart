@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:dio/dio.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
@@ -26,19 +28,36 @@ class SafetyRepository extends SyncQueueAwareRepository {
   final Dio _dio;
 
   Future<SafetyDashboardModel> fetchDashboard({int? projectId}) async {
+    return SafetyDashboardModel.fromJson(
+      await fetchDashboardPayload(projectId: projectId),
+    );
+  }
+
+  Future<Map<String, dynamic>> fetchDashboardPayload({int? projectId}) async {
     try {
       final response = await _dio.get(
         '/safety-management/dashboard',
         queryParameters: {if (projectId != null) 'project_id': projectId},
       );
 
-      return SafetyDashboardModel.fromJson(_object(response.data));
+      return _object(response.data);
     } on DioException catch (error) {
       throw ApiException.fromDio(error);
     }
   }
 
   Future<SafetyAdmissionModel?> fetchMyAdmission({
+    int? projectId,
+    String workCategory = 'general',
+  }) async {
+    final payload = await fetchMyAdmissionPayload(
+      projectId: projectId,
+      workCategory: workCategory,
+    );
+    return payload == null ? null : SafetyAdmissionModel.fromJson(payload);
+  }
+
+  Future<Map<String, dynamic>?> fetchMyAdmissionPayload({
     int? projectId,
     String workCategory = 'general',
   }) async {
@@ -51,7 +70,7 @@ class SafetyRepository extends SyncQueueAwareRepository {
         },
       );
 
-      return SafetyAdmissionModel.fromJson(_object(response.data));
+      return _object(response.data);
     } on DioException catch (error) {
       if (error.response?.statusCode == 404) {
         return null;
@@ -65,6 +84,16 @@ class SafetyRepository extends SyncQueueAwareRepository {
     int? projectId,
     String? status,
   }) async {
+    return (await fetchPermitPayloads(
+      projectId: projectId,
+      status: status,
+    )).map(SafetyWorkPermitModel.fromJson).toList();
+  }
+
+  Future<List<Map<String, dynamic>>> fetchPermitPayloads({
+    int? projectId,
+    String? status,
+  }) async {
     try {
       final response = await _dio.get(
         '/safety-management/work-permits',
@@ -74,7 +103,7 @@ class SafetyRepository extends SyncQueueAwareRepository {
         },
       );
 
-      return _list(response.data).map(SafetyWorkPermitModel.fromJson).toList();
+      return _list(response.data);
     } on DioException catch (error) {
       throw ApiException.fromDio(error);
     }
@@ -94,6 +123,16 @@ class SafetyRepository extends SyncQueueAwareRepository {
     int? projectId,
     String? status,
   }) async {
+    return (await fetchBriefingPayloads(
+      projectId: projectId,
+      status: status,
+    )).map(SafetyBriefingModel.fromJson).toList();
+  }
+
+  Future<List<Map<String, dynamic>>> fetchBriefingPayloads({
+    int? projectId,
+    String? status,
+  }) async {
     try {
       final response = await _dio.get(
         '/safety-management/briefings',
@@ -103,7 +142,7 @@ class SafetyRepository extends SyncQueueAwareRepository {
         },
       );
 
-      return _list(response.data).map(SafetyBriefingModel.fromJson).toList();
+      return _list(response.data);
     } on DioException catch (error) {
       throw ApiException.fromDio(error);
     }
@@ -123,6 +162,16 @@ class SafetyRepository extends SyncQueueAwareRepository {
     int? projectId,
     String? status,
   }) async {
+    return (await fetchIncidentPayloads(
+      projectId: projectId,
+      status: status,
+    )).map(SafetyIncidentModel.fromJson).toList();
+  }
+
+  Future<List<Map<String, dynamic>>> fetchIncidentPayloads({
+    int? projectId,
+    String? status,
+  }) async {
     try {
       final response = await _dio.get(
         '/safety-management/incidents',
@@ -132,13 +181,23 @@ class SafetyRepository extends SyncQueueAwareRepository {
         },
       );
 
-      return _list(response.data).map(SafetyIncidentModel.fromJson).toList();
+      return _list(response.data);
     } on DioException catch (error) {
       throw ApiException.fromDio(error);
     }
   }
 
   Future<List<SafetyViolationModel>> fetchViolations({
+    int? projectId,
+    String? status,
+  }) async {
+    return (await fetchViolationPayloads(
+      projectId: projectId,
+      status: status,
+    )).map(SafetyViolationModel.fromJson).toList();
+  }
+
+  Future<List<Map<String, dynamic>>> fetchViolationPayloads({
     int? projectId,
     String? status,
   }) async {
@@ -151,13 +210,23 @@ class SafetyRepository extends SyncQueueAwareRepository {
         },
       );
 
-      return _list(response.data).map(SafetyViolationModel.fromJson).toList();
+      return _list(response.data);
     } on DioException catch (error) {
       throw ApiException.fromDio(error);
     }
   }
 
   Future<List<SafetyInspectionModel>> fetchInspections({
+    int? projectId,
+    String? status,
+  }) async {
+    return (await fetchInspectionPayloads(
+      projectId: projectId,
+      status: status,
+    )).map(SafetyInspectionModel.fromJson).toList();
+  }
+
+  Future<List<Map<String, dynamic>>> fetchInspectionPayloads({
     int? projectId,
     String? status,
   }) async {
@@ -170,13 +239,23 @@ class SafetyRepository extends SyncQueueAwareRepository {
         },
       );
 
-      return _list(response.data).map(SafetyInspectionModel.fromJson).toList();
+      return _list(response.data);
     } on DioException catch (error) {
       throw ApiException.fromDio(error);
     }
   }
 
   Future<List<SafetyInspectionFindingModel>> fetchInspectionFindings({
+    int? projectId,
+    String? status,
+  }) async {
+    return (await fetchInspectionFindingPayloads(
+      projectId: projectId,
+      status: status,
+    )).map(SafetyInspectionFindingModel.fromJson).toList();
+  }
+
+  Future<List<Map<String, dynamic>>> fetchInspectionFindingPayloads({
     int? projectId,
     String? status,
   }) async {
@@ -189,9 +268,7 @@ class SafetyRepository extends SyncQueueAwareRepository {
         },
       );
 
-      return _list(
-        response.data,
-      ).map(SafetyInspectionFindingModel.fromJson).toList();
+      return _list(response.data);
     } on DioException catch (error) {
       throw ApiException.fromDio(error);
     }
@@ -199,11 +276,14 @@ class SafetyRepository extends SyncQueueAwareRepository {
 
   Future<SafetyIncidentModel> createIncident(Map<String, dynamic> data) async {
     final payload = Map<String, dynamic>.from(data);
+    final idempotencyKey = _newSafetyIdempotencyKey();
+    payload['idempotency_key'] = idempotencyKey;
 
     try {
       final response = await _dio.post(
         '/safety-management/incidents',
         data: data,
+        options: Options(headers: {'Idempotency-Key': idempotencyKey}),
       );
 
       return SafetyIncidentModel.fromJson(_object(response.data));
@@ -217,6 +297,7 @@ class SafetyRepository extends SyncQueueAwareRepository {
             endpoint: '/safety-management/incidents',
             payload: payload,
           ),
+          cause: error,
         );
       }
 
@@ -229,11 +310,14 @@ class SafetyRepository extends SyncQueueAwareRepository {
     List<String> photoPaths = const [],
   }) async {
     final payload = Map<String, dynamic>.from(data);
+    final idempotencyKey = _newSafetyIdempotencyKey();
+    payload['idempotency_key'] = idempotencyKey;
     final attachments = _photoAttachments(photoPaths);
     try {
       final response = await _dio.post(
         '/safety-management/violations',
         data: await _withPhotos(data, photoPaths),
+        options: Options(headers: {'Idempotency-Key': idempotencyKey}),
       );
 
       return SafetyViolationModel.fromJson(_object(response.data));
@@ -248,6 +332,7 @@ class SafetyRepository extends SyncQueueAwareRepository {
             payload: payload,
             attachments: attachments,
           ),
+          cause: error,
         );
       }
       throw ApiException.fromDio(error);
@@ -258,11 +343,14 @@ class SafetyRepository extends SyncQueueAwareRepository {
     Map<String, dynamic> data,
   ) async {
     final payload = Map<String, dynamic>.from(data);
+    final idempotencyKey = _newSafetyIdempotencyKey();
+    payload['idempotency_key'] = idempotencyKey;
 
     try {
       final response = await _dio.post(
         '/safety-management/inspection-findings',
         data: data,
+        options: Options(headers: {'Idempotency-Key': idempotencyKey}),
       );
 
       return SafetyInspectionFindingModel.fromJson(_object(response.data));
@@ -276,6 +364,7 @@ class SafetyRepository extends SyncQueueAwareRepository {
             endpoint: '/safety-management/inspection-findings',
             payload: payload,
           ),
+          cause: error,
         );
       }
 
@@ -435,4 +524,18 @@ class SafetyRepository extends SyncQueueAwareRepository {
   Map<String, dynamic> _object(dynamic responseData) {
     return MobileApiResponse.dataMap(responseData);
   }
+}
+
+final Random _safetySecureRandom = Random.secure();
+
+String _newSafetyIdempotencyKey() {
+  final bytes = List<int>.generate(16, (_) => _safetySecureRandom.nextInt(256));
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  final hex =
+      bytes.map((byte) => byte.toRadixString(16).padLeft(2, '0')).join();
+
+  return '${hex.substring(0, 8)}-${hex.substring(8, 12)}-'
+      '${hex.substring(12, 16)}-${hex.substring(16, 20)}-'
+      '${hex.substring(20)}';
 }

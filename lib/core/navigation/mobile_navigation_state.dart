@@ -8,7 +8,7 @@ final mobileNavigationProvider =
     });
 
 class MobileNavigationNotifier extends StateNotifier<MobileNavTab> {
-  MobileNavigationNotifier() : super(MobileNavTab.overview);
+  MobileNavigationNotifier() : super(MobileNavTab.now);
 
   void setTab(MobileNavTab tab) {
     state = tab;

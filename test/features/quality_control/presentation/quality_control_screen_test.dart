@@ -1,7 +1,9 @@
-﻿import 'package:dio/dio.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:prohelpers_mobile/core/widgets/pro_metric_tile.dart';
+import 'package:prohelpers_mobile/core/sync/sync_queue_service.dart';
 import 'package:prohelpers_mobile/features/projects/data/project_model.dart';
 import 'package:prohelpers_mobile/features/projects/data/projects_repository.dart';
 import 'package:prohelpers_mobile/features/projects/domain/projects_provider.dart';
@@ -27,6 +29,7 @@ class _RecordingQualityRepository extends QualityControlRepository {
   int? rejectedDefectId;
   String? rejectedComment;
   Map<String, dynamic>? createPayload;
+  Object? createDefectError;
   List<String> createPhotoPaths = const [];
   List<String> resolvedPhotoPaths = const [];
 
@@ -60,6 +63,10 @@ class _RecordingQualityRepository extends QualityControlRepository {
   }) async {
     createPayload = Map<String, dynamic>.from(data);
     createPhotoPaths = List<String>.from(photoPaths);
+    final error = createDefectError;
+    if (error != null) {
+      throw error;
+    }
 
     return const QualityDefectModel(
       id: 1,
@@ -235,6 +242,7 @@ void main() {
   Widget buildScreen(
     _RecordingQualityRepository repository, {
     QualityPhotoPicker? photoPicker,
+    double textScale = 1,
   }) {
     return ProviderScope(
       overrides: [
@@ -247,7 +255,16 @@ void main() {
         if (photoPicker != null)
           qualityPhotoPickerProvider.overrideWith((ref) => photoPicker),
       ],
-      child: const MaterialApp(home: QualityControlScreen()),
+      child: MaterialApp(
+        builder:
+            (context, child) => MediaQuery(
+              data: MediaQuery.of(
+                context,
+              ).copyWith(textScaler: TextScaler.linear(textScale)),
+              child: child!,
+            ),
+        home: const QualityControlScreen(),
+      ),
     );
   }
 
@@ -255,6 +272,33 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
   }
+
+  testWidgets('keeps create action and metrics readable on compact screen', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(720, 1280);
+    tester.view.devicePixelRatio = 2;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      buildScreen(_RecordingQualityRepository(), textScale: 1.3),
+    );
+    await pumpUi(tester);
+
+    expect(find.byType(FloatingActionButton), findsNothing);
+    expect(
+      find.widgetWithText(FilledButton, 'Новое замечание'),
+      findsOneWidget,
+    );
+    final metrics = find.byType(ProMetricTile);
+    expect(metrics, findsNWidgets(3));
+    expect(
+      tester.getTopLeft(metrics.at(2)).dy,
+      greaterThan(tester.getBottomLeft(metrics.first).dy),
+    );
+    expect(tester.takeException(), isNull);
+  });
 
   void useLargeSurface(WidgetTester tester) {
     tester.view.devicePixelRatio = 1;
@@ -291,6 +335,41 @@ void main() {
     expect(repository.createPayload?['title'], 'Скол плитки');
     expect(repository.createPayload?['severity'], 'major');
     expect(repository.createPayload?['inspection_required'], isFalse);
+  });
+
+  testWidgets('shows queued creation as saved and closes the form', (
+    tester,
+  ) async {
+    final repository =
+        _RecordingQualityRepository()
+          ..createDefectError = const SyncQueuedException(queueId: 1);
+
+    await tester.pumpWidget(buildScreen(repository));
+    await pumpUi(tester);
+
+    await tester.tap(find.byType(FloatingActionButton));
+    await pumpUi(tester);
+    await tester.enterText(find.byType(TextField).first, 'Скол плитки');
+    await tester.tap(find.byType(DropdownButtonFormField<String>));
+    await pumpUi(tester);
+    await tester.tap(find.text('Средняя').last);
+    await pumpUi(tester);
+    await tester.tap(find.byType(DropdownButtonFormField<bool>));
+    await pumpUi(tester);
+    await tester.tap(find.text('Не требуется').last);
+    await pumpUi(tester);
+    await tester.ensureVisible(find.byType(FilledButton).last);
+    await tester.pump();
+    await tester.tap(find.byType(FilledButton).last);
+    await pumpUi(tester);
+
+    expect(find.text('Новое замечание'), findsNothing);
+    expect(
+      find.text('Будет отправлено при восстановлении связи'),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('app-error-notice')), findsNothing);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('attaches multiple before photos when creating quality defect', (

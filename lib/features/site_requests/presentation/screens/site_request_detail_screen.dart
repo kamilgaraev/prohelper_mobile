@@ -3,6 +3,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:prohelpers_mobile/core/theme/app_colors.dart';
+import 'package:prohelpers_mobile/core/design/pro_status.dart';
 import 'package:prohelpers_mobile/core/theme/app_typography.dart';
 import 'package:prohelpers_mobile/core/widgets/app_error_state.dart';
 import 'package:prohelpers_mobile/core/widgets/app_error_notice.dart';
@@ -10,6 +11,7 @@ import 'package:prohelpers_mobile/core/widgets/app_loading_state.dart';
 import 'package:prohelpers_mobile/core/widgets/mesh_background.dart';
 import 'package:prohelpers_mobile/core/widgets/pro_button.dart';
 import 'package:prohelpers_mobile/core/widgets/pro_card.dart';
+import 'package:prohelpers_mobile/core/widgets/pro_status_banner.dart';
 import 'package:prohelpers_mobile/features/site_requests/data/site_request_model.dart';
 import 'package:prohelpers_mobile/features/site_requests/domain/site_request_detail_provider.dart';
 import 'package:prohelpers_mobile/features/site_requests/domain/site_requests_provider.dart';
@@ -57,32 +59,53 @@ class SiteRequestDetailScreen extends ConsumerWidget {
                               .read(siteRequestDetailProvider(id).notifier)
                               .loadDetails(),
                 )
-                : _SiteRequestDetailContent(
-                  request: state.request!,
-                  onEdit:
-                      state.request!.canBeEdited
-                          ? () async {
-                            final updated = await Navigator.of(
-                              context,
-                            ).push<bool>(
-                              MaterialPageRoute(
-                                builder:
-                                    (_) => SiteRequestFormScreen(
-                                      initialRequest: state.request,
+                : Column(
+                  children: [
+                    if (state.fromCache)
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+                        child: ProStatusBanner(
+                          title: 'Сохранённая заявка',
+                          description:
+                              state.error ??
+                              'Показаны данные с устройства. Они могут быть неактуальны.',
+                          tone: ProStatusTone.info,
+                        ),
+                      ),
+                    Expanded(
+                      child: _SiteRequestDetailContent(
+                        request: state.request!,
+                        onEdit:
+                            state.request!.canBeEdited
+                                ? () async {
+                                  final updated = await Navigator.of(
+                                    context,
+                                  ).push<bool>(
+                                    MaterialPageRoute(
+                                      builder:
+                                          (_) => SiteRequestFormScreen(
+                                            initialRequest: state.request,
+                                          ),
                                     ),
-                              ),
-                            );
+                                  );
 
-                            if (updated == true && context.mounted) {
-                              await ref
-                                  .read(siteRequestsProvider.notifier)
-                                  .loadRequests(refresh: true);
-                              await ref
-                                  .read(siteRequestDetailProvider(id).notifier)
-                                  .loadDetails();
-                            }
-                          }
-                          : null,
+                                  if (updated == true && context.mounted) {
+                                    await ref
+                                        .read(siteRequestsProvider.notifier)
+                                        .loadRequests(refresh: true);
+                                    await ref
+                                        .read(
+                                          siteRequestDetailProvider(
+                                            id,
+                                          ).notifier,
+                                        )
+                                        .loadDetails();
+                                  }
+                                }
+                                : null,
+                      ),
+                    ),
+                  ],
                 ),
         bottomNavigationBar:
             state.request == null

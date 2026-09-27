@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/error/user_message.dart';
+import '../../../core/sync/sync_queue_service.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/design/pro_status.dart';
 import '../../../core/theme/app_typography.dart';
@@ -118,6 +119,26 @@ class _WarehouseScreenState extends ConsumerState<WarehouseScreen> {
                 ),
               )
             else ...[
+              if (state.fromCache || state.hasDirtyLocal || state.error != null)
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                  sliver: SliverToBoxAdapter(
+                    child: ProStatusBanner(
+                      title:
+                          state.hasDirtyLocal
+                              ? 'Есть локальные изменения'
+                              : 'Показаны сохранённые данные',
+                      description:
+                          state.error ??
+                          'Актуальность данных не подтверждена сетью.',
+                      tone:
+                          state.hasDirtyLocal || state.error != null
+                              ? ProStatusTone.warning
+                              : ProStatusTone.info,
+                      fullText: true,
+                    ),
+                  ),
+                ),
               SliverPadding(
                 padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
                 sliver: SliverToBoxAdapter(
@@ -423,7 +444,7 @@ class _WarehouseScreenState extends ConsumerState<WarehouseScreen> {
       useSafeArea: true,
       builder:
           (_) => _WarehousePhotoGallerySheet(
-            title: movement.materialName!,
+            title: movement.materialName ?? 'Материал не указан',
             subtitle: movement.documentNumber ?? movement.movementTypeLabel,
             initialPhotos: movement.photoGallery,
             onUpload: (paths) {
@@ -500,6 +521,7 @@ class _ReceiptEntryCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return ProActionTile(
       title: 'Оприходовать',
+      fullText: true,
       subtitle: 'Принять материалы на склад с фото и документом.',
       icon: Icons.add_a_photo_outlined,
       tone: ProStatusTone.success,
@@ -517,6 +539,7 @@ class _ScanEntryCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return ProActionTile(
       title: 'Сканирование склада',
+      fullText: true,
       subtitle:
           'Распознать код и сразу перейти к подходящей складской операции.',
       icon: Icons.qr_code_scanner_rounded,
@@ -534,6 +557,7 @@ class _TaskQueueEntryCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return ProActionTile(
       title: 'Очередь складских задач',
+      fullText: true,
       subtitle:
           'Приемка, размещение, перемещение и инвентаризация в одном потоке.',
       icon: Icons.task_alt_rounded,
@@ -552,6 +576,7 @@ class _ProjectDeliveriesEntryCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return ProActionTile(
       title: 'Материалы на объект',
+      fullText: true,
       subtitle: 'Поставки из склада и закупок, приемка доставки на объекте.',
       icon: Icons.local_shipping_outlined,
       tone: ProStatusTone.success,
@@ -573,6 +598,7 @@ class _ResourceAnalyticsEntryCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return ProActionTile(
       title: 'Остатки и расход объекта',
+      fullText: true,
       subtitle:
           'Материалы, доступный остаток и расход по журналу: $projectName.',
       icon: Icons.analytics_outlined,
@@ -591,6 +617,7 @@ class _CustodyEntryCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return ProActionTile(
       title: 'У меня на ответственности',
+      fullText: true,
       subtitle:
           'Выдача материалов сотруднику, возврат на объект и списание в работу.',
       icon: Icons.assignment_ind_outlined,
@@ -718,6 +745,7 @@ class _OperationalHighlights extends StatelessWidget {
 
     return ProStatusBanner(
       title: hasAttention ? 'Требует внимания' : 'Склад в норме',
+      fullText: true,
       description:
           hasAttention
               ? 'Низкий остаток: ${summary.lowStockCount}. В резерве: ${summary.reservedItemsCount}.'
@@ -904,12 +932,8 @@ class _MovementCard extends StatelessWidget {
       'transfer_in' || 'transfer_out' => AppColors.secondary,
       'adjustment' => Colors.blueGrey,
       'return' => Colors.teal,
-      _ =>
-        throw ArgumentError.value(
-          movement.movementType,
-          'movementType',
-          'Unknown warehouse movement type',
-        ),
+      'reserved_issue' => AppColors.warning,
+      _ => Theme.of(context).colorScheme.primary,
     };
 
     return IndustrialCard(
@@ -945,7 +969,7 @@ class _MovementCard extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           Text(
-            movement.materialName!,
+            movement.materialName ?? 'Материал не указан',
             style: AppTypography.bodyLarge(
               context,
             ).copyWith(fontWeight: FontWeight.w700),
@@ -1171,6 +1195,12 @@ class _WarehouseBalancesSheetState
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(const SnackBar(content: Text('Списание проведено.')));
+      }
+    } on SyncQueuedException catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(error.message)));
       }
     } catch (error) {
       if (mounted) {
@@ -1660,6 +1690,13 @@ class _WarehousePhotoGallerySheetState
         setState(() {
           _photos = uploaded;
         });
+      }
+    } on SyncQueuedException catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(error.message)));
+        Navigator.of(context).pop();
       }
     } catch (error) {
       if (mounted) {

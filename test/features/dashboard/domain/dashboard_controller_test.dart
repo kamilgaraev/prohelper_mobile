@@ -1,5 +1,12 @@
-﻿import 'package:dio/dio.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'dart:async';
+import 'package:prohelpers_mobile/core/storage/secure_storage_service.dart';
+import 'package:prohelpers_mobile/features/auth/data/auth_repository.dart';
+import 'package:prohelpers_mobile/features/auth/data/auth_session_identity.dart';
+import 'package:prohelpers_mobile/features/auth/data/user_model.dart';
+import 'package:prohelpers_mobile/features/auth/domain/auth_provider.dart';
 import 'package:prohelpers_mobile/core/network/api_exception.dart';
 import 'package:prohelpers_mobile/features/dashboard/data/dashboard_repository.dart';
 import 'package:prohelpers_mobile/features/dashboard/data/dashboard_widget_model.dart';
@@ -30,7 +37,7 @@ void main() {
       expect(controller.state.widgets.map((widget) => widget.slug), [
         'project_overview',
       ]);
-      expect(controller.state.error, isNull);
+      expect(controller.state.error, 'Нет соединения с сервером.');
     },
   );
 
@@ -51,6 +58,101 @@ void main() {
       expect(controller.state.error, 'Нет соединения с сервером.');
     },
   );
+
+  test(
+    'loadDashboard stops loading when the request never completes',
+    () async {
+      final controller = DashboardController(
+        _HangingDashboardRepository(),
+        canLoad: false,
+        requestTimeout: const Duration(milliseconds: 10),
+      );
+
+      await controller.loadDashboard();
+
+      expect(controller.state.isLoading, isFalse);
+      expect(controller.state.error, isNotNull);
+    },
+  );
+
+  test('online verification keeps the current dashboard state', () async {
+    final storage = _TestSecureStorageService();
+    final user =
+        User()
+          ..serverId = 1
+          ..email = 'worker@test.local'
+          ..name = 'Worker'
+          ..currentOrganizationId = 10;
+    const identity = AuthSessionIdentity(
+      userId: 1,
+      organizationId: 10,
+      sessionId: 'session-1',
+    );
+    final auth = _TestAuthNotifier(
+      AuthAuthenticated(user, sessionIdentity: identity),
+      storage,
+    );
+    final repository = _SequenceDashboardRepository([
+      _DashboardResult.widgets([_widget('project_overview')]),
+    ]);
+    final container = ProviderContainer(
+      overrides: [
+        authProvider.overrideWith((ref) => auth),
+        dashboardRepositoryProvider.overrideWithValue(repository),
+      ],
+    );
+    addTearDown(container.dispose);
+    final subscription = container.listen(
+      dashboardControllerProvider,
+      (_, __) {},
+    );
+    addTearDown(subscription.close);
+    final notifier = container.read(dashboardControllerProvider.notifier);
+    await Future<void>.delayed(Duration.zero);
+
+    expect(container.read(dashboardControllerProvider).widgets, isNotEmpty);
+    auth.updateAuthState(
+      AuthAuthenticated(
+        user,
+        sessionIdentity: identity,
+        isOnlineVerified: true,
+      ),
+    );
+    await container.pump();
+
+    expect(
+      identical(container.read(dashboardControllerProvider.notifier), notifier),
+      isTrue,
+    );
+    expect(container.read(dashboardControllerProvider).widgets, isNotEmpty);
+  });
+}
+
+class _HangingDashboardRepository extends DashboardRepository {
+  _HangingDashboardRepository() : super(Dio());
+
+  @override
+  Future<List<DashboardWidgetModel>> fetchWidgets() =>
+      Completer<List<DashboardWidgetModel>>().future;
+}
+
+class _TestSecureStorageService extends SecureStorageService {}
+
+class _TestAuthRepository extends AuthRepository {
+  _TestAuthRepository(SecureStorageService storage) : super(Dio(), storage);
+}
+
+class _TestAuthNotifier extends AuthNotifier {
+  _TestAuthNotifier(
+    AuthAuthenticated initialState,
+    SecureStorageService storage,
+  ) : super(_TestAuthRepository(storage), storage, autoCheckAuth: false) {
+    state = initialState;
+  }
+
+  void updateAuthState(AuthAuthenticated next) {
+    state = next;
+  }
 }
 
 class _SequenceDashboardRepository extends DashboardRepository {

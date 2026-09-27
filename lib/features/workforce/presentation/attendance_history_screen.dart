@@ -1,12 +1,14 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
+import '../../../core/design/pro_status.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../core/widgets/app_action_buttons.dart';
 import '../../../core/widgets/app_error_state.dart';
 import '../../../core/widgets/app_loading_state.dart';
 import '../../../core/widgets/mesh_background.dart';
 import '../../../core/widgets/pro_card.dart';
+import '../../../core/widgets/pro_status_banner.dart';
 import '../../projects/domain/projects_provider.dart';
 import '../data/workforce_attendance_model.dart';
 import '../domain/workforce_attendance_provider.dart';
@@ -91,7 +93,7 @@ class _AttendanceHistoryScreenState
                 ],
               ),
             ),
-            if (state.error != null) ...[
+            if (state.error != null && state.history.isEmpty) ...[
               const SizedBox(height: 12),
               AppErrorState(
                 title:
@@ -109,6 +111,15 @@ class _AttendanceHistoryScreenState
               const _EmptyHistoryCard(),
             ] else ...[
               const SizedBox(height: 12),
+              if (state.historyFromCache)
+                ProStatusBanner(
+                  title: 'Сохранённая история',
+                  description:
+                      state.error ??
+                      'Показаны данные с устройства. Они могут быть неактуальны.',
+                  tone: ProStatusTone.info,
+                ),
+              if (state.historyFromCache) const SizedBox(height: 12),
               ...state.history.map(_HistoryCard.new),
             ],
           ],

@@ -1,9 +1,10 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:prohelpers_mobile/core/design/pro_status.dart';
 import 'package:prohelpers_mobile/core/error/user_message.dart';
+import 'package:prohelpers_mobile/core/sync/sync_queue_service.dart';
 import 'package:prohelpers_mobile/core/theme/app_colors.dart';
 import 'package:prohelpers_mobile/core/theme/app_typography.dart';
 import 'package:prohelpers_mobile/core/widgets/app_empty_state.dart';
@@ -252,10 +253,19 @@ class SiteRequestFormScreen extends HookConsumerWidget {
         }
       } catch (error) {
         if (context.mounted) {
-          AppErrorNotice.show(context, error);
+          if (!isEditing && error is SyncQueuedException) {
+            ScaffoldMessenger.of(
+              context,
+            ).showSnackBar(SnackBar(content: Text(error.message)));
+            Navigator.of(context).pop();
+          } else {
+            AppErrorNotice.show(context, error);
+          }
         }
       } finally {
-        isLoading.value = false;
+        if (context.mounted) {
+          isLoading.value = false;
+        }
       }
     }
 
@@ -593,7 +603,9 @@ class SiteRequestFormScreen extends HookConsumerWidget {
                 ).colorScheme.primary.withValues(alpha: 0.2),
                 labelStyle: AppTypography.bodySmall(context).copyWith(
                   color:
-                      isSelected ? Theme.of(context).colorScheme.primary : null,
+                      isSelected
+                          ? Theme.of(context).colorScheme.onSurface
+                          : null,
                   fontWeight: isSelected ? FontWeight.bold : null,
                 ),
               );

@@ -122,7 +122,7 @@ class _MyActionsSectionState extends ConsumerState<MyActionsSection> {
   static String _subtitle(MyAction action) {
     final parts = <String>[
       if (action.projectName?.isNotEmpty == true) action.projectName!,
-      action.status,
+      action.statusLabel,
       if (action.dueAt != null)
         'Срок: ${action.dueAt!.day.toString().padLeft(2, '0')}.${action.dueAt!.month.toString().padLeft(2, '0')}.${action.dueAt!.year}',
     ];

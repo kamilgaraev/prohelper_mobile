@@ -19,15 +19,22 @@ class TimeTrackingRepository {
     required String date,
     required int projectId,
   }) async {
+    return DailyTimeSummaryModel.fromJson(
+      await fetchDailySummaryPayload(date: date, projectId: projectId),
+    );
+  }
+
+  Future<Map<String, dynamic>> fetchDailySummaryPayload({
+    required String date,
+    required int projectId,
+  }) async {
     try {
       final response = await _dio.get(
         '/time-tracking/daily-summary',
         queryParameters: {'date': date, 'project_id': projectId},
       );
 
-      return DailyTimeSummaryModel.fromJson(
-        MobileApiResponse.dataMap(response.data),
-      );
+      return MobileApiResponse.dataMap(response.data);
     } on DioException catch (error) {
       throw ApiException.fromDio(error);
     }
@@ -61,10 +68,14 @@ class TimeTrackingRepository {
   }
 
   Future<TimeEntryModel> fetchEntry(int id) async {
+    return TimeEntryModel.fromJson(await fetchEntryPayload(id));
+  }
+
+  Future<Map<String, dynamic>> fetchEntryPayload(int id) async {
     try {
       final response = await _dio.get('/time-tracking/entries/$id');
 
-      return TimeEntryModel.fromJson(MobileApiResponse.dataMap(response.data));
+      return MobileApiResponse.dataMap(response.data);
     } on DioException catch (error) {
       throw ApiException.fromDio(error);
     }

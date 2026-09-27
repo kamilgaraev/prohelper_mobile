@@ -3,6 +3,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_typography.dart';
+import '../../../core/sync/sync_queue_service.dart';
 import '../../../core/widgets/app_empty_state.dart';
 import '../../../core/widgets/app_error_notice.dart';
 import '../../../core/widgets/app_error_state.dart';
@@ -406,12 +407,22 @@ class _HandoverAcceptanceScreenState
                                       if (context.mounted) {
                                         Navigator.of(sheetContext).pop();
                                       }
+                                    } on SyncQueuedException catch (error) {
+                                      if (sheetContext.mounted) {
+                                        Navigator.of(sheetContext).pop();
+                                      }
+                                      if (context.mounted) {
+                                        _showQueuedOperationNotice(
+                                          context,
+                                          message: error.message,
+                                        );
+                                      }
                                     } catch (error) {
                                       if (context.mounted) {
                                         AppErrorNotice.show(context, error);
                                       }
                                     } finally {
-                                      if (context.mounted) {
+                                      if (sheetContext.mounted) {
                                         setSheetState(() => submitting = false);
                                       }
                                     }
@@ -852,11 +863,24 @@ class _HandoverAcceptanceScreenState
           const SnackBar(content: Text('Документ комплекта загружен')),
         );
       }
+    } on SyncQueuedException catch (error) {
+      if (context.mounted) {
+        _showQueuedOperationNotice(context, message: error.message);
+      }
     } catch (error) {
       if (context.mounted) {
         AppErrorNotice.show(context, error);
       }
     }
+  }
+
+  void _showQueuedOperationNotice(
+    BuildContext context, {
+    required String message,
+  }) {
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   Future<void> _reviewChecklistItem(
@@ -1083,6 +1107,7 @@ class _FilterBar extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           DropdownButtonFormField<String>(
+            isExpanded: true,
             value: state.statusFilter,
             decoration: const InputDecoration(labelText: 'Статус приемки'),
             items: const [
