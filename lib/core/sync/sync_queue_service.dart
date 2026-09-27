@@ -229,6 +229,28 @@ class SyncQueueService {
     return _deleteOperation(id);
   }
 
+  Future<bool> discardReviewedForCurrentOwner(int id) async {
+    final operation = await _store.get(id);
+    if (operation == null) return false;
+
+    final scope = currentScope;
+    final operationScope = operation.payload['queue_scope']?.toString();
+    if (requiresScope &&
+        (scope == null || scope.isEmpty || operationScope != scope)) {
+      throw const ApiException(SyncQueueMessages.permissionDenied);
+    }
+    if (operation.status != SyncOperationStatuses.conflict &&
+        operation.status != SyncOperationStatuses.needsEdit) {
+      return false;
+    }
+    if (requiresScope && scope != currentScope) {
+      throw const ApiException(SyncQueueMessages.permissionDenied);
+    }
+
+    await _deleteOperation(id);
+    return true;
+  }
+
   Future<void> _deleteOperation(int id) async {
     final operation = await _store.get(id);
     await _remove(id);
@@ -805,6 +827,8 @@ class SyncQueueService {
         path == '/warehouse/custody/issue',
       ('production_labor', 'record_output') =>
         path == '/production-labor/output-entries',
+      ('quality_control', 'create_defect') =>
+        path == '/quality-control/defects',
       ('safety', 'create_incident') => path == '/safety-management/incidents',
       ('safety', 'create_violation') => path == '/safety-management/violations',
       ('safety', 'create_inspection_finding') =>

@@ -92,9 +92,45 @@ class _PendingSyncBody extends StatelessWidget {
                 operation.status == SyncOperationStatuses.queued
                     ? () => unawaited(notifier.retryQueued())
                     : null,
+            onDiscard:
+                operation.status == SyncOperationStatuses.conflict ||
+                        operation.status == SyncOperationStatuses.needsEdit
+                    ? () =>
+                        unawaited(_confirmDiscard(context, notifier, operation))
+                    : null,
           ),
       ],
     );
+  }
+
+  Future<void> _confirmDiscard(
+    BuildContext context,
+    PendingSyncNotifier notifier,
+    QueuedSyncOperation operation,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder:
+          (dialogContext) => AlertDialog(
+            title: const Text('Удалить сохранённое действие?'),
+            content: const Text(
+              'Проверьте результат на объекте перед удалением. Действие исчезнет только с устройства; данные на сервере останутся.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: const Text('Отмена'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, true),
+                child: const Text('Удалить'),
+              ),
+            ],
+          ),
+    );
+    if (confirmed == true) {
+      await notifier.discardReviewed(operation.id);
+    }
   }
 }
 
@@ -120,10 +156,15 @@ class _LoadErrorNotice extends StatelessWidget {
 }
 
 class _PendingSyncTile extends StatelessWidget {
-  const _PendingSyncTile({required this.operation, this.onRetry});
+  const _PendingSyncTile({
+    required this.operation,
+    this.onRetry,
+    this.onDiscard,
+  });
 
   final QueuedSyncOperation operation;
   final VoidCallback? onRetry;
+  final VoidCallback? onDiscard;
 
   @override
   Widget build(BuildContext context) {
@@ -182,6 +223,12 @@ class _PendingSyncTile extends StatelessWidget {
                       : 'Проверьте состояние операции на объекте. Не отправляйте её повторно, пока не убедитесь, что действие не выполнено.',
                   style: AppTypography.caption(context),
                 ),
+              ),
+            if (onDiscard != null)
+              TextButton.icon(
+                onPressed: onDiscard,
+                icon: const Icon(Icons.delete_outline_rounded),
+                label: const Text('Удалить с устройства'),
               ),
           ],
         ),

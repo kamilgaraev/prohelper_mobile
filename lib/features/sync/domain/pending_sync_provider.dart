@@ -89,6 +89,18 @@ class PendingSyncNotifier extends StateNotifier<PendingSyncState> {
     await load();
   }
 
+  Future<void> discardReviewed(int id) async {
+    try {
+      final queue = await _ref.read(syncQueueServiceProvider.future);
+      await queue.discardReviewedForCurrentOwner(id);
+    } catch (error) {
+      if (!mounted) return;
+      state = state.copyWith(error: UserMessage.fromError(error));
+      return;
+    }
+    await load();
+  }
+
   void _observeQueue(SyncQueueService queue) {
     if (identical(_observedQueue, queue)) return;
     _observedQueue = queue;

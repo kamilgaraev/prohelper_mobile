@@ -55,17 +55,17 @@ void main() {
   });
 
   test(
-    'unkeyed create timeout requires review instead of automatic retry',
+    'offline defect creation keeps one key through automatic replay',
     () async {
       final store = _PersistedSyncQueueStore();
+      var now = DateTime(2026, 9, 27, 18, 30);
+      final firstAdapter = _TypedErrorAdapter(DioExceptionType.connectionError);
       final firstDio = Dio(BaseOptions(baseUrl: 'https://api.example.test'))
-        ..httpClientAdapter = _TypedErrorAdapter(
-          DioExceptionType.receiveTimeout,
-        );
+        ..httpClientAdapter = firstAdapter;
       final repository = QualityControlRepository(
         firstDio,
         syncQueueServiceFuture: Future.value(
-          SyncQueueService(store: store, dio: firstDio),
+          SyncQueueService(store: store, dio: firstDio, now: () => now),
         ),
       );
 
@@ -77,32 +77,44 @@ void main() {
         }),
         throwsA(
           isA<SyncQueuedException>()
-              .having((error) => error.requiresReview, 'requiresReview', isTrue)
+              .having(
+                (error) => error.requiresReview,
+                'requiresReview',
+                isFalse,
+              )
               .having(
                 (error) => error.message,
                 'message',
-                SyncQueueMessages.unknownOutcome,
+                SyncQueueMessages.queuedForNetwork,
               ),
         ),
       );
 
       final queued = (await store.all()).single;
+      final key = queued.payload['idempotency_key'] as String;
       expect(queued.operationType, 'create_defect');
-      expect(queued.payload, isNot(contains('idempotency_key')));
-      expect(queued.status, SyncOperationStatuses.conflict);
-      expect(queued.nextAttemptAt, isNull);
-      expect(queued.lastBusinessError, SyncQueueMessages.unknownOutcome);
+      expect(key, matches(RegExp(r'^[a-f0-9]{32}$')));
+      expect(firstAdapter.lastRequest?.headers['Idempotency-Key'], key);
+      expect(queued.status, SyncOperationStatuses.queued);
+      expect(queued.nextAttemptAt, isNotNull);
+      expect(queued.lastBusinessError, SyncQueueMessages.queuedForNetwork);
 
+      now = now.add(const Duration(minutes: 2));
+      final replayAdapter = _CaptureSuccessAdapter();
       final replayDio = Dio(BaseOptions(baseUrl: 'https://api.example.test'))
-        ..httpClientAdapter = _RejectUnexpectedReplayAdapter();
+        ..httpClientAdapter = replayAdapter;
       final replay =
           await SyncQueueService(
             store: store,
             dio: replayDio,
+            now: () => now,
+            verifyOnline: () async => true,
           ).retryDueOperations();
 
-      expect(replay.blockedCount, 1);
-      expect(replay.retryCount, 0);
+      expect(replay.successCount, 1);
+      expect(replay.blockedCount, 0);
+      expect(await store.all(), isEmpty);
+      expect(replayAdapter.lastRequest?.headers['Idempotency-Key'], key);
     },
   );
 
@@ -289,6 +301,7 @@ class _TypedErrorAdapter implements HttpClientAdapter {
   _TypedErrorAdapter(this.type);
 
   final DioExceptionType type;
+  RequestOptions? lastRequest;
 
   @override
   void close({bool force = false}) {}
@@ -299,11 +312,14 @@ class _TypedErrorAdapter implements HttpClientAdapter {
     Stream<Uint8List>? requestStream,
     Future<void>? cancelFuture,
   ) async {
+    lastRequest = options;
     throw DioException(requestOptions: options, type: type);
   }
 }
 
-class _RejectUnexpectedReplayAdapter implements HttpClientAdapter {
+class _CaptureSuccessAdapter implements HttpClientAdapter {
+  RequestOptions? lastRequest;
+
   @override
   void close({bool force = false}) {}
 
@@ -313,7 +329,14 @@ class _RejectUnexpectedReplayAdapter implements HttpClientAdapter {
     Stream<Uint8List>? requestStream,
     Future<void>? cancelFuture,
   ) async {
-    throw StateError('A conflict must not be replayed.');
+    lastRequest = options;
+    return ResponseBody.fromString(
+      '{"success":true}',
+      200,
+      headers: {
+        Headers.contentTypeHeader: [Headers.jsonContentType],
+      },
+    );
   }
 }
 
