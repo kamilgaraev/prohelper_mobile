@@ -483,10 +483,11 @@ class _RequestFilesCardState extends ConsumerState<_RequestFilesCard> {
     _load();
   }
 
-  void _load() =>
-      _files = ref
-          .read(siteRequestsRepositoryProvider)
-          .fetchFiles(widget.requestId);
+  void _load() {
+    _files = ref
+        .read(siteRequestsRepositoryProvider)
+        .fetchFiles(widget.requestId);
+  }
 
   Future<void> _takePhoto() async {
     final photo = await ImagePicker().pickImage(

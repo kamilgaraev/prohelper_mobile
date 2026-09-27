@@ -8,13 +8,28 @@ import 'package:prohelpers_mobile/features/site_requests/domain/site_request_det
 import 'package:prohelpers_mobile/features/site_requests/presentation/screens/site_request_detail_screen.dart';
 
 class _FakeSiteRequestsRepository extends SiteRequestsRepository {
-  _FakeSiteRequestsRepository(this.request) : super(Dio());
+  _FakeSiteRequestsRepository(this.request, {List<Map<String, dynamic>>? files})
+    : files = files ?? [],
+      super(Dio());
 
   final SiteRequestModel request;
+  final List<Map<String, dynamic>> files;
+  final List<int> deletedFileIds = [];
 
   @override
   Future<SiteRequestModel> fetchSiteRequestDetails(int id) async {
     return request;
+  }
+
+  @override
+  Future<List<Map<String, dynamic>>> fetchFiles(int requestId) async {
+    return List<Map<String, dynamic>>.from(files);
+  }
+
+  @override
+  Future<void> deleteFile(int requestId, int fileId) async {
+    deletedFileIds.add(fileId);
+    files.removeWhere((file) => file['id'] == fileId);
   }
 }
 
@@ -91,15 +106,18 @@ final _request =
       ..createdAt = DateTime(2026, 3, 14);
 
 void main() {
-  Widget createWidget({SiteRequestModel? request, double textScaleFactor = 1}) {
+  Widget createWidget({
+    SiteRequestModel? request,
+    _FakeSiteRequestsRepository? repository,
+    double textScaleFactor = 1,
+  }) {
+    final fakeRepository =
+        repository ?? _FakeSiteRequestsRepository(request ?? _request);
     return ProviderScope(
       overrides: [
+        siteRequestsRepositoryProvider.overrideWithValue(fakeRepository),
         siteRequestDetailProvider.overrideWith(
-          (ref, id) => SiteRequestDetailNotifier(
-            _FakeSiteRequestsRepository(request ?? _request),
-            ref,
-            id,
-          ),
+          (ref, id) => SiteRequestDetailNotifier(fakeRepository, ref, id),
         ),
       ],
       child: TickerMode(
@@ -247,5 +265,30 @@ void main() {
       greaterThan(tester.getTopLeft(find.text('Объект')).dy),
     );
     expect(tester.getSize(find.text('Тестовый')).width, greaterThan(100));
+  });
+
+  testWidgets('после удаления файла список перечитывается', (tester) async {
+    final repository = _FakeSiteRequestsRepository(
+      _request,
+      files: [
+        {'id': 11, 'name': 'qa-photo.jpg', 'can_delete': true},
+      ],
+    );
+
+    await tester.pumpWidget(createWidget(repository: repository));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.scrollUntilVisible(
+      find.text('qa-photo.jpg'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Удалить файл'));
+    await tester.pumpAndSettle();
+
+    expect(repository.deletedFileIds, [11]);
+    expect(find.text('К заявке пока не приложены файлы.'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 }
