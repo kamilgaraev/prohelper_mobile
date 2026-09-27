@@ -118,6 +118,90 @@ void main() {
     expect(await store.all(), isEmpty);
   });
 
+  test(
+    'permission denied operation retries only after explicit request',
+    () async {
+      final store = _MemorySyncQueueStore();
+      final adapter =
+          _QueueHttpAdapter()
+            ..responses.add(
+              const _AdapterResponse(
+                statusCode: 403,
+                body: '{"message":"denied"}',
+              ),
+            )
+            ..responses.add(
+              const _AdapterResponse(statusCode: 200, body: '{"ok":true}'),
+            );
+      final service = SyncQueueService(
+        store: store,
+        dio: _dio(adapter),
+        currentScope: () => '27:4:session-a',
+        onlineVerified: () => true,
+        verifyOnline: () async => true,
+      );
+      final operation = await service.enqueue(
+        _siteRequestDraft(idempotencyKey: 'permission-retry-42'),
+      );
+      final originalPayload = Map<String, dynamic>.from(operation.payload);
+
+      final denied = await service.retryQueuedOperations();
+
+      expect(denied.blockedCount, 1);
+      expect(adapter.requests, hasLength(1));
+      final deniedOperation = await store.get(operation.id);
+      expect(deniedOperation?.status, SyncOperationStatuses.permissionDenied);
+      expect(deniedOperation?.payload, originalPayload);
+
+      final automatic = await service.retryDueOperations();
+
+      expect(automatic.blockedCount, 1);
+      expect(adapter.requests, hasLength(1));
+
+      final manual = await service.retryPermissionDenied(operation.id);
+
+      expect(manual.successCount, 1);
+      expect(adapter.requests, hasLength(2));
+      expect(
+        adapter.requests[1].headers['Idempotency-Key'],
+        'permission-retry-42',
+      );
+      expect(adapter.requests[1].data, {
+        'project_id': 15,
+        'title': 'Материалы',
+        'idempotency_key': 'permission-retry-42',
+      });
+      expect((await store.get(operation.id)), isNull);
+    },
+  );
+
+  test(
+    'permission denied operation can be discarded by its current owner',
+    () async {
+      final store = _MemorySyncQueueStore();
+      var scope = '27:4:session-a';
+      final service = SyncQueueService(
+        store: store,
+        dio: _dio(_QueueHttpAdapter()),
+        currentScope: () => scope,
+      );
+      final operation = await service.enqueue(_siteRequestDraft());
+      operation.status = SyncOperationStatuses.permissionDenied;
+      await service.update(operation);
+
+      scope = '28:4:session-b';
+      await expectLater(
+        service.discardForCurrentOwner(operation.id),
+        throwsA(isA<ApiException>()),
+      );
+      expect(await store.get(operation.id), isNotNull);
+
+      scope = '27:4:session-a';
+      expect(await service.discardForCurrentOwner(operation.id), isTrue);
+      expect(await store.get(operation.id), isNull);
+    },
+  );
+
   test('ordinary queued action does not send session scope to API', () async {
     final store = _MemorySyncQueueStore();
     final adapter =

@@ -91,10 +91,15 @@ class _PendingSyncBody extends StatelessWidget {
             onRetry:
                 operation.status == SyncOperationStatuses.queued
                     ? () => unawaited(notifier.retryQueued())
+                    : operation.status == SyncOperationStatuses.permissionDenied
+                    ? () =>
+                        unawaited(notifier.retryPermissionDenied(operation.id))
                     : null,
             onDiscard:
                 operation.status == SyncOperationStatuses.conflict ||
-                        operation.status == SyncOperationStatuses.needsEdit
+                        operation.status == SyncOperationStatuses.needsEdit ||
+                        operation.status ==
+                            SyncOperationStatuses.permissionDenied
                     ? () =>
                         unawaited(_confirmDiscard(context, notifier, operation))
                     : null,

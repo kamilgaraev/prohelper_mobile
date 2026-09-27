@@ -89,10 +89,22 @@ class PendingSyncNotifier extends StateNotifier<PendingSyncState> {
     await load();
   }
 
+  Future<void> retryPermissionDenied(int id) async {
+    try {
+      final queue = await _ref.read(syncQueueServiceProvider.future);
+      await queue.retryPermissionDenied(id);
+    } catch (error) {
+      if (!mounted) return;
+      state = state.copyWith(error: UserMessage.fromError(error));
+      return;
+    }
+    await load();
+  }
+
   Future<void> discardReviewed(int id) async {
     try {
       final queue = await _ref.read(syncQueueServiceProvider.future);
-      await queue.discardReviewedForCurrentOwner(id);
+      await queue.discardForCurrentOwner(id);
     } catch (error) {
       if (!mounted) return;
       state = state.copyWith(error: UserMessage.fromError(error));

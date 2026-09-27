@@ -236,6 +236,10 @@ class SyncQueueService {
   }
 
   Future<bool> discardReviewedForCurrentOwner(int id) async {
+    return discardForCurrentOwner(id);
+  }
+
+  Future<bool> discardForCurrentOwner(int id) async {
     final operation = await _store.get(id);
     if (operation == null) return false;
 
@@ -246,7 +250,8 @@ class SyncQueueService {
       throw const ApiException(SyncQueueMessages.permissionDenied);
     }
     if (operation.status != SyncOperationStatuses.conflict &&
-        operation.status != SyncOperationStatuses.needsEdit) {
+        operation.status != SyncOperationStatuses.needsEdit &&
+        operation.status != SyncOperationStatuses.permissionDenied) {
       return false;
     }
     if (requiresScope && scope != currentScope) {
@@ -437,6 +442,74 @@ class SyncQueueService {
 
   Future<SyncQueueProcessResult> retryQueuedOperations() {
     return _startProcessing(ignoreBackoff: true);
+  }
+
+  Future<SyncQueueProcessResult> retryPermissionDenied(int id) async {
+    final processing = _processing;
+    if (processing != null) await processing;
+    return _processing ??= _verifyAndRetryPermissionDenied(id).whenComplete(() {
+      _processing = null;
+    });
+  }
+
+  Future<SyncQueueProcessResult> _verifyAndRetryPermissionDenied(int id) async {
+    final scope = currentScope;
+    if ((_verifyOnline == null && _onlineVerified?.call() == false) ||
+        (requiresScope && scope == null)) {
+      return const SyncQueueProcessResult(
+        successCount: 0,
+        retryCount: 0,
+        blockedCount: 0,
+      );
+    }
+    final verifyOnline = _verifyOnline;
+    if (verifyOnline != null && !await verifyOnline()) {
+      return const SyncQueueProcessResult(
+        successCount: 0,
+        retryCount: 0,
+        blockedCount: 0,
+      );
+    }
+    if (scope != currentScope || _onlineVerified?.call() == false) {
+      return const SyncQueueProcessResult(
+        successCount: 0,
+        retryCount: 0,
+        blockedCount: 0,
+      );
+    }
+
+    final operation = await _store.get(id);
+    if (operation == null ||
+        operation.status != SyncOperationStatuses.permissionDenied) {
+      return const SyncQueueProcessResult(
+        successCount: 0,
+        retryCount: 0,
+        blockedCount: 0,
+      );
+    }
+    final operationScope = operation.payload['queue_scope']?.toString();
+    if (requiresScope &&
+        (scope == null || scope.isEmpty || operationScope != scope)) {
+      throw const ApiException(SyncQueueMessages.permissionDenied);
+    }
+
+    final operations = await forCurrentOwner();
+    operations.sort((left, right) => left.createdAt.compareTo(right.createdAt));
+    final operationIndex = operations.indexWhere((item) => item.id == id);
+    if (operationIndex < 0 || operationIndex != 0) {
+      return const SyncQueueProcessResult(
+        successCount: 0,
+        retryCount: 0,
+        blockedCount: 1,
+      );
+    }
+
+    final outcome = await _retryOperation(operation, verifiedScope: scope);
+    return SyncQueueProcessResult(
+      successCount: outcome == _RetryOutcome.success ? 1 : 0,
+      retryCount: outcome == _RetryOutcome.retry ? 1 : 0,
+      blockedCount: outcome == _RetryOutcome.blocked ? 1 : 0,
+    );
   }
 
   Future<SyncQueueProcessResult> _startProcessing({
