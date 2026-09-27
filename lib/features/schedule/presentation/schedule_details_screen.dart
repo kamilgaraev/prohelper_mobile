@@ -897,11 +897,16 @@ class _TaskCard extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        task.name,
-                        style: AppTypography.bodyLarge(
-                          context,
-                        ).copyWith(fontWeight: FontWeight.w700),
+                      Tooltip(
+                        message: task.name,
+                        child: Text(
+                          scheduleTaskDisplayName(task.name),
+                          style: AppTypography.bodyLarge(
+                            context,
+                          ).copyWith(fontWeight: FontWeight.w700),
+                          maxLines: 3,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
                       const SizedBox(height: 6),
                       Wrap(

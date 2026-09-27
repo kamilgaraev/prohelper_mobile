@@ -11,6 +11,7 @@ import '../../../core/widgets/industrial_card.dart';
 import '../data/schedule_model.dart';
 import '../data/schedule_repository.dart';
 import '../../projects/domain/projects_provider.dart';
+import 'schedule_display_name.dart';
 
 class ScheduleTaskDetailScreen extends ConsumerStatefulWidget {
   const ScheduleTaskDetailScreen({
@@ -188,7 +189,10 @@ class _ScheduleTaskDetailScreenState
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(task.name, style: AppTypography.h1(context)),
+                    Text(
+                      scheduleTaskDisplayName(task.name),
+                      style: AppTypography.h1(context),
+                    ),
                     const SizedBox(height: 12),
                     Wrap(
                       spacing: 8,
