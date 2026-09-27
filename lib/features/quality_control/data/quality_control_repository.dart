@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:dio/dio.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
@@ -99,6 +101,8 @@ class QualityControlRepository extends SyncQueueAwareRepository {
     List<String> photoPaths = const [],
   }) async {
     final payload = Map<String, dynamic>.from(data);
+    final idempotencyKey =
+        payload.putIfAbsent('idempotency_key', _newIdempotencyKey).toString();
     final normalizedPhotoPaths = _normalizePhotoPaths(photoPaths);
     for (var index = 0; index < normalizedPhotoPaths.length; index++) {
       payload['photos[$index][type]'] = 'before';
@@ -110,7 +114,7 @@ class QualityControlRepository extends SyncQueueAwareRepository {
 
       if (normalizedPhotoPaths.isNotEmpty) {
         final formMap = <String, dynamic>{
-          ...data.map((key, value) => MapEntry(key, _formValue(value))),
+          ...payload.map((key, value) => MapEntry(key, _formValue(value))),
         };
         for (var index = 0; index < normalizedPhotoPaths.length; index++) {
           final path = normalizedPhotoPaths[index];
@@ -122,12 +126,13 @@ class QualityControlRepository extends SyncQueueAwareRepository {
         }
         requestData = FormData.fromMap(formMap);
       } else {
-        requestData = data;
+        requestData = payload;
       }
 
       final response = await _dio.post(
         '/quality-control/defects',
         data: requestData,
+        options: Options(headers: {'Idempotency-Key': idempotencyKey}),
       );
       return QualityDefectModel.fromJson(
         MobileApiResponse.dataMap(response.data),
@@ -149,6 +154,14 @@ class QualityControlRepository extends SyncQueueAwareRepository {
 
       throw ApiException.fromDio(error);
     }
+  }
+
+  String _newIdempotencyKey() {
+    final random = Random.secure();
+    return List.generate(
+      32,
+      (_) => random.nextInt(16).toRadixString(16),
+    ).join();
   }
 
   Future<QualityDefectModel> fetchDefect(int id) async {

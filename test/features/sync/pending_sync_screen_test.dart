@@ -94,12 +94,14 @@ void main() {
       error: SyncQueueMessages.unknownOutcome,
     );
 
+    late _StubPendingSyncNotifier notifier;
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          pendingSyncProvider.overrideWith(
-            (ref) => _StubPendingSyncNotifier(ref, [uncertain]),
-          ),
+          pendingSyncProvider.overrideWith((ref) {
+            notifier = _StubPendingSyncNotifier(ref, [uncertain]);
+            return notifier;
+          }),
         ],
         child: MaterialApp(
           theme: MostTheme.lightTheme,
@@ -113,6 +115,22 @@ void main() {
     expect(find.text(SyncQueueMessages.unknownOutcome), findsOneWidget);
     expect(find.textContaining('Не отправляйте её повторно'), findsOneWidget);
     expect(find.byTooltip('Повторить отправку'), findsNothing);
+
+    await tester.ensureVisible(find.text('Удалить с устройства'));
+    await tester.tap(find.text('Удалить с устройства'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Проверьте результат'), findsOneWidget);
+    expect(notifier.discardedIds, isEmpty);
+
+    await tester.tap(find.text('Отмена'));
+    await tester.pumpAndSettle();
+    expect(notifier.discardedIds, isEmpty);
+
+    await tester.tap(find.text('Удалить с устройства'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Удалить').last);
+    await tester.pumpAndSettle();
+    expect(notifier.discardedIds, [uncertain.id]);
   });
 }
 
@@ -122,16 +140,19 @@ QueuedSyncOperation _operation({
   required String status,
   String? error,
 }) {
-  final operation = QueuedSyncOperation.fromDraft(
-    SyncQueueDraft(
-      moduleSlug: moduleSlug,
-      operationType: operationType,
-      method: 'POST',
-      endpoint: '/queued-operation',
-      payload: const {'queue_scope': '7:10:session-a'},
-    ),
-    createdAt: DateTime(2026, 9, 18, 10),
-  )..status = status;
+  final operation =
+      QueuedSyncOperation.fromDraft(
+          SyncQueueDraft(
+            moduleSlug: moduleSlug,
+            operationType: operationType,
+            method: 'POST',
+            endpoint: '/queued-operation',
+            payload: const {'queue_scope': '7:10:session-a'},
+          ),
+          createdAt: DateTime(2026, 9, 18, 10),
+        )
+        ..id = 42
+        ..status = status;
   operation.lastBusinessError = error;
   return operation;
 }
@@ -142,6 +163,7 @@ class _StubPendingSyncNotifier extends PendingSyncNotifier {
   final List<QueuedSyncOperation> _operations;
   final String? error;
   int retryCount = 0;
+  final discardedIds = <int>[];
 
   @override
   Future<void> load() async {
@@ -151,5 +173,10 @@ class _StubPendingSyncNotifier extends PendingSyncNotifier {
   @override
   Future<void> retryQueued() async {
     retryCount++;
+  }
+
+  @override
+  Future<void> discardReviewed(int id) async {
+    discardedIds.add(id);
   }
 }

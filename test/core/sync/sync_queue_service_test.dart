@@ -207,6 +207,34 @@ void main() {
     expect(await service.forCurrentOwner(), isEmpty);
   });
 
+  test('reviewed action can only be discarded by its owner', () async {
+    final store = _MemorySyncQueueStore();
+    var scope = '27:4:session-a';
+    final service = SyncQueueService(
+      store: store,
+      dio: _dio(_QueueHttpAdapter()),
+      currentScope: () => scope,
+    );
+    final operation = await service.enqueue(_siteRequestDraft());
+
+    expect(await service.discardReviewedForCurrentOwner(operation.id), isFalse);
+    expect(await store.get(operation.id), isNotNull);
+
+    operation.status = SyncOperationStatuses.conflict;
+    await store.put(operation);
+    scope = '28:4:session-b';
+    await expectLater(
+      service.discardReviewedForCurrentOwner(operation.id),
+      throwsA(isA<ApiException>()),
+    );
+    expect(await store.get(operation.id), isNotNull);
+
+    scope = '27:4:session-a';
+    expect(await service.discardReviewedForCurrentOwner(operation.id), isTrue);
+    expect(await store.get(operation.id), isNull);
+    expect(await service.discardReviewedForCurrentOwner(operation.id), isFalse);
+  });
+
   test(
     'publishes enqueue, delete, and flush changes to queue observers',
     () async {
@@ -835,9 +863,9 @@ void main() {
       await service.enqueue(
         const SyncQueueDraft(
           moduleSlug: 'quality_control',
-          operationType: 'create_defect',
+          operationType: 'resolve_defect',
           method: 'POST',
-          endpoint: '/quality-control/defects',
+          endpoint: '/quality-control/defects/7/resolve',
           payload: {'idempotency_key': 'unconfirmed-key'},
         ),
       );
