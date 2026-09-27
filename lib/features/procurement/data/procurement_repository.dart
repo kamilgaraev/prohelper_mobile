@@ -42,6 +42,97 @@ class ProcurementRepository extends SyncQueueAwareRepository {
     }
   }
 
+  Future<ProcurementPage<ProcurementPurchaseRequestModel>>
+  fetchPurchaseRequests({
+    int? projectId,
+    int page = 1,
+    String? status,
+    String? query,
+  }) async {
+    try {
+      final response = await _dio.get(
+        '/procurement/purchase-requests',
+        queryParameters: {
+          if (projectId != null) 'project_id': projectId,
+          if (status != null) 'status': status,
+          if (query != null && query.trim().isNotEmpty) 'q': query.trim(),
+          'page': page,
+          'per_page': 20,
+        },
+      );
+      return _parsePage(
+        response.data,
+        ProcurementPurchaseRequestModel.fromJson,
+      );
+    } on DioException catch (error) {
+      throw ApiException.fromDio(error);
+    }
+  }
+
+  Future<ProcurementPage<ProcurementPurchaseOrderModel>> fetchPurchaseOrders({
+    int? projectId,
+    int page = 1,
+    String? status,
+    String? query,
+  }) async {
+    try {
+      final response = await _dio.get(
+        '/procurement/purchase-orders',
+        queryParameters: {
+          if (projectId != null) 'project_id': projectId,
+          if (status != null) 'status': status,
+          if (query != null && query.trim().isNotEmpty) 'q': query.trim(),
+          'page': page,
+          'per_page': 20,
+        },
+      );
+      return _parsePage(response.data, ProcurementPurchaseOrderModel.fromJson);
+    } on DioException catch (error) {
+      throw ApiException.fromDio(error);
+    }
+  }
+
+  ProcurementPage<T> _parsePage<T>(
+    dynamic response,
+    T Function(Map<String, dynamic>) fromJson,
+  ) {
+    final data = MobileApiResponse.dataMap(response);
+    final rawItems = data['items'];
+    if (rawItems is! List) {
+      throw const FormatException('В ответе не найден список записей.');
+    }
+    final meta = data['meta'];
+    if (meta is! Map) {
+      throw const FormatException(
+        'В ответе не найдена информация о страницах.',
+      );
+    }
+    final normalizedMeta = meta.map(
+      (key, value) => MapEntry(key.toString(), value),
+    );
+    return ProcurementPage<T>(
+      items: rawItems
+          .whereType<Map>()
+          .map(
+            (item) => fromJson(
+              item.map((key, value) => MapEntry(key.toString(), value)),
+            ),
+          )
+          .toList(growable: false),
+      currentPage: _pageInt(normalizedMeta, 'current_page'),
+      lastPage: _pageInt(normalizedMeta, 'last_page'),
+      total: _pageInt(normalizedMeta, 'total'),
+    );
+  }
+
+  int _pageInt(Map<String, dynamic> meta, String key) {
+    final value = meta[key];
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    if (value is String) return int.tryParse(value) ?? 0;
+    return 0;
+  }
+
   Future<ProcurementPurchaseRequestModel> fetchPurchaseRequest(int id) async {
     try {
       final response = await _dio.get('/procurement/purchase-requests/$id');

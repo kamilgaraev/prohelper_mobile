@@ -38,6 +38,39 @@ class _RecordingProcurementRepository extends ProcurementRepository {
   }
 
   @override
+  Future<ProcurementPage<ProcurementPurchaseRequestModel>>
+  fetchPurchaseRequests({
+    int? projectId,
+    int page = 1,
+    String? status,
+    String? query,
+  }) async => ProcurementPage(
+    items: [
+      ProcurementPurchaseRequestModel.fromJson(
+        procurementPurchaseRequestJson(),
+      ),
+    ],
+    currentPage: page,
+    lastPage: 1,
+    total: 1,
+  );
+
+  @override
+  Future<ProcurementPage<ProcurementPurchaseOrderModel>> fetchPurchaseOrders({
+    int? projectId,
+    int page = 1,
+    String? status,
+    String? query,
+  }) async => ProcurementPage(
+    items: [
+      ProcurementPurchaseOrderModel.fromJson(procurementPurchaseOrderJson()),
+    ],
+    currentPage: page,
+    lastPage: 1,
+    total: 1,
+  );
+
+  @override
   Future<ProcurementPurchaseRequestModel> fetchPurchaseRequest(int id) async {
     fetchedPurchaseRequestId = id;
     return ProcurementPurchaseRequestModel.fromJson(
@@ -248,6 +281,8 @@ void main() {
         tester.getTopLeft(find.text('Заказы').first).dy,
         greaterThan(tester.getTopLeft(find.text('В работе').first).dy),
       );
+      await tester.scrollUntilVisible(find.text('Все статусы'), 300);
+      await tester.pump();
       expect(tester.takeException(), isNull);
     },
   );

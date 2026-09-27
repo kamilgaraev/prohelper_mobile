@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:isar/isar.dart';
+import 'package:prohelpers_mobile/core/network/api_exception.dart';
 import 'package:prohelpers_mobile/core/sync/queued_sync_operation.dart';
 import 'package:prohelpers_mobile/core/sync/sync_queue_service.dart';
 import 'package:prohelpers_mobile/core/sync/sync_queue_store.dart';
@@ -13,6 +14,46 @@ import 'package:prohelpers_mobile/features/quality_control/data/quality_control_
 import '../../../helpers/mobile_integration_test_helpers.dart';
 
 void main() {
+  test('загружает все страницы дефектов с прежними фильтрами', () async {
+    final adapter = _PaginatedDefectsAdapter();
+    final dio = Dio(BaseOptions(baseUrl: 'https://api.example.test'))
+      ..httpClientAdapter = adapter;
+    final repository = QualityControlRepository(dio);
+
+    final defects = await repository.fetchDefects(
+      perPage: 1,
+      projectId: 9,
+      status: 'open',
+      severity: 'major',
+      overdueOnly: true,
+    );
+
+    expect(defects.map((defect) => defect.id), [1, 2]);
+    expect(adapter.requests, hasLength(2));
+    for (var index = 0; index < adapter.requests.length; index++) {
+      final query = adapter.requests[index].queryParameters;
+      expect(query['page'], index + 1);
+      expect(query['per_page'], 1);
+      expect(query['project_id'], 9);
+      expect(query['status'], 'open');
+      expect(query['severity'], 'major');
+      expect(query['overdue'], 1);
+    }
+  });
+
+  test('не возвращает неполный список при ошибке следующей страницы', () async {
+    final adapter = _PaginatedDefectsAdapter(failOnPage: 2);
+    final dio = Dio(BaseOptions(baseUrl: 'https://api.example.test'))
+      ..httpClientAdapter = adapter;
+    final repository = QualityControlRepository(dio);
+
+    await expectLater(
+      repository.fetchDefects(perPage: 1),
+      throwsA(isA<ApiException>()),
+    );
+    expect(adapter.requests, hasLength(2));
+  });
+
   test(
     'unkeyed create timeout requires review instead of automatic retry',
     () async {
@@ -352,6 +393,54 @@ class _PersistedSyncQueueStore implements SyncQueueStore {
   @override
   Future<void> delete(int id) async {
     _operations.remove(id);
+  }
+}
+
+class _PaginatedDefectsAdapter implements HttpClientAdapter {
+  _PaginatedDefectsAdapter({this.failOnPage});
+
+  final int? failOnPage;
+  final requests = <RequestOptions>[];
+
+  @override
+  void close({bool force = false}) {}
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) async {
+    requests.add(options);
+    final page = int.parse(options.queryParameters['page'].toString());
+    if (page == failOnPage) {
+      return ResponseBody.fromString(
+        '{"success":false,"message":"Ошибка страницы","data":null}',
+        503,
+        headers: {
+          Headers.contentTypeHeader: [Headers.jsonContentType],
+        },
+      );
+    }
+
+    final payload = _defectPayload();
+    payload['id'] = page;
+    return ResponseBody.fromString(
+      jsonEncode({
+        'success': true,
+        'data': [payload],
+        'meta': {
+          'current_page': page,
+          'last_page': 2,
+          'per_page': 1,
+          'total': 2,
+        },
+      }),
+      200,
+      headers: {
+        Headers.contentTypeHeader: [Headers.jsonContentType],
+      },
+    );
   }
 }
 

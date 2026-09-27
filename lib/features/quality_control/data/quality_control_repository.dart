@@ -54,19 +54,41 @@ class QualityControlRepository extends SyncQueueAwareRepository {
     bool overdueOnly = false,
   }) async {
     try {
-      final response = await _dio.get(
-        '/quality-control/defects',
-        queryParameters: {
-          'page': page,
-          'per_page': perPage,
-          if (projectId != null) 'project_id': projectId,
-          if (status != null && status.isNotEmpty) 'status': status,
-          if (severity != null && severity.isNotEmpty) 'severity': severity,
-          if (overdueOnly) 'overdue': 1,
-        },
-      );
+      final defects = <Map<String, dynamic>>[];
+      var currentPage = page;
+      int? lastPage;
 
-      return MobileApiResponse.dataList(response.data);
+      while (lastPage == null || currentPage <= lastPage) {
+        final response = await _dio.get(
+          '/quality-control/defects',
+          queryParameters: {
+            'page': currentPage,
+            'per_page': perPage,
+            if (projectId != null) 'project_id': projectId,
+            if (status != null && status.isNotEmpty) 'status': status,
+            if (severity != null && severity.isNotEmpty) 'severity': severity,
+            if (overdueOnly) 'overdue': 1,
+          },
+        );
+        final result = MobileApiResponse.list(response.data);
+        defects.addAll(result.data);
+
+        final responseLastPage = _paginationValue(result.meta['last_page']);
+        if (responseLastPage != null) {
+          lastPage = responseLastPage;
+          if (currentPage < lastPage && result.data.isEmpty) {
+            throw const FormatException(
+              'Страница дефектов пуста, хотя сервер сообщает о следующих страницах.',
+            );
+          }
+        } else if (result.data.length < perPage) {
+          break;
+        }
+
+        currentPage++;
+      }
+
+      return defects;
     } on DioException catch (error) {
       throw ApiException.fromDio(error);
     }
@@ -296,6 +318,21 @@ class QualityControlRepository extends SyncQueueAwareRepository {
       throw ApiException.fromDio(error);
     }
   }
+}
+
+int? _paginationValue(Object? value) {
+  if (value is int) {
+    return value > 0 ? value : null;
+  }
+  if (value is num) {
+    final integer = value.toInt();
+    return integer > 0 ? integer : null;
+  }
+  if (value is String) {
+    final integer = int.tryParse(value);
+    return integer != null && integer > 0 ? integer : null;
+  }
+  return null;
 }
 
 class QualityAssigneeModel {
