@@ -7,6 +7,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'core/localization/most_localizations.dart';
 import 'core/storage/encrypted_local_file_cache.dart';
 import 'core/sync/sync_queue_provider.dart';
+import 'core/sync/sync_retry_schedule.dart';
 import 'core/widgets/app_loading_state.dart';
 import 'core/widgets/mobile_app_shell.dart';
 import 'core/theme/pro_theme.dart';
@@ -56,6 +57,8 @@ class _MostAppState extends ConsumerState<MostApp> with WidgetsBindingObserver {
   StreamSubscription<PushMessage>? _foregroundPushSubscription;
   StreamSubscription<PushMessage>? _openedPushSubscription;
   StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
+  Timer? _queueRetryTimer;
+  Future<void>? _queueRetryInFlight;
   bool? _connectivityAvailable;
   PushMessage? _pendingOpenedMessage;
   bool _pushNavigationScheduled = false;
@@ -77,6 +80,8 @@ class _MostAppState extends ConsumerState<MostApp> with WidgetsBindingObserver {
       if (state is AuthAuthenticated) {
         unawaited(_retryOfflineQueue());
         _scheduleOpenPendingPush();
+      } else {
+        _queueRetryTimer?.cancel();
       }
     });
     ref.listenManual<ProjectsState>(projectsProvider, (_, state) {
@@ -91,12 +96,15 @@ class _MostAppState extends ConsumerState<MostApp> with WidgetsBindingObserver {
       final initial = await _connectivity.checkConnectivity();
       if (!mounted) return;
       _connectivityAvailable = _hasNetwork(initial);
+      if (_connectivityAvailable == true) unawaited(_retryOfflineQueue());
       _connectivitySubscription = _connectivity.onConnectivityChanged.listen((
         results,
       ) {
         final available = _hasNetwork(results);
         if (_connectivityAvailable == false && available) {
           unawaited(_retryOfflineQueue());
+        } else if (!available) {
+          _queueRetryTimer?.cancel();
         }
         _connectivityAvailable = available;
       });
@@ -106,10 +114,33 @@ class _MostAppState extends ConsumerState<MostApp> with WidgetsBindingObserver {
   bool _hasNetwork(List<ConnectivityResult> results) =>
       results.any((result) => result != ConnectivityResult.none);
 
-  Future<void> _retryOfflineQueue() async {
+  Future<void> _retryOfflineQueue() {
+    return _queueRetryInFlight ??= _retryOfflineQueueOnce().whenComplete(() {
+      _queueRetryInFlight = null;
+    });
+  }
+
+  Future<void> _retryOfflineQueueOnce() async {
+    if (!mounted) return;
     if (ref.read(authProvider) is! AuthAuthenticated) return;
+    _queueRetryTimer?.cancel();
     try {
       await ref.read(syncQueueProvider.notifier).retryPending();
+    } catch (_) {}
+    if (!mounted || _connectivityAvailable != true) return;
+    try {
+      final service = await ref.read(syncQueueServiceProvider.future);
+      final scope = service.currentScope;
+      final operations = await service.all();
+      if (!mounted || _connectivityAvailable != true) return;
+      final delay = nextSyncRetryDelay(
+        operations,
+        scope: scope,
+        now: DateTime.now(),
+      );
+      if (delay != null) {
+        _queueRetryTimer = Timer(delay, () => unawaited(_retryOfflineQueue()));
+      }
     } catch (_) {}
   }
 
@@ -307,6 +338,7 @@ class _MostAppState extends ConsumerState<MostApp> with WidgetsBindingObserver {
     unawaited(_foregroundPushSubscription?.cancel());
     unawaited(_openedPushSubscription?.cancel());
     unawaited(_connectivitySubscription?.cancel());
+    _queueRetryTimer?.cancel();
     unawaited(_pushService.dispose());
     super.dispose();
   }
