@@ -843,6 +843,45 @@ void main() {
   });
 
   test(
+    'keeps a keyed action retryable and reports server failure after 5xx',
+    () async {
+      final store = _MemorySyncQueueStore();
+      final adapter =
+          _QueueHttpAdapter()
+            ..responses.add(
+              const _AdapterResponse(
+                statusCode: 503,
+                body: '{"message":"busy"}',
+              ),
+            );
+      final service = SyncQueueService(
+        store: store,
+        dio: _dio(adapter),
+        now: () => DateTime(2026, 9, 28, 10),
+        verifyOnline: () async => true,
+      );
+      final operation = await service.enqueue(
+        const SyncQueueDraft(
+          moduleSlug: 'construction_journal',
+          operationType: 'create_entry',
+          method: 'POST',
+          endpoint: '/construction-journals/7/entries',
+          payload: {'idempotency_key': 'journal-create-key', 'journal_id': 7},
+        ),
+      );
+
+      final result = await service.retryDueOperations();
+      final saved = await store.get(operation.id);
+
+      expect(result.retryCount, 1);
+      expect(result.blockedCount, 0);
+      expect(saved?.status, SyncOperationStatuses.queued);
+      expect(saved?.lastBusinessError, SyncQueueMessages.serverFailure);
+      expect(saved?.nextAttemptAt, DateTime(2026, 9, 28, 10, 1));
+    },
+  );
+
+  test(
     'a client key alone does not authorize retry for an unknown contract',
     () async {
       final store = _MemorySyncQueueStore();
