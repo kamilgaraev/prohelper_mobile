@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:prohelpers_mobile/core/sync/queued_sync_operation.dart';
@@ -187,6 +188,61 @@ void main() {
       expect(notifier.discardedIds, [denied.id]);
     },
   );
+
+  testWidgets('permission denied card stays readable at 1.3 text scale', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 3;
+    tester.view.physicalSize = const Size(720, 1280);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final denied = _operation(
+      moduleSlug: 'journal',
+      operationType: 'create_entry',
+      status: SyncOperationStatuses.permissionDenied,
+    );
+    late _StubPendingSyncNotifier notifier;
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          pendingSyncProvider.overrideWith((ref) {
+            notifier = _StubPendingSyncNotifier(ref, [denied]);
+            return notifier;
+          }),
+        ],
+        child: MaterialApp(
+          theme: MostTheme.lightTheme,
+          home: Builder(
+            builder: (context) {
+              return MediaQuery(
+                data: MediaQuery.of(
+                  context,
+                ).copyWith(textScaler: TextScaler.linear(1.3)),
+                child: const PendingSyncScreen(),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('Запись журнала'), findsOneWidget);
+    expect(find.text('Недостаточно прав'), findsOneWidget);
+    final status = tester.renderObject<RenderParagraph>(
+      find.text('Недостаточно прав'),
+    );
+    expect(status.size.width, greaterThan(150));
+    expect(find.byTooltip('Повторить отправку').hitTestable(), findsOneWidget);
+    expect(find.text('Удалить с устройства').hitTestable(), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Повторить отправку'));
+    await tester.pump();
+    expect(notifier.permissionRetryIds, [denied.id]);
+  });
 }
 
 QueuedSyncOperation _operation({
