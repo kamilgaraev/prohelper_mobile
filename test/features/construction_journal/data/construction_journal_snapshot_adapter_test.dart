@@ -107,6 +107,30 @@ void main() {
     expect(result.data?.project.name, 'Дом 300м Царево');
   });
 
+  test('онлайн обновляет счётчик записей при прежней дате журнала', () async {
+    final service = EntitySnapshotService(
+      store: MemoryEntitySnapshotStore(),
+      resolveOwner: () => owner,
+    );
+    final previous = ConstructionJournalSnapshotAdapter(
+      repository: _FakeJournalRepository(
+        payload: _listPayload(items: [_journalItem()..['total_entries'] = 3]),
+      ),
+      snapshots: Future.value(service),
+    );
+    await previous.load(online: true, projectId: 15);
+
+    final current = ConstructionJournalSnapshotAdapter(
+      repository: _FakeJournalRepository(
+        payload: _listPayload(items: [_journalItem()..['total_entries'] = 4]),
+      ),
+      snapshots: Future.value(service),
+    );
+    final result = await current.load(online: true, projectId: 15);
+
+    expect(result.data?.items.single.totalEntries, 4);
+  });
+
   test('403 журнала не становится пустым списком', () async {
     final adapter = ConstructionJournalSnapshotAdapter(
       repository: _FakeJournalRepository(permissionDenied: true),
@@ -174,6 +198,45 @@ void main() {
     expect(result.data?.entries.single.workDescription, contains('монтаж'));
     expect(repository.detailFetchCount, 0);
     expect(repository.flushCount, 0);
+  });
+
+  test('онлайн показывает новую запись при прежней дате журнала', () async {
+    final service = EntitySnapshotService(
+      store: MemoryEntitySnapshotStore(),
+      resolveOwner: () => owner,
+    );
+    final previous = ConstructionJournalSnapshotAdapter(
+      repository: _FakeJournalRepository(detailPayload: _detailPayload()),
+      snapshots: Future.value(service),
+    );
+    await previous.loadDetail(online: true, journalId: 77, projectId: 15);
+
+    final newEntry =
+        _entryPayload(description: 'Новая запись')
+          ..['id'] = 92
+          ..['entry_number'] = 6;
+    final updated =
+        _detailPayload()
+          ..['journal'] = (_journalItem()..['total_entries'] = 4)
+          ..['entries'] = [_entryPayload(), newEntry]
+          ..['meta'] = {
+            'current_page': 1,
+            'per_page': 20,
+            'last_page': 1,
+            'total': 2,
+          };
+    final current = ConstructionJournalSnapshotAdapter(
+      repository: _FakeJournalRepository(detailPayload: updated),
+      snapshots: Future.value(service),
+    );
+    final result = await current.loadDetail(
+      online: true,
+      journalId: 77,
+      projectId: 15,
+    );
+
+    expect(result.data?.entries, hasLength(2));
+    expect(result.data?.entries.last.workDescription, 'Новая запись');
   });
 
   test('офлайн карточка журнала без снимка — missing', () async {
@@ -363,12 +426,14 @@ Map<String, dynamic> _detailPayload({String name = 'Журнал СМР'}) {
 class _FakeJournalRepository extends ConstructionJournalRepository {
   _FakeJournalRepository({
     this.payload,
+    this.detailPayload,
     this.permissionDenied = false,
     this.conflict = false,
     this.networkError = false,
   }) : super(Dio());
 
   final Map<String, dynamic>? payload;
+  final Map<String, dynamic>? detailPayload;
   final bool permissionDenied;
   final bool conflict;
   final bool networkError;
@@ -407,7 +472,7 @@ class _FakeJournalRepository extends ConstructionJournalRepository {
   Future<Map<String, dynamic>> fetchJournalDetailPayload(int journalId) async {
     detailFetchCount++;
     _throwIfFailed();
-    return _detailPayload();
+    return detailPayload ?? _detailPayload();
   }
 
   @override
