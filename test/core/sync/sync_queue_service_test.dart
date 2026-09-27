@@ -65,10 +65,57 @@ void main() {
     expect(operation.payload['queue_scope'], scope);
 
     scope = '28:4:session-b';
-    final result = await service.retryDueOperations();
+    final result = await service.retryQueuedOperations();
     expect(result.successCount, 0);
     expect(result.blockedCount, 1);
     expect(adapter.requests, isEmpty);
+  });
+
+  test('manual retry bypasses backoff for a queued operation', () async {
+    final store = _MemorySyncQueueStore();
+    final adapter =
+        _QueueHttpAdapter()
+          ..responses.add(
+            const _AdapterResponse(statusCode: 200, body: '{"ok":true}'),
+          );
+    final now = DateTime(2026, 9, 28, 10);
+    var verificationCount = 0;
+    final service = SyncQueueService(
+      store: store,
+      dio: _dio(adapter),
+      now: () => now,
+      currentScope: () => '27:4:session-a',
+      onlineVerified: () => true,
+      verifyOnline: () async {
+        verificationCount++;
+        return true;
+      },
+    );
+    final operation = await service.enqueue(
+      _siteRequestDraft(idempotencyKey: 'manual-retry-42'),
+    );
+    operation.nextAttemptAt = now.add(const Duration(hours: 1));
+    await service.update(operation);
+
+    final automatic = await service.retryDueOperations();
+
+    expect(automatic.retryCount, 1);
+    expect(adapter.requests, isEmpty);
+    expect(
+      (await store.get(operation.id))?.status,
+      SyncOperationStatuses.queued,
+    );
+
+    final manual = await service.retryQueuedOperations();
+
+    expect(manual.successCount, 1);
+    expect(adapter.requests, hasLength(1));
+    expect(
+      adapter.requests.single.headers['Idempotency-Key'],
+      'manual-retry-42',
+    );
+    expect(verificationCount, 2);
+    expect(await store.all(), isEmpty);
   });
 
   test('ordinary queued action does not send session scope to API', () async {
@@ -158,7 +205,7 @@ void main() {
         onlineVerified: () => true,
         verifyOnline: () async => true,
       );
-      final result = await restartedService.retryDueOperations();
+      final result = await restartedService.retryQueuedOperations();
       final recovered = await store.get(operation.id);
 
       expect(result.blockedCount, 1);
@@ -439,12 +486,12 @@ void main() {
       ),
     );
 
-    expect((await service.retryDueOperations()).successCount, 0);
+    expect((await service.retryQueuedOperations()).successCount, 0);
     expect(adapter.requests, isEmpty);
     expect((await store.all()).single.status, SyncOperationStatuses.queued);
 
     verified = true;
-    expect((await service.retryDueOperations()).successCount, 1);
+    expect((await service.retryQueuedOperations()).successCount, 1);
     expect(adapter.requests, hasLength(1));
     expect(adapter.requests.single.headers['Idempotency-Key'], 'action-key');
     expect(

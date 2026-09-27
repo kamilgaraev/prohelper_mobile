@@ -81,7 +81,7 @@ class PendingSyncNotifier extends StateNotifier<PendingSyncState> {
   Future<void> retryQueued() async {
     try {
       final queue = await _ref.read(syncQueueServiceProvider.future);
-      await queue.retryDueOperations();
+      await queue.retryQueuedOperations();
     } catch (error) {
       state = state.copyWith(error: UserMessage.fromError(error));
       return;
