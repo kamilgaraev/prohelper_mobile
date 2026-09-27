@@ -34,33 +34,17 @@ class SiteRequestCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
+          Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      request.title,
-                      style: AppTypography.h2(context),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      _requestSubtitle(request),
-                      style: AppTypography.bodyMedium(
-                        context,
-                      ).copyWith(color: theme.colorScheme.onSurfaceVariant),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                ),
+              Text(request.title, style: AppTypography.h2(context)),
+              const SizedBox(height: 6),
+              Text(
+                _requestSubtitle(request),
+                style: AppTypography.bodyMedium(
+                  context,
+                ).copyWith(color: theme.colorScheme.onSurfaceVariant),
               ),
-              const SizedBox(width: 10),
-              _StatusBadge(label: _statusLabel(request), color: statusColor),
             ],
           ),
           const SizedBox(height: 12),
@@ -68,6 +52,7 @@ class SiteRequestCard extends StatelessWidget {
             spacing: 8,
             runSpacing: 8,
             children: [
+              _StatusBadge(label: _statusLabel(request), color: statusColor),
               _MetaBadge(
                 icon: Icons.category_outlined,
                 label: _requestTypeLabel(request),
@@ -345,8 +330,6 @@ class _MetaBadge extends StatelessWidget {
             Flexible(
               child: Text(
                 label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
                 style: AppTypography.caption(
                   context,
                 ).copyWith(color: resolvedColor, fontWeight: FontWeight.w600),

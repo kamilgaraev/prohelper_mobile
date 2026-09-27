@@ -4,7 +4,7 @@ import 'package:prohelpers_mobile/features/site_requests/data/site_request_model
 import 'package:prohelpers_mobile/features/site_requests/presentation/widgets/site_request_card.dart';
 
 void main() {
-  testWidgets('длинные метки заявки помещаются при увеличенном шрифте', (
+  testWidgets('карточка сохраняет длинные данные на узком экране', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(720, 1280);
@@ -14,18 +14,30 @@ void main() {
       tester.view.resetDevicePixelRatio();
     });
 
-    final request =
+    final shortTitleRequest =
         SiteRequestModel()
           ..serverId = 1
-          ..title = 'Учебный конкурс поставщиков цемента'
-          ..status = 'approved'
-          ..statusLabel = 'Одобрена'
+          ..title = 'Q'
+          ..status = 'pending'
+          ..statusLabel = 'Ожидает согласования руководителем проекта'
           ..priority = 'medium'
           ..priorityLabel = 'Средний'
           ..requestType = 'material_request'
           ..requestTypeLabel =
               'Заявка на материалы для учебного конкурса поставщиков цемента'
           ..materialName = 'Цемент М500, мешки для склада';
+    final longTitleRequest =
+        SiteRequestModel()
+          ..serverId = 2
+          ..title = 'Учебный конкурс поставщиков цемента для нового корпуса'
+          ..status = 'approved'
+          ..statusLabel = 'Одобрена'
+          ..priority = 'medium'
+          ..priorityLabel = 'Средний'
+          ..requestType = 'material_request'
+          ..requestTypeLabel = 'Заявка на материалы'
+          ..description =
+              'Подробное описание заявки, которое должно отображаться целиком';
 
     await tester.pumpWidget(
       MaterialApp(
@@ -38,7 +50,12 @@ void main() {
             ),
         home: Scaffold(
           body: SingleChildScrollView(
-            child: SiteRequestCard(request: request, onTap: () {}),
+            child: Column(
+              children: [
+                SiteRequestCard(request: shortTitleRequest, onTap: () {}),
+                SiteRequestCard(request: longTitleRequest, onTap: () {}),
+              ],
+            ),
           ),
         ),
       ),
@@ -46,6 +63,35 @@ void main() {
     await tester.pump();
 
     expect(tester.takeException(), isNull);
+    expect(find.text('Q'), findsOneWidget);
+    expect(
+      find.text(
+        'Ожидает согласования руководителем проекта',
+        skipOffstage: false,
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.text(
+        'Заявка на материалы для учебного конкурса поставщиков цемента',
+        skipOffstage: false,
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.text(
+        'Учебный конкурс поставщиков цемента для нового корпуса',
+        skipOffstage: false,
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.text(
+        'Подробное описание заявки, которое должно отображаться целиком',
+        skipOffstage: false,
+      ),
+      findsOneWidget,
+    );
     expect(find.text('Одобрена'), findsOneWidget);
   });
 }
