@@ -119,7 +119,10 @@ void main() {
     await tester.ensureVisible(find.text('Удалить с устройства'));
     await tester.tap(find.text('Удалить с устройства'));
     await tester.pumpAndSettle();
-    expect(find.textContaining('На сервере ничего не удалится'), findsOneWidget);
+    expect(
+      find.textContaining('На сервере ничего не удалится'),
+      findsOneWidget,
+    );
     expect(notifier.discardedIds, isEmpty);
 
     await tester.tap(find.text('Отмена'));
@@ -132,6 +135,58 @@ void main() {
     await tester.pumpAndSettle();
     expect(notifier.discardedIds, [uncertain.id]);
   });
+
+  testWidgets(
+    'permission denied action offers manual retry and confirmed discard',
+    (tester) async {
+      final denied = _operation(
+        moduleSlug: 'site_requests',
+        operationType: 'create_site_request',
+        status: SyncOperationStatuses.permissionDenied,
+      );
+      late _StubPendingSyncNotifier notifier;
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            pendingSyncProvider.overrideWith((ref) {
+              notifier = _StubPendingSyncNotifier(ref, [denied]);
+              return notifier;
+            }),
+          ],
+          child: MaterialApp(
+            theme: MostTheme.lightTheme,
+            home: const PendingSyncScreen(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Недостаточно прав'), findsOneWidget);
+      expect(find.byTooltip('Повторить отправку'), findsOneWidget);
+      expect(
+        find.byTooltip('Повторить отправку').hitTestable(),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.byTooltip('Повторить отправку'));
+      await tester.pump();
+      expect(notifier.permissionRetryIds, [denied.id]);
+
+      await tester.ensureVisible(find.text('Удалить с устройства'));
+      await tester.tap(find.text('Удалить с устройства'));
+      await tester.pumpAndSettle();
+      expect(
+        find.textContaining('На сервере ничего не удалится'),
+        findsOneWidget,
+      );
+      expect(notifier.discardedIds, isEmpty);
+
+      await tester.tap(find.text('Удалить').last);
+      await tester.pumpAndSettle();
+      expect(notifier.discardedIds, [denied.id]);
+    },
+  );
 }
 
 QueuedSyncOperation _operation({
@@ -163,6 +218,7 @@ class _StubPendingSyncNotifier extends PendingSyncNotifier {
   final List<QueuedSyncOperation> _operations;
   final String? error;
   int retryCount = 0;
+  final permissionRetryIds = <int>[];
   final discardedIds = <int>[];
 
   @override
@@ -173,6 +229,11 @@ class _StubPendingSyncNotifier extends PendingSyncNotifier {
   @override
   Future<void> retryQueued() async {
     retryCount++;
+  }
+
+  @override
+  Future<void> retryPermissionDenied(int id) async {
+    permissionRetryIds.add(id);
   }
 
   @override
