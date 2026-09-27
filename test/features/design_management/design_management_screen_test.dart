@@ -37,7 +37,10 @@ class _FakeDesignPackageRepository extends DesignPackageRepository {
 }
 
 class _FakeDesignPackageNotifier extends DesignPackageNotifier {
-  _FakeDesignPackageNotifier() : super(_FakeDesignPackageRepository()) {
+  _FakeDesignPackageNotifier({
+    String title = 'Рабочая документация',
+    String? status,
+  }) : super(_FakeDesignPackageRepository()) {
     state = DesignPackageState(
       projectId: 9,
       page: DesignPackagePage(
@@ -45,7 +48,8 @@ class _FakeDesignPackageNotifier extends DesignPackageNotifier {
           DesignPackageModel(
             id: 42,
             projectId: 9,
-            title: 'Рабочая документация',
+            title: title,
+            status: status,
           ),
         ],
         currentPage: 1,
@@ -82,6 +86,43 @@ class _FakeDesignPackageNotifier extends DesignPackageNotifier {
 }
 
 void main() {
+  testWidgets('package card fits long title and status on compact screen', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(720, 1280);
+    tester.view.devicePixelRatio = 2;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    const title = 'РД_системы_вентиляции_секции_А_северного_корпуса';
+    const status = 'Ожидает подтверждения проектировщика';
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          projectsProvider.overrideWith((ref) => _FakeProjectsNotifier()),
+          designPackageProvider.overrideWith(
+            (ref) => _FakeDesignPackageNotifier(title: title, status: status),
+          ),
+        ],
+        child: MaterialApp(
+          builder:
+              (context, child) => MediaQuery(
+                data: MediaQuery.of(
+                  context,
+                ).copyWith(textScaler: const TextScaler.linear(1.3)),
+                child: child!,
+              ),
+          home: const DesignManagementScreen(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text(title), findsOneWidget);
+    expect(find.text(status), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('shows selected project packages and runs an allowed action', (
     tester,
   ) async {

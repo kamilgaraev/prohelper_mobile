@@ -582,20 +582,13 @@ class _TimeSummaryStrip extends StatelessWidget {
     final submitted = totals?.byStatus['submitted'] ?? 0;
     final approved = totals?.byStatus['approved'] ?? 0;
 
-    return Row(
+    return Column(
       children: [
-        Expanded(
-          child: _SummaryTile(
-            label: 'Часы',
-            value: _hoursText(totals?.totalHours ?? 0),
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: _SummaryTile(label: 'На проверке', value: '$submitted'),
-        ),
-        const SizedBox(width: 8),
-        Expanded(child: _SummaryTile(label: 'Согласовано', value: '$approved')),
+        _SummaryTile(label: 'Часы', value: _hoursText(totals?.totalHours ?? 0)),
+        const SizedBox(height: 8),
+        _SummaryTile(label: 'На проверке', value: '$submitted'),
+        const SizedBox(height: 8),
+        _SummaryTile(label: 'Согласовано', value: '$approved'),
       ],
     );
   }

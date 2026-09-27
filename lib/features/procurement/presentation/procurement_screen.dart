@@ -610,17 +610,19 @@ class _ProcurementHeader extends StatelessWidget {
             ).copyWith(color: theme.colorScheme.onSurfaceVariant),
           ),
           const SizedBox(height: 12),
-          Row(
+          Column(
             children: [
-              Expanded(
+              SizedBox(
+                width: double.infinity,
                 child: _MetricTile(
                   label: 'Согласования',
                   value: summary.counters.pendingApprovalsCount.toString(),
                   color: AppColors.warning,
                 ),
               ),
-              const SizedBox(width: 10),
-              Expanded(
+              const SizedBox(height: 10),
+              SizedBox(
+                width: double.infinity,
                 child: _MetricTile(
                   label: 'К приемке',
                   value: summary.counters.receivableOrdersCount.toString(),
@@ -833,24 +835,19 @@ class _PurchaseOrderCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  order.orderNumber,
-                  style: AppTypography.bodyLarge(
-                    context,
-                  ).copyWith(fontWeight: FontWeight.w900),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              const SizedBox(width: 10),
-              _StatusPill(
-                label: order.statusLabel,
-                color: _orderColor(order.status, theme),
-              ),
-            ],
+          Align(
+            alignment: Alignment.centerLeft,
+            child: _StatusPill(
+              label: order.statusLabel,
+              color: _orderColor(order.status, theme),
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            order.orderNumber,
+            style: AppTypography.bodyLarge(
+              context,
+            ).copyWith(fontWeight: FontWeight.w900),
           ),
           const SizedBox(height: 8),
           Text(

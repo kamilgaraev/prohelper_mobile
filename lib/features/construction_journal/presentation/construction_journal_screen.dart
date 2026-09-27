@@ -188,37 +188,29 @@ class _ConstructionJournalScreenState
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          journal.name,
-                                          style: AppTypography.h2(context),
-                                        ),
-                                        const SizedBox(height: 6),
-                                        Text(
-                                          'Журнал №${journal.journalNumber.isEmpty ? '-' : journal.journalNumber}',
-                                          style: AppTypography.bodyMedium(
-                                            context,
-                                          ).copyWith(
-                                            color:
-                                                Theme.of(
-                                                  context,
-                                                ).colorScheme.onSurfaceVariant,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  _StatusBadge(
-                                    status: journal.status,
-                                    label: journal.statusLabel,
-                                  ),
-                                ],
+                              Align(
+                                alignment: Alignment.centerLeft,
+                                child: _StatusBadge(
+                                  status: journal.status,
+                                  label: journal.statusLabel,
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                journal.name,
+                                style: AppTypography.h2(context),
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                'Журнал №${journal.journalNumber.isEmpty ? '-' : journal.journalNumber}',
+                                style: AppTypography.bodyMedium(
+                                  context,
+                                ).copyWith(
+                                  color:
+                                      Theme.of(
+                                        context,
+                                      ).colorScheme.onSurfaceVariant,
+                                ),
                               ),
                               const SizedBox(height: 12),
                               Wrap(

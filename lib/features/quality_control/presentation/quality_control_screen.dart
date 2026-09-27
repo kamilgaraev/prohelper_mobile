@@ -343,6 +343,7 @@ class _QualityControlScreenState extends ConsumerState<QualityControlScreen> {
                       ),
                       const SizedBox(height: 12),
                       DropdownButtonFormField<String>(
+                        isExpanded: true,
                         value: severity,
                         decoration: const InputDecoration(
                           labelText: 'Критичность',
@@ -380,6 +381,7 @@ class _QualityControlScreenState extends ConsumerState<QualityControlScreen> {
                       ),
                       const SizedBox(height: 12),
                       DropdownButtonFormField<bool>(
+                        isExpanded: true,
                         value: inspectionRequired,
                         decoration: const InputDecoration(
                           labelText: 'Проверка результата',
@@ -1324,20 +1326,20 @@ class _QualityDefectCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  defect.title,
-                  style: AppTypography.bodyLarge(
-                    context,
-                  ).copyWith(fontWeight: FontWeight.w800),
-                ),
-              ),
-              _StatusBadge(status: defect.status, label: defect.statusLabel),
-            ],
+          Align(
+            alignment: Alignment.centerLeft,
+            child: _StatusBadge(
+              status: defect.status,
+              label: defect.statusLabel,
+            ),
           ),
           const SizedBox(height: 6),
+          Text(
+            defect.title,
+            style: AppTypography.bodyLarge(
+              context,
+            ).copyWith(fontWeight: FontWeight.w800),
+          ),
           Text(
             defect.defectNumber,
             style: AppTypography.caption(

@@ -176,12 +176,17 @@ class _ProcurementPurchaseRequestDetailScreenState
                         ),
                         const SizedBox(height: 8),
                         ...request.purchaseOrders.map(
-                          (order) => ListTile(
-                            contentPadding: EdgeInsets.zero,
-                            title: Text(order.orderNumber),
-                            subtitle: Text(order.status),
-                            trailing: Text(
-                              '${order.totalAmount} ${order.currency ?? 'RUB'}',
+                          (order) => Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(order.orderNumber),
+                                Text(order.status),
+                                Text(
+                                  '${order.totalAmount} ${order.currency ?? 'RUB'}',
+                                ),
+                              ],
                             ),
                           ),
                         ),
@@ -207,16 +212,11 @@ class _Fact extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(
-            width: 120,
-            child: Text(label, style: AppTypography.caption(context)),
-          ),
-          Expanded(
-            child: Text(value, style: AppTypography.bodyMedium(context)),
-          ),
+          Text(label, style: AppTypography.caption(context)),
+          Text(value, style: AppTypography.bodyMedium(context)),
         ],
       ),
     );

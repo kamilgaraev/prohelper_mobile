@@ -107,6 +107,16 @@ class MachineryOperationsNotifier
     await load();
   }
 
+  Future<void> approveShiftReport(int shiftReportId) async {
+    await _repository.approveShiftReport(shiftReportId);
+    await load();
+  }
+
+  Future<void> rejectShiftReport(int shiftReportId, String reason) async {
+    await _repository.rejectShiftReport(shiftReportId, reason);
+    await load();
+  }
+
   Future<void> retryQueuedOperations() async {
     final future = _syncQueueFuture;
     if (future == null) {

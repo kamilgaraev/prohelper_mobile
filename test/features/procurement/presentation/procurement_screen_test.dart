@@ -30,6 +30,7 @@ class _RecordingProcurementRepository extends ProcurementRepository {
   int? rejectedApprovalId;
   String? rejectionComment;
   bool queueMaterialsReception = false;
+  String purchaseOrderNumber = 'PO-61';
 
   @override
   Future<ProcurementSummaryModel> fetchSummary({int? projectId}) async {
@@ -63,7 +64,9 @@ class _RecordingProcurementRepository extends ProcurementRepository {
     String? query,
   }) async => ProcurementPage(
     items: [
-      ProcurementPurchaseOrderModel.fromJson(procurementPurchaseOrderJson()),
+      ProcurementPurchaseOrderModel.fromJson(
+        procurementPurchaseOrderJson(orderNumber: purchaseOrderNumber),
+      ),
     ],
     currentPage: page,
     lastPage: 1,
@@ -243,6 +246,7 @@ void main() {
     expect(find.text('Закупки'), findsOneWidget);
     expect(find.text('Башня'), findsWidgets);
     expect(find.text('Согласования'), findsWidgets);
+    expect(find.text('К приемке'), findsWidgets);
     expect(find.text('PO-61'), findsWidgets);
     expect(find.text('Поставка бетона'), findsWidgets);
     expect(find.text('БетонПром'), findsWidgets);
@@ -251,7 +255,9 @@ void main() {
   testWidgets(
     'keeps creation action and metrics readable on a compact screen',
     (tester) async {
-      final repository = _RecordingProcurementRepository();
+      final repository =
+          _RecordingProcurementRepository()
+            ..purchaseOrderNumber = 'ЗП-202609-0002';
       tester.view.devicePixelRatio = 2;
       tester.view.physicalSize = const Size(720, 1280);
       addTearDown(tester.view.resetPhysicalSize);
@@ -281,7 +287,19 @@ void main() {
         tester.getTopLeft(find.text('Заказы').first).dy,
         greaterThan(tester.getTopLeft(find.text('В работе').first).dy),
       );
-      await tester.scrollUntilVisible(find.text('Все статусы'), 300);
+      expect(find.text('Согласования'), findsWidgets);
+      expect(find.text('К приемке'), findsWidgets);
+      await tester.scrollUntilVisible(
+        find.text('ЗП-202609-0002'),
+        300,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(find.text('ЗП-202609-0002'), findsWidgets);
+      await tester.scrollUntilVisible(
+        find.text('Все статусы'),
+        300,
+        scrollable: find.byType(Scrollable).first,
+      );
       await tester.pump();
       expect(tester.takeException(), isNull);
     },

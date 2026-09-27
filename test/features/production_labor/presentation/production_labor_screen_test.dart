@@ -16,6 +16,8 @@ class _RecordingProductionLaborRepository extends ProductionLaborRepository {
   _RecordingProductionLaborRepository({this.outputError}) : super(Dio());
 
   Object? outputError;
+  String workOrderTitle = 'Монтаж стен';
+  String workOrderStatus = 'В работе';
   double acceptedQuantity = 3;
   Map<String, dynamic>? outputPayload;
   Map<String, dynamic>? timesheetPayload;
@@ -25,10 +27,10 @@ class _RecordingProductionLaborRepository extends ProductionLaborRepository {
   LaborWorkOrderModel get workOrder => LaborWorkOrderModel(
     id: 5,
     projectId: 9,
-    title: 'Монтаж стен',
+    title: workOrderTitle,
     orderNumber: 'PL-1',
     status: 'in_progress',
-    statusLabel: 'В работе',
+    statusLabel: workOrderStatus,
     availableActions: const ['submit'],
     assigneeName: 'Бригада 1',
     lines: [
@@ -165,7 +167,10 @@ void main() {
       ..address = 'Площадка 1';
   }
 
-  Widget buildScreen(_RecordingProductionLaborRepository repository) {
+  Widget buildScreen(
+    _RecordingProductionLaborRepository repository, {
+    double textScale = 1,
+  }) {
     return ProviderScope(
       overrides: [
         projectsProvider.overrideWith(
@@ -175,7 +180,16 @@ void main() {
           (ref) => _TestProductionLaborNotifier(repository),
         ),
       ],
-      child: const MaterialApp(home: ProductionLaborScreen()),
+      child: MaterialApp(
+        builder:
+            (context, child) => MediaQuery(
+              data: MediaQuery.of(
+                context,
+              ).copyWith(textScaler: TextScaler.linear(textScale)),
+              child: child!,
+            ),
+        home: const ProductionLaborScreen(),
+      ),
     );
   }
 
@@ -193,6 +207,26 @@ void main() {
     await tester.tap(saveButton);
     await pumpUi(tester);
   }
+
+  testWidgets('work order header fits long text on compact screen', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(720, 1280);
+    tester.view.devicePixelRatio = 2;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final repository =
+        _RecordingProductionLaborRepository()
+          ..workOrderTitle = 'Монтаж_плиты_перекрытия_секции_А_северный_корпус'
+          ..workOrderStatus = 'Ожидает подтверждения прораба';
+
+    await tester.pumpWidget(buildScreen(repository, textScale: 1.3));
+    await pumpUi(tester);
+
+    expect(find.text(repository.workOrderTitle), findsOneWidget);
+    expect(find.text(repository.workOrderStatus), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('requires quantity before submitting production actual', (
     tester,
