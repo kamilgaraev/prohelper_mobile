@@ -26,30 +26,47 @@ class ForemanMachineryScreen extends ConsumerWidget {
             Card(
               child: Padding(
                 padding: const EdgeInsets.all(16),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: _Metric(
-                        label: 'Техника',
-                        value: state.assets.length,
-                      ),
-                    ),
-                    Expanded(
-                      child: _Metric(
-                        label: 'На проверку',
-                        value: review.length,
-                      ),
-                    ),
-                    Expanded(
-                      child: _Metric(
-                        label: 'Проблемы',
-                        value:
-                            state.assets
-                                .where((asset) => asset.problemFlags.isNotEmpty)
-                                .length,
-                      ),
-                    ),
-                  ],
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    const spacing = 8.0;
+                    final columns = constraints.maxWidth < 400 ? 2 : 3;
+                    final metricWidth =
+                        (constraints.maxWidth - spacing * (columns - 1)) /
+                        columns;
+                    return Wrap(
+                      alignment: WrapAlignment.spaceAround,
+                      spacing: spacing,
+                      runSpacing: 12,
+                      children: [
+                        SizedBox(
+                          width: metricWidth,
+                          child: _Metric(
+                            label: 'Техника',
+                            value: state.assets.length,
+                          ),
+                        ),
+                        SizedBox(
+                          width: metricWidth,
+                          child: _Metric(
+                            label: 'На проверку',
+                            value: review.length,
+                          ),
+                        ),
+                        SizedBox(
+                          width: metricWidth,
+                          child: _Metric(
+                            label: 'Проблемы',
+                            value:
+                                state.assets
+                                    .where(
+                                      (asset) => asset.problemFlags.isNotEmpty,
+                                    )
+                                    .length,
+                          ),
+                        ),
+                      ],
+                    );
+                  },
                 ),
               ),
             ),
