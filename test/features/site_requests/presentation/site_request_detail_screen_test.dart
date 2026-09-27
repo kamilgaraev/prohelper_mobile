@@ -209,4 +209,43 @@ void main() {
     expect(find.text('Отменить заявку'), findsOneWidget);
     expect(find.text('Отклонить'), findsOneWidget);
   });
+
+  testWidgets('контекст заявки читабелен на узком экране', (tester) async {
+    tester.view.physicalSize = const Size(720, 1280);
+    tester.view.devicePixelRatio = 2.625;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final request =
+        SiteRequestModel()
+          ..serverId = 1001
+          ..title = 'Проверка заявки'
+          ..status = 'pending'
+          ..statusLabel = 'Ожидает обработки'
+          ..priority = 'medium'
+          ..priorityLabel = 'Средний'
+          ..requestType = 'material_request'
+          ..requestTypeLabel = 'Заявка на материалы'
+          ..projectId = 15
+          ..projectName = 'Тестовый';
+
+    await tester.pumpWidget(
+      createWidget(request: request, textScaleFactor: 1.3),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.scrollUntilVisible(
+      find.text('Объект'),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(
+      tester.getTopLeft(find.text('Тестовый')).dy,
+      greaterThan(tester.getTopLeft(find.text('Объект')).dy),
+    );
+    expect(tester.getSize(find.text('Тестовый')).width, greaterThan(100));
+  });
 }

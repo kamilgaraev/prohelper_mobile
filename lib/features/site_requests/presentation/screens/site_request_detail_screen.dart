@@ -1414,32 +1414,48 @@ class _ParamRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final labelStyle = AppTypography.bodyMedium(
+      context,
+    ).copyWith(color: theme.colorScheme.onSurfaceVariant);
+    final valueStyle = AppTypography.bodyLarge(
+      context,
+    ).copyWith(color: valueColor);
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, size: 18, color: theme.colorScheme.onSurfaceVariant),
-          const SizedBox(width: 8),
-          SizedBox(
-            width: 108,
-            child: Text(
-              label,
-              style: AppTypography.bodyMedium(
-                context,
-              ).copyWith(color: theme.colorScheme.onSurfaceVariant),
-            ),
-          ),
-          Expanded(
-            child: Text(
-              value,
-              style: AppTypography.bodyLarge(
-                context,
-              ).copyWith(color: valueColor),
-            ),
-          ),
-        ],
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final compact = constraints.maxWidth < 420;
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(icon, size: 18, color: theme.colorScheme.onSurfaceVariant),
+              const SizedBox(width: 8),
+              Expanded(
+                child:
+                    compact
+                        ? Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(label, style: labelStyle),
+                            const SizedBox(height: 2),
+                            Text(value, style: valueStyle),
+                          ],
+                        )
+                        : Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            SizedBox(
+                              width: 108,
+                              child: Text(label, style: labelStyle),
+                            ),
+                            Expanded(child: Text(value, style: valueStyle)),
+                          ],
+                        ),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
