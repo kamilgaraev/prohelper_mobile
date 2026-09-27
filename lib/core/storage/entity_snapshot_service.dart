@@ -214,7 +214,9 @@ CachedEntity mergeRemoteSnapshot({
     return local;
   }
 
-  if (!remote.updatedAt.isAfter(local.updatedAt)) {
+  final versionOrder = remote.updatedAt.compareTo(local.updatedAt);
+  if (versionOrder < 0 ||
+      (versionOrder == 0 && remote.payloadJson == local.payloadJson)) {
     return local;
   }
 
