@@ -96,8 +96,15 @@ void main() {
       ),
     );
 
+    await tester.scrollUntilVisible(
+      find.text('Экскаватор_северный_корпус_участок_17'),
+      200,
+    );
     expect(find.text('Экскаватор_северный_корпус_участок_17'), findsOneWidget);
     expect(find.text('Ожидает подтверждения механика'), findsOneWidget);
+    for (final label in ['Техника', 'На проверку', 'Проблемы']) {
+      expect(tester.getSize(find.text(label)).width, greaterThanOrEqualTo(120));
+    }
     expect(tester.takeException(), isNull);
   });
 
@@ -123,6 +130,7 @@ void main() {
       ),
     );
 
+    await tester.scrollUntilVisible(find.text('Экскаватор'), 200);
     await tester.tap(find.text('Экскаватор'));
     await tester.pumpAndSettle();
 
@@ -232,6 +240,7 @@ void main() {
       ),
     );
 
+    await tester.scrollUntilVisible(find.text('Экскаватор'), 200);
     await tester.tap(find.text('Экскаватор'));
     await tester.pumpAndSettle();
     expect(find.text('Подтвердить'), findsNothing);

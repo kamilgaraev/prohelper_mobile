@@ -234,49 +234,43 @@ class _WorkDestinationRow extends StatelessWidget {
         },
         child: Padding(
           padding: const EdgeInsets.all(ProSpacing.md),
-          child: Row(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                width: 44,
-                height: 44,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: status.background,
-                  borderRadius: BorderRadius.circular(ProRadius.sm),
-                ),
-                child: Icon(
-                  destination.icon,
-                  color: status.foreground,
-                  size: 22,
-                ),
-              ),
-              const SizedBox(width: ProSpacing.sm),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      destination.shortTitle,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: AppTypography.bodyMedium(
-                        context,
-                      ).copyWith(fontWeight: FontWeight.w800),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Container(
+                    width: 44,
+                    height: 44,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: status.background,
+                      borderRadius: BorderRadius.circular(ProRadius.sm),
                     ),
-                    const SizedBox(height: ProSpacing.xxs),
-                    Text(
-                      subtitle,
-                      maxLines: 3,
-                      overflow: TextOverflow.ellipsis,
-                      style: AppTypography.caption(context),
+                    child: Icon(
+                      destination.icon,
+                      color: status.foreground,
+                      size: 22,
                     ),
-                  ],
-                ),
+                  ),
+                  Icon(
+                    Icons.chevron_right_rounded,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ],
               ),
-              const SizedBox(width: ProSpacing.xs),
-              Icon(
-                Icons.chevron_right_rounded,
-                color: theme.colorScheme.onSurfaceVariant,
+              const SizedBox(height: ProSpacing.sm),
+              Text(
+                destination.shortTitle,
+                style: AppTypography.bodyMedium(
+                  context,
+                ).copyWith(fontWeight: FontWeight.w800),
+              ),
+              const SizedBox(height: ProSpacing.xxs),
+              Text(
+                subtitle,
+                style: AppTypography.caption(context),
               ),
             ],
           ),

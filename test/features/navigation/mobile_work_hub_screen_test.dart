@@ -81,6 +81,33 @@ void main() {
     expect(find.text('Процессы'), findsOneWidget);
   });
 
+  testWidgets('длинное название занимает полную ширину на узком экране', (
+    tester,
+  ) async {
+    _usePhoneViewport(tester, width: 360);
+
+    await tester.pumpWidget(
+      _buildScreen(modules: _safetyModule, textScale: 1.3),
+    );
+    await tester.pumpAndSettle();
+
+    final titleFinder = find.text('Безопасность');
+    final subtitleFinder = find.text(
+      'Охрана труда · Проверить риски и наряды',
+    );
+    final cardFinder = find.ancestor(
+      of: titleFinder,
+      matching: find.byType(ProSurface),
+    );
+    final titleRect = tester.getRect(titleFinder);
+    final cardRect = tester.getRect(cardFinder);
+
+    expect(titleFinder, findsOneWidget);
+    expect(subtitleFinder, findsOneWidget);
+    expect(titleRect.left, lessThan(cardRect.left + 40));
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('фильтрует рабочие разделы без потери карточной оболочки', (
     tester,
   ) async {
@@ -150,7 +177,10 @@ void main() {
   });
 }
 
-Widget _buildScreen({List<MobileModuleModel> modules = _workModules}) {
+Widget _buildScreen({
+  List<MobileModuleModel> modules = _workModules,
+  double textScale = 1,
+}) {
   final project =
       Project()
         ..serverId = 15
@@ -165,13 +195,24 @@ Widget _buildScreen({List<MobileModuleModel> modules = _workModules}) {
     ],
     child: MaterialApp(
       theme: MostTheme.lightTheme,
-      home: const MobileWorkHubScreen(),
+      home: Builder(
+        builder:
+            (context) => MediaQuery(
+              data: MediaQuery.of(context).copyWith(
+                textScaler: TextScaler.linear(textScale),
+              ),
+              child: const MobileWorkHubScreen(),
+            ),
+      ),
     ),
   );
 }
 
-void _usePhoneViewport(WidgetTester tester) {
-  tester.view.physicalSize = const Size(390, 844);
+void _usePhoneViewport(
+  WidgetTester tester, {
+  double width = 390,
+}) {
+  tester.view.physicalSize = Size(width, 844);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
@@ -204,5 +245,17 @@ const _workModules = [
     supportedOnMobile: true,
     order: 3,
     route: 'workflow_management',
+  ),
+];
+
+const _safetyModule = [
+  MobileModuleModel(
+    slug: 'safety-management',
+    title: 'Охрана труда',
+    description: 'Наряды-допуски, происшествия и нарушения на объекте.',
+    icon: 'health_and_safety',
+    supportedOnMobile: true,
+    order: 1,
+    route: 'safety_management',
   ),
 ];
