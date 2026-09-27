@@ -49,6 +49,10 @@ class _WarehouseTasksScreenState extends ConsumerState<WarehouseTasksScreen> {
   String? _selectedTaskType;
   bool _isLoading = true;
   bool _isRefreshing = false;
+  bool _isLoadingMore = false;
+  bool _hasMore = false;
+  int _currentPage = 0;
+  int _loadGeneration = 0;
   String? _error;
 
   @override
@@ -204,6 +208,29 @@ class _WarehouseTasksScreenState extends ConsumerState<WarehouseTasksScreen> {
                           ),
                         ),
                       ),
+                      if (_hasMore)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: OutlinedButton.icon(
+                            onPressed:
+                                _isLoadingMore ? null : _loadMoreTasks,
+                            icon:
+                                _isLoadingMore
+                                    ? const SizedBox(
+                                      width: 16,
+                                      height: 16,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      ),
+                                    )
+                                    : const Icon(Icons.expand_more_rounded),
+                            label: Text(
+                              _isLoadingMore
+                                  ? 'Загружаем задачи'
+                                  : 'Загрузить ещё задачи',
+                            ),
+                          ),
+                        ),
                     ],
                   ],
                 ),
@@ -231,6 +258,7 @@ class _WarehouseTasksScreenState extends ConsumerState<WarehouseTasksScreen> {
     if (warehouseId == null) {
       return;
     }
+    final generation = ++_loadGeneration;
 
     setState(() {
       if (refreshOnly) {
@@ -239,30 +267,36 @@ class _WarehouseTasksScreenState extends ConsumerState<WarehouseTasksScreen> {
         _isLoading = true;
       }
       _error = null;
+      _isLoadingMore = false;
+      _hasMore = false;
+      _currentPage = 0;
     });
 
     try {
-      final tasks = await ref
+      final result = await ref
           .read(warehouseRepositoryProvider)
-          .fetchTasks(
+          .fetchTaskPage(
             warehouseId,
+            page: 1,
+            perPage: 60,
             status: _selectedStatus,
             taskType: _selectedTaskType,
             entityType: widget.initialEntityType,
             entityId: widget.initialEntityId,
             query: _searchController.text.trim(),
-            limit: 60,
           );
 
-      if (!mounted) {
+      if (!mounted || generation != _loadGeneration) {
         return;
       }
 
       setState(() {
-        _tasks = tasks;
+        _tasks = result.items;
+        _currentPage = result.currentPage;
+        _hasMore = result.hasMore;
       });
     } catch (error) {
-      if (!mounted) {
+      if (!mounted || generation != _loadGeneration) {
         return;
       }
 
@@ -270,10 +304,62 @@ class _WarehouseTasksScreenState extends ConsumerState<WarehouseTasksScreen> {
         _error = UserMessage.fromError(error);
       });
     } finally {
-      if (mounted) {
+      if (mounted && generation == _loadGeneration) {
         setState(() {
           _isLoading = false;
           _isRefreshing = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _loadMoreTasks() async {
+    final warehouseId = _selectedWarehouseId;
+    if (warehouseId == null || !_hasMore || _isLoadingMore) {
+      return;
+    }
+
+    final generation = _loadGeneration;
+    final nextPage = _currentPage + 1;
+    setState(() {
+      _isLoadingMore = true;
+    });
+
+    try {
+      final result = await ref
+          .read(warehouseRepositoryProvider)
+          .fetchTaskPage(
+            warehouseId,
+            page: nextPage,
+            perPage: 60,
+            status: _selectedStatus,
+            taskType: _selectedTaskType,
+            entityType: widget.initialEntityType,
+            entityId: widget.initialEntityId,
+            query: _searchController.text.trim(),
+          );
+
+      if (!mounted || generation != _loadGeneration) {
+        return;
+      }
+
+      setState(() {
+        final existingIds = _tasks.map((task) => task.id).toSet();
+        _tasks = [
+          ..._tasks,
+          ...result.items.where((task) => !existingIds.contains(task.id)),
+        ];
+        _currentPage = result.currentPage;
+        _hasMore = result.hasMore;
+      });
+    } catch (error) {
+      if (mounted && generation == _loadGeneration) {
+        AppErrorNotice.show(context, error);
+      }
+    } finally {
+      if (mounted && generation == _loadGeneration) {
+        setState(() {
+          _isLoadingMore = false;
         });
       }
     }

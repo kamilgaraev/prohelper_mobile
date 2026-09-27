@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/error/user_message.dart';
+import '../../../core/sync/sync_queue_service.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../core/widgets/app_empty_state.dart';
@@ -41,8 +42,11 @@ class _ProcurementScreenState extends ConsumerState<ProcurementScreen> {
     final state = ref.watch(procurementProvider);
     final selectedProject = ref.watch(projectsProvider).selectedProject;
     final projectId = selectedProject?.serverId;
+    final compactAction =
+        MediaQuery.sizeOf(context).width < 390 ||
+        MediaQuery.textScalerOf(context).scale(1) > 1.15;
 
-    if (state.projectId != projectId && !state.isLoading) {
+    if (state.projectId != projectId) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _syncAndLoad();
       });
@@ -64,25 +68,18 @@ class _ProcurementScreenState extends ConsumerState<ProcurementScreen> {
             ),
           ],
         ),
-        body: _buildBody(context, state, selectedProject?.name),
+        body: _buildBody(
+          context,
+          state,
+          selectedProject?.name,
+          projectId,
+          compactAction,
+        ),
         floatingActionButton:
-            projectId == null
+            projectId == null || compactAction
                 ? null
                 : FloatingActionButton.extended(
-                  onPressed: () async {
-                    final created = await Navigator.of(context).push<bool>(
-                      MaterialPageRoute(
-                        builder:
-                            (_) =>
-                                PurchaseRequestFormScreen(projectId: projectId),
-                      ),
-                    );
-                    if (created == true && context.mounted) {
-                      await ref
-                          .read(procurementProvider.notifier)
-                          .loadSummary();
-                    }
-                  },
+                  onPressed: () => _openCreateRequest(projectId),
                   icon: const Icon(Icons.add),
                   label: const Text('Заявка на закупку'),
                 ),
@@ -94,6 +91,8 @@ class _ProcurementScreenState extends ConsumerState<ProcurementScreen> {
     BuildContext context,
     ProcurementState state,
     String? projectName,
+    int? projectId,
+    bool compactAction,
   ) {
     if (state.isLoading && state.summary == null) {
       return const AppLoadingState(message: 'Загружаем закупки');
@@ -119,9 +118,22 @@ class _ProcurementScreenState extends ConsumerState<ProcurementScreen> {
         children: [
           _ProcurementHeader(summary: summary, projectName: projectName),
           const SizedBox(height: 12),
+          if (projectId != null && compactAction) ...[
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: () => _openCreateRequest(projectId),
+                icon: const Icon(Icons.add),
+                label: const Text('Заявка на закупку'),
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
           _ProcurementSummaryStrip(counters: summary.counters),
           const SizedBox(height: 12),
-          if (summary.isEmpty)
+          if (summary.counters.purchaseRequestsCount == 0 &&
+              summary.counters.purchaseOrdersCount == 0 &&
+              summary.assignedApprovals.isEmpty)
             const AppEmptyState(
               icon: Icons.inventory_2_outlined,
               title: 'Закупок нет',
@@ -153,13 +165,50 @@ class _ProcurementScreenState extends ConsumerState<ProcurementScreen> {
               ),
             ),
           ],
-          if (summary.purchaseOrders.isNotEmpty) ...[
+          if (summary.counters.purchaseOrdersCount > 0 ||
+              state.orders.items.isNotEmpty) ...[
             _SectionTitle(
               title: 'Заказы поставщикам',
-              count: summary.purchaseOrders.length,
+              count: state.orders.total,
             ),
             const SizedBox(height: 8),
-            ...summary.purchaseOrders.map(
+            _ListFilter(
+              label: 'Найти заказ',
+              value: state.orderQuery,
+              status: state.orderStatus,
+              statuses: const {
+                'Черновик': 'draft',
+                'Отправлен': 'sent',
+                'Подтверждён': 'confirmed',
+                'В доставке': 'in_delivery',
+                'Доставлен частично': 'partially_delivered',
+                'Доставлен': 'delivered',
+                'Отменён': 'cancelled',
+              },
+              onSearch:
+                  (query) => ref
+                      .read(procurementProvider.notifier)
+                      .filterOrders(query: query),
+              onStatus:
+                  (status) => ref
+                      .read(procurementProvider.notifier)
+                      .filterOrders(
+                        status: status,
+                        clearStatus: status == null,
+                      ),
+            ),
+            const SizedBox(height: 8),
+            if (state.ordersError != null)
+              _ListError(
+                message: state.ordersError!,
+                onRetry:
+                    () => ref.read(procurementProvider.notifier).filterOrders(),
+              ),
+            if (state.orders.items.isEmpty &&
+                !state.loadingOrders &&
+                state.ordersError == null)
+              const _FilteredListEmpty(),
+            ...state.orders.items.map(
               (order) => Padding(
                 padding: const EdgeInsets.only(bottom: 12),
                 child: _PurchaseOrderCard(
@@ -168,14 +217,57 @@ class _ProcurementScreenState extends ConsumerState<ProcurementScreen> {
                 ),
               ),
             ),
+            if (state.orders.hasMore || state.loadingOrders)
+              _LoadMoreButton(
+                loading: state.loadingOrders,
+                onPressed:
+                    () =>
+                        ref.read(procurementProvider.notifier).loadMoreOrders(),
+              ),
           ],
-          if (summary.purchaseRequests.isNotEmpty) ...[
+          if (summary.counters.purchaseRequestsCount > 0 ||
+              state.requests.items.isNotEmpty) ...[
             _SectionTitle(
               title: 'Заявки на закупку',
-              count: summary.purchaseRequests.length,
+              count: state.requests.total,
             ),
             const SizedBox(height: 8),
-            ...summary.purchaseRequests.map(
+            _ListFilter(
+              label: 'Найти заявку',
+              value: state.requestQuery,
+              status: state.requestStatus,
+              statuses: const {
+                'Черновик': 'draft',
+                'На согласовании': 'pending',
+                'Согласована': 'approved',
+                'Отклонена': 'rejected',
+                'Отменена': 'cancelled',
+              },
+              onSearch:
+                  (query) => ref
+                      .read(procurementProvider.notifier)
+                      .filterRequests(query: query),
+              onStatus:
+                  (status) => ref
+                      .read(procurementProvider.notifier)
+                      .filterRequests(
+                        status: status,
+                        clearStatus: status == null,
+                      ),
+            ),
+            const SizedBox(height: 8),
+            if (state.requestsError != null)
+              _ListError(
+                message: state.requestsError!,
+                onRetry:
+                    () =>
+                        ref.read(procurementProvider.notifier).filterRequests(),
+              ),
+            if (state.requests.items.isEmpty &&
+                !state.loadingRequests &&
+                state.requestsError == null)
+              const _FilteredListEmpty(),
+            ...state.requests.items.map(
               (request) => Padding(
                 padding: const EdgeInsets.only(bottom: 12),
                 child: _PurchaseRequestCard(
@@ -184,6 +276,15 @@ class _ProcurementScreenState extends ConsumerState<ProcurementScreen> {
                 ),
               ),
             ),
+            if (state.requests.hasMore || state.loadingRequests)
+              _LoadMoreButton(
+                loading: state.loadingRequests,
+                onPressed:
+                    () =>
+                        ref
+                            .read(procurementProvider.notifier)
+                            .loadMoreRequests(),
+              ),
           ],
         ],
       ),
@@ -195,6 +296,17 @@ class _ProcurementScreenState extends ConsumerState<ProcurementScreen> {
     final notifier = ref.read(procurementProvider.notifier);
     notifier.syncProject(selectedProject?.serverId);
     notifier.loadSummary();
+  }
+
+  Future<void> _openCreateRequest(int projectId) async {
+    final created = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => PurchaseRequestFormScreen(projectId: projectId),
+      ),
+    );
+    if (created == true && mounted) {
+      await ref.read(procurementProvider.notifier).loadSummary();
+    }
   }
 
   void _openPurchaseRequest(int requestId) {
@@ -422,6 +534,11 @@ class _ProcurementOrderDetailScreenState
 
       _reload();
       _message(context, 'Материалы приняты на склад');
+    } on SyncQueuedException catch (error) {
+      if (!mounted) {
+        return;
+      }
+      _message(context, error.message);
     } catch (error) {
       if (!mounted) {
         return;
@@ -526,6 +643,44 @@ class _ProcurementSummaryStrip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final compact =
+        MediaQuery.sizeOf(context).width < 390 ||
+        MediaQuery.textScalerOf(context).scale(1) > 1.15;
+
+    if (compact) {
+      return Column(
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: _MetricTile(
+                  label: 'Заявки',
+                  value: counters.purchaseRequestsCount.toString(),
+                  color: theme.colorScheme.secondary,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _MetricTile(
+                  label: 'В работе',
+                  value: counters.pendingRequestsCount.toString(),
+                  color: AppColors.warning,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          SizedBox(
+            width: double.infinity,
+            child: _MetricTile(
+              label: 'Заказы',
+              value: counters.purchaseOrdersCount.toString(),
+              color: AppColors.success,
+            ),
+          ),
+        ],
+      );
+    }
 
     return Row(
       children: [
@@ -1773,4 +1928,116 @@ String _actionErrorMessage(Object error) {
 
 void _message(BuildContext context, String message) {
   ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+}
+
+class _ListFilter extends StatelessWidget {
+  const _ListFilter({
+    required this.label,
+    required this.value,
+    required this.status,
+    required this.statuses,
+    required this.onSearch,
+    required this.onStatus,
+  });
+
+  final String label;
+  final String value;
+  final String? status;
+  final Map<String, String> statuses;
+  final ValueChanged<String> onSearch;
+  final ValueChanged<String?> onStatus;
+
+  @override
+  Widget build(BuildContext context) {
+    final selected = status ?? 'all';
+    return Column(
+      children: [
+        TextFormField(
+          key: ValueKey('$label:$value'),
+          initialValue: value,
+          textInputAction: TextInputAction.search,
+          decoration: InputDecoration(
+            labelText: label,
+            prefixIcon: const Icon(Icons.search_rounded),
+            isDense: true,
+            border: const OutlineInputBorder(),
+          ),
+          onFieldSubmitted: onSearch,
+        ),
+        const SizedBox(height: 8),
+        DropdownButtonFormField<String>(
+          initialValue: selected,
+          isExpanded: true,
+          decoration: const InputDecoration(
+            labelText: 'Статус',
+            isDense: true,
+            border: OutlineInputBorder(),
+          ),
+          items: [
+            const DropdownMenuItem(value: 'all', child: Text('Все статусы')),
+            ...statuses.entries.map(
+              (entry) => DropdownMenuItem(
+                value: entry.value,
+                child: Text(entry.key, overflow: TextOverflow.ellipsis),
+              ),
+            ),
+          ],
+          onChanged: (value) => onStatus(value == 'all' ? null : value),
+        ),
+      ],
+    );
+  }
+}
+
+class _LoadMoreButton extends StatelessWidget {
+  const _LoadMoreButton({required this.loading, required this.onPressed});
+
+  final bool loading;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) => Center(
+    child: TextButton.icon(
+      onPressed: loading ? null : onPressed,
+      icon:
+          loading
+              ? const SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+              : const Icon(Icons.expand_more_rounded),
+      label: Text(loading ? 'Загружаем…' : 'Показать ещё'),
+    ),
+  );
+}
+
+class _ListError extends StatelessWidget {
+  const _ListError({required this.message, required this.onRetry});
+
+  final String message;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    children: [
+      Expanded(
+        child: Text(
+          message,
+          style: TextStyle(color: Theme.of(context).colorScheme.error),
+        ),
+      ),
+      TextButton(onPressed: onRetry, child: const Text('Повторить')),
+    ],
+  );
+}
+
+class _FilteredListEmpty extends StatelessWidget {
+  const _FilteredListEmpty();
+
+  @override
+  Widget build(BuildContext context) => const Padding(
+    padding: EdgeInsets.symmetric(vertical: 12),
+    child: Text('По выбранным фильтрам записей нет.'),
+  );
 }

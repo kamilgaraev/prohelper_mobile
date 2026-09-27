@@ -29,6 +29,9 @@ class ProRecordCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final status = proStatusStyle(context, tone);
     final theme = Theme.of(context);
+    final compact =
+        MediaQuery.sizeOf(context).width < 390 ||
+        MediaQuery.textScalerOf(context).scale(1) > 1.15;
 
     return ProSurface(
       onTap: onTap,
@@ -53,20 +56,22 @@ class ProRecordCard extends StatelessWidget {
               children: [
                 Text(
                   title,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppTypography.bodyLarge(
-                    context,
-                  ).copyWith(fontWeight: FontWeight.w800),
+                  maxLines: compact ? null : 2,
+                  overflow: compact ? null : TextOverflow.ellipsis,
+                  style: (compact
+                          ? AppTypography.bodyMedium(context)
+                          : AppTypography.bodyLarge(context))
+                      .copyWith(fontWeight: FontWeight.w800),
                 ),
                 const SizedBox(height: ProSpacing.xxs),
                 Text(
                   subtitle,
-                  maxLines: 3,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppTypography.bodyMedium(
-                    context,
-                  ).copyWith(color: theme.colorScheme.onSurfaceVariant),
+                  maxLines: compact ? null : 3,
+                  overflow: compact ? null : TextOverflow.ellipsis,
+                  style: (compact
+                          ? AppTypography.caption(context)
+                          : AppTypography.bodyMedium(context))
+                      .copyWith(color: theme.colorScheme.onSurfaceVariant),
                 ),
                 if (meta != null) ...[
                   const SizedBox(height: ProSpacing.xs),

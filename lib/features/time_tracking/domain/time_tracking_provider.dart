@@ -1,9 +1,12 @@
-﻿import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/error/user_message.dart';
 import '../../../core/network/api_exception.dart';
+import '../../../core/storage/entity_snapshot_provider.dart';
+import '../../../core/storage/snapshot_read.dart';
 import '../data/time_entry_model.dart';
 import '../data/time_tracking_repository.dart';
+import '../data/time_tracking_snapshot_adapter.dart';
 
 class TimeTrackingState {
   const TimeTrackingState({
@@ -15,6 +18,8 @@ class TimeTrackingState {
     this.totals,
     this.permissionDenied = false,
     this.malformedContract = false,
+    this.fromCache = false,
+    this.hasDirtyLocal = false,
     this.error,
   });
 
@@ -26,6 +31,8 @@ class TimeTrackingState {
   final TimeTotalsModel? totals;
   final bool permissionDenied;
   final bool malformedContract;
+  final bool fromCache;
+  final bool hasDirtyLocal;
   final String? error;
 
   TimeTrackingState copyWith({
@@ -37,6 +44,8 @@ class TimeTrackingState {
     Object? totals = _totalsSentinel,
     bool? permissionDenied,
     bool? malformedContract,
+    bool? fromCache,
+    bool? hasDirtyLocal,
     Object? error = _errorSentinel,
   }) {
     return TimeTrackingState(
@@ -57,6 +66,8 @@ class TimeTrackingState {
               : totals as TimeTotalsModel?,
       permissionDenied: permissionDenied ?? this.permissionDenied,
       malformedContract: malformedContract ?? this.malformedContract,
+      fromCache: fromCache ?? this.fromCache,
+      hasDirtyLocal: hasDirtyLocal ?? this.hasDirtyLocal,
       error: identical(error, _errorSentinel) ? this.error : error as String?,
     );
   }
@@ -69,9 +80,14 @@ const _totalsSentinel = Object();
 const _errorSentinel = Object();
 
 class TimeTrackingNotifier extends StateNotifier<TimeTrackingState> {
-  TimeTrackingNotifier(this._repository) : super(const TimeTrackingState());
+  TimeTrackingNotifier(
+    this._repository, {
+    TimeTrackingSnapshotAdapter? snapshotAdapter,
+  }) : _snapshotAdapter = snapshotAdapter,
+       super(const TimeTrackingState());
 
   final TimeTrackingRepository _repository;
+  final TimeTrackingSnapshotAdapter? _snapshotAdapter;
 
   void syncScope({required String date, required int? projectId}) {
     if (state.date == date && state.projectId == projectId) {
@@ -85,6 +101,8 @@ class TimeTrackingNotifier extends StateNotifier<TimeTrackingState> {
       activeTimer: null,
       totals: null,
       error: null,
+      fromCache: false,
+      hasDirtyLocal: false,
     );
   }
 
@@ -111,6 +129,28 @@ class TimeTrackingNotifier extends StateNotifier<TimeTrackingState> {
     );
 
     try {
+      final adapter = _snapshotAdapter;
+      if (adapter != null) {
+        final read = await adapter.load(
+          online: true,
+          date: date,
+          projectId: projectId,
+        );
+        final denied = read.presence == SnapshotPresence.permissionDenied;
+        final summary = denied ? null : read.data;
+        state = state.copyWith(
+          isLoading: false,
+          entries: summary?.entries ?? const [],
+          activeTimer: summary?.activeTimer,
+          totals: summary?.totals,
+          permissionDenied: denied,
+          malformedContract: false,
+          fromCache: read.fromCache,
+          hasDirtyLocal: read.hasDirtyLocal,
+          error: read.error,
+        );
+        return;
+      }
       final summary = await _repository.fetchDailySummary(
         date: date,
         projectId: projectId,
@@ -121,6 +161,8 @@ class TimeTrackingNotifier extends StateNotifier<TimeTrackingState> {
         entries: summary.entries,
         activeTimer: summary.activeTimer,
         totals: summary.totals,
+        fromCache: false,
+        hasDirtyLocal: false,
       );
     } catch (error) {
       state = state.copyWith(
@@ -130,6 +172,8 @@ class TimeTrackingNotifier extends StateNotifier<TimeTrackingState> {
         totals: null,
         permissionDenied: _isPermissionDenied(error),
         malformedContract: error is FormatException,
+        fromCache: false,
+        hasDirtyLocal: false,
         error: UserMessage.fromError(error),
       );
     }
@@ -137,6 +181,37 @@ class TimeTrackingNotifier extends StateNotifier<TimeTrackingState> {
 
   Future<TimeEntryModel> fetchEntry(int id) {
     return _repository.fetchEntry(id);
+  }
+
+  Future<SnapshotRead<TimeEntryModel>> loadEntrySnapshot(int id) async {
+    final adapter = _snapshotAdapter;
+    if (adapter == null) {
+      try {
+        return SnapshotRead(
+          presence: SnapshotPresence.ready,
+          data: await _repository.fetchEntry(id),
+        );
+      } catch (error) {
+        return SnapshotRead(
+          presence: SnapshotPresence.error,
+          error: UserMessage.fromError(error),
+        );
+      }
+    }
+    final read = await adapter.loadEntry(
+      online: true,
+      entryId: id,
+      projectId: state.projectId,
+    );
+    if (read.presence == SnapshotPresence.permissionDenied) {
+      return SnapshotRead(
+        presence: read.presence,
+        error: read.error,
+        fromCache: false,
+        hasDirtyLocal: read.hasDirtyLocal,
+      );
+    }
+    return read;
   }
 
   Future<void> startTimer({
@@ -243,5 +318,16 @@ bool _isPermissionDenied(Object error) {
 
 final timeTrackingProvider =
     StateNotifierProvider<TimeTrackingNotifier, TimeTrackingState>((ref) {
-      return TimeTrackingNotifier(ref.read(timeTrackingRepositoryProvider));
+      return TimeTrackingNotifier(
+        ref.read(timeTrackingRepositoryProvider),
+        snapshotAdapter: ref.read(timeTrackingSnapshotAdapterProvider),
+      );
+    });
+
+final timeTrackingSnapshotAdapterProvider =
+    Provider<TimeTrackingSnapshotAdapter>((ref) {
+      return TimeTrackingSnapshotAdapter(
+        repository: ref.read(timeTrackingRepositoryProvider),
+        snapshots: ref.read(entitySnapshotServiceProvider.future),
+      );
     });

@@ -14,12 +14,22 @@ class ModulesRepository {
   ModulesRepository(this._dio);
 
   final Dio _dio;
+  CancelToken? _activeFetchToken;
+
+  void cancelPendingFetch() {
+    _activeFetchToken?.cancel('Загрузка разделов отменена.');
+  }
 
   Future<List<MobileModuleModel>> fetchModules({int? projectId}) async {
+    cancelPendingFetch();
+    final cancelToken = CancelToken();
+    _activeFetchToken = cancelToken;
+
     try {
       final response = await _dio.get(
         '/modules',
         queryParameters: projectId == null ? null : {'project_id': projectId},
+        cancelToken: cancelToken,
       );
       final payload = MobileApiResponse.dataMap(response.data);
       final modules = payload['modules'];
@@ -44,6 +54,10 @@ class ModulesRepository {
       );
     } catch (_) {
       throw const ApiException('Не удалось загрузить список модулей.');
+    } finally {
+      if (identical(_activeFetchToken, cancelToken)) {
+        _activeFetchToken = null;
+      }
     }
   }
 }

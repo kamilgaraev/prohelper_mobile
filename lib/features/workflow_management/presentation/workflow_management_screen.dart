@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/error/user_message.dart';
@@ -665,25 +665,41 @@ class _WorkflowTaskCard extends StatelessWidget {
     final theme = Theme.of(context);
     final hasSecondaryActions = task.canRequestChanges || task.canComment;
     final actionContext = '${task.title}, задача ${task.id}';
+    final compactHeader =
+        MediaQuery.sizeOf(context).width < 390 ||
+        MediaQuery.textScalerOf(context).scale(1) > 1.15;
 
     return ProCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Text(
-                  task.title,
-                  style: AppTypography.bodyLarge(
-                    context,
-                  ).copyWith(fontWeight: FontWeight.w800),
+          if (compactHeader) ...[
+            Text(
+              task.title,
+              style: AppTypography.bodyLarge(
+                context,
+              ).copyWith(fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: 4),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: _StatusBadge(status: task.status, label: task.statusLabel),
+            ),
+          ] else
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Text(
+                    task.title,
+                    style: AppTypography.bodyLarge(
+                      context,
+                    ).copyWith(fontWeight: FontWeight.w800),
+                  ),
                 ),
-              ),
-              _StatusBadge(status: task.status, label: task.statusLabel),
-            ],
-          ),
+                _StatusBadge(status: task.status, label: task.statusLabel),
+              ],
+            ),
           const SizedBox(height: 8),
           Wrap(
             spacing: 8,

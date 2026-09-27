@@ -1,7 +1,9 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/error/user_message.dart';
+import '../../../core/design/pro_status.dart';
+import '../../../core/storage/snapshot_read.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../core/widgets/app_empty_state.dart';
@@ -10,6 +12,7 @@ import '../../../core/widgets/app_error_state.dart';
 import '../../../core/widgets/app_loading_state.dart';
 import '../../../core/widgets/mesh_background.dart';
 import '../../../core/widgets/pro_card.dart';
+import '../../../core/widgets/pro_status_banner.dart';
 import '../../projects/domain/projects_provider.dart';
 import '../data/time_entry_model.dart';
 import '../data/time_tracking_repository.dart';
@@ -86,6 +89,14 @@ class _TimeTrackingScreenState extends ConsumerState<TimeTrackingScreen> {
                   child: ListView(
                     padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
                     children: [
+                      if (state.fromCache)
+                        ProStatusBanner(
+                          title: 'Сохранённые данные',
+                          description:
+                              state.error ??
+                              'Показаны данные с устройства. Они могут быть неактуальны.',
+                          tone: ProStatusTone.info,
+                        ),
                       _PendingTimeEntryApprovals(projectId: projectId),
                       const SizedBox(height: 12),
                       if (state.isLoading && state.entries.isEmpty)
@@ -106,65 +117,66 @@ class _TimeTrackingScreenState extends ConsumerState<TimeTrackingScreen> {
                                       .loadDailySummary(),
                         )
                       else ...[
-                      _ScopePanel(
-                        selectedDate: _selectedDate,
-                        projectName: selectedProject?.name,
-                        onPickDate: _pickDate,
-                      ),
-                      const SizedBox(height: 12),
-                      _TimeSummaryStrip(state: state),
-                      const SizedBox(height: 12),
-                      _TimeActionsPanel(
-                        activeTimer: state.activeTimer,
-                        onStart: () => _showStartTimerSheet(context),
-                        onManual: () => _showManualEntrySheet(context, ref),
-                        onStop:
-                            state.activeTimer == null
-                                ? null
-                                : () => _showStopTimerSheet(
-                                  context,
-                                  ref,
-                                  state.activeTimer!,
-                                ),
-                      ),
-                      const SizedBox(height: 12),
-                      if (state.entries.isEmpty)
-                        const AppEmptyState(
-                          icon: Icons.timer_outlined,
-                          title: 'Записей за день нет',
-                          description:
-                              'Запустите таймер или добавьте ручную запись по фактически выполненной работе.',
-                        )
-                      else
-                        ...state.entries.map(
-                          (entry) => Padding(
-                            padding: const EdgeInsets.only(bottom: 12),
-                            child: _TimeEntryCard(
-                              entry: entry,
-                              onOpen: () => _openDetail(entry.id),
-                              onStop:
-                                  entry.canStop
-                                      ? () => _showStopTimerSheet(
-                                        context,
-                                        ref,
-                                        entry,
-                                      )
-                                      : null,
-                              onSubmit:
-                                  entry.canSubmit
-                                      ? () => _submitEntry(context, ref, entry)
-                                      : null,
-                              onCorrection:
-                                  entry.canCorrect
-                                      ? () => _showCorrectionSheet(
-                                        context,
-                                        ref,
-                                        entry,
-                                      )
-                                      : null,
+                        _ScopePanel(
+                          selectedDate: _selectedDate,
+                          projectName: selectedProject?.name,
+                          onPickDate: _pickDate,
+                        ),
+                        const SizedBox(height: 12),
+                        _TimeSummaryStrip(state: state),
+                        const SizedBox(height: 12),
+                        _TimeActionsPanel(
+                          activeTimer: state.activeTimer,
+                          onStart: () => _showStartTimerSheet(context),
+                          onManual: () => _showManualEntrySheet(context, ref),
+                          onStop:
+                              state.activeTimer == null
+                                  ? null
+                                  : () => _showStopTimerSheet(
+                                    context,
+                                    ref,
+                                    state.activeTimer!,
+                                  ),
+                        ),
+                        const SizedBox(height: 12),
+                        if (state.entries.isEmpty)
+                          const AppEmptyState(
+                            icon: Icons.timer_outlined,
+                            title: 'Записей за день нет',
+                            description:
+                                'Запустите таймер или добавьте ручную запись по фактически выполненной работе.',
+                          )
+                        else
+                          ...state.entries.map(
+                            (entry) => Padding(
+                              padding: const EdgeInsets.only(bottom: 12),
+                              child: _TimeEntryCard(
+                                entry: entry,
+                                onOpen: () => _openDetail(entry.id),
+                                onStop:
+                                    entry.canStop
+                                        ? () => _showStopTimerSheet(
+                                          context,
+                                          ref,
+                                          entry,
+                                        )
+                                        : null,
+                                onSubmit:
+                                    entry.canSubmit
+                                        ? () =>
+                                            _submitEntry(context, ref, entry)
+                                        : null,
+                                onCorrection:
+                                    entry.canCorrect
+                                        ? () => _showCorrectionSheet(
+                                          context,
+                                          ref,
+                                          entry,
+                                        )
+                                        : null,
+                              ),
                             ),
                           ),
-                        ),
                       ],
                     ],
                   ),
@@ -282,25 +294,25 @@ class _PendingTimeEntryApprovalsState
     }
 
     try {
-      await ref.read(timeTrackingRepositoryProvider).decideApproval(
-        id: entry.id,
-        action: action,
-        reason: reason,
-      );
+      await ref
+          .read(timeTrackingRepositoryProvider)
+          .decideApproval(id: entry.id, action: action, reason: reason);
       if (!mounted) return;
       setState(() => _future = _load());
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            action == 'approve' ? 'Трудозатраты подтверждены' : 'Запись отклонена',
+            action == 'approve'
+                ? 'Трудозатраты подтверждены'
+                : 'Запись отклонена',
           ),
         ),
       );
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(UserMessage.fromError(error))),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(UserMessage.fromError(error))));
     }
   }
 
@@ -344,10 +356,19 @@ class _PendingTimeEntryApprovalsState
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(entry.title, style: AppTypography.bodyLarge(context)),
-                      if (entry.workerLabel != null && entry.workerLabel!.isNotEmpty)
-                        Text(entry.workerLabel!, style: AppTypography.bodyMedium(context)),
-                      Text('${_formatDate(entry.workDate)} · ${_hoursText(entry.hoursWorked ?? 0)}'),
+                      Text(
+                        entry.title,
+                        style: AppTypography.bodyLarge(context),
+                      ),
+                      if (entry.workerLabel != null &&
+                          entry.workerLabel!.isNotEmpty)
+                        Text(
+                          entry.workerLabel!,
+                          style: AppTypography.bodyMedium(context),
+                        ),
+                      Text(
+                        '${_formatDate(entry.workDate)} · ${_hoursText(entry.hoursWorked ?? 0)}',
+                      ),
                       Wrap(
                         spacing: 8,
                         children: [
@@ -387,21 +408,21 @@ class TimeEntryDetailScreen extends ConsumerStatefulWidget {
 }
 
 class _TimeEntryDetailScreenState extends ConsumerState<TimeEntryDetailScreen> {
-  late Future<TimeEntryModel> _future;
+  late Future<SnapshotRead<TimeEntryModel>> _future;
 
   @override
   void initState() {
     super.initState();
     _future = ref
         .read(timeTrackingProvider.notifier)
-        .fetchEntry(widget.entryId);
+        .loadEntrySnapshot(widget.entryId);
   }
 
   void _reload() {
     setState(() {
       _future = ref
           .read(timeTrackingProvider.notifier)
-          .fetchEntry(widget.entryId);
+          .loadEntrySnapshot(widget.entryId);
     });
   }
 
@@ -422,31 +443,40 @@ class _TimeEntryDetailScreenState extends ConsumerState<TimeEntryDetailScreen> {
             ),
           ],
         ),
-        body: FutureBuilder<TimeEntryModel>(
+        body: FutureBuilder<SnapshotRead<TimeEntryModel>>(
           future: _future,
           builder: (context, snapshot) {
             if (snapshot.connectionState != ConnectionState.done) {
               return const AppLoadingState(message: 'Загружаем запись времени');
             }
 
-            if (snapshot.hasError || !snapshot.hasData) {
+            final read = snapshot.data;
+            if (snapshot.hasError || read?.data == null) {
               return AppErrorState(
                 title: 'Не удалось загрузить запись времени',
                 description:
                     snapshot.error == null
-                        ? null
+                        ? read?.error
                         : UserMessage.fromError(snapshot.error!),
                 onRetry: _reload,
               );
             }
 
-            final entry = snapshot.data!;
+            final entry = read!.data!;
 
             return RefreshIndicator(
               onRefresh: () async => _reload(),
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 96),
                 children: [
+                  if (read.fromCache)
+                    ProStatusBanner(
+                      title: 'Сохранённая запись',
+                      description:
+                          read.error ??
+                          'Показаны данные с устройства. Они могут быть неактуальны.',
+                      tone: ProStatusTone.info,
+                    ),
                   _TimeEntryDetails(entry: entry),
                   const SizedBox(height: 16),
                   _TimeEntryActionPanel(
@@ -502,33 +532,41 @@ class _ScopePanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final compact =
+        MediaQuery.sizeOf(context).width < 400 &&
+        MediaQuery.textScalerOf(context).scale(1) > 1.15;
+    final projectLabel = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Объект', style: AppTypography.caption(context)),
+        const SizedBox(height: 4),
+        Text(
+          projectName ?? 'Объект не выбран',
+          style: AppTypography.bodyLarge(
+            context,
+          ).copyWith(fontWeight: FontWeight.w800),
+          maxLines: compact ? null : 1,
+          overflow: compact ? TextOverflow.visible : TextOverflow.ellipsis,
+        ),
+      ],
+    );
+    final dateButton = OutlinedButton.icon(
+      onPressed: onPickDate,
+      icon: const Icon(Icons.calendar_month_outlined),
+      label: Text(_readableDate(selectedDate)),
+    );
     return ProCard(
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Объект', style: AppTypography.caption(context)),
-                const SizedBox(height: 4),
-                Text(
-                  projectName ?? 'Объект не выбран',
-                  style: AppTypography.bodyLarge(
-                    context,
-                  ).copyWith(fontWeight: FontWeight.w800),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-            ),
-          ),
-          OutlinedButton.icon(
-            onPressed: onPickDate,
-            icon: const Icon(Icons.calendar_month_outlined),
-            label: Text(_readableDate(selectedDate)),
-          ),
-        ],
-      ),
+      child:
+          compact
+              ? Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  projectLabel,
+                  const SizedBox(height: 12),
+                  dateButton,
+                ],
+              )
+              : Row(children: [Expanded(child: projectLabel), dateButton]),
     );
   }
 }

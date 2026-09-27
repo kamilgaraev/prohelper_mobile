@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/theme/app_typography.dart';
+import '../../../core/design/pro_status.dart';
 import '../../../core/widgets/app_action_buttons.dart';
 import '../../../core/widgets/app_empty_state.dart';
 import '../../../core/widgets/app_error_notice.dart';
@@ -10,8 +11,11 @@ import '../../../core/widgets/app_form_section.dart';
 import '../../../core/widgets/app_loading_state.dart';
 import '../../../core/widgets/mesh_background.dart';
 import '../../../core/widgets/pro_card.dart';
+import '../../../core/widgets/pro_status_banner.dart';
+import '../../../core/sync/sync_queue_service.dart';
 import '../../projects/domain/projects_provider.dart';
 import '../data/production_labor_model.dart';
+import '../data/production_labor_repository.dart';
 import '../domain/production_labor_provider.dart';
 
 typedef _OutputSubmit =
@@ -19,6 +23,7 @@ typedef _OutputSubmit =
       required DateTime workDate,
       required double quantity,
       required double hours,
+      required String idempotencyKey,
       String? comment,
     });
 
@@ -94,26 +99,39 @@ class _ProductionLaborScreenState extends ConsumerState<ProductionLaborScreen> {
                 : RefreshIndicator(
                   onRefresh:
                       () => ref.read(productionLaborProvider.notifier).load(),
-                  child:
-                      state.workOrders.isEmpty
-                          ? const AppEmptyState(
-                            icon: Icons.engineering_outlined,
-                            title: 'Нарядов пока нет',
-                            description:
-                                'Для выбранного объекта нет выданных нарядов.',
-                          )
-                          : ListView.separated(
-                            padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
-                            itemCount: state.workOrders.length,
-                            separatorBuilder:
-                                (_, __) => const SizedBox(height: 12),
-                            itemBuilder:
-                                (context, index) => _WorkOrderCard(
-                                  workOrder: state.workOrders[index],
-                                  onRecordOutput: _showOutputSheet,
-                                  onCreateTimesheet: _showTimesheetSheet,
-                                ),
+                  child: ListView(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
+                    children: [
+                      if (state.fromCache)
+                        ProStatusBanner(
+                          title: 'Сохранённые данные',
+                          description:
+                              state.error ??
+                              'Показаны данные с устройства. Они могут быть неактуальны.',
+                          tone: ProStatusTone.info,
+                        ),
+                      if (state.workOrders.isEmpty)
+                        const AppEmptyState(
+                          icon: Icons.engineering_outlined,
+                          title: 'Нарядов пока нет',
+                          description:
+                              'Для выбранного объекта нет выданных нарядов.',
+                        )
+                      else
+                        for (
+                          var index = 0;
+                          index < state.workOrders.length;
+                          index++
+                        ) ...[
+                          if (index > 0) const SizedBox(height: 12),
+                          _WorkOrderCard(
+                            workOrder: state.workOrders[index],
+                            onRecordOutput: _showOutputSheet,
+                            onCreateTimesheet: _showTimesheetSheet,
                           ),
+                        ],
+                    ],
+                  ),
                 ),
       ),
     );
@@ -134,6 +152,7 @@ class _ProductionLaborScreenState extends ConsumerState<ProductionLaborScreen> {
                   required workDate,
                   required quantity,
                   required hours,
+                  required idempotencyKey,
                   comment,
                 }) => ref
                     .read(productionLaborProvider.notifier)
@@ -143,6 +162,7 @@ class _ProductionLaborScreenState extends ConsumerState<ProductionLaborScreen> {
                       workDate: workDate,
                       quantity: quantity,
                       hours: hours,
+                      idempotencyKey: idempotencyKey,
                       comment: comment,
                     ),
           ),
@@ -363,10 +383,11 @@ class _SafetyLineNotice extends StatelessWidget {
       if (line.safetyAdmissionStatus != null)
         'Допуск: ${_safetyAdmissionLabel(line.safetyAdmissionStatus!)}',
     ];
-    final messages = [
-      ...line.safetyBlockers.map((flag) => flag.message),
-      ...line.safetyWarnings.map((flag) => flag.message),
-    ].where((message) => message.isNotEmpty).take(2).toList();
+    final messages =
+        [
+          ...line.safetyBlockers.map((flag) => flag.message),
+          ...line.safetyWarnings.map((flag) => flag.message),
+        ].where((message) => message.isNotEmpty).take(2).toList();
 
     return Container(
       width: double.infinity,
@@ -395,10 +416,9 @@ class _SafetyLineNotice extends StatelessWidget {
                   isBlocked
                       ? 'Допуск к работам заблокирован'
                       : 'Требуется контроль допуска',
-                  style: AppTypography.bodyMedium(context).copyWith(
-                    color: accent,
-                    fontWeight: FontWeight.w700,
-                  ),
+                  style: AppTypography.bodyMedium(
+                    context,
+                  ).copyWith(color: accent, fontWeight: FontWeight.w700),
                 ),
                 if (facts.isNotEmpty) ...[
                   const SizedBox(height: 4),
@@ -443,7 +463,14 @@ class _OutputSheetState extends State<_OutputSheet> {
   final _quantityController = TextEditingController();
   final _hoursController = TextEditingController();
   final _commentController = TextEditingController();
+  late final String _idempotencyKey;
   bool _isSaving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _idempotencyKey = newProductionLaborOutputIdempotencyKey();
+  }
 
   @override
   void dispose() {
@@ -548,6 +575,7 @@ class _OutputSheetState extends State<_OutputSheet> {
         workDate: DateTime.now(),
         quantity: _parseDouble(_quantityController.text),
         hours: _parseDouble(_hoursController.text),
+        idempotencyKey: _idempotencyKey,
         comment: _commentController.text,
       );
       if (mounted) {
@@ -555,7 +583,14 @@ class _OutputSheetState extends State<_OutputSheet> {
       }
     } catch (error) {
       if (mounted) {
-        _showLaborError(context, error);
+        if (error is SyncQueuedException) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text(error.message)));
+          Navigator.of(context).pop();
+        } else {
+          _showLaborError(context, error);
+        }
       }
     } finally {
       if (mounted) {

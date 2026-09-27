@@ -10,6 +10,7 @@ import 'core/sync/sync_queue_provider.dart';
 import 'core/widgets/app_loading_state.dart';
 import 'core/widgets/mobile_app_shell.dart';
 import 'core/theme/pro_theme.dart';
+import 'core/theme/theme_mode_provider.dart';
 import 'features/auth/domain/auth_provider.dart';
 import 'features/auth/presentation/login_screen.dart';
 import 'features/projects/domain/projects_provider.dart';
@@ -335,7 +336,7 @@ class _MostAppState extends ConsumerState<MostApp> with WidgetsBindingObserver {
       debugShowCheckedModeBanner: false,
       theme: MostTheme.lightTheme,
       darkTheme: MostTheme.darkTheme,
-      themeMode: ThemeMode.system,
+      themeMode: ref.watch(themeModeProvider),
       locale: MostLocalizations.ru,
       localizationsDelegates: MostLocalizations.delegates,
       supportedLocales: MostLocalizations.supportedLocales,

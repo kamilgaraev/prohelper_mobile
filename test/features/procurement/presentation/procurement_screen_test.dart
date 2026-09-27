@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:prohelpers_mobile/core/sync/sync_queue_service.dart';
 import 'package:prohelpers_mobile/features/procurement/data/procurement_model.dart';
 import 'package:prohelpers_mobile/features/procurement/data/procurement_repository.dart';
 import 'package:prohelpers_mobile/features/procurement/domain/procurement_provider.dart';
@@ -28,12 +29,46 @@ class _RecordingProcurementRepository extends ProcurementRepository {
   String? approvedComment;
   int? rejectedApprovalId;
   String? rejectionComment;
+  bool queueMaterialsReception = false;
 
   @override
   Future<ProcurementSummaryModel> fetchSummary({int? projectId}) async {
     loadedProjectId = projectId;
     return ProcurementSummaryModel.fromJson(procurementSummaryJson());
   }
+
+  @override
+  Future<ProcurementPage<ProcurementPurchaseRequestModel>>
+  fetchPurchaseRequests({
+    int? projectId,
+    int page = 1,
+    String? status,
+    String? query,
+  }) async => ProcurementPage(
+    items: [
+      ProcurementPurchaseRequestModel.fromJson(
+        procurementPurchaseRequestJson(),
+      ),
+    ],
+    currentPage: page,
+    lastPage: 1,
+    total: 1,
+  );
+
+  @override
+  Future<ProcurementPage<ProcurementPurchaseOrderModel>> fetchPurchaseOrders({
+    int? projectId,
+    int page = 1,
+    String? status,
+    String? query,
+  }) async => ProcurementPage(
+    items: [
+      ProcurementPurchaseOrderModel.fromJson(procurementPurchaseOrderJson()),
+    ],
+    currentPage: page,
+    lastPage: 1,
+    total: 1,
+  );
 
   @override
   Future<ProcurementPurchaseRequestModel> fetchPurchaseRequest(int id) async {
@@ -61,6 +96,9 @@ class _RecordingProcurementRepository extends ProcurementRepository {
     receivedWarehouseId = warehouseId;
     receivedReceiptDate = receiptDate;
     receivedItems = items;
+    if (queueMaterialsReception) {
+      throw const SyncQueuedException(queueId: 1);
+    }
     return ProcurementPurchaseOrderModel.fromJson(
       procurementPurchaseOrderJson(
         status: 'partially_delivered',
@@ -210,6 +248,45 @@ void main() {
     expect(find.text('БетонПром'), findsWidgets);
   });
 
+  testWidgets(
+    'keeps creation action and metrics readable on a compact screen',
+    (tester) async {
+      final repository = _RecordingProcurementRepository();
+      tester.view.devicePixelRatio = 2;
+      tester.view.physicalSize = const Size(720, 1280);
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      await tester.pumpWidget(
+        buildApp(
+          const MediaQuery(
+            data: MediaQueryData(
+              size: Size(360, 640),
+              textScaler: TextScaler.linear(1.3),
+            ),
+            child: ProcurementScreen(),
+          ),
+          repository,
+          selectedProject: project(),
+        ),
+      );
+      await pumpUi(tester);
+
+      expect(find.byType(FloatingActionButton), findsNothing);
+      expect(
+        find.widgetWithText(FilledButton, 'Заявка на закупку'),
+        findsOneWidget,
+      );
+      expect(
+        tester.getTopLeft(find.text('Заказы').first).dy,
+        greaterThan(tester.getTopLeft(find.text('В работе').first).dy),
+      );
+      await tester.scrollUntilVisible(find.text('Все статусы'), 300);
+      await tester.pump();
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets('submits approval and rejection from summary', (tester) async {
     final repository = _RecordingProcurementRepository();
     useLargeSurface(tester);
@@ -297,5 +374,51 @@ void main() {
     expect(repository.receivedItems.single.itemId, 701);
     expect(repository.receivedItems.single.quantityReceived, 3);
     expect(repository.receivedItems.single.price, 80000);
+  });
+
+  testWidgets('shows queued receipt as saved instead of an error', (
+    tester,
+  ) async {
+    final repository =
+        _RecordingProcurementRepository()..queueMaterialsReception = true;
+    useLargeSurface(tester);
+
+    await tester.pumpWidget(
+      buildApp(
+        const ProcurementOrderDetailScreen(orderId: 61),
+        repository,
+        selectedProject: project(),
+      ),
+    );
+    await pumpUi(tester);
+
+    await tester.tap(find.text('Принять').first);
+    await pumpUi(tester);
+    await tester.tap(find.byKey(const Key('procurement-receive-warehouse')));
+    await pumpUi(tester);
+    await tester.tap(find.text('Основной склад').last);
+    await pumpUi(tester);
+    await tester.enterText(
+      find.byKey(const Key('procurement-receive-date')),
+      '2026-05-22',
+    );
+    await tester.enterText(
+      find.byKey(const Key('procurement-receive-quantity-701')),
+      '3',
+    );
+    await tester.enterText(
+      find.byKey(const Key('procurement-receive-price-701')),
+      '80000',
+    );
+    await tester.tap(find.text('Принять материалы').last);
+    await pumpUi(tester);
+
+    expect(
+      find.text('Будет отправлено при восстановлении связи'),
+      findsOneWidget,
+    );
+    expect(find.text('Материалы приняты на склад'), findsNothing);
+    expect(find.byKey(const Key('app-error-notice')), findsNothing);
+    expect(tester.takeException(), isNull);
   });
 }

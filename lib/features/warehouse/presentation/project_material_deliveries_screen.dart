@@ -1,7 +1,8 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/error/user_message.dart';
+import '../../../core/sync/sync_queue_service.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../core/widgets/app_empty_state.dart';
@@ -220,6 +221,13 @@ class _ProjectMaterialDeliveriesScreenState
 
                         if (sheetContext.mounted) {
                           Navigator.of(sheetContext).pop(true);
+                        }
+                      } on SyncQueuedException catch (error) {
+                        if (sheetContext.mounted) {
+                          ScaffoldMessenger.of(sheetContext).showSnackBar(
+                            SnackBar(content: Text(error.message)),
+                          );
+                          Navigator.of(sheetContext).pop(false);
                         }
                       } catch (error) {
                         if (sheetContext.mounted) {

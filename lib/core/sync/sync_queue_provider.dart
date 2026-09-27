@@ -81,6 +81,12 @@ final syncQueueServiceProvider = FutureProvider<SyncQueueService>((ref) async {
           state.isOnlineVerified &&
           state.sessionIdentity != null;
     },
+    stageQueuedAttachment:
+        (attachment, ownerIdentity, context) => fileCache.stageQueuedAttachment(
+          ownerIdentity: ownerIdentity,
+          context: context,
+          sourcePath: attachment.path,
+        ),
     verifyOnline: () async {
       final before = scopeFor(ref.read(authProvider));
       if (before == null) return false;

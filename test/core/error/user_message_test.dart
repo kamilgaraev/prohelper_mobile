@@ -46,6 +46,12 @@ void main() {
     );
     expect(
       UserMessage.fromError(
+        const ApiException('IsarError: SchemaError: invalid index'),
+      ),
+      generic,
+    );
+    expect(
+      UserMessage.fromError(
         const ApiException('Unauthenticated.', statusCode: 401),
       ),
       sessionExpired,

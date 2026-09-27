@@ -1,7 +1,9 @@
-﻿import 'package:dio/dio.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:prohelpers_mobile/core/network/api_exception.dart';
+import 'package:prohelpers_mobile/core/sync/sync_queue_service.dart';
 import 'package:prohelpers_mobile/features/production_labor/data/production_labor_model.dart';
 import 'package:prohelpers_mobile/features/production_labor/data/production_labor_repository.dart';
 import 'package:prohelpers_mobile/features/production_labor/domain/production_labor_provider.dart';
@@ -11,11 +13,14 @@ import 'package:prohelpers_mobile/features/projects/data/projects_repository.dar
 import 'package:prohelpers_mobile/features/projects/domain/projects_provider.dart';
 
 class _RecordingProductionLaborRepository extends ProductionLaborRepository {
-  _RecordingProductionLaborRepository() : super(Dio());
+  _RecordingProductionLaborRepository({this.outputError}) : super(Dio());
 
+  Object? outputError;
   double acceptedQuantity = 3;
   Map<String, dynamic>? outputPayload;
   Map<String, dynamic>? timesheetPayload;
+  int outputCallCount = 0;
+  final List<String> outputIdempotencyKeys = [];
 
   LaborWorkOrderModel get workOrder => LaborWorkOrderModel(
     id: 5,
@@ -51,8 +56,14 @@ class _RecordingProductionLaborRepository extends ProductionLaborRepository {
     required double quantity,
     required double hours,
     required String workDate,
+    required String idempotencyKey,
     String? comment,
   }) async {
+    outputCallCount++;
+    outputIdempotencyKeys.add(idempotencyKey);
+    final error = outputError;
+    if (error != null) throw error;
+
     outputPayload = {
       'work_order_line_id': workOrderLineId,
       'quantity': quantity,
@@ -249,4 +260,72 @@ void main() {
     expect(repository.outputPayload?['hours'], 4);
     expect(find.text('Осталось 5.5 м2'), findsOneWidget);
   });
+
+  testWidgets(
+    'closes output form and shows review after ambiguous queue result',
+    (tester) async {
+      final repository = _RecordingProductionLaborRepository(
+        outputError: const SyncQueuedException(
+          queueId: 12,
+          requiresReview: true,
+        ),
+      );
+
+      await tester.pumpWidget(buildScreen(repository));
+      await pumpUi(tester);
+      await tester.tap(find.text('Выработка'));
+      await pumpUi(tester);
+      await tester.enterText(find.byType(TextFormField).at(0), '2');
+      await tester.enterText(find.byType(TextFormField).at(1), '4');
+      await submitSheet(tester);
+
+      expect(repository.outputCallCount, 1);
+      expect(repository.outputIdempotencyKeys, hasLength(1));
+      expect(find.text('Факт выработки'), findsNothing);
+      expect(find.text(SyncQueueMessages.unknownOutcome), findsOneWidget);
+      expect(find.text('Выработка'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'reuses the output key for a retry and rotates it for a new fact',
+    (tester) async {
+      final repository = _RecordingProductionLaborRepository(
+        outputError: const ApiException('Повторите попытку.'),
+      );
+
+      await tester.pumpWidget(buildScreen(repository));
+      await pumpUi(tester);
+      await tester.tap(find.text('Выработка'));
+      await pumpUi(tester);
+      await tester.enterText(find.byType(TextFormField).at(0), '2');
+      await tester.enterText(find.byType(TextFormField).at(1), '4');
+      await submitSheet(tester);
+
+      expect(find.text('Факт выработки'), findsOneWidget);
+      expect(repository.outputIdempotencyKeys, hasLength(1));
+      await tester.tap(find.byTooltip('Закрыть сообщение'));
+      await tester.pump();
+
+      repository.outputError = null;
+      await submitSheet(tester);
+      expect(repository.outputIdempotencyKeys, hasLength(2));
+      expect(
+        repository.outputIdempotencyKeys[1],
+        repository.outputIdempotencyKeys[0],
+      );
+
+      await tester.tap(find.text('Выработка'));
+      await pumpUi(tester);
+      await tester.enterText(find.byType(TextFormField).at(0), '1');
+      await tester.enterText(find.byType(TextFormField).at(1), '2');
+      await submitSheet(tester);
+
+      expect(repository.outputIdempotencyKeys, hasLength(3));
+      expect(
+        repository.outputIdempotencyKeys[2],
+        isNot(repository.outputIdempotencyKeys[0]),
+      );
+    },
+  );
 }

@@ -118,6 +118,7 @@ void main() {
     Widget child,
     _RecordingBudgetRepository repository, {
     Project? selectedProject,
+    TextScaler? textScaler,
   }) {
     return ProviderScope(
       overrides: [
@@ -129,7 +130,16 @@ void main() {
         ),
         budgetEstimatesRepositoryProvider.overrideWithValue(repository),
       ],
-      child: MaterialApp(home: child),
+      child: MaterialApp(
+        builder:
+            textScaler == null
+                ? null
+                : (context, child) => MediaQuery(
+                  data: MediaQuery.of(context).copyWith(textScaler: textScaler),
+                  child: child!,
+                ),
+        home: child,
+      ),
     );
   }
 
@@ -167,6 +177,30 @@ void main() {
     expect(find.text('Основание: Проектное изменение'), findsOneWidget);
     expect(find.text('1 200 000 ₽'), findsWidgets);
   });
+
+  testWidgets(
+    'shows complete budget metrics on narrow screen with large text',
+    (tester) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(360, 640);
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      await tester.pumpWidget(
+        buildApp(
+          const BudgetEstimatesScreen(),
+          _RecordingBudgetRepository(),
+          selectedProject: project(),
+          textScaler: const TextScaler.linear(1.3),
+        ),
+      );
+      await pumpUi(tester);
+
+      expect(find.text('Сметы'), findsWidgets);
+      expect(find.text('1 500 000 ₽'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets('filters estimates by search and status', (tester) async {
     final repository = _RecordingBudgetRepository();

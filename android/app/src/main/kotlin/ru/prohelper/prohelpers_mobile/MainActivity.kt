@@ -27,12 +27,20 @@ class MainActivity : FlutterActivity() {
                     checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
                 ) {
                     result.success(true)
+                } else if (permissionRequestInFlight) {
+                    permissionResults.add(result)
+                } else if (getSharedPreferences("most_notification_permission", MODE_PRIVATE)
+                        .getBoolean("request_attempted", false)
+                ) {
+                    result.success(false)
                 } else {
                     permissionResults.add(result)
-                    if (!permissionRequestInFlight) {
-                        permissionRequestInFlight = true
-                        requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 9401)
-                    }
+                    permissionRequestInFlight = true
+                    getSharedPreferences("most_notification_permission", MODE_PRIVATE)
+                        .edit()
+                        .putBoolean("request_attempted", true)
+                        .apply()
+                    requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 9401)
                 }
             }
     }

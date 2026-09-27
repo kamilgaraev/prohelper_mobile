@@ -32,6 +32,55 @@ void main() {
   });
 
   test(
+    'fetches paginated request and order lists with project and filters',
+    () async {
+      final requests = <RequestOptions>[];
+      final dio = Dio(BaseOptions(baseUrl: 'https://api.example.test'));
+      dio.httpClientAdapter = _JsonAdapter((options) {
+        requests.add(options);
+        final item =
+            options.path.endsWith('purchase-requests')
+                ? procurementPurchaseRequestJson()
+                : procurementPurchaseOrderJson();
+        return _responseData({
+          'items': [item],
+          'meta': {'current_page': 2, 'last_page': 4, 'total': 71},
+        });
+      });
+
+      final repository = ProcurementRepository(dio);
+      final requestPage = await repository.fetchPurchaseRequests(
+        projectId: 52,
+        page: 2,
+        status: 'pending',
+        query: ' PR- ',
+      );
+      final orderPage = await repository.fetchPurchaseOrders(
+        projectId: 52,
+        page: 2,
+        status: 'confirmed',
+        query: ' PO- ',
+      );
+
+      expect(requests[0].path, '/procurement/purchase-requests');
+      expect(requests[0].queryParameters, {
+        'project_id': 52,
+        'status': 'pending',
+        'q': 'PR-',
+        'page': 2,
+        'per_page': 20,
+      });
+      expect(requestPage.items.single.requestNumber, 'PR-12');
+      expect(requestPage.total, 71);
+      expect(requestPage.hasMore, isTrue);
+      expect(requests[1].path, '/procurement/purchase-orders');
+      expect(requests[1].queryParameters['status'], 'confirmed');
+      expect(orderPage.items.single.orderNumber, 'PO-61');
+      expect(orderPage.currentPage, 2);
+    },
+  );
+
+  test(
     'creates a purchase request with linked site request and line items',
     () async {
       late RequestOptions request;

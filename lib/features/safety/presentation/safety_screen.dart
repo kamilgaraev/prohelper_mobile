@@ -13,6 +13,7 @@ import '../../../core/widgets/pro_metric_tile.dart';
 import '../../../core/widgets/pro_status_banner.dart';
 import '../../../core/providers/module_provider.dart';
 import '../../../core/services/permission_service.dart';
+import '../../../core/sync/sync_queue_service.dart';
 import '../../projects/domain/projects_provider.dart';
 import '../data/safety_model.dart';
 import '../domain/safety_provider.dart';
@@ -51,6 +52,9 @@ class _SafetyScreenState extends ConsumerState<SafetyScreen> {
           'safety-management.incidents.create',
           'safety-management.violations.create',
         ]);
+    final compactAction =
+        MediaQuery.sizeOf(context).width < 400 &&
+        MediaQuery.textScalerOf(context).scale(1) > 1.15;
 
     if (selectedProject?.serverId != state.projectFilter && !state.isLoading) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -81,7 +85,7 @@ class _SafetyScreenState extends ConsumerState<SafetyScreen> {
           ],
         ),
         floatingActionButton:
-            selectedProject == null || !canCreateRecord
+            selectedProject == null || !canCreateRecord || compactAction
                 ? null
                 : FloatingActionButton.extended(
                   onPressed: () => _showCreateSheet(context),
@@ -124,6 +128,31 @@ class _SafetyScreenState extends ConsumerState<SafetyScreen> {
                   child: ListView(
                     padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
                     children: [
+                      if (state.fromCache || state.hasDirtyLocal)
+                        ProStatusBanner(
+                          title:
+                              state.hasDirtyLocal
+                                  ? 'Есть локальные изменения'
+                                  : 'Показаны сохранённые данные',
+                          description:
+                              state.error ??
+                              'Актуальность данных не подтверждена сетью.',
+                          tone:
+                              state.hasDirtyLocal
+                                  ? ProStatusTone.warning
+                                  : ProStatusTone.info,
+                          fullText: true,
+                        ),
+                      if (state.fromCache || state.hasDirtyLocal)
+                        const SizedBox(height: 12),
+                      if (canCreateRecord && compactAction) ...[
+                        FilledButton.icon(
+                          onPressed: () => _showCreateSheet(context),
+                          icon: const Icon(Icons.add_rounded),
+                          label: const Text('Новая запись'),
+                        ),
+                        const SizedBox(height: 12),
+                      ],
                       _ProjectContextCard(
                         name: selectedProject.name,
                         address: selectedProject.address,
@@ -201,6 +230,9 @@ class _SafetyScreenState extends ConsumerState<SafetyScreen> {
       'safety-management.violations.create',
     );
     if (!canCreateIncident && !canCreateViolation) return;
+    final compactMode =
+        MediaQuery.sizeOf(context).width < 400 &&
+        MediaQuery.textScalerOf(context).scale(1) > 1.15;
 
     final titleController = TextEditingController();
     final descriptionController = TextEditingController();
@@ -243,32 +275,66 @@ class _SafetyScreenState extends ConsumerState<SafetyScreen> {
                           style: AppTypography.caption(context),
                         ),
                         const SizedBox(height: 16),
-                        SegmentedButton<String>(
-                          segments: [
-                            if (canCreateIncident)
-                              const ButtonSegment(
-                                value: 'incident',
-                                label: Text('Происшествие'),
-                                icon: Icon(Icons.report_problem_outlined),
-                              ),
-                            if (canCreateViolation)
-                              const ButtonSegment(
-                                value: 'violation',
-                                label: Text('Нарушение'),
-                                icon: Icon(Icons.gpp_bad_outlined),
-                              ),
-                            if (canCreateViolation)
-                              const ButtonSegment(
-                                value: 'finding',
-                                label: Text('Замечание'),
-                                icon: Icon(Icons.fact_check_outlined),
-                              ),
-                          ],
-                          selected: {mode},
-                          onSelectionChanged:
-                              (value) =>
-                                  setSheetState(() => mode = value.first),
-                        ),
+                        if (compactMode)
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: [
+                              if (canCreateIncident)
+                                ChoiceChip(
+                                  label: const Text('Происшествие'),
+                                  selected: mode == 'incident',
+                                  onSelected:
+                                      (_) => setSheetState(
+                                        () => mode = 'incident',
+                                      ),
+                                ),
+                              if (canCreateViolation)
+                                ChoiceChip(
+                                  label: const Text('Нарушение'),
+                                  selected: mode == 'violation',
+                                  onSelected:
+                                      (_) => setSheetState(
+                                        () => mode = 'violation',
+                                      ),
+                                ),
+                              if (canCreateViolation)
+                                ChoiceChip(
+                                  label: const Text('Замечание'),
+                                  selected: mode == 'finding',
+                                  onSelected:
+                                      (_) =>
+                                          setSheetState(() => mode = 'finding'),
+                                ),
+                            ],
+                          )
+                        else
+                          SegmentedButton<String>(
+                            segments: [
+                              if (canCreateIncident)
+                                const ButtonSegment(
+                                  value: 'incident',
+                                  label: Text('Происшествие'),
+                                  icon: Icon(Icons.report_problem_outlined),
+                                ),
+                              if (canCreateViolation)
+                                const ButtonSegment(
+                                  value: 'violation',
+                                  label: Text('Нарушение'),
+                                  icon: Icon(Icons.gpp_bad_outlined),
+                                ),
+                              if (canCreateViolation)
+                                const ButtonSegment(
+                                  value: 'finding',
+                                  label: Text('Замечание'),
+                                  icon: Icon(Icons.fact_check_outlined),
+                                ),
+                            ],
+                            selected: {mode},
+                            onSelectionChanged:
+                                (value) =>
+                                    setSheetState(() => mode = value.first),
+                          ),
                         const SizedBox(height: 12),
                         TextField(
                           controller: titleController,
@@ -285,7 +351,8 @@ class _SafetyScreenState extends ConsumerState<SafetyScreen> {
                           ),
                         ),
                         DropdownButtonFormField<String>(
-                          value: severity,
+                          initialValue: severity,
+                          isExpanded: true,
                           decoration: const InputDecoration(
                             labelText: 'Тяжесть',
                           ),
@@ -333,7 +400,8 @@ class _SafetyScreenState extends ConsumerState<SafetyScreen> {
                         ],
                         if (mode == 'incident') ...[
                           DropdownButtonFormField<String>(
-                            value: incidentType,
+                            initialValue: incidentType,
+                            isExpanded: true,
                             decoration: const InputDecoration(
                               labelText: 'Тип происшествия',
                             ),
@@ -592,12 +660,22 @@ class _SafetyScreenState extends ConsumerState<SafetyScreen> {
                                         if (sheetContext.mounted) {
                                           Navigator.pop(sheetContext);
                                         }
+                                      } on SyncQueuedException catch (error) {
+                                        if (sheetContext.mounted) {
+                                          Navigator.pop(sheetContext);
+                                        }
+                                        if (context.mounted) {
+                                          _showQueuedOperationNotice(
+                                            context,
+                                            message: error.message,
+                                          );
+                                        }
                                       } catch (error) {
                                         if (context.mounted) {
                                           AppErrorNotice.show(context, error);
                                         }
                                       } finally {
-                                        if (context.mounted) {
+                                        if (sheetContext.mounted) {
                                           setSheetState(
                                             () => submitting = false,
                                           );
@@ -615,6 +693,15 @@ class _SafetyScreenState extends ConsumerState<SafetyScreen> {
                 ),
           ),
     );
+  }
+
+  void _showQueuedOperationNotice(
+    BuildContext context, {
+    required String message,
+  }) {
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   Future<void> _showPermitSheet(
@@ -1144,6 +1231,7 @@ class _TodaySafetyPanel extends StatelessWidget {
             ProStatusBanner(
               title: title,
               description: description,
+              fullText: true,
               tone:
                   admission == null
                       ? ProStatusTone.warning
@@ -1239,21 +1327,32 @@ class _TodayMetric extends StatelessWidget {
           borderRadius: BorderRadius.circular(12),
           border: Border.all(color: theme.colorScheme.outlineVariant),
         ),
-        child: Row(
-          children: [
-            Icon(icon, color: theme.colorScheme.primary),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(label, style: AppTypography.caption(context)),
-                  Text(value, style: AppTypography.h2(context)),
-                ],
-              ),
-            ),
-          ],
-        ),
+        child:
+            width < 180
+                ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(icon, color: theme.colorScheme.primary),
+                    const SizedBox(height: 8),
+                    Text(label, style: AppTypography.caption(context)),
+                    Text(value, style: AppTypography.h2(context)),
+                  ],
+                )
+                : Row(
+                  children: [
+                    Icon(icon, color: theme.colorScheme.primary),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(label, style: AppTypography.caption(context)),
+                          Text(value, style: AppTypography.h2(context)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
       ),
     );
   }

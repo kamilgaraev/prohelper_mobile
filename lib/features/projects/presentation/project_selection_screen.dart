@@ -1,13 +1,16 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import 'package:prohelpers_mobile/core/design/pro_design_tokens.dart';
 import 'package:prohelpers_mobile/core/theme/app_typography.dart';
 import 'package:prohelpers_mobile/core/widgets/app_action_buttons.dart';
+import 'package:prohelpers_mobile/core/widgets/pro_status_banner.dart';
 import 'package:prohelpers_mobile/core/widgets/pro_surface.dart';
+import 'package:prohelpers_mobile/features/auth/data/auth_session_identity.dart';
 import 'package:prohelpers_mobile/features/auth/data/user_model.dart';
 import 'package:prohelpers_mobile/features/auth/domain/auth_provider.dart';
 import 'package:prohelpers_mobile/features/auth/presentation/widgets/logout_confirmation_dialog.dart';
+import 'package:prohelpers_mobile/features/auth/presentation/widgets/user_profile_bottom_sheet.dart';
 import 'package:prohelpers_mobile/features/projects/domain/projects_provider.dart';
 import 'package:prohelpers_mobile/features/projects/presentation/widgets/project_card.dart';
 
@@ -47,6 +50,20 @@ class _ProjectSelectionScreenState
     return ref.read(projectsProvider.notifier).loadProjects();
   }
 
+  void _showUserProfile() {
+    final user = ref.read(authProvider).user;
+    if (user == null) {
+      return;
+    }
+
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      barrierLabel: 'Закрыть профиль',
+      builder: (_) => UserProfileBottomSheet(user: user),
+    );
+  }
+
   Future<void> _logout() async {
     final confirmed = await showLogoutConfirmationDialog(context);
     if (!confirmed || !mounted) {
@@ -58,6 +75,23 @@ class _ProjectSelectionScreenState
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<AuthSessionIdentity?>(
+      authProvider.select(
+        (state) => state is AuthAuthenticated ? state.sessionIdentity : null,
+      ),
+      (previous, next) {
+        if (previous == next || next == null) {
+          return;
+        }
+
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            _loadProjectsOnce();
+          }
+        });
+      },
+    );
+
     final theme = Theme.of(context);
     final state = ref.watch(projectsProvider);
     final user = ref.watch(authProvider).user;
@@ -65,28 +99,51 @@ class _ProjectSelectionScreenState
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(
-            ProSpacing.md,
-            ProSpacing.md,
-            ProSpacing.md,
-            0,
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _ProjectSelectionHeader(
-                user: user,
-                state: state,
-                onRefresh: state.isLoading ? null : _refreshProjects,
-                onBack:
-                    Navigator.canPop(context)
-                        ? () => Navigator.pop(context)
-                        : null,
-                onLogout: _logout,
+        child: RefreshIndicator(
+          onRefresh: _refreshProjects,
+          child: CustomScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            slivers: [
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(
+                  ProSpacing.md,
+                  ProSpacing.md,
+                  ProSpacing.md,
+                  0,
+                ),
+                sliver: SliverToBoxAdapter(
+                  child: _ProjectSelectionHeader(
+                    user: user,
+                    state: state,
+                    onRefresh: state.isLoading ? null : _refreshProjects,
+                    onProfile: _showUserProfile,
+                    onBack:
+                        Navigator.canPop(context)
+                            ? () => Navigator.pop(context)
+                            : null,
+                    onLogout: _logout,
+                  ),
+                ),
               ),
-              const SizedBox(height: ProSpacing.md),
-              Expanded(child: _buildContent(context, state)),
+              const SliverToBoxAdapter(child: SizedBox(height: ProSpacing.md)),
+              if (state.fromCache)
+                const SliverPadding(
+                  padding: EdgeInsets.fromLTRB(
+                    ProSpacing.md,
+                    0,
+                    ProSpacing.md,
+                    ProSpacing.md,
+                  ),
+                  sliver: SliverToBoxAdapter(
+                    child: ProStatusBanner(
+                      title: 'Сохранённые объекты',
+                      description: 'Проверьте обновления при появлении связи.',
+                      compact: true,
+                      fullText: true,
+                    ),
+                  ),
+                ),
+              _buildContent(context, state),
             ],
           ),
         ),
@@ -95,18 +152,19 @@ class _ProjectSelectionScreenState
   }
 
   Widget _buildContent(BuildContext context, ProjectsState state) {
+    final Widget sliver;
+    final compact = MediaQuery.sizeOf(context).width < 360;
+
     if (state.isLoading && state.projects.isEmpty) {
-      return _buildStateList(
-        child: const _ProjectSelectionStateCard(
+      sliver = const SliverToBoxAdapter(
+        child: _ProjectSelectionStateCard(
           title: 'Загружаем объекты',
           description: 'Проверяем доступные объекты организации.',
           isLoading: true,
         ),
       );
-    }
-
-    if (state.error != null && state.projects.isEmpty) {
-      return _buildStateList(
+    } else if (state.error != null && state.projects.isEmpty) {
+      sliver = SliverToBoxAdapter(
         child: _ProjectSelectionStateCard(
           icon: Icons.error_outline_rounded,
           iconColor: Theme.of(context).colorScheme.error,
@@ -115,40 +173,34 @@ class _ProjectSelectionScreenState
           action: AppSecondaryActionButton(
             label: 'Повторить',
             onPressed: _refreshProjects,
-            leading: const Icon(Icons.refresh_rounded),
+            leading: compact ? null : const Icon(Icons.refresh_rounded),
             expanded: false,
           ),
         ),
       );
-    }
-
-    if (state.projects.isEmpty) {
-      return _buildStateList(
+    } else if (state.projects.isEmpty) {
+      sliver = SliverToBoxAdapter(
         child: _ProjectSelectionStateCard(
           icon: Icons.folder_off_outlined,
           title: 'Нет доступных объектов',
           description:
               'Объекты появятся здесь после выдачи доступа администратором организации.',
           action: AppSecondaryActionButton(
-            label: 'Обновить список',
+            label: compact ? 'Обновить' : 'Обновить список',
             onPressed: _refreshProjects,
-            leading: const Icon(Icons.refresh_rounded),
+            leading: compact ? null : const Icon(Icons.refresh_rounded),
             expanded: false,
           ),
         ),
       );
-    }
+    } else {
+      sliver = SliverList(
+        delegate: SliverChildBuilderDelegate((context, index) {
+          if (index.isOdd) {
+            return const SizedBox(height: ProSpacing.sm);
+          }
 
-    return RefreshIndicator(
-      onRefresh: _refreshProjects,
-      child: ListView.separated(
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.only(bottom: ProSpacing.bottomNavSafe),
-        itemCount: state.projects.length,
-        separatorBuilder: (_, _) => const SizedBox(height: ProSpacing.sm),
-        itemBuilder: (context, index) {
-          final project = state.projects[index];
-
+          final project = state.projects[index ~/ 2];
           return ProjectCard(
             project: project,
             isSelected: state.selectedProject?.serverId == project.serverId,
@@ -159,16 +211,18 @@ class _ProjectSelectionScreenState
               }
             },
           );
-        },
-      ),
-    );
-  }
+        }, childCount: state.projects.length * 2 - 1),
+      );
+    }
 
-  Widget _buildStateList({required Widget child}) {
-    return ListView(
-      physics: const AlwaysScrollableScrollPhysics(),
-      padding: const EdgeInsets.only(bottom: ProSpacing.bottomNavSafe),
-      children: [child],
+    return SliverPadding(
+      padding: const EdgeInsets.fromLTRB(
+        ProSpacing.md,
+        0,
+        ProSpacing.md,
+        ProSpacing.bottomNavSafe,
+      ),
+      sliver: sliver,
     );
   }
 }
@@ -178,6 +232,7 @@ class _ProjectSelectionHeader extends StatelessWidget {
     required this.user,
     required this.state,
     required this.onRefresh,
+    required this.onProfile,
     required this.onBack,
     required this.onLogout,
   });
@@ -185,6 +240,7 @@ class _ProjectSelectionHeader extends StatelessWidget {
   final User? user;
   final ProjectsState state;
   final Future<void> Function()? onRefresh;
+  final VoidCallback onProfile;
   final VoidCallback? onBack;
   final VoidCallback onLogout;
 
@@ -192,114 +248,161 @@ class _ProjectSelectionHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final selectedProject = state.selectedProject;
+    final profileButton = Tooltip(
+      message: 'Профиль и организации',
+      child: Material(
+        color: theme.colorScheme.primary.withValues(alpha: 0.1),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(ProRadius.md),
+          side: BorderSide(
+            color: theme.colorScheme.primary.withValues(alpha: 0.18),
+          ),
+        ),
+        child: InkWell(
+          onTap: user == null ? null : onProfile,
+          borderRadius: BorderRadius.circular(ProRadius.md),
+          child: SizedBox(
+            width: ProTouchTarget.comfortable,
+            height: ProTouchTarget.comfortable,
+            child: Icon(
+              Icons.engineering_rounded,
+              color: theme.colorScheme.primary,
+              semanticLabel: 'Открыть профиль и организации',
+            ),
+          ),
+        ),
+      ),
+    );
+    final actions = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        IconButton(
+          tooltip: 'Обновить список объектов',
+          onPressed: onRefresh,
+          icon: const Icon(
+            Icons.refresh_rounded,
+            semanticLabel: 'Обновить список объектов',
+          ),
+        ),
+        if (onBack == null)
+          IconButton(
+            tooltip: 'Выйти из аккаунта',
+            onPressed: onLogout,
+            icon: Icon(
+              Icons.logout_rounded,
+              semanticLabel: 'Выйти из аккаунта',
+              color: theme.colorScheme.error,
+            ),
+          )
+        else
+          IconButton(
+            tooltip: 'Вернуться к обзору',
+            onPressed: onBack,
+            icon: const Icon(
+              Icons.close_rounded,
+              semanticLabel: 'Вернуться к обзору',
+            ),
+          ),
+      ],
+    );
+    Widget identity({required bool compact, required bool includePrompt}) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Рабочий контекст', style: AppTypography.caption(context)),
+          const SizedBox(height: ProSpacing.xxs),
+          Text(
+            'Привет, ${_displayName(user)}',
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: AppTypography.h2(
+              context,
+            ).copyWith(fontSize: compact ? 20 : null),
+          ),
+          if (includePrompt) ...[
+            const SizedBox(height: ProSpacing.xxs),
+            Text(
+              'Выберите объект для работы',
+              style: AppTypography.bodyMedium(
+                context,
+              ).copyWith(color: theme.colorScheme.onSurfaceVariant),
+            ),
+          ],
+        ],
+      );
+    }
 
     return ProSurface(
       tone: ProSurfaceTone.elevated,
       padding: const EdgeInsets.all(ProSpacing.md),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final compact = constraints.maxWidth < 420;
+          return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                width: ProTouchTarget.comfortable,
-                height: ProTouchTarget.comfortable,
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.primary.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(ProRadius.md),
-                  border: Border.all(
-                    color: theme.colorScheme.primary.withValues(alpha: 0.18),
-                  ),
-                ),
-                child: Icon(
-                  Icons.engineering_rounded,
-                  color: theme.colorScheme.primary,
-                ),
-              ),
-              const SizedBox(width: ProSpacing.sm),
-              Expanded(
-                child: Column(
+              if (compact) ...[
+                Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      'Рабочий контекст',
-                      style: AppTypography.caption(context),
-                    ),
-                    const SizedBox(height: ProSpacing.xxs),
-                    Text(
-                      'Привет, ${_displayName(user)}',
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: AppTypography.h2(context),
-                    ),
-                    const SizedBox(height: ProSpacing.xxs),
-                    Text(
-                      'Выберите объект для работы',
-                      style: AppTypography.bodyMedium(
-                        context,
-                      ).copyWith(color: theme.colorScheme.onSurfaceVariant),
+                    profileButton,
+                    const SizedBox(width: ProSpacing.sm),
+                    Expanded(
+                      child: identity(compact: true, includePrompt: false),
                     ),
                   ],
                 ),
-              ),
-              const SizedBox(width: ProSpacing.xs),
-              IconButton(
-                tooltip: 'Обновить список объектов',
-                onPressed: onRefresh,
-                icon: const Icon(
-                  Icons.refresh_rounded,
-                  semanticLabel: 'Обновить список объектов',
+                const SizedBox(height: ProSpacing.xs),
+                Text(
+                  'Выберите объект для работы',
+                  style: AppTypography.bodyMedium(
+                    context,
+                  ).copyWith(color: theme.colorScheme.onSurfaceVariant),
                 ),
-              ),
-              if (onBack == null)
-                IconButton(
-                  tooltip: 'Выйти из аккаунта',
-                  onPressed: onLogout,
-                  icon: Icon(
-                    Icons.logout_rounded,
-                    semanticLabel: 'Выйти из аккаунта',
-                    color: theme.colorScheme.error,
-                  ),
-                )
-              else
-                IconButton(
-                  tooltip: 'Вернуться к обзору',
-                  onPressed: onBack,
-                  icon: const Icon(
-                    Icons.close_rounded,
-                    semanticLabel: 'Вернуться к обзору',
-                  ),
+                Align(alignment: Alignment.centerRight, child: actions),
+              ] else ...[
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    profileButton,
+                    const SizedBox(width: ProSpacing.sm),
+                    Expanded(
+                      child: identity(compact: false, includePrompt: true),
+                    ),
+                    const SizedBox(width: ProSpacing.xs),
+                    actions,
+                  ],
                 ),
-            ],
-          ),
-          const SizedBox(height: ProSpacing.md),
-          Wrap(
-            spacing: ProSpacing.xs,
-            runSpacing: ProSpacing.xs,
-            children: [
-              _ContextBadge(
-                icon: Icons.business_rounded,
-                label: _organizationName(user),
-              ),
-              _ContextBadge(
-                icon: Icons.apartment_rounded,
-                label: _objectCountLabel(state.projects.length),
-              ),
-              _ContextBadge(
-                icon:
-                    selectedProject == null
-                        ? Icons.rule_folder_outlined
-                        : Icons.check_circle_rounded,
-                label:
-                    selectedProject == null
-                        ? 'Объект не выбран'
-                        : 'Выбран: ${selectedProject.name}',
-                emphasized: selectedProject != null,
+              ],
+              const SizedBox(height: ProSpacing.md),
+              Wrap(
+                spacing: ProSpacing.xs,
+                runSpacing: ProSpacing.xs,
+                children: [
+                  _ContextBadge(
+                    icon: Icons.business_rounded,
+                    label: _organizationName(user),
+                  ),
+                  _ContextBadge(
+                    icon: Icons.apartment_rounded,
+                    label: _objectCountLabel(state.projects.length),
+                  ),
+                  _ContextBadge(
+                    icon:
+                        selectedProject == null
+                            ? Icons.rule_folder_outlined
+                            : Icons.check_circle_rounded,
+                    label:
+                        selectedProject == null
+                            ? 'Объект не выбран'
+                            : 'Выбран: ${selectedProject.name}',
+                    emphasized: selectedProject != null,
+                  ),
+                ],
               ),
             ],
-          ),
-        ],
+          );
+        },
       ),
     );
   }
@@ -422,64 +525,78 @@ class _ProjectSelectionStateCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final color = iconColor ?? theme.colorScheme.primary;
+    final stateIcon = Container(
+      width: ProTouchTarget.comfortable,
+      height: ProTouchTarget.comfortable,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(ProRadius.md),
+        border: Border.all(color: color.withValues(alpha: 0.18)),
+      ),
+      child:
+          isLoading
+              ? SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(strokeWidth: 3, color: color),
+              )
+              : Icon(
+                icon ?? Icons.info_outline_rounded,
+                size: 30,
+                color: color,
+              ),
+    );
+    Widget stateContent({required bool compact}) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: AppTypography.h2(context).copyWith(fontSize: 18)),
+          if (description != null) ...[
+            const SizedBox(height: ProSpacing.xxs),
+            Text(
+              description!,
+              style: AppTypography.bodyMedium(
+                context,
+              ).copyWith(color: theme.colorScheme.onSurfaceVariant),
+            ),
+          ],
+          if (action != null) ...[
+            const SizedBox(height: ProSpacing.sm),
+            if (compact)
+              SizedBox(width: double.infinity, child: action!)
+            else
+              Align(alignment: Alignment.centerLeft, child: action!),
+          ],
+        ],
+      );
+    }
 
     return ProSurface(
       tone: ProSurfaceTone.elevated,
       padding: const EdgeInsets.all(ProSpacing.md),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: ProTouchTarget.comfortable,
-            height: ProTouchTarget.comfortable,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(ProRadius.md),
-              border: Border.all(color: color.withValues(alpha: 0.18)),
-            ),
-            child:
-                isLoading
-                    ? SizedBox(
-                      width: 24,
-                      height: 24,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 3,
-                        color: color,
-                      ),
-                    )
-                    : Icon(
-                      icon ?? Icons.info_outline_rounded,
-                      size: 30,
-                      color: color,
-                    ),
-          ),
-          const SizedBox(width: ProSpacing.sm),
-          Expanded(
-            child: Column(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          if (constraints.maxWidth < 360) {
+            return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  title,
-                  style: AppTypography.h2(context).copyWith(fontSize: 18),
-                ),
-                if (description != null) ...[
-                  const SizedBox(height: ProSpacing.xxs),
-                  Text(
-                    description!,
-                    style: AppTypography.bodyMedium(
-                      context,
-                    ).copyWith(color: theme.colorScheme.onSurfaceVariant),
-                  ),
-                ],
-                if (action != null) ...[
-                  const SizedBox(height: ProSpacing.sm),
-                  Align(alignment: Alignment.centerLeft, child: action!),
-                ],
+                stateIcon,
+                const SizedBox(height: ProSpacing.sm),
+                stateContent(compact: true),
               ],
-            ),
-          ),
-        ],
+            );
+          }
+
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              stateIcon,
+              const SizedBox(width: ProSpacing.sm),
+              Expanded(child: stateContent(compact: false)),
+            ],
+          );
+        },
       ),
     );
   }

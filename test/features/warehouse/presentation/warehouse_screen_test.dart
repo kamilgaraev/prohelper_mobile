@@ -1,4 +1,4 @@
-﻿import 'package:dio/dio.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -73,6 +73,10 @@ class _FakeWarehouseNotifier extends WarehouseNotifier {
     state = const WarehouseState(isLoading: false, data: _summary, error: null);
   }
 
+  void showCachedError() {
+    state = state.copyWith(error: 'Нет связи с сервером.');
+  }
+
   @override
   Future<void> load() async {}
 }
@@ -130,6 +134,28 @@ const _summary = WarehouseSummaryModel(
 );
 
 void main() {
+  testWidgets('показывает предупреждение поверх сохранённых данных', (
+    tester,
+  ) async {
+    final repository = _FakeWarehouseRepository();
+    await _pumpWarehouseScreen(
+      tester,
+      repository: repository,
+      mediaPicker: _FakeMediaPicker(),
+    );
+
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(WarehouseScreen)),
+    );
+    (container.read(warehouseProvider.notifier) as _FakeWarehouseNotifier)
+        .showCachedError();
+    await tester.pumpAndSettle();
+
+    expect(find.text('Показаны сохранённые данные'), findsOneWidget);
+    expect(find.text('Нет связи с сервером.'), findsOneWidget);
+    expect(find.text('Складов'), findsWidgets);
+  });
+
   testWidgets('показывает сводку и действия склада', (tester) async {
     await _pumpWarehouseScreen(
       tester,

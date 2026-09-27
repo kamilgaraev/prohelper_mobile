@@ -46,6 +46,13 @@ void main() {
     expect(myActionTarget(action('unsupported')), isNull);
   });
 
+  test('localizes common action statuses', () {
+    expect(myActionStatusLabel('approved'), 'Согласовано');
+    expect(myActionStatusLabel(' in_review '), 'На согласовании');
+    expect(myActionStatusLabel('completed'), 'Завершено');
+    expect(myActionStatusLabel('custom_status'), 'custom_status');
+  });
+
   test('loads a bounded project page with a direct record target', () async {
     late RequestOptions request;
     final dio = Dio(BaseOptions(baseUrl: 'https://api.example.test'));

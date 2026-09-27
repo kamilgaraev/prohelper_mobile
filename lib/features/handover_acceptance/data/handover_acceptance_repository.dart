@@ -123,6 +123,7 @@ class HandoverAcceptanceRepository extends SyncQueueAwareRepository {
             payload: const <String, dynamic>{},
             attachments: <SyncAttachmentRef>[attachment],
           ),
+          cause: error,
         );
       }
 
@@ -157,6 +158,7 @@ class HandoverAcceptanceRepository extends SyncQueueAwareRepository {
             payload: payload,
             attachments: attachments,
           ),
+          cause: error,
         );
       }
 

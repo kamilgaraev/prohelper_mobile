@@ -1,6 +1,7 @@
-﻿import 'package:dio/dio.dart';
+import 'package:dio/dio.dart';
 
 import '../network/api_exception.dart';
+import 'queued_sync_operation.dart';
 import 'sync_queue_draft.dart';
 import 'sync_queue_service.dart';
 
@@ -19,18 +20,27 @@ abstract class SyncQueueAwareRepository {
     } on DioException catch (error) {
       if (SyncQueueService.shouldQueueDioException(error)) {
         final service = await _requireSyncQueueService();
-        final operation = await service.enqueue(draft);
-        throw SyncQueuedException(queueId: operation.id);
+        final operation = await service.enqueue(draft, initialFailure: error);
+        throw SyncQueuedException(
+          queueId: operation.id,
+          requiresReview: operation.status == SyncOperationStatuses.conflict,
+        );
       }
 
       throw ApiException.fromDio(error, fallbackMessage: businessMessage);
     }
   }
 
-  Future<Never> queueAndThrow(SyncQueueDraft draft) async {
+  Future<Never> queueAndThrow(
+    SyncQueueDraft draft, {
+    DioException? cause,
+  }) async {
     final service = await _requireSyncQueueService();
-    final operation = await service.enqueue(draft);
-    throw SyncQueuedException(queueId: operation.id);
+    final operation = await service.enqueue(draft, initialFailure: cause);
+    throw SyncQueuedException(
+      queueId: operation.id,
+      requiresReview: operation.status == SyncOperationStatuses.conflict,
+    );
   }
 
   Future<SyncQueueService> _requireSyncQueueService() async {

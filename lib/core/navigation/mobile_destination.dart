@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:prohelpers_mobile/core/models/user_context.dart';
 import 'package:prohelpers_mobile/core/providers/module_provider.dart';
 
-enum MobileNavTab { overview, work, actions, more }
+enum MobileNavTab { now, sections, me }
 
 enum MobileWorkIntent { create, inspect, approve, record, search, manage }
 
@@ -67,12 +67,13 @@ class MobileModuleDestination {
     this.viewPermissions = const <String>[],
     this.actionId,
     this.basePriority = 100,
-    this.recommendedReason = 'Доступно по вашим правам',
+    this.recommendedReason = 'Открыть раздел',
     this.preferredContexts = const <UserContext>{},
     this.requiresProject = true,
     this.searchKeywords = const <String>[],
     this.intent = MobileWorkIntent.inspect,
     this.isSecondary = false,
+    this.intentBuilder,
   });
 
   final String route;
@@ -95,6 +96,9 @@ class MobileModuleDestination {
   final List<String> searchKeywords;
   final MobileWorkIntent intent;
   final bool isSecondary;
+  final WidgetBuilder? intentBuilder;
+
+  WidgetBuilder get openBuilder => intentBuilder ?? builder;
 
   bool allowsPermissions(Iterable<String> granted) {
     if (viewPermissions.isEmpty) {

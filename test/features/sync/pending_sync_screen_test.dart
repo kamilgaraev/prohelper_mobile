@@ -1,0 +1,155 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:prohelpers_mobile/core/sync/queued_sync_operation.dart';
+import 'package:prohelpers_mobile/core/sync/sync_queue_draft.dart';
+import 'package:prohelpers_mobile/core/sync/sync_queue_service.dart';
+import 'package:prohelpers_mobile/core/theme/pro_theme.dart';
+import 'package:prohelpers_mobile/features/sync/domain/pending_sync_provider.dart';
+import 'package:prohelpers_mobile/features/sync/presentation/pending_sync_screen.dart';
+
+void main() {
+  testWidgets('shows queued and uncertain operations with safe retry', (
+    tester,
+  ) async {
+    final queued = _operation(
+      moduleSlug: 'warehouse',
+      operationType: 'create_receipt',
+      status: SyncOperationStatuses.queued,
+    );
+    final uncertain = _operation(
+      moduleSlug: 'site_requests',
+      operationType: 'create_site_request',
+      status: SyncOperationStatuses.conflict,
+      error: SyncQueueMessages.unknownOutcome,
+    );
+    late _StubPendingSyncNotifier notifier;
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          pendingSyncProvider.overrideWith((ref) {
+            notifier = _StubPendingSyncNotifier(ref, [queued, uncertain]);
+            return notifier;
+          }),
+        ],
+        child: MaterialApp(
+          theme: MostTheme.lightTheme,
+          home: const PendingSyncScreen(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Не отправлено'), findsOneWidget);
+    expect(find.text('Приход на склад'), findsOneWidget);
+    expect(find.text('Ждёт отправки'), findsOneWidget);
+    expect(find.text('Заявка с объекта'), findsOneWidget);
+    expect(find.text('Нужно проверить результат'), findsOneWidget);
+    expect(find.text(SyncQueueMessages.unknownOutcome), findsOneWidget);
+    expect(find.textContaining('Не отправляйте её повторно'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Повторить отправку').first);
+    await tester.pump();
+    expect(notifier.retryCount, 1);
+  });
+
+  testWidgets('keeps operations visible when queue status refresh fails', (
+    tester,
+  ) async {
+    final queued = _operation(
+      moduleSlug: 'warehouse',
+      operationType: 'create_receipt',
+      status: SyncOperationStatuses.queued,
+    );
+    const error = 'Не удалось проверить сохранённые действия.';
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          pendingSyncProvider.overrideWith(
+            (ref) => _StubPendingSyncNotifier(ref, [queued], error: error),
+          ),
+        ],
+        child: MaterialApp(
+          theme: MostTheme.lightTheme,
+          home: const PendingSyncScreen(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Не удалось обновить список'), findsOneWidget);
+    expect(find.text(error), findsOneWidget);
+    expect(find.text('Приход на склад'), findsOneWidget);
+  });
+
+  testWidgets('shows uncertain result without offering automatic retry', (
+    tester,
+  ) async {
+    final uncertain = _operation(
+      moduleSlug: 'quality_control',
+      operationType: 'create_defect',
+      status: SyncOperationStatuses.conflict,
+      error: SyncQueueMessages.unknownOutcome,
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          pendingSyncProvider.overrideWith(
+            (ref) => _StubPendingSyncNotifier(ref, [uncertain]),
+          ),
+        ],
+        child: MaterialApp(
+          theme: MostTheme.lightTheme,
+          home: const PendingSyncScreen(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Нужно проверить результат'), findsOneWidget);
+    expect(find.text(SyncQueueMessages.unknownOutcome), findsOneWidget);
+    expect(find.textContaining('Не отправляйте её повторно'), findsOneWidget);
+    expect(find.byTooltip('Повторить отправку'), findsNothing);
+  });
+}
+
+QueuedSyncOperation _operation({
+  required String moduleSlug,
+  required String operationType,
+  required String status,
+  String? error,
+}) {
+  final operation = QueuedSyncOperation.fromDraft(
+    SyncQueueDraft(
+      moduleSlug: moduleSlug,
+      operationType: operationType,
+      method: 'POST',
+      endpoint: '/queued-operation',
+      payload: const {'queue_scope': '7:10:session-a'},
+    ),
+    createdAt: DateTime(2026, 9, 18, 10),
+  )..status = status;
+  operation.lastBusinessError = error;
+  return operation;
+}
+
+class _StubPendingSyncNotifier extends PendingSyncNotifier {
+  _StubPendingSyncNotifier(super.ref, this._operations, {this.error});
+
+  final List<QueuedSyncOperation> _operations;
+  final String? error;
+  int retryCount = 0;
+
+  @override
+  Future<void> load() async {
+    state = PendingSyncState(operations: _operations, error: error);
+  }
+
+  @override
+  Future<void> retryQueued() async {
+    retryCount++;
+  }
+}

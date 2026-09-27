@@ -15,6 +15,24 @@ void main() {
     expect(journal.availableActions.first.label, 'Открыть');
   });
 
+  test('accepts optional journal number and localizes known actions', () {
+    final payload =
+        _journalPayload()
+          ..['journal_number'] = null
+          ..['available_actions'] = [
+            {'action': 'view', 'label': 'Открыть'},
+            {
+              'action': 'close',
+              'label': 'mobile_construction_journal.actions.close',
+            },
+          ];
+
+    final journal = ConstructionJournalModel.fromJson(payload);
+
+    expect(journal.journalNumber, isEmpty);
+    expect(journal.availableActions.last.label, 'Закрыть');
+  });
+
   test('rejects legacy scalar journal actions', () {
     final payload =
         _journalPayload()..['available_actions'] = ['view', 'create_entry'];

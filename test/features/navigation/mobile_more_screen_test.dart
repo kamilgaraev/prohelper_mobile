@@ -186,9 +186,31 @@ void main() {
     }
   });
 
-  testWidgets('группы вкладки еще закреплены внутри карточных поверхностей', (
+  testWidgets('карточка объекта читается на узком экране с крупным шрифтом', (
     tester,
   ) async {
+    tester.view.physicalSize = const Size(274, 488);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      MediaQuery(
+        data: const MediaQueryData(textScaler: TextScaler.linear(1.3)),
+        child: buildScreen(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(
+      tester.getSize(find.text('Строительство склада Литер А')).width,
+      greaterThan(120),
+    );
+    expect(find.text('Сменить'), findsOneWidget);
+  });
+
+  testWidgets('вкладка Я содержит профиль и настройки', (tester) async {
     usePhoneViewport(tester);
     await tester.pumpWidget(
       buildScreen(
@@ -220,13 +242,7 @@ void main() {
       find.ancestor(of: find.text('Помощь'), matching: find.byType(ProSurface)),
       findsOneWidget,
     );
-    expect(
-      find.ancestor(
-        of: find.text('Управление'),
-        matching: find.byType(ProSurface),
-      ),
-      findsOneWidget,
-    );
+    expect(find.text('Управление'), findsNothing);
 
     await tester.scrollUntilVisible(
       find.text('Аккаунт'),
@@ -241,6 +257,8 @@ void main() {
       ),
       findsOneWidget,
     );
+    expect(find.text('Тема'), findsOneWidget);
+    expect(find.text('Операции'), findsOneWidget);
   });
 
   testWidgets('подтверждает выход перед завершением сессии', (tester) async {
@@ -253,6 +271,11 @@ void main() {
       300,
       scrollable: find.byType(Scrollable).first,
     );
+    await Scrollable.ensureVisible(
+      tester.element(find.text('Выйти')),
+      alignment: 0.2,
+    );
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Выйти'));
     await tester.pumpAndSettle();
 

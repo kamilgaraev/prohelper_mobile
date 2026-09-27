@@ -42,7 +42,12 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen> {
     }
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Финансовые документы'),
+        title: Text(
+          MediaQuery.sizeOf(context).width < 390 ||
+                  MediaQuery.textScalerOf(context).scale(1) > 1.15
+              ? 'Документы'
+              : 'Финансовые документы',
+        ),
         actions: [
           IconButton(
             tooltip: 'Обновить',
@@ -251,7 +256,7 @@ class _PaymentDocumentDetailScreenState
                         ),
                         const SizedBox(height: 8),
                         Text(doc.status),
-                        for (final row in _displayValues(doc.values))
+                        for (final row in doc.detailValues)
                           Padding(
                             padding: const EdgeInsets.only(top: 10),
                             child: Text('${row.key}: ${row.value}'),
@@ -729,22 +734,6 @@ class _ErrorPanel extends StatelessWidget {
       ],
     ),
   );
-}
-
-List<MapEntry<String, String>> _displayValues(Map<String, dynamic> values) {
-  const labels = {
-    'amount': 'Сумма',
-    'payment_purpose': 'Назначение',
-    'description': 'Комментарий',
-    'document_date': 'Дата документа',
-    'due_date': 'Срок оплаты',
-    'direction': 'Направление',
-    'invoice_type': 'Тип счета',
-  };
-  return labels.entries
-      .where((e) => values[e.key] != null && '${values[e.key]}'.isNotEmpty)
-      .map((e) => MapEntry(e.value, '${values[e.key]}'))
-      .toList();
 }
 
 int _projectId(Map<String, dynamic> values) {

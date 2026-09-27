@@ -16,6 +16,14 @@ class SecureStorageService {
   static const _selectedProjectIdKey = 'selected_project_id';
   static const _pinnedMobileActionsKey = 'pinned_mobile_action_ids';
   static const _pushInstallationIdKey = 'push_installation_id';
+  static const _themeModeKey = 'theme_mode';
+  static const _offlineProjectsKey = 'offline_projects';
+  static const _offlineModulesKey = 'offline_modules';
+
+  Future<String?> getThemeMode() => _storage.read(key: _themeModeKey);
+
+  Future<void> saveThemeMode(String mode) =>
+      _storage.write(key: _themeModeKey, value: mode);
 
   Future<String> getOrCreateOperationKey({
     required String namespace,
@@ -94,6 +102,38 @@ class SecureStorageService {
   Future<void> clearOfflineAuth() async {
     await _storage.delete(key: _offlineAuthKey);
     await _storage.delete(key: _offlineSessionIdKey);
+    await _storage.delete(key: _offlineProjectsKey);
+    await _storage.delete(key: _offlineModulesKey);
+  }
+
+  Future<void> saveOfflineProjects(Map<String, dynamic> value) async {
+    await _storage.write(key: _offlineProjectsKey, value: jsonEncode(value));
+  }
+
+  Future<Map<String, dynamic>?> getOfflineProjects() async {
+    final value = await _storage.read(key: _offlineProjectsKey);
+    if (value == null || value.isEmpty) return null;
+    try {
+      final decoded = jsonDecode(value);
+      return decoded is Map<String, dynamic> ? decoded : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> saveOfflineModules(Map<String, dynamic> value) async {
+    await _storage.write(key: _offlineModulesKey, value: jsonEncode(value));
+  }
+
+  Future<Map<String, dynamic>?> getOfflineModules() async {
+    final value = await _storage.read(key: _offlineModulesKey);
+    if (value == null || value.isEmpty) return null;
+    try {
+      final decoded = jsonDecode(value);
+      return decoded is Map<String, dynamic> ? decoded : null;
+    } catch (_) {
+      return null;
+    }
   }
 
   Future<void> rebindOfflineAuthToken(String token) async {

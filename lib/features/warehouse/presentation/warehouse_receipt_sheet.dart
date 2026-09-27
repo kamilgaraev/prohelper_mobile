@@ -1,9 +1,10 @@
-﻿import 'dart:async';
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/theme/app_typography.dart';
+import '../../../core/sync/sync_queue_service.dart';
 import '../../../core/widgets/app_error_notice.dart';
 import '../../../core/widgets/industrial_card.dart';
 import '../data/warehouse_media_picker.dart';
@@ -525,6 +526,13 @@ class _WarehouseReceiptSheetState extends ConsumerState<WarehouseReceiptSheet> {
       }
 
       Navigator.of(context).pop(true);
+    } on SyncQueuedException catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(error.message)));
+        Navigator.of(context).pop(false);
+      }
     } catch (error) {
       if (mounted) {
         AppErrorNotice.show(context, error);

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:prohelpers_mobile/core/network/api_exception.dart';
 import 'package:prohelpers_mobile/core/theme/pro_theme.dart';
 import 'package:prohelpers_mobile/features/notifications/data/notification_model.dart';
 import 'package:prohelpers_mobile/features/notifications/data/notifications_repository.dart';
@@ -47,7 +48,125 @@ class _NotificationsRepository extends NotificationsRepository {
   }
 }
 
+class _RefreshFailureRepository extends _NotificationsRepository {
+  var fetchCount = 0;
+
+  @override
+  Future<NotificationsPageResult> fetchNotifications({
+    int page = 1,
+    int perPage = 20,
+    NotificationFilter filter = NotificationFilter.all,
+  }) async {
+    fetchCount++;
+    if (fetchCount == 2) {
+      throw const ApiException(
+        'Нет соединения с сервером. Проверьте интернет.',
+      );
+    }
+
+    return NotificationsPageResult(
+      items: [_notification()],
+      currentPage: 1,
+      lastPage: 1,
+      perPage: perPage,
+      total: 1,
+    );
+  }
+}
+
+class _ReadFailureRepository extends _NotificationsRepository {
+  var markReadCount = 0;
+
+  @override
+  Future<NotificationModel> markAsRead(String id) async {
+    markReadCount++;
+    if (markReadCount == 1) {
+      throw const ApiException(
+        'Нет соединения с сервером. Проверьте интернет.',
+      );
+    }
+
+    return _notification(read: true);
+  }
+}
+
 void main() {
+  testWidgets('refresh keeps old notifications and offers retry on failure', (
+    tester,
+  ) async {
+    final repository = _RefreshFailureRepository();
+    late NotificationsNotifier notifier;
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          notificationsProvider.overrideWith(
+            (ref) => notifier = NotificationsNotifier(repository),
+          ),
+        ],
+        child: const MaterialApp(home: NotificationsScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Вход с нового устройства'), findsOneWidget);
+
+    await notifier.load(refresh: true);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Вход с нового устройства'), findsOneWidget);
+    expect(
+      find.text('Нет соединения с сервером. Проверьте интернет.'),
+      findsOneWidget,
+    );
+    expect(find.text('Повторить'), findsOneWidget);
+
+    await tester.tap(find.text('Повторить'));
+    await tester.pumpAndSettle();
+
+    expect(repository.fetchCount, 3);
+    expect(find.text('Вход с нового устройства'), findsOneWidget);
+    expect(
+      find.text('Нет соединения с сервером. Проверьте интернет.'),
+      findsNothing,
+    );
+  });
+
+  testWidgets('failed mark-read shows an action-specific retry', (
+    tester,
+  ) async {
+    final repository = _ReadFailureRepository();
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          notificationsProvider.overrideWith(
+            (ref) => NotificationsNotifier(repository),
+          ),
+        ],
+        child: const MaterialApp(home: NotificationsScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Отметить прочитанным'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('Нет соединения с сервером. Проверьте интернет.'),
+      findsOneWidget,
+    );
+    expect(find.text('Повторить'), findsOneWidget);
+    expect(find.text('Отметить прочитанным'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    await tester.tap(find.text('Повторить'));
+    await tester.pumpAndSettle();
+
+    expect(repository.markReadCount, 2);
+    expect(find.text('Отметить прочитанным'), findsNothing);
+  });
+
   testWidgets('непрочитанные уведомления показывают действия, а не состояние', (
     tester,
   ) async {

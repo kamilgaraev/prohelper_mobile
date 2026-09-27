@@ -12,6 +12,7 @@ import '../../../core/network/dio_client.dart';
 import '../../../core/network/mobile_api_response.dart';
 import '../../../core/storage/isar_service.dart';
 import '../../../core/storage/encrypted_local_file_cache.dart';
+import '../../../core/sync/queued_sync_operation.dart';
 import '../../../core/sync/sync_queue_draft.dart';
 import '../../../core/sync/sync_queue_provider.dart';
 import '../../../core/sync/sync_queue_service.dart';
@@ -785,12 +786,16 @@ class LegalDocumentRepository {
               ..._queueIdentity(identityAtStart, documentId),
             },
           ),
+          initialFailure: error,
         );
         if (_currentOwnerIdentity?.call() != identityAtStart) {
           await service.delete(queued.id);
           throw StateError('Владелец данных изменился во время действия.');
         }
-        throw SyncQueuedException(queueId: queued.id);
+        throw SyncQueuedException(
+          queueId: queued.id,
+          requiresReview: queued.status == SyncOperationStatuses.conflict,
+        );
       }
       throw ApiException.fromDio(error);
     }
@@ -895,13 +900,17 @@ class LegalDocumentRepository {
               ),
             ],
           ),
+          initialFailure: error,
         );
         if (_currentOwnerIdentity?.call() != identity) {
           await service.delete(queued.id);
           await fileCache.deleteStagedUpload(stagedPath);
           throw StateError('Владелец данных изменился во время загрузки.');
         }
-        throw SyncQueuedException(queueId: queued.id);
+        throw SyncQueuedException(
+          queueId: queued.id,
+          requiresReview: queued.status == SyncOperationStatuses.conflict,
+        );
       }
       await fileCache.deleteStagedUpload(stagedPath);
       throw ApiException.fromDio(error);

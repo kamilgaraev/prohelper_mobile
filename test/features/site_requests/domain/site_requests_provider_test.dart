@@ -1,4 +1,6 @@
-﻿import 'package:dio/dio.dart';
+import 'dart:async';
+
+import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:prohelpers_mobile/core/network/api_exception.dart';
 import 'package:prohelpers_mobile/features/site_requests/data/site_request_model.dart';
@@ -18,6 +20,7 @@ class _FakeSiteRequestsRepository extends SiteRequestsRepository {
   String? loadedStatus;
   int? loadedProjectId;
   SiteRequestsScope? loadedScope;
+  Completer<List<SiteRequestModel>>? delayedResult;
 
   @override
   Future<List<SiteRequestModel>> fetchSiteRequests({
@@ -49,7 +52,7 @@ class _FakeSiteRequestsRepository extends SiteRequestsRepository {
     loadedProjectId = projectId;
     loadedScope = scope;
 
-    return page == 1 ? [_request] : const [];
+    return delayedResult?.future ?? (page == 1 ? [_request] : const []);
   }
 
   @override
@@ -130,5 +133,17 @@ void main() {
       notifier.state.error,
       'Данные заявки пришли неполными. Обновите экран и повторите попытку.',
     );
+  });
+  test('завершает загрузку без ошибки после закрытия экрана', () async {
+    final repository =
+        _FakeSiteRequestsRepository()
+          ..delayedResult = Completer<List<SiteRequestModel>>();
+    final notifier = SiteRequestsNotifier(repository, initialProjectId: 15);
+
+    final loading = notifier.loadRequests(refresh: true);
+    notifier.dispose();
+    repository.delayedResult!.complete([_request]);
+
+    await loading;
   });
 }

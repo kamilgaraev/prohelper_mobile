@@ -59,6 +59,9 @@ class _BudgetEstimatesScreenState extends ConsumerState<BudgetEstimatesScreen> {
     final state = ref.watch(budgetEstimatesProvider);
     final selectedProject = ref.watch(projectsProvider).selectedProject;
     final projectId = selectedProject?.serverId;
+    final compactTitle =
+        MediaQuery.sizeOf(context).width < 390 ||
+        MediaQuery.textScalerOf(context).scale(1) > 1.15;
 
     if (state.projectId != projectId && !state.isLoading) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -72,7 +75,7 @@ class _BudgetEstimatesScreenState extends ConsumerState<BudgetEstimatesScreen> {
         appBar: AppBar(
           backgroundColor: Colors.transparent,
           elevation: 0,
-          title: const Text('Сметы и бюджет'),
+          title: Text(compactTitle ? 'Сметы' : 'Сметы и бюджет'),
           actions: [
             IconButton(
               tooltip: 'Обновить',
@@ -570,6 +573,9 @@ class _BudgetHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final compact =
+        MediaQuery.sizeOf(context).width < 390 ||
+        MediaQuery.textScalerOf(context).scale(1) > 1.15;
 
     return ProCard(
       child: Column(
@@ -583,26 +589,46 @@ class _BudgetHeader extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 12),
-          Row(
+          Flex(
+            direction: compact ? Axis.vertical : Axis.horizontal,
+            crossAxisAlignment:
+                compact ? CrossAxisAlignment.stretch : CrossAxisAlignment.start,
             children: [
-              Expanded(
-                child: _MetricTile(
+              if (compact)
+                _MetricTile(
                   label: 'Бюджет',
                   value: _formatMoney(summary.budget.projectBudgetAmount),
                   color: theme.colorScheme.primary,
+                )
+              else
+                Expanded(
+                  child: _MetricTile(
+                    label: 'Бюджет',
+                    value: _formatMoney(summary.budget.projectBudgetAmount),
+                    color: theme.colorScheme.primary,
+                  ),
                 ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: _MetricTile(
+              const SizedBox(width: 10, height: 10),
+              if (compact)
+                _MetricTile(
                   label: 'Остаток',
                   value: _formatMoney(summary.budget.budgetRemaining),
                   color:
                       (summary.budget.budgetRemaining ?? 0) < 0
                           ? AppColors.error
                           : AppColors.success,
+                )
+              else
+                Expanded(
+                  child: _MetricTile(
+                    label: 'Остаток',
+                    value: _formatMoney(summary.budget.budgetRemaining),
+                    color:
+                        (summary.budget.budgetRemaining ?? 0) < 0
+                            ? AppColors.error
+                            : AppColors.success,
+                  ),
                 ),
-              ),
             ],
           ),
         ],
@@ -618,31 +644,44 @@ class _BudgetSummaryStrip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final compact =
+        MediaQuery.sizeOf(context).width < 390 ||
+        MediaQuery.textScalerOf(context).scale(1) > 1.15;
+    final metrics = [
+      _MetricTile(
+        label: 'Сметы',
+        value: summary.totals.estimatesCount.toString(),
+        color: Theme.of(context).colorScheme.primary,
+      ),
+      _MetricTile(
+        label: 'Согласовано',
+        value: _formatMoney(summary.totals.approvedAmountWithVat),
+        color: AppColors.success,
+      ),
+      _MetricTile(
+        label: 'Изменения',
+        value: _formatMoney(summary.budget.pendingChangeDelta),
+        color: AppColors.warning,
+      ),
+    ];
+    if (compact) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (var index = 0; index < metrics.length; index++) ...[
+            if (index > 0) const SizedBox(height: 10),
+            metrics[index],
+          ],
+        ],
+      );
+    }
     return Row(
       children: [
-        Expanded(
-          child: _MetricTile(
-            label: 'Сметы',
-            value: summary.totals.estimatesCount.toString(),
-            color: Theme.of(context).colorScheme.primary,
-          ),
-        ),
+        Expanded(child: metrics[0]),
         const SizedBox(width: 10),
-        Expanded(
-          child: _MetricTile(
-            label: 'Согласовано',
-            value: _formatMoney(summary.totals.approvedAmountWithVat),
-            color: AppColors.success,
-          ),
-        ),
+        Expanded(child: metrics[1]),
         const SizedBox(width: 10),
-        Expanded(
-          child: _MetricTile(
-            label: 'Изменения',
-            value: _formatMoney(summary.budget.pendingChangeDelta),
-            color: AppColors.warning,
-          ),
-        ),
+        Expanded(child: metrics[2]),
       ],
     );
   }
@@ -1037,7 +1076,7 @@ class _MetricTile extends StatelessWidget {
               fontWeight: FontWeight.w900,
               color: theme.colorScheme.onSurface,
             ),
-            maxLines: 1,
+            maxLines: 2,
             overflow: TextOverflow.ellipsis,
           ),
         ],

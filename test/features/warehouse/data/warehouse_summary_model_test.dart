@@ -1,4 +1,4 @@
-﻿import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_test/flutter_test.dart';
 import 'package:prohelpers_mobile/features/warehouse/data/warehouse_summary_model.dart';
 
 void main() {
@@ -19,20 +19,19 @@ void main() {
       expect(movement.movementTypeLabel, 'Списание');
     });
 
-    test('отклоняет translation key вместо готового label', () {
-      expect(
-        () => WarehouseMovementModel.fromJson({
-          'id': 1,
-          'movement_type': 'write_off',
-          'movement_type_label': 'mobile_warehouse.movement_types.write_off',
-          'quantity': 5,
-          'price': 1200,
-          'warehouse_name': 'Основной склад',
-          'material_name': 'Цемент',
-          'photo_gallery': [],
-        }),
-        throwsFormatException,
-      );
+    test('подставляет русскую подпись вместо ключа перевода', () {
+      final movement = WarehouseMovementModel.fromJson({
+        'id': 1,
+        'movement_type': 'write_off',
+        'movement_type_label': 'mobile_warehouse.movement_types.write_off',
+        'quantity': 5,
+        'price': 1200,
+        'warehouse_name': 'Основной склад',
+        'material_name': 'Цемент',
+        'photo_gallery': [],
+      });
+
+      expect(movement.movementTypeLabel, 'Списание');
     });
 
     test('сохраняет фото галереи движения', () {
@@ -61,19 +60,38 @@ void main() {
       );
     });
 
-    test('отклоняет движение без обязательного материала', () {
-      expect(
-        () => WarehouseMovementModel.fromJson({
-          'id': 2,
-          'movement_type': 'receipt',
-          'movement_type_label': 'Приход',
-          'quantity': 3,
-          'price': 450,
-          'warehouse_name': 'Основной склад',
+    test('показывает движение при отсутствующих связанных именах', () {
+      final movement = WarehouseMovementModel.fromJson({
+        'id': 2,
+        'movement_type': 'reserved_issue',
+        'movement_type_label': 'mobile_warehouse.movement_types.reserved_issue',
+        'quantity': 3,
+        'price': 450,
+        'warehouse_name': null,
+        'photo_gallery': [],
+      });
+
+      expect(movement.movementTypeLabel, 'Выдача из резерва');
+      expect(movement.warehouseName, isNull);
+      expect(movement.materialName, isNull);
+    });
+
+    test('читает резервирование и снятие резерва', () {
+      for (final (type, label) in [
+        ('reservation', 'Резервирование'),
+        ('unreservation', 'Снятие резерва'),
+      ]) {
+        final movement = WarehouseMovementModel.fromJson({
+          'id': 3,
+          'movement_type': type,
+          'movement_type_label': 'mobile_warehouse.movement_types.$type',
+          'quantity': 2,
+          'price': 100,
           'photo_gallery': [],
-        }),
-        throwsFormatException,
-      );
+        });
+
+        expect(movement.movementTypeLabel, label);
+      }
     });
   });
 

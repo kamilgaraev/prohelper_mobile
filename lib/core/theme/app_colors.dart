@@ -1,45 +1,39 @@
 ﻿import 'package:flutter/material.dart';
 
 class AppColors {
-  // Brand Colors - Industrial & Professional
-  static const Color primary = Color(0xFF007AFF); // Status Blue
-  static const Color primaryDark = Color(0xFF0056B3);
-  static const Color secondary = Color(0xFFFF9500); // Warning Orange
+  static const Color primary = Color(0xFFF16A28);
+  static const Color primaryDark = Color(0xFFE86020);
+  static const Color secondary = Color(0xFFC4B08A);
 
-  // Neutral Colors - Industrial Contrast
-  // Neutral Colors - Industrial Contrast (Dark)
-  static const Color background = Color(0xFF121214); // Deep matte black
-  static const Color surface = Color(0xFF1C1C1E); // Elevated surface
-  static const Color surfaceLight = Color(0xFF2C2C2E); // For borders/dividers
-  static const Color textPrimary = Color(0xFFFFFFFF);
-  static const Color textSecondary = Color(0xFF8E8E93);
+  static const Color background = Color(0xFF161513);
+  static const Color surface = Color(0xFF221F1C);
+  static const Color surfaceLight = Color(0xFF332F2B);
+  static const Color textPrimary = Color(0xFFE8E4DC);
+  static const Color textSecondary = Color(0xFFA8A49A);
 
-  // Neutral Colors - Industrial Contrast (Light)
-  static const Color backgroundLight = Color(0xFFF2F2F7); // iOS System Gray 6
-  static const Color surfaceLightMode = Color(0xFFFFFFFF); // Pure white surface
-  static const Color borderLight = Color(0xFFD1D1D6); // System Gray 4
-  static const Color textPrimaryLight = Color(0xFF000000);
+  static const Color backgroundLight = Color(0xFFF6F2F1);
+  static const Color surfaceLightMode = Color(0xFFFFFFFF);
+  static const Color borderLight = Color(0xFFDCDED5);
+  static const Color textPrimaryLight = Color(0xFF080E14);
 
-  // Accents & State
-  static const Color success = Color(0xFF34C759);
-  static const Color error = Color(0xFFFF3B30);
-  static const Color warning = Color(0xFFFF9500);
+  static const Color success = Color(0xFF8FCB6A);
+  static const Color error = Color(0xFFE07068);
+  static const Color warning = Color(0xFFE0A24B);
 
-  // Premium Gradients - Subdued/Functional
   static const LinearGradient primaryGradient = LinearGradient(
-    colors: [Color(0xFF007AFF), Color(0xFF0056B3)],
+    colors: [primary, primaryDark],
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
   );
 
   static const LinearGradient cardGradient = LinearGradient(
-    colors: [Color(0xFF1C1C1E), Color(0xFF121214)],
+    colors: [surface, background],
     begin: Alignment.topCenter,
     end: Alignment.bottomCenter,
   );
 
   static const LinearGradient darkGradient = LinearGradient(
-    colors: [Color(0xFF1C1C1E), Color(0xFF2C2C2E)],
+    colors: [surface, surfaceLight],
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
   );

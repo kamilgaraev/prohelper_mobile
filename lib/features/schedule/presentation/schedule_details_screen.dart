@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/error/user_message.dart';
+import '../../../core/design/pro_status.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../auth/domain/auth_provider.dart';
@@ -9,6 +10,7 @@ import '../../../core/widgets/app_empty_state.dart';
 import '../../../core/widgets/app_error_state.dart';
 import '../../../core/widgets/app_loading_state.dart';
 import '../../../core/widgets/industrial_card.dart';
+import '../../../core/widgets/pro_status_banner.dart';
 import '../data/schedule_model.dart';
 import '../data/schedule_repository.dart';
 import '../domain/schedule_provider.dart';
@@ -200,6 +202,8 @@ class _ScheduleDetailsScreenState extends ConsumerState<ScheduleDetailsScreen> {
               )
               : _ScheduleDetailsContent(
                 detail: state.detail!,
+                fromCache: state.fromCache,
+                cacheError: state.error,
                 searchController: _searchController,
                 searchQuery: _searchQuery,
                 selectedFilter: _selectedFilter,
@@ -229,6 +233,8 @@ class _ScheduleDetailsScreenState extends ConsumerState<ScheduleDetailsScreen> {
 class _ScheduleDetailsContent extends StatelessWidget {
   const _ScheduleDetailsContent({
     required this.detail,
+    required this.fromCache,
+    required this.cacheError,
     required this.searchController,
     required this.searchQuery,
     required this.selectedFilter,
@@ -241,6 +247,8 @@ class _ScheduleDetailsContent extends StatelessWidget {
   });
 
   final ScheduleDetailsModel detail;
+  final bool fromCache;
+  final String? cacheError;
   final TextEditingController searchController;
   final String searchQuery;
   final _TaskFilter selectedFilter;
@@ -269,6 +277,19 @@ class _ScheduleDetailsContent extends StatelessWidget {
       child: CustomScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
         slivers: [
+          if (fromCache)
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+              sliver: SliverToBoxAdapter(
+                child: ProStatusBanner(
+                  title: 'Сохранённые данные',
+                  description:
+                      cacheError ??
+                      'Показаны данные с устройства. Они могут быть неактуальны.',
+                  tone: ProStatusTone.info,
+                ),
+              ),
+            ),
           SliverPadding(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
             sliver: SliverToBoxAdapter(

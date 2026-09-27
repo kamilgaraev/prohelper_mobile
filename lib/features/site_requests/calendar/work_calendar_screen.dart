@@ -185,31 +185,54 @@ class _DateSelector extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final compact =
+        MediaQuery.sizeOf(context).width < 390 ||
+        MediaQuery.textScalerOf(context).scale(1) > 1.15;
     return ProCard(
-      child: Row(
+      child: Column(
         children: [
-          IconButton(
-            tooltip: 'Предыдущий день',
-            onPressed: onPrevious,
-            icon: const Icon(Icons.chevron_left_rounded),
-          ),
-          Expanded(
-            child: TextButton.icon(
-              onPressed: onPick,
-              icon: const Icon(Icons.calendar_month_outlined),
-              label: Text(
-                _dateLabel(date),
-                style: theme.textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w700,
-                ),
+          Row(
+            children: [
+              IconButton(
+                tooltip: 'Предыдущий день',
+                onPressed: onPrevious,
+                icon: const Icon(Icons.chevron_left_rounded),
               ),
-            ),
+              Expanded(
+                child:
+                    compact
+                        ? TextButton(
+                          onPressed: onPick,
+                          child: Text(
+                            _compactDateLabel(date),
+                            maxLines: 1,
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        )
+                        : TextButton.icon(
+                          onPressed: onPick,
+                          icon: const Icon(Icons.calendar_month_outlined),
+                          label: Text(
+                            _dateLabel(date),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+              ),
+              IconButton(
+                tooltip: 'Следующий день',
+                onPressed: onNext,
+                icon: const Icon(Icons.chevron_right_rounded),
+              ),
+            ],
           ),
-          IconButton(
-            tooltip: 'Следующий день',
-            onPressed: onNext,
-            icon: const Icon(Icons.chevron_right_rounded),
-          ),
+          if (compact)
+            Text(_weekdayLabel(date), style: theme.textTheme.bodyMedium),
         ],
       ),
     );
@@ -318,7 +341,11 @@ class _CalendarEventCard extends StatelessWidget {
 }
 
 String _dateLabel(DateTime date) {
-  final days = const [
+  return '${_weekdayLabel(date)}, ${_shortDateLabel(date)}';
+}
+
+String _weekdayLabel(DateTime date) {
+  const days = [
     'понедельник',
     'вторник',
     'среда',
@@ -327,7 +354,18 @@ String _dateLabel(DateTime date) {
     'суббота',
     'воскресенье',
   ];
+  return days[date.weekday - 1];
+}
+
+String _shortDateLabel(DateTime date) {
   final day = date.day.toString().padLeft(2, '0');
   final month = date.month.toString().padLeft(2, '0');
-  return '${days[date.weekday - 1]}, $day.$month.${date.year}';
+  return '$day.$month.${date.year}';
+}
+
+String _compactDateLabel(DateTime date) {
+  final day = date.day.toString().padLeft(2, '0');
+  final month = date.month.toString().padLeft(2, '0');
+  final year = (date.year % 100).toString().padLeft(2, '0');
+  return '$day.$month.$year';
 }

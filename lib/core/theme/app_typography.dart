@@ -1,7 +1,10 @@
 ﻿import 'package:flutter/material.dart';
 
 class AppTypography {
+  static const String fontFamily = 'IBM Plex Sans';
+
   static TextStyle h1(BuildContext context) => TextStyle(
+    fontFamily: fontFamily,
     fontSize: 28,
     fontWeight: FontWeight.w800,
     color: Theme.of(context).colorScheme.onSurface,
@@ -9,6 +12,7 @@ class AppTypography {
   );
 
   static TextStyle h2(BuildContext context) => TextStyle(
+    fontFamily: fontFamily,
     fontSize: 20,
     fontWeight: FontWeight.w700,
     color: Theme.of(context).colorScheme.onSurface,
@@ -16,12 +20,14 @@ class AppTypography {
   );
 
   static TextStyle bodyLarge(BuildContext context) => TextStyle(
+    fontFamily: fontFamily,
     fontSize: 16,
     fontWeight: FontWeight.w600,
     color: Theme.of(context).colorScheme.onSurface,
   );
 
   static TextStyle bodyMedium(BuildContext context) => TextStyle(
+    fontFamily: fontFamily,
     fontSize: 14,
     fontWeight: FontWeight.w500,
     color: Theme.of(context).colorScheme.onSurface,
@@ -29,6 +35,7 @@ class AppTypography {
   );
 
   static TextStyle caption(BuildContext context) => TextStyle(
+    fontFamily: fontFamily,
     fontSize: 12,
     fontWeight: FontWeight.w400,
     color: Theme.of(context).colorScheme.onSurfaceVariant,
@@ -36,6 +43,7 @@ class AppTypography {
   );
 
   static TextStyle bodySmall(BuildContext context) => TextStyle(
+    fontFamily: fontFamily,
     fontSize: 12,
     fontWeight: FontWeight.w500,
     color: Theme.of(context).colorScheme.onSurfaceVariant,
@@ -43,9 +51,9 @@ class AppTypography {
   );
 
   static TextStyle get button => const TextStyle(
+    fontFamily: fontFamily,
     fontSize: 16,
     fontWeight: FontWeight.w700,
-    color: Colors.white,
   );
 
   static TextStyle get mono => const TextStyle(

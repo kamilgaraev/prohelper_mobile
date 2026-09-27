@@ -47,40 +47,53 @@ class WorkCalendarDay {
   final List<ScheduleItemModel> schedules;
 }
 
-final workCalendarDayProvider = FutureProvider.autoDispose
-    .family<WorkCalendarDay, WorkCalendarQuery>((ref, query) async {
-      final requestsFuture =
-          query.loadRequests
-              ? ref
-                  .read(siteRequestsRepositoryProvider)
-                  .fetchSiteRequests(
-                    projectId: query.projectId,
-                    requiredFrom: query.date,
-                    requiredTo: query.date,
-                    perPage: 100,
-                    scope: SiteRequestsScope.own,
-                  )
-              : Future.value(<SiteRequestModel>[]);
-      final scheduleFuture =
-          query.loadSchedule
-              ? ref
-                  .read(scheduleRepositoryProvider)
-                  .fetchSchedules(projectId: query.projectId)
-              : Future.value(null);
-      final results = await Future.wait<Object?>([
-        requestsFuture,
-        scheduleFuture,
-      ]);
-      final requests = results[0] as List<SiteRequestModel>;
-      final schedule = results[1] as ScheduleOverviewModel?;
-      final schedules =
-          schedule?.schedules
-              .where((item) => _scheduleIncludesDate(item, query.date))
-              .toList(growable: false) ??
-          const <ScheduleItemModel>[];
+final workCalendarDayProvider = FutureProvider.autoDispose.family<
+  WorkCalendarDay,
+  WorkCalendarQuery
+>((ref, query) async {
+  final requestsFuture =
+      query.loadRequests
+          ? _loadDayRequests(ref.read(siteRequestsRepositoryProvider), query)
+          : Future.value(<SiteRequestModel>[]);
+  final scheduleFuture =
+      query.loadSchedule
+          ? ref
+              .read(scheduleRepositoryProvider)
+              .fetchSchedules(projectId: query.projectId)
+          : Future.value(null);
+  final results = await Future.wait<Object?>([requestsFuture, scheduleFuture]);
+  final requests = results[0] as List<SiteRequestModel>;
+  final schedule = results[1] as ScheduleOverviewModel?;
+  final schedules =
+      schedule?.schedules
+          .where((item) => _scheduleIncludesDate(item, query.date))
+          .toList(growable: false) ??
+      const <ScheduleItemModel>[];
 
-      return WorkCalendarDay(requests: requests, schedules: schedules);
-    });
+  return WorkCalendarDay(requests: requests, schedules: schedules);
+});
+
+Future<List<SiteRequestModel>> _loadDayRequests(
+  SiteRequestsRepository repository,
+  WorkCalendarQuery query,
+) async {
+  const pageSize = 50;
+  final requests = <SiteRequestModel>[];
+  var page = 1;
+  while (true) {
+    final batch = await repository.fetchSiteRequests(
+      projectId: query.projectId,
+      requiredFrom: query.date,
+      requiredTo: query.date,
+      page: page,
+      perPage: pageSize,
+      scope: SiteRequestsScope.all,
+    );
+    requests.addAll(batch);
+    if (batch.length < pageSize) return requests;
+    page++;
+  }
+}
 
 bool _scheduleIncludesDate(ScheduleItemModel schedule, DateTime date) {
   final start = _dateOnly(schedule.plannedStartDate);

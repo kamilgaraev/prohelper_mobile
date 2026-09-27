@@ -27,4 +27,28 @@ void main() {
       throwsFormatException,
     );
   });
+
+  test('shows financial details with business labels', () {
+    final document = PaymentDocumentModel.fromJson({
+      'id': 18,
+      'status': 'approved',
+      'direction': 'outgoing',
+      'invoice_type': 'act',
+      'document_date': '2026-09-04',
+    });
+
+    expect(document.status, 'Утвержден');
+    expect(
+      document.detailValues.map((entry) => '${entry.key}: ${entry.value}'),
+      contains('Направление: Исходящий (кредиторка)'),
+    );
+    expect(
+      document.detailValues.map((entry) => '${entry.key}: ${entry.value}'),
+      contains('Тип счета: По акту выполненных работ'),
+    );
+    expect(
+      document.detailValues.map((entry) => '${entry.key}: ${entry.value}'),
+      contains('Дата документа: 04.09.2026'),
+    );
+  });
 }

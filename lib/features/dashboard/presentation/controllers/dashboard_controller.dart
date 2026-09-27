@@ -1,5 +1,6 @@
-﻿import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:prohelpers_mobile/core/error/user_message.dart';
+import 'dart:async';
 import 'package:prohelpers_mobile/features/auth/domain/auth_provider.dart';
 import 'package:prohelpers_mobile/features/dashboard/data/dashboard_repository.dart';
 import 'package:prohelpers_mobile/features/dashboard/data/dashboard_widget_model.dart';
@@ -32,27 +33,35 @@ class DashboardState {
 }
 
 class DashboardController extends StateNotifier<DashboardState> {
-  DashboardController(this._repository, {required bool canLoad})
-    : super(const DashboardState()) {
+  DashboardController(
+    this._repository, {
+    required bool canLoad,
+    this.requestTimeout = const Duration(seconds: 32),
+  }) : super(const DashboardState()) {
     if (canLoad) {
       loadDashboard();
     }
   }
 
   final DashboardRepository _repository;
+  final Duration requestTimeout;
 
   Future<void> loadDashboard() async {
     state = state.copyWith(isLoading: true, error: null);
 
     try {
-      final widgets = await _repository.fetchWidgets();
+      final widgets = await _repository.fetchWidgets().timeout(requestTimeout);
+      if (!mounted) return;
       state = state.copyWith(isLoading: false, widgets: widgets);
     } catch (error) {
-      final currentWidgets = state.widgets;
+      if (!mounted) return;
       state = state.copyWith(
         isLoading: false,
-        widgets: currentWidgets,
-        error: currentWidgets.isEmpty ? UserMessage.fromError(error) : null,
+        widgets: state.widgets,
+        error:
+            error is TimeoutException
+                ? 'Сервер не ответил вовремя. Попробуйте ещё раз.'
+                : UserMessage.fromError(error),
       );
     }
   }
@@ -60,10 +69,14 @@ class DashboardController extends StateNotifier<DashboardState> {
 
 final dashboardControllerProvider =
     StateNotifierProvider<DashboardController, DashboardState>((ref) {
-      final authState = ref.watch(authProvider);
+      final identity = ref.watch(
+        authProvider.select(
+          (state) => state is AuthAuthenticated ? state.sessionIdentity : null,
+        ),
+      );
 
       return DashboardController(
         ref.read(dashboardRepositoryProvider),
-        canLoad: authState is AuthAuthenticated,
+        canLoad: identity != null,
       );
     });

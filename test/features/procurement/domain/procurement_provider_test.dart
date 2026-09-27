@@ -1,4 +1,6 @@
-﻿import 'package:dio/dio.dart';
+import 'dart:async';
+
+import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:prohelpers_mobile/core/network/api_exception.dart';
 import 'package:prohelpers_mobile/features/procurement/data/procurement_model.dart';
@@ -8,9 +10,13 @@ import 'package:prohelpers_mobile/features/procurement/domain/procurement_provid
 import '../procurement_test_data.dart';
 
 class _RecordingProcurementRepository extends ProcurementRepository {
-  _RecordingProcurementRepository({this.error}) : super(Dio());
+  _RecordingProcurementRepository({this.error, this.requestError})
+    : super(Dio());
 
   final Object? error;
+  final Object? requestError;
+  Completer<ProcurementPage<ProcurementPurchaseRequestModel>>? delayedRequests;
+  Completer<void>? requestStarted;
 
   int? loadedProjectId;
   int? fetchedOrderId;
@@ -37,6 +43,46 @@ class _RecordingProcurementRepository extends ProcurementRepository {
     refreshCount++;
     return ProcurementSummaryModel.fromJson(procurementSummaryJson());
   }
+
+  @override
+  Future<ProcurementPage<ProcurementPurchaseRequestModel>>
+  fetchPurchaseRequests({
+    int? projectId,
+    int page = 1,
+    String? status,
+    String? query,
+  }) async {
+    if (requestError != null) throw requestError!;
+    if (status == null && delayedRequests != null) {
+      requestStarted?.complete();
+      return delayedRequests!.future;
+    }
+    return ProcurementPage(
+      items: [
+        ProcurementPurchaseRequestModel.fromJson(
+          procurementPurchaseRequestJson(),
+        ),
+      ],
+      currentPage: page,
+      lastPage: 1,
+      total: 1,
+    );
+  }
+
+  @override
+  Future<ProcurementPage<ProcurementPurchaseOrderModel>> fetchPurchaseOrders({
+    int? projectId,
+    int page = 1,
+    String? status,
+    String? query,
+  }) async => ProcurementPage(
+    items: [
+      ProcurementPurchaseOrderModel.fromJson(procurementPurchaseOrderJson()),
+    ],
+    currentPage: page,
+    lastPage: 1,
+    total: 1,
+  );
 
   @override
   Future<ProcurementOrderDetailModel> fetchOrder(int id) async {
@@ -125,6 +171,42 @@ void main() {
       notifier.state.summary?.purchaseRequests.single.requestNumber,
       'PR-12',
     );
+  });
+
+  test('keeps summary available when the requests page fails', () async {
+    final notifier = ProcurementNotifier(
+      _RecordingProcurementRepository(requestError: Exception('offline')),
+    );
+
+    await notifier.loadSummary();
+
+    expect(notifier.state.summary, isNotNull);
+    expect(notifier.state.requestsError, isNotNull);
+    expect(notifier.state.orders.items, hasLength(1));
+  });
+
+  test('ignores request pages returned after a filter change', () async {
+    final repository =
+        _RecordingProcurementRepository()
+          ..delayedRequests = Completer()
+          ..requestStarted = Completer<void>();
+    final notifier = ProcurementNotifier(repository);
+    final initialLoad = notifier.loadSummary();
+    await repository.requestStarted!.future;
+
+    await notifier.filterRequests(status: 'pending');
+    repository.delayedRequests!.complete(
+      const ProcurementPage<ProcurementPurchaseRequestModel>(
+        items: [],
+        currentPage: 1,
+        lastPage: 1,
+        total: 0,
+      ),
+    );
+    await initialLoad;
+
+    expect(notifier.state.requestStatus, 'pending');
+    expect(notifier.state.requests.items, hasLength(1));
   });
 
   test('runs procurement actions and refreshes summary', () async {

@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/network/api_exception.dart';
+import '../../../core/sync/queued_sync_operation.dart';
 import '../../../core/sync/sync_queue_service.dart';
 import '../../../core/widgets/app_error_notice.dart';
 import '../data/construction_journal_models.dart';
@@ -26,7 +27,7 @@ class JournalEntryFormScreen extends ConsumerStatefulWidget {
       _JournalEntryFormScreenState();
 }
 
-enum _JournalSyncStatus { saved, queued, unsent, rejected }
+enum _JournalSyncStatus { saved, queued, review, unsent, rejected }
 
 class _JournalEntryFormScreenState
     extends ConsumerState<JournalEntryFormScreen> {
@@ -50,6 +51,7 @@ class _JournalEntryFormScreenState
   bool _isSaving = false;
   bool _isRestoring = true;
   bool _recoveryFailed = false;
+  bool _requiresManualReview = false;
   String? _operationKey;
   String? _submitOperationKey;
   PendingJournalEntryOperation? _pendingOperation;
@@ -63,6 +65,10 @@ class _JournalEntryFormScreenState
 
   bool get _hasRecoveredEntry =>
       _recoveredEntry != null || _pendingOperation?.entryId != null;
+
+  bool get _mustReviewBeforeRetry =>
+      _requiresManualReview ||
+      _pendingOperation?.operation.status == SyncOperationStatuses.conflict;
 
   List<ConstructionJournalEstimateOption> get _estimates =>
       _options?.estimates ?? const [];
@@ -159,6 +165,9 @@ class _JournalEntryFormScreenState
       }
 
       _pendingOperation = pending;
+      final requiresReview =
+          pending.operation.status == SyncOperationStatuses.conflict;
+      _requiresManualReview = requiresReview;
       if (pending.entryId != null) {
         _submitOperationKey =
             pending.payload['stage'] == 'submit'
@@ -175,23 +184,41 @@ class _JournalEntryFormScreenState
           }
           _recoveredEntry = entry;
           _restoreEntry(entry);
-          _syncStatus = _JournalSyncStatus.unsent;
+          _syncStatus =
+              requiresReview
+                  ? _JournalSyncStatus.review
+                  : _JournalSyncStatus.unsent;
           _recoveryNotice =
-              'Запись создана, отправка ещё не завершена. Можно продолжить.';
+              requiresReview
+                  ? pending.operation.lastBusinessError ??
+                      SyncQueueMessages.unknownOutcome
+                  : 'Запись создана, отправка ещё не завершена. Можно продолжить.';
         } on ApiException {
           if (!mounted) {
             return;
           }
           _restorePayload(pending.payload);
-          _syncStatus = _JournalSyncStatus.unsent;
+          _syncStatus =
+              requiresReview
+                  ? _JournalSyncStatus.review
+                  : _JournalSyncStatus.unsent;
           _recoveryNotice =
-              'Сохранённая запись ожидает подтверждения сервера. Повторите отправку позже.';
+              requiresReview
+                  ? pending.operation.lastBusinessError ??
+                      SyncQueueMessages.unknownOutcome
+                  : 'Сохранённая запись ожидает подтверждения сервера. Повторите отправку позже.';
         }
       } else {
         _restorePayload(pending.payload);
-        _syncStatus = _JournalSyncStatus.queued;
+        _syncStatus =
+            requiresReview
+                ? _JournalSyncStatus.review
+                : _JournalSyncStatus.queued;
         _recoveryNotice =
-            'Операция поставлена в очередь. Повторите отправку после восстановления связи.';
+            requiresReview
+                ? pending.operation.lastBusinessError ??
+                    SyncQueueMessages.unknownOutcome
+                : 'Операция поставлена в очередь и будет отправлена после восстановления связи.';
       }
       setState(() {});
     } catch (_) {
@@ -345,7 +372,8 @@ class _JournalEntryFormScreenState
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(_syncStatusText ?? ''),
-              if ((_syncStatusText ?? '').isNotEmpty) const SizedBox(height: 12),
+              if ((_syncStatusText ?? '').isNotEmpty)
+                const SizedBox(height: 12),
               Text(
                 _recoveryNotice ??
                     'Создание записи на сервере ещё не подтверждено.',
@@ -358,7 +386,7 @@ class _JournalEntryFormScreenState
               const SizedBox(height: 16),
               ElevatedButton(
                 onPressed:
-                    _isSaving || _isRestoring
+                    _isSaving || _isRestoring || _mustReviewBeforeRetry
                         ? null
                         : () {
                           if (_recoveryFailed) {
@@ -372,7 +400,11 @@ class _JournalEntryFormScreenState
                             );
                           }
                         },
-                child: const Text('Продолжить отправку'),
+                child: Text(
+                  _mustReviewBeforeRetry
+                      ? 'Проверьте результат перед повтором'
+                      : 'Продолжить отправку',
+                ),
               ),
             ],
           ),
@@ -474,7 +506,7 @@ class _JournalEntryFormScreenState
               Expanded(
                 child: OutlinedButton(
                   onPressed:
-                      _isSaving || _isRestoring
+                      _isSaving || _isRestoring || _mustReviewBeforeRetry
                           ? null
                           : () => _save(isDraft: true),
                   child: const Text('Сохранить черновик'),
@@ -484,7 +516,7 @@ class _JournalEntryFormScreenState
               Expanded(
                 child: ElevatedButton(
                   onPressed:
-                      _isSaving || _isRestoring
+                      _isSaving || _isRestoring || _mustReviewBeforeRetry
                           ? null
                           : () => _save(isDraft: false),
                   child: const Text('Отправить'),
@@ -1106,9 +1138,12 @@ class _JournalEntryFormScreenState
                 : '';
         setState(() {
           if (error is SyncQueuedException) {
-            _syncStatus = _JournalSyncStatus.queued;
-            _recoveryNotice =
-                'Операция поставлена в очередь. Повторите отправку после восстановления связи.';
+            _requiresManualReview = error.requiresReview;
+            _syncStatus =
+                error.requiresReview
+                    ? _JournalSyncStatus.review
+                    : _JournalSyncStatus.queued;
+            _recoveryNotice = error.message;
           } else if (rejection.isNotEmpty) {
             _syncStatus = _JournalSyncStatus.rejected;
             _serverRejectionReason = rejection;
@@ -1143,6 +1178,7 @@ class _JournalEntryFormScreenState
     return switch (_syncStatus) {
       _JournalSyncStatus.saved => 'Сохранено',
       _JournalSyncStatus.queued => 'В очереди',
+      _JournalSyncStatus.review => 'Нужно проверить результат',
       _JournalSyncStatus.unsent => 'Не отправлено',
       _JournalSyncStatus.rejected =>
         _serverRejectionReason == null || _serverRejectionReason!.isEmpty

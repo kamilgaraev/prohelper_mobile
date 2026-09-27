@@ -3,6 +3,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import '../models/user_context.dart';
 import '../providers/context_provider.dart';
 import '../providers/module_provider.dart';
+import '../../features/auth/domain/auth_provider.dart';
 
 class PermissionService {
   PermissionService({
@@ -17,7 +18,8 @@ class PermissionService {
 
   bool hasPermission(String permission) {
     final module = permission.split('.').first;
-    return grantedPermissions.contains(permission) ||
+    return grantedPermissions.contains('*') ||
+        grantedPermissions.contains(permission) ||
         grantedPermissions.contains('$module.*') ||
         grantedPermissions.contains('${module.replaceAll('_', '-')}.*') ||
         grantedPermissions.contains('${module.replaceAll('-', '_')}.*');
@@ -102,6 +104,10 @@ final permissionServiceProvider = Provider<PermissionService>((ref) {
   final context = ref.watch(userContextProvider);
   final modules = ref.watch(activeModulesProvider);
   final grants = <String>{};
+  final auth = ref.watch(authProvider);
+  if (auth is AuthAuthenticated) {
+    grants.addAll(auth.user.grantedPermissions);
+  }
   for (final module in ref.watch(modulesProvider).modules) {
     for (final permission in module.permissions) {
       if (permission == '*') {

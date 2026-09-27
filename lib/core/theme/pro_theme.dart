@@ -1,41 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'app_colors.dart';
+
+import '../design/pro_design_tokens.dart';
+import 'most_color_tokens.dart';
 
 class MostTheme {
-  // Industrial properties
-  static const double cardRadius = 8.0;
-  static const double buttonRadius = 12.0;
+  static const String fontFamily = 'IBM Plex Sans';
+  static const double cardRadius = ProRadius.sm;
+  static const double buttonRadius = ProRadius.sm;
   static const double borderWidth = 0.5;
   static const double glassBlurSigma = 20.0;
   static const double glassOpacity = 0.72;
   static const double glassBorderOpacity = 0.12;
-  static final Color borderColor = const Color(0xFF2C2C2E);
-
-  static Color statusNeutralColor(Brightness brightness) =>
-      brightness == Brightness.dark
-          ? const Color(0xFFC2C4CC)
-          : const Color(0xFF5D6470);
-
-  static Color statusInfoColor(Brightness brightness) =>
-      brightness == Brightness.dark
-          ? const Color(0xFF5EB1FF)
-          : const Color(0xFF0056B3);
-
-  static Color statusSuccessColor(Brightness brightness) =>
-      brightness == Brightness.dark
-          ? const Color(0xFF53D88A)
-          : const Color(0xFF087A3B);
-
-  static Color statusWarningColor(Brightness brightness) =>
-      brightness == Brightness.dark
-          ? const Color(0xFFFFC15A)
-          : const Color(0xFF8A5200);
-
-  static Color statusDangerColor(Brightness brightness) =>
-      brightness == Brightness.dark
-          ? const Color(0xFFFF746B)
-          : const Color(0xFFB42318);
+  static final Color borderColor = MostColorTokens.dark.line;
   static final SystemUiOverlayStyle lightSystemOverlayStyle =
       SystemUiOverlayStyle.dark.copyWith(
         statusBarColor: Colors.transparent,
@@ -63,56 +40,58 @@ class MostTheme {
     ),
   ];
 
-  static ThemeData get darkTheme {
-    final base = ThemeData.dark(useMaterial3: true);
-    final scheme = ColorScheme.fromSeed(
-      seedColor: AppColors.primary,
-      brightness: Brightness.dark,
-    ).copyWith(
-      primary: AppColors.primary,
-      onPrimary: Colors.white,
-      secondary: AppColors.secondary,
-      surface: AppColors.surface,
-      surfaceContainer: const Color(0xFF202124),
-      surfaceContainerHigh: const Color(0xFF25262A),
-      surfaceContainerHighest: const Color(0xFF2A2B30),
-      onSurface: AppColors.textPrimary,
-      onSurfaceVariant: const Color(0xFFC2C4CC),
-      outline: const Color(0xFF3A3C43),
-      error: AppColors.error,
-    );
+  static ThemeData get darkTheme => _build(MostColorTokens.dark);
+
+  static ThemeData get lightTheme => _build(MostColorTokens.light);
+
+  static ThemeData _build(MostColorTokens tokens) {
+    final scheme = tokens.colorScheme;
+    final isDark = scheme.brightness == Brightness.dark;
+    final base =
+        isDark
+            ? ThemeData.dark(useMaterial3: true)
+            : ThemeData.light(useMaterial3: true);
+    final textTheme = _buildTextTheme(base.textTheme, tokens);
 
     return base.copyWith(
-      scaffoldBackgroundColor: AppColors.background,
+      scaffoldBackgroundColor: tokens.paper,
       colorScheme: scheme,
-      textTheme: _buildTextTheme(base.textTheme, true),
+      textTheme: textTheme,
+      primaryTextTheme: textTheme,
       appBarTheme: AppBarTheme(
-        backgroundColor: AppColors.background,
-        foregroundColor: AppColors.textPrimary,
+        backgroundColor: tokens.paper,
+        foregroundColor: tokens.ink,
         elevation: 0,
         centerTitle: false,
-        systemOverlayStyle: darkSystemOverlayStyle,
-        titleTextStyle: _buildTextTheme(base.textTheme, true).titleLarge,
+        systemOverlayStyle:
+            isDark ? darkSystemOverlayStyle : lightSystemOverlayStyle,
+        titleTextStyle: textTheme.titleLarge,
       ),
       cardTheme: CardThemeData(
-        color: AppColors.surface,
-        shadowColor: Colors.black.withValues(alpha: 0.18),
+        color: tokens.card,
+        shadowColor: Colors.black.withValues(alpha: isDark ? 0.28 : 0.06),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(cardRadius),
         ),
       ),
       navigationBarTheme: NavigationBarThemeData(
         backgroundColor: scheme.surface,
-        indicatorColor: scheme.primaryContainer.withValues(alpha: 0.5),
+        indicatorColor: tokens.action.withValues(alpha: isDark ? 0.28 : 0.18),
         labelTextStyle: WidgetStatePropertyAll(
-          const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+          TextStyle(
+            fontFamily: fontFamily,
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+          ),
         ),
       ),
       bottomSheetTheme: BottomSheetThemeData(
         backgroundColor: scheme.surface,
         modalBackgroundColor: scheme.surface,
         shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+          borderRadius: BorderRadius.vertical(
+            top: Radius.circular(ProRadius.sheet),
+          ),
         ),
       ),
       floatingActionButtonTheme: _floatingActionButtonTheme(scheme),
@@ -124,86 +103,27 @@ class MostTheme {
     );
   }
 
-  static ThemeData get lightTheme {
-    final base = ThemeData.light(useMaterial3: true);
-    final scheme = ColorScheme.fromSeed(
-      seedColor: AppColors.primaryDark,
-      brightness: Brightness.light,
-    ).copyWith(
-      primary: AppColors.primaryDark,
-      onPrimary: Colors.white,
-      secondary: AppColors.secondary,
-      surface: AppColors.surfaceLightMode,
-      surfaceContainer: const Color(0xFFF7F8FA),
-      surfaceContainerHigh: const Color(0xFFF1F3F6),
-      surfaceContainerHighest: const Color(0xFFE8EBF0),
-      onSurface: AppColors.textPrimaryLight,
-      onSurfaceVariant: const Color(0xFF5D6470),
-      outline: const Color(0xFFD8DDE6),
-      error: AppColors.error,
-    );
-
-    return base.copyWith(
-      scaffoldBackgroundColor: const Color(0xFFF4F6F9),
-      colorScheme: scheme,
-      textTheme: _buildTextTheme(base.textTheme, false),
-      appBarTheme: AppBarTheme(
-        backgroundColor: const Color(0xFFF4F6F9),
-        foregroundColor: AppColors.textPrimaryLight,
-        elevation: 0,
-        centerTitle: false,
-        systemOverlayStyle: lightSystemOverlayStyle,
-        titleTextStyle: _buildTextTheme(base.textTheme, false).titleLarge,
-      ),
-      cardTheme: CardThemeData(
-        color: AppColors.surfaceLightMode,
-        shadowColor: Colors.black.withValues(alpha: 0.06),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(cardRadius),
-        ),
-      ),
-      navigationBarTheme: NavigationBarThemeData(
-        backgroundColor: scheme.surface,
-        indicatorColor: scheme.primaryContainer.withValues(alpha: 0.72),
-        labelTextStyle: WidgetStatePropertyAll(
-          const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
-        ),
-      ),
-      bottomSheetTheme: BottomSheetThemeData(
-        backgroundColor: scheme.surface,
-        modalBackgroundColor: scheme.surface,
-        shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
-        ),
-      ),
-      floatingActionButtonTheme: _floatingActionButtonTheme(scheme),
-      inputDecorationTheme: _inputDecorationTheme(scheme),
-      chipTheme: _chipTheme(scheme),
-      filledButtonTheme: _filledButtonTheme(scheme),
-      elevatedButtonTheme: _elevatedButtonTheme(scheme),
-      outlinedButtonTheme: _outlinedButtonTheme(scheme),
-    );
-  }
-
-  static TextTheme _buildTextTheme(TextTheme base, bool isDark) {
-    final textColor =
-        isDark ? AppColors.textPrimary : AppColors.textPrimaryLight;
-
-    return base.copyWith(
-      displayLarge: base.displayLarge?.copyWith(color: textColor),
-      bodyLarge: base.bodyLarge?.copyWith(color: textColor),
-      bodyMedium: base.bodyMedium?.copyWith(color: textColor),
-      labelSmall: base.labelSmall?.copyWith(
-        fontSize: 12,
-        color: isDark ? Colors.white70 : Colors.black54,
-        letterSpacing: 0,
-      ),
-      bodySmall: base.bodySmall?.copyWith(
-        fontSize: 12,
-        color: isDark ? Colors.white60 : Colors.black45,
-        letterSpacing: 0,
-      ),
-    );
+  static TextTheme _buildTextTheme(TextTheme base, MostColorTokens tokens) {
+    return base
+        .apply(
+          fontFamily: fontFamily,
+          bodyColor: tokens.ink,
+          displayColor: tokens.ink,
+        )
+        .copyWith(
+          labelSmall: base.labelSmall?.copyWith(
+            fontFamily: fontFamily,
+            fontSize: 12,
+            color: tokens.muted,
+            letterSpacing: 0,
+          ),
+          bodySmall: base.bodySmall?.copyWith(
+            fontFamily: fontFamily,
+            fontSize: 12,
+            color: tokens.muted,
+            letterSpacing: 0,
+          ),
+        );
   }
 
   static InputDecorationTheme _inputDecorationTheme(ColorScheme scheme) {
@@ -233,6 +153,7 @@ class MostTheme {
       side: BorderSide(color: scheme.outline.withValues(alpha: 0.16)),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
       labelStyle: TextStyle(
+        fontFamily: fontFamily,
         color: scheme.onSurface,
         fontSize: 12,
         fontWeight: FontWeight.w700,
@@ -248,7 +169,7 @@ class MostTheme {
         foregroundColor: scheme.onPrimary,
         disabledBackgroundColor: scheme.onSurface.withValues(alpha: 0.12),
         disabledForegroundColor: scheme.onSurface.withValues(alpha: 0.38),
-        minimumSize: const Size(0, 52),
+        minimumSize: const Size(0, ProTouchTarget.comfortable),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(buttonRadius),
         ),
@@ -263,7 +184,7 @@ class MostTheme {
         foregroundColor: scheme.onPrimary,
         disabledBackgroundColor: scheme.onSurface.withValues(alpha: 0.12),
         disabledForegroundColor: scheme.onSurface.withValues(alpha: 0.38),
-        minimumSize: const Size(0, 52),
+        minimumSize: const Size(0, ProTouchTarget.comfortable),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(buttonRadius),
         ),
@@ -278,6 +199,7 @@ class MostTheme {
       backgroundColor: scheme.primary,
       foregroundColor: scheme.onPrimary,
       extendedTextStyle: TextStyle(
+        fontFamily: fontFamily,
         color: scheme.onPrimary,
         fontSize: 16,
         fontWeight: FontWeight.w700,
@@ -289,7 +211,8 @@ class MostTheme {
   static OutlinedButtonThemeData _outlinedButtonTheme(ColorScheme scheme) {
     return OutlinedButtonThemeData(
       style: OutlinedButton.styleFrom(
-        minimumSize: const Size(0, 52),
+        foregroundColor: scheme.onSurface,
+        minimumSize: const Size(0, ProTouchTarget.comfortable),
         side: BorderSide(color: scheme.outline.withValues(alpha: 0.4)),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(buttonRadius),

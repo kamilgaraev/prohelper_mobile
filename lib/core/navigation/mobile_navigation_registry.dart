@@ -33,6 +33,7 @@ import 'package:prohelpers_mobile/features/quality_control/presentation/quality_
 import 'package:prohelpers_mobile/features/safety/presentation/safety_screen.dart';
 import 'package:prohelpers_mobile/features/schedule/presentation/schedule_screen.dart';
 import 'package:prohelpers_mobile/features/site_requests/domain/site_requests_scope.dart';
+import 'package:prohelpers_mobile/features/site_requests/presentation/screens/site_request_form_screen.dart';
 import 'package:prohelpers_mobile/features/site_requests/presentation/screens/site_requests_screen.dart';
 import 'package:prohelpers_mobile/features/site_requests/calendar/work_calendar_screen.dart';
 import 'package:prohelpers_mobile/features/system_field/presentation/one_c_exchange_screen.dart';
@@ -65,6 +66,7 @@ class MobileNavigationRegistry {
       recommendedReason: 'Быстро создать заявку',
       preferredContexts: <UserContext>{UserContext.field},
       builder: (_) => const SiteRequestsScreen(),
+      intentBuilder: (_) => const SiteRequestFormScreen(),
       aliases: <String>['site-requests'],
     ),
     MobileModuleDestination(
@@ -85,7 +87,7 @@ class MobileNavigationRegistry {
       adminGroup: MobileAdminGroup.resources,
       slug: 'site_request_approvals',
       title: 'Согласование заявок',
-      shortTitle: 'Согласования',
+      shortTitle: 'Согласовать',
       icon: Icons.fact_check_rounded,
       group: MobileModuleGroup.approvalsAndDocs,
       isPrimaryAction: true,

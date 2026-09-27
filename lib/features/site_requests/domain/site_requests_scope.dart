@@ -1,4 +1,5 @@
-﻿enum SiteRequestsScope {
+enum SiteRequestsScope {
+  all('all'),
   own('own'),
   approvals('approvals');
 

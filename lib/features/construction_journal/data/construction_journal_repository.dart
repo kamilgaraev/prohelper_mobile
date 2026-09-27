@@ -36,6 +36,36 @@ class ConstructionJournalRepository extends SyncQueueAwareRepository {
     int page = 1,
     int perPage = 20,
   }) async {
+    final data = await fetchJournalListPayload(
+      projectId: projectId,
+      page: page,
+      perPage: perPage,
+    );
+
+    return ConstructionJournalListPayload(
+      items:
+          _extractList(
+            data['items'],
+          ).map(ConstructionJournalModel.fromJson).toList(),
+      meta: JournalPaginationMeta.fromJson(_extractMap(data['meta'])),
+      summary: ConstructionJournalSummary.fromJournalListJson(
+        _extractMap(data['summary']),
+      ),
+      availableActions:
+          _extractList(
+            data['available_actions'],
+          ).map(ConstructionJournalActionModel.fromJson).toList(),
+      project: ConstructionJournalProjectRef.fromJson(
+        _extractMap(data['project']),
+      ),
+    );
+  }
+
+  Future<Map<String, dynamic>> fetchJournalListPayload({
+    required int projectId,
+    int page = 1,
+    int perPage = 20,
+  }) async {
     try {
       final response = await _dio.get(
         '/construction-journals',
@@ -46,25 +76,7 @@ class ConstructionJournalRepository extends SyncQueueAwareRepository {
         },
       );
 
-      final data = _extractMap(MobileApiResponse.payload(response.data));
-
-      return ConstructionJournalListPayload(
-        items:
-            _extractList(
-              data['items'],
-            ).map(ConstructionJournalModel.fromJson).toList(),
-        meta: JournalPaginationMeta.fromJson(_extractMap(data['meta'])),
-        summary: ConstructionJournalSummary.fromJournalListJson(
-          _extractMap(data['summary']),
-        ),
-        availableActions:
-            _extractList(
-              data['available_actions'],
-            ).map(ConstructionJournalActionModel.fromJson).toList(),
-        project: ConstructionJournalProjectRef.fromJson(
-          _extractMap(data['project']),
-        ),
-      );
+      return _extractMap(MobileApiResponse.payload(response.data));
     } on DioException catch (error) {
       throw ApiException.fromDio(
         error,
@@ -79,6 +91,25 @@ class ConstructionJournalRepository extends SyncQueueAwareRepository {
   Future<ConstructionJournalDetailPayload> fetchJournalDetail(
     int journalId,
   ) async {
+    final data = await fetchJournalDetailPayload(journalId);
+    return ConstructionJournalDetailPayload(
+      journal: ConstructionJournalModel.fromJson(_extractMap(data['journal'])),
+      entries:
+          _extractList(
+            data['entries'],
+          ).map(ConstructionJournalEntryModel.fromJson).toList(),
+      entriesMeta: JournalPaginationMeta.fromJson(_extractMap(data['meta'])),
+      entriesSummary: ConstructionJournalSummary.fromEntriesJson(
+        _extractMap(data['summary']),
+      ),
+      availableActions:
+          _extractList(
+            data['available_actions'],
+          ).map(ConstructionJournalActionModel.fromJson).toList(),
+    );
+  }
+
+  Future<Map<String, dynamic>> fetchJournalDetailPayload(int journalId) async {
     try {
       final journalResponse = await _dio.get(
         '/construction-journals/$journalId',
@@ -93,23 +124,15 @@ class ConstructionJournalRepository extends SyncQueueAwareRepository {
         MobileApiResponse.payload(entriesResponse.data),
       );
 
-      return ConstructionJournalDetailPayload(
-        journal: ConstructionJournalModel.fromJson(journalData),
-        entries:
-            _extractList(
-              entriesData['items'],
-            ).map(ConstructionJournalEntryModel.fromJson).toList(),
-        entriesMeta: JournalPaginationMeta.fromJson(
-          _extractMap(entriesData['meta']),
-        ),
-        entriesSummary: ConstructionJournalSummary.fromEntriesJson(
-          _extractMap(entriesData['summary']),
-        ),
-        availableActions:
-            _extractList(
-              entriesData['available_actions'],
-            ).map(ConstructionJournalActionModel.fromJson).toList(),
-      );
+      return {
+        'journal': journalData,
+        'entries': entriesData['items'] ?? const [],
+        'meta': entriesData['meta'],
+        'summary': entriesData['summary'],
+        'available_actions': entriesData['available_actions'] ?? const [],
+        'project_id': journalData['project_id'],
+        'updated_at': journalData['updated_at'],
+      };
     } on DioException catch (error) {
       throw ApiException.fromDio(
         error,
@@ -122,11 +145,15 @@ class ConstructionJournalRepository extends SyncQueueAwareRepository {
   }
 
   Future<ConstructionJournalEntryModel> fetchEntryDetail(int entryId) async {
+    return ConstructionJournalEntryModel.fromJson(
+      await fetchEntryDetailPayload(entryId),
+    );
+  }
+
+  Future<Map<String, dynamic>> fetchEntryDetailPayload(int entryId) async {
     try {
       final response = await _dio.get('/journal-entries/$entryId');
-      return ConstructionJournalEntryModel.fromJson(
-        _extractMap(MobileApiResponse.payload(response.data)),
-      );
+      return _extractMap(MobileApiResponse.payload(response.data));
     } on DioException catch (error) {
       throw ApiException.fromDio(
         error,
@@ -297,6 +324,7 @@ class ConstructionJournalRepository extends SyncQueueAwareRepository {
       if (knownId != null) {
         return await fetchEntryDetail(knownId);
       }
+      await _markPreparedOperationSending(preparedOperation);
       final response = await _dio.post(
         '/construction-journals/$journalId/entries',
         data: _wirePayload(preparedOperation?.payload ?? payload),
@@ -315,7 +343,10 @@ class ConstructionJournalRepository extends SyncQueueAwareRepository {
     } on DioException catch (error) {
       if (SyncQueueService.shouldQueueDioException(error)) {
         if (preparedOperation != null) {
-          throw SyncQueuedException(queueId: preparedOperation.id);
+          throw await _queuedExceptionForInitialFailure(
+            preparedOperation,
+            error,
+          );
         }
         await queueAndThrow(
           SyncQueueDraft(
@@ -326,6 +357,7 @@ class ConstructionJournalRepository extends SyncQueueAwareRepository {
             endpoint: '/construction-journals/$journalId/entries',
             payload: payload,
           ),
+          cause: error,
         );
       }
 
@@ -476,6 +508,7 @@ class ConstructionJournalRepository extends SyncQueueAwareRepository {
     );
     final preparedOperation = await _prepareSubmitOperation(draft, entryId);
     try {
+      await _markPreparedOperationSending(preparedOperation);
       final response = await _dio.post(
         '/journal-entries/$entryId/submit',
         data: {'idempotency_key': operationKey},
@@ -499,7 +532,10 @@ class ConstructionJournalRepository extends SyncQueueAwareRepository {
 
       if (SyncQueueService.shouldQueueDioException(error)) {
         if (preparedOperation != null) {
-          throw SyncQueuedException(queueId: preparedOperation.id);
+          throw await _queuedExceptionForInitialFailure(
+            preparedOperation,
+            error,
+          );
         }
         await queueAndThrow(
           SyncQueueDraft(
@@ -509,6 +545,7 @@ class ConstructionJournalRepository extends SyncQueueAwareRepository {
             endpoint: '/journal-entries/$entryId/submit',
             payload: {'idempotency_key': operationKey},
           ),
+          cause: error,
         );
       }
 
@@ -636,6 +673,9 @@ class ConstructionJournalRepository extends SyncQueueAwareRepository {
               operationScope != service.currentScope)) {
         continue;
       }
+      if (operation.status != SyncOperationStatuses.queued) {
+        return operation;
+      }
       operation
         ..endpoint = draft.endpoint
         ..method = draft.method
@@ -655,6 +695,52 @@ class ConstructionJournalRepository extends SyncQueueAwareRepository {
       return operation;
     }
     return _prepareOperation(draft);
+  }
+
+  Future<void> _markPreparedOperationSending(
+    QueuedSyncOperation? operation,
+  ) async {
+    if (operation == null) return;
+    if (operation.status == SyncOperationStatuses.conflict ||
+        operation.status == SyncOperationStatuses.sending) {
+      throw SyncQueuedException(queueId: operation.id, requiresReview: true);
+    }
+
+    final queue = syncQueueServiceFuture;
+    if (queue == null) return;
+    final service = await queue;
+    final marked = await service.markOperationSending(operation.id);
+    if (marked != null) return;
+
+    final current = await service.get(operation.id);
+    if (current?.status == SyncOperationStatuses.permissionDenied) {
+      throw ApiException(
+        current?.lastBusinessError ?? SyncQueueMessages.permissionDenied,
+        statusCode: 403,
+      );
+    }
+    if (current?.status == SyncOperationStatuses.needsEdit) {
+      throw ApiException(
+        current?.lastBusinessError ??
+            'Операцию нужно исправить перед отправкой.',
+      );
+    }
+    throw SyncQueuedException(queueId: operation.id, requiresReview: true);
+  }
+
+  Future<SyncQueuedException> _queuedExceptionForInitialFailure(
+    QueuedSyncOperation operation,
+    DioException error,
+  ) async {
+    final queue = syncQueueServiceFuture;
+    final updated =
+        queue == null
+            ? null
+            : await (await queue).recordInitialFailure(operation.id, error);
+    return SyncQueuedException(
+      queueId: operation.id,
+      requiresReview: updated?.status == SyncOperationStatuses.conflict,
+    );
   }
 
   Future<void> _deletePreparedOperation(QueuedSyncOperation? operation) async {

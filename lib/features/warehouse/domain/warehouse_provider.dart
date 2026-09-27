@@ -1,10 +1,17 @@
-﻿import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'dart:async';
+
+import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/network/api_exception.dart';
+import '../../../core/storage/entity_snapshot_provider.dart';
+import '../../../core/storage/snapshot_read.dart';
+import '../../../core/sync/sync_queue_provider.dart';
+import '../../auth/domain/auth_provider.dart';
 import '../data/project_material_delivery_model.dart';
 import '../data/warehouse_custody_model.dart';
 import '../data/warehouse_repository.dart';
 import '../data/warehouse_summary_model.dart';
+import '../data/warehouse_snapshot_adapter.dart';
 
 const _warehouseSentinel = Object();
 
@@ -13,6 +20,8 @@ class WarehouseState {
     this.isLoading = false,
     this.data,
     this.permissionDenied = false,
+    this.fromCache = false,
+    this.hasDirtyLocal = false,
     this.error,
     this.custodyBalances = const <WarehouseCustodyBalanceModel>[],
     this.isCustodyLoading = false,
@@ -25,6 +34,8 @@ class WarehouseState {
   final bool isLoading;
   final WarehouseSummaryModel? data;
   final bool permissionDenied;
+  final bool fromCache;
+  final bool hasDirtyLocal;
   final String? error;
   final List<WarehouseCustodyBalanceModel> custodyBalances;
   final bool isCustodyLoading;
@@ -37,6 +48,8 @@ class WarehouseState {
     bool? isLoading,
     Object? data = _warehouseSentinel,
     bool? permissionDenied,
+    bool? fromCache,
+    bool? hasDirtyLocal,
     Object? error = _warehouseSentinel,
     List<WarehouseCustodyBalanceModel>? custodyBalances,
     bool? isCustodyLoading,
@@ -52,6 +65,8 @@ class WarehouseState {
               ? this.data
               : data as WarehouseSummaryModel?,
       permissionDenied: permissionDenied ?? this.permissionDenied,
+      fromCache: fromCache ?? this.fromCache,
+      hasDirtyLocal: hasDirtyLocal ?? this.hasDirtyLocal,
       error:
           identical(error, _warehouseSentinel) ? this.error : error as String?,
       custodyBalances: custodyBalances ?? this.custodyBalances,
@@ -75,9 +90,19 @@ class WarehouseState {
 }
 
 class WarehouseNotifier extends StateNotifier<WarehouseState> {
-  WarehouseNotifier(this._repository) : super(const WarehouseState());
+  WarehouseNotifier(
+    this._repository, {
+    WarehouseSnapshotAdapter? snapshotAdapter,
+    bool Function()? isOnline,
+  }) : _snapshotAdapter = snapshotAdapter,
+       _isOnline = isOnline,
+       super(const WarehouseState());
 
   final WarehouseRepository _repository;
+  final WarehouseSnapshotAdapter? _snapshotAdapter;
+  final bool Function()? _isOnline;
+
+  bool get isLoading => state.isLoading;
 
   Future<void> load() async {
     state = state.copyWith(
@@ -87,12 +112,34 @@ class WarehouseNotifier extends StateNotifier<WarehouseState> {
     );
 
     try {
+      final snapshotAdapter = _snapshotAdapter;
+      if (snapshotAdapter != null) {
+        final read = await snapshotAdapter.load(
+          online: _isOnline?.call() ?? false,
+        );
+        final denied = read.presence == SnapshotPresence.permissionDenied;
+        state = state.copyWith(
+          isLoading: false,
+          data: denied ? null : read.data,
+          permissionDenied: denied,
+          fromCache: !denied && read.fromCache,
+          hasDirtyLocal: !denied && read.hasDirtyLocal,
+          error: read.error,
+        );
+        return;
+      }
       final data = await _repository.fetchWarehouseSummary();
-      state = state.copyWith(isLoading: false, data: data);
+      state = state.copyWith(
+        isLoading: false,
+        data: data,
+        fromCache: false,
+        hasDirtyLocal: false,
+      );
     } catch (error) {
       state = state.copyWith(
         isLoading: false,
         permissionDenied: _isPermissionDenied(error),
+        fromCache: false,
         error: _errorMessage(error),
       );
     }
@@ -204,9 +251,42 @@ class WarehouseNotifier extends StateNotifier<WarehouseState> {
   }
 }
 
+final warehouseSnapshotAdapterProvider = Provider<WarehouseSnapshotAdapter>((
+  ref,
+) {
+  return WarehouseSnapshotAdapter(
+    repository: ref.read(warehouseRepositoryProvider),
+    snapshots: ref.read(entitySnapshotServiceProvider.future),
+    flushQueue: () async {
+      await ref.read(syncQueueProvider.notifier).retryPending();
+    },
+  );
+});
+
 final warehouseProvider =
     StateNotifierProvider<WarehouseNotifier, WarehouseState>((ref) {
-      return WarehouseNotifier(ref.read(warehouseRepositoryProvider));
+      final notifier = WarehouseNotifier(
+        ref.read(warehouseRepositoryProvider),
+        snapshotAdapter: ref.read(warehouseSnapshotAdapterProvider),
+        isOnline: () {
+          final auth = ref.read(authProvider);
+          return auth is AuthAuthenticated && auth.isOnlineVerified;
+        },
+      );
+      ref.listen<AuthState>(authProvider, (previous, next) {
+        final wasOnline =
+            previous is AuthAuthenticated && previous.isOnlineVerified;
+        final isOnline = next is AuthAuthenticated && next.isOnlineVerified;
+        if (!wasOnline && isOnline && !notifier.isLoading) {
+          unawaited(notifier.load());
+        }
+      });
+      ref.listen(syncQueueProvider, (previous, next) {
+        if (next != null && !notifier.isLoading) {
+          unawaited(notifier.load());
+        }
+      });
+      return notifier;
     });
 
 bool _isPermissionDenied(Object error) {

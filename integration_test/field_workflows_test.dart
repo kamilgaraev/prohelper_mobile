@@ -168,6 +168,7 @@ void main() {
       workDate: DateTime(2026, 5, 22),
       quantity: 4,
       hours: 8,
+      idempotencyKey: 'field-output-attempt-21',
       comment: 'Accepted volume',
     );
 
@@ -344,6 +345,46 @@ class _FieldSafetyRepository extends SafetyRepository {
   final incidents = <SafetyIncidentModel>[];
 
   @override
+  Future<SafetyDashboardModel> fetchDashboard({int? projectId}) async {
+    return const SafetyDashboardModel(
+      activePermits: 0,
+      openIncidents: 0,
+      openViolations: 0,
+      openCorrectiveActions: 0,
+      openInspections: 0,
+      openFindings: 0,
+      myOpenPermits: 0,
+      myOpenViolations: 0,
+      myOpenFindings: 0,
+      myBriefingsToSign: 0,
+    );
+  }
+
+  @override
+  Future<SafetyAdmissionModel?> fetchMyAdmission({
+    int? projectId,
+    String workCategory = 'general',
+  }) async => null;
+
+  @override
+  Future<List<SafetyBriefingModel>> fetchBriefings({
+    int? projectId,
+    String? status,
+  }) async => const [];
+
+  @override
+  Future<List<SafetyInspectionModel>> fetchInspections({
+    int? projectId,
+    String? status,
+  }) async => const [];
+
+  @override
+  Future<List<SafetyInspectionFindingModel>> fetchInspectionFindings({
+    int? projectId,
+    String? status,
+  }) async => const [];
+
+  @override
   Future<List<SafetyWorkPermitModel>> fetchPermits({
     int? projectId,
     String? status,
@@ -438,6 +479,7 @@ class _FieldProductionLaborRepository extends ProductionLaborRepository {
     required double quantity,
     required double hours,
     required String workDate,
+    required String idempotencyKey,
     String? comment,
   }) async {
     acceptedQuantity = quantity;
@@ -621,6 +663,9 @@ ConstructionJournalEntryModel _journalEntry({
     'status_label': 'Draft',
     'workflow_state': 'ready',
     'workVolumes': const [],
+    'workers': const [],
+    'equipment': const [],
+    'materials': const [],
     'blockers': const [],
     'available_actions': const [
       {'action': 'submit', 'label': 'Submit'},

@@ -24,6 +24,24 @@ final warehouseRepositoryProvider = Provider<WarehouseRepository>((ref) {
   );
 });
 
+class WarehouseTaskPage {
+  const WarehouseTaskPage({
+    required this.items,
+    required this.currentPage,
+    required this.lastPage,
+    required this.perPage,
+    required this.total,
+  });
+
+  final List<WarehouseTaskModel> items;
+  final int currentPage;
+  final int lastPage;
+  final int perPage;
+  final int total;
+
+  bool get hasMore => currentPage < lastPage;
+}
+
 class WarehouseRepository extends SyncQueueAwareRepository {
   WarehouseRepository(
     this._dio, {
@@ -33,6 +51,10 @@ class WarehouseRepository extends SyncQueueAwareRepository {
   final Dio _dio;
 
   Future<WarehouseSummaryModel> fetchWarehouseSummary() async {
+    return WarehouseSummaryModel.fromJson(await fetchWarehouseSummaryPayload());
+  }
+
+  Future<Map<String, dynamic>> fetchWarehouseSummaryPayload() async {
     try {
       final response = await _dio.get('/warehouse');
       final payload = _extractData(response.data);
@@ -41,7 +63,7 @@ class WarehouseRepository extends SyncQueueAwareRepository {
         throw const ApiException('Сервер вернул пустой ответ по складу.');
       }
 
-      return WarehouseSummaryModel.fromJson(payload);
+      return payload;
     } on DioException catch (error) {
       throw ApiException.fromDio(
         error,
@@ -232,6 +254,7 @@ class WarehouseRepository extends SyncQueueAwareRepository {
             endpoint: endpoint,
             payload: payload,
           ),
+          cause: error,
         );
       }
       throw ApiException.fromDio(
@@ -386,6 +409,7 @@ class WarehouseRepository extends SyncQueueAwareRepository {
             payload: receiptPayload,
             attachments: attachments,
           ),
+          cause: error,
         );
       }
 
@@ -440,6 +464,50 @@ class WarehouseRepository extends SyncQueueAwareRepository {
 
       final payload = _extractList(response.data);
       return payload.map(WarehouseTaskModel.fromJson).toList();
+    } on DioException catch (error) {
+      throw ApiException.fromDio(
+        error,
+        fallbackMessage: 'Не удалось загрузить задачи склада.',
+      );
+    }
+  }
+
+  Future<WarehouseTaskPage> fetchTaskPage(
+    int warehouseId, {
+    int page = 1,
+    int perPage = 60,
+    String? status,
+    String? taskType,
+    String? priority,
+    String? entityType,
+    int? entityId,
+    String? query,
+  }) async {
+    try {
+      final response = await _dio.get(
+        '/warehouse/warehouses/$warehouseId/tasks',
+        queryParameters: <String, dynamic>{
+          'page': page,
+          'per_page': perPage,
+          'limit': perPage,
+          if ((status ?? '').trim().isNotEmpty) 'status': status,
+          if ((taskType ?? '').trim().isNotEmpty) 'task_type': taskType,
+          if ((priority ?? '').trim().isNotEmpty) 'priority': priority,
+          if ((entityType ?? '').trim().isNotEmpty) 'entity_type': entityType,
+          if (entityId != null) 'entity_id': entityId,
+          if ((query ?? '').trim().isNotEmpty) 'q': query,
+        },
+      );
+      final result = MobileApiResponse.list(response.data);
+      final meta = result.meta;
+
+      return WarehouseTaskPage(
+        items: result.data.map(WarehouseTaskModel.fromJson).toList(),
+        currentPage: _warehouseTaskInt(meta['current_page'], fallback: page),
+        lastPage: _warehouseTaskInt(meta['last_page'], fallback: page),
+        perPage: _warehouseTaskInt(meta['per_page'], fallback: perPage),
+        total: _warehouseTaskInt(meta['total'], fallback: result.data.length),
+      );
     } on DioException catch (error) {
       throw ApiException.fromDio(
         error,
@@ -612,6 +680,7 @@ class WarehouseRepository extends SyncQueueAwareRepository {
             payload: const <String, dynamic>{},
             attachments: attachments,
           ),
+          cause: error,
         );
       }
 
@@ -664,6 +733,13 @@ class WarehouseRepository extends SyncQueueAwareRepository {
 }
 
 final Random _warehouseSecureRandom = Random.secure();
+
+int _warehouseTaskInt(dynamic value, {required int fallback}) {
+  if (value is int) return value;
+  if (value is num) return value.toInt();
+
+  return int.tryParse(value?.toString() ?? '') ?? fallback;
+}
 
 String _newWarehouseIdempotencyKey() {
   final bytes = List<int>.generate(

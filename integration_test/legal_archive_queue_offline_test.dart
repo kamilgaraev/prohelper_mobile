@@ -97,6 +97,7 @@ void main() {
           currentIdentity: () => currentIdentity,
         );
 
+        now = now.add(const Duration(minutes: 2));
         final firstFlush = await service.retryDueOperations();
         expect(firstFlush.retryCount, 1);
         expect(server.approvalEffects, 1);
@@ -108,7 +109,7 @@ void main() {
         expect(pendingApproval.payload['queue_scope'], owner);
         expect(pendingApproval.payload['queue_owner_identity'], owner);
 
-        now = now.add(const Duration(minutes: 2));
+        now = now.add(const Duration(minutes: 4));
         final secondFlush = await service.retryDueOperations();
         expect(secondFlush.retryCount, 1);
         expect(server.approvalEffects, 1);
@@ -119,7 +120,7 @@ void main() {
         expect(server.paperKeys, ['paper-original-once']);
         expect(await service.all(), hasLength(1));
 
-        now = now.add(const Duration(minutes: 2));
+        now = now.add(const Duration(minutes: 4));
         final thirdFlush = await service.retryDueOperations();
         expect(thirdFlush.successCount, 1);
         expect(server.paperEffects, 1);
@@ -142,6 +143,7 @@ void main() {
       ).create(recursive: true);
       const owner = '27:4:queue-session-a';
       const otherOwner = '28:9:queue-session-b';
+      var now = DateTime.utc(2026, 9, 23, 9);
       final cache = EncryptedLocalFileCache(
         keyStore: _MemoryKeyStore(),
         directoryProvider: () async => directory,
@@ -155,6 +157,7 @@ void main() {
           isar: isar,
           adapter: _FakeAdapter((_) => _AdapterResult.network()),
           cache: cache,
+          now: () => now,
           currentIdentity: () => currentIdentity,
         );
         final repository = _repository(
@@ -173,8 +176,10 @@ void main() {
           isar: isar,
           adapter: _FakeAdapter((_) => const _AdapterResult(statusCode: 409)),
           cache: cache,
+          now: () => now,
           currentIdentity: () => currentIdentity,
         );
+        now = now.add(const Duration(minutes: 2));
         await service.retryDueOperations();
         operation = (await store.get(operation.id))!;
         expect(operation.status, SyncOperationStatuses.conflict);
@@ -187,6 +192,7 @@ void main() {
             isar: isar,
             adapter: _FakeAdapter((_) => _AdapterResult.network()),
             cache: cache,
+            now: () => now,
             currentIdentity: () => currentIdentity,
           ),
           cache,
@@ -209,8 +215,10 @@ void main() {
             return const _AdapterResult(statusCode: 403);
           }),
           cache: cache,
+          now: () => now,
           currentIdentity: () => currentIdentity,
         );
+        now = now.add(const Duration(minutes: 2));
         await service.retryDueOperations();
         operation = (await store.get(operation.id))!;
         expect(operation.status, SyncOperationStatuses.permissionDenied);
@@ -252,14 +260,32 @@ void main() {
             return const _AdapterResult(statusCode: 200);
           }),
           cache: cache,
+          now: () => now,
           currentIdentity: () => currentIdentity,
         );
         await service.retryDueOperations();
         expect(crossIdentityRequests, 0);
         expect(
           (await store.get(idBeforeSwitch))?.status,
-          SyncOperationStatuses.permissionDenied,
+          SyncOperationStatuses.queued,
         );
+        currentIdentity = owner;
+        var resumedRequests = 0;
+        service = _queueService(
+          isar: isar,
+          adapter: _FakeAdapter((_) {
+            resumedRequests++;
+            return const _AdapterResult(statusCode: 200);
+          }),
+          cache: cache,
+          now: () => now,
+          currentIdentity: () => currentIdentity,
+        );
+        now = now.add(const Duration(minutes: 2));
+        final resumed = await service.retryDueOperations();
+        expect(resumed.successCount, 2);
+        expect(resumedRequests, 2);
+        expect(await store.all(), isEmpty);
         await service.clearScope(owner);
         expect(await store.all(), isEmpty);
         await cache.clearIdentity(owner);

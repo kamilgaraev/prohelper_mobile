@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 
 import 'package:prohelpers_mobile/core/design/pro_status.dart';
 import 'package:prohelpers_mobile/core/widgets/app_loading_state.dart';
@@ -30,11 +30,16 @@ class OverviewTodayStatus extends StatelessWidget {
       return const AppLoadingState(message: 'Обновляем сводку', minHeight: 132);
     }
 
+    ProStatusBanner? errorBanner;
     if (error != null) {
-      return ProStatusBanner(
-        title: 'Сводка недоступна',
-        description: error,
-        tone: ProStatusTone.danger,
+      errorBanner = ProStatusBanner(
+        title:
+            widgets.isEmpty
+                ? 'Сводка недоступна'
+                : 'Не удалось обновить сводку',
+        description:
+            widgets.isEmpty ? error : 'Показаны последние данные. $error',
+        tone: widgets.isEmpty ? ProStatusTone.danger : ProStatusTone.warning,
         surfaceTone: ProSurfaceTone.elevated,
         compact: true,
         action: TextButton.icon(
@@ -43,6 +48,9 @@ class OverviewTodayStatus extends StatelessWidget {
           label: const Text('Повторить'),
         ),
       );
+    }
+    if (errorBanner != null && widgets.isEmpty) {
+      return errorBanner;
     }
 
     final criticalCount =
@@ -97,7 +105,7 @@ class OverviewTodayStatus extends StatelessWidget {
             )
             : null;
 
-    return ProStatusBanner(
+    final statusBanner = ProStatusBanner(
       title: title,
       description: description,
       tone: tone,
@@ -105,5 +113,12 @@ class OverviewTodayStatus extends StatelessWidget {
       action: action,
       compact: isNotificationOnly,
     );
+    if (errorBanner != null) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [errorBanner, const SizedBox(height: 8), statusBanner],
+      );
+    }
+    return statusBanner;
   }
 }
