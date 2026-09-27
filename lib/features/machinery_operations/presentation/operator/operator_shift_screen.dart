@@ -116,6 +116,7 @@ class _StartShiftCardState extends ConsumerState<_StartShiftCard> {
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
+              isExpanded: true,
               initialValue: inspectionResult,
               decoration: const InputDecoration(
                 labelText: 'Результат предсменного осмотра',
@@ -388,14 +389,46 @@ class _AssetHeader extends StatelessWidget {
   final MachineryAssetModel asset;
   @override
   Widget build(BuildContext context) => Card(
-    child: ListTile(
-      minTileHeight: 72,
-      leading: const Icon(Icons.precision_manufacturing_rounded),
-      title: Text(asset.name),
-      subtitle: Text(
-        '${asset.assetCode} · ${asset.projectName ?? 'Объект не указан'}',
+    child: Padding(
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Align(
+            alignment: Alignment.centerLeft,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxWidth: MediaQuery.sizeOf(context).width - 48,
+              ),
+              child: Text(
+                asset.statusLabel,
+                style: Theme.of(context).textTheme.labelLarge,
+              ),
+            ),
+          ),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Padding(
+                padding: EdgeInsets.only(top: 4),
+                child: Icon(Icons.precision_manufacturing_rounded),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(asset.name),
+                    Text(
+                      '${asset.assetCode} · ${asset.projectName ?? 'Объект не указан'}',
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
-      trailing: Text(asset.statusLabel),
     ),
   );
 }

@@ -83,6 +83,7 @@ Map<String, dynamic> procurementPurchaseRequestJson() {
 }
 
 Map<String, dynamic> procurementPurchaseOrderJson({
+  String orderNumber = 'PO-61',
   String status = 'confirmed',
   List<String> actions = const ['receive_materials', 'comment'],
   double receivedQuantity = 2,
@@ -97,7 +98,7 @@ Map<String, dynamic> procurementPurchaseOrderJson({
     'id': 61,
     'organization_id': 4,
     'purchase_request_id': 12,
-    'order_number': 'PO-61',
+    'order_number': orderNumber,
     'order_date': '2026-05-21',
     'status': status,
     'status_label': status == 'delivered' ? 'Поставлен' : 'Подтвержден',

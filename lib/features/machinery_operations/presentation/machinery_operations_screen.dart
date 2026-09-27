@@ -8,7 +8,6 @@ import '../domain/machinery_operations_provider.dart';
 import 'foreman/foreman_machinery_screen.dart';
 import 'mechanic/maintenance_queue_screen.dart';
 import 'operator/operator_shift_screen.dart';
-import 'storekeeper/asset_scan_screen.dart';
 
 class MachineryOperationsScreen extends ConsumerStatefulWidget {
   const MachineryOperationsScreen({super.key});
@@ -44,48 +43,10 @@ class _MachineryOperationsScreenState
     final permissions =
         module?.permissions.map((value) => value.toLowerCase()).toSet() ??
         const <String>{};
-    final destinations = <_MachineryDestination>[
-      if (_matches(permissions, const [
-        'shift.create',
-        'shift.create-own',
-        'create_shift_report',
-        'record_shift',
-      ]))
-        _MachineryDestination(
-          'Сменный рапорт',
-          () => const OperatorShiftScreen(),
-        ),
-      if (_matches(permissions, const [
-        'asset.scan',
-        'scan_asset',
-        'warehouse.scan',
-        'scan',
-      ]))
-        _MachineryDestination(
-          'Сканирование техники',
-          () => const AssetScanScreen(),
-        ),
-      if (_matches(permissions, const [
-        'maintenance.view',
-        'maintenance.manage',
-        'machinery.maintenance',
-        'maintenance',
-      ]))
-        _MachineryDestination(
-          'ТО и дефекты',
-          () => const MaintenanceQueueScreen(),
-        ),
-      if (_matches(permissions, const [
-        'shift.review',
-        'shift.approve',
-        'review_shift',
-        'machinery.review',
-      ]))
-        _MachineryDestination(
-          'Проверка рапортов',
-          () => const ForemanMachineryScreen(),
-        ),
-    ];
+    final destinations =
+        machineryOperationsDestinationsFor(
+          permissions,
+        ).map(_buildDestination).toList();
     if (destinations.isEmpty) {
       return Scaffold(
         appBar: AppBar(title: const Text('Техника на объекте')),
@@ -122,8 +83,65 @@ class _MachineryOperationsScreenState
   }
 }
 
-bool _matches(Set<String> permissions, List<String> candidates) =>
-    permissions.any((permission) => candidates.any(permission.contains));
+enum MachineryOperationsDestination {
+  fleet,
+  fleetAndReview,
+  shift,
+  maintenance,
+  shiftReview,
+}
+
+@visibleForTesting
+List<MachineryOperationsDestination> machineryOperationsDestinationsFor(
+  Iterable<String> permissions,
+) {
+  final grants =
+      permissions.map((permission) => permission.toLowerCase()).toSet();
+  final canView =
+      grants.contains('*') ||
+      grants.contains('view') ||
+      grants.contains('machinery-operations.view') ||
+      grants.contains('machinery-operations.*');
+  final canReview = grants.contains('machinery-operations.shifts.approve');
+
+  return [
+    if (canView && canReview)
+      MachineryOperationsDestination.fleetAndReview
+    else if (canView)
+      MachineryOperationsDestination.fleet
+    else if (canReview)
+      MachineryOperationsDestination.shiftReview,
+    if (grants.contains('machinery-operations.shifts.create'))
+      MachineryOperationsDestination.shift,
+    if (grants.contains('machinery-operations.downtime.manage'))
+      MachineryOperationsDestination.maintenance,
+  ];
+}
+
+_MachineryDestination _buildDestination(
+  MachineryOperationsDestination destination,
+) => switch (destination) {
+  MachineryOperationsDestination.fleet => _MachineryDestination(
+    'Парк техники',
+    () => const ForemanMachineryScreen(),
+  ),
+  MachineryOperationsDestination.fleetAndReview => _MachineryDestination(
+    'Парк техники и рапорты',
+    () => const ForemanMachineryScreen(),
+  ),
+  MachineryOperationsDestination.shift => _MachineryDestination(
+    'Сменный рапорт',
+    () => const OperatorShiftScreen(),
+  ),
+  MachineryOperationsDestination.maintenance => _MachineryDestination(
+    'ТО и дефекты',
+    () => const MaintenanceQueueScreen(),
+  ),
+  MachineryOperationsDestination.shiftReview => _MachineryDestination(
+    'Проверка рапортов',
+    () => const ForemanMachineryScreen(),
+  ),
+};
 
 class _MachineryDestination {
   const _MachineryDestination(this.title, this.builder);

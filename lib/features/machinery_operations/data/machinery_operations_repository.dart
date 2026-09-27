@@ -61,6 +61,42 @@ class MachineryOperationsRepository extends SyncQueueAwareRepository {
     }
   }
 
+  Future<void> approveShiftReport(int shiftReportId) async {
+    try {
+      await _dio.post(
+        '/machinery-operations/shift-reports/$shiftReportId/approve',
+      );
+    } on DioException catch (error) {
+      throw ApiException.fromDio(
+        error,
+        fallbackMessage: 'Не удалось подтвердить рапорт.',
+      );
+    } catch (_) {
+      throw const ApiException('Не удалось подтвердить рапорт.');
+    }
+  }
+
+  Future<void> rejectShiftReport(int shiftReportId, String reason) async {
+    final normalizedReason = reason.trim();
+    if (normalizedReason.isEmpty) {
+      throw const FormatException('Укажите причину отклонения.');
+    }
+
+    try {
+      await _dio.post(
+        '/machinery-operations/shift-reports/$shiftReportId/reject',
+        data: {'reason': normalizedReason},
+      );
+    } on DioException catch (error) {
+      throw ApiException.fromDio(
+        error,
+        fallbackMessage: 'Не удалось отклонить рапорт.',
+      );
+    } catch (_) {
+      throw const ApiException('Не удалось отклонить рапорт.');
+    }
+  }
+
   Future<List<MachineryMaintenanceOrderModel>> fetchMaintenanceOrders({
     int? projectId,
   }) async {

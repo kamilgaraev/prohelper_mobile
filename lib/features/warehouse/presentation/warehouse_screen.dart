@@ -795,31 +795,31 @@ class _WarehouseCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Text(warehouse.name, style: AppTypography.h2(context)),
-              ),
-              if (warehouse.isMain) ...[
-                _WarehouseChip(
-                  label: 'Основной',
-                  backgroundColor: theme.colorScheme.primary.withValues(
-                    alpha: 0.12,
+          if (warehouse.isMain ||
+              _warehouseTypeLabel(warehouse.warehouseType) != null)
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                if (warehouse.isMain)
+                  _WarehouseChip(
+                    label: 'Основной',
+                    backgroundColor: theme.colorScheme.primary.withValues(
+                      alpha: 0.12,
+                    ),
+                    foregroundColor: theme.colorScheme.primary,
                   ),
-                  foregroundColor: theme.colorScheme.primary,
-                ),
-                const SizedBox(width: 8),
+                if (_warehouseTypeLabel(warehouse.warehouseType) != null)
+                  _WarehouseChip(
+                    label: _warehouseTypeLabel(warehouse.warehouseType)!,
+                    backgroundColor: theme.colorScheme.secondaryContainer
+                        .withValues(alpha: 0.6),
+                    foregroundColor: theme.colorScheme.onSecondaryContainer,
+                  ),
               ],
-              if (_warehouseTypeLabel(warehouse.warehouseType) != null)
-                _WarehouseChip(
-                  label: _warehouseTypeLabel(warehouse.warehouseType)!,
-                  backgroundColor: theme.colorScheme.secondaryContainer
-                      .withValues(alpha: 0.6),
-                  foregroundColor: theme.colorScheme.onSecondaryContainer,
-                ),
-            ],
-          ),
+            ),
+          const SizedBox(height: 8),
+          Text(warehouse.name, style: AppTypography.h2(context)),
           if (warehouse.address?.trim().isNotEmpty == true) ...[
             const SizedBox(height: 8),
             Row(

@@ -158,6 +158,22 @@ const _defect = QualityDefectModel(
   ),
 );
 
+const _longDefect = QualityDefectModel(
+  id: 7,
+  defectNumber: 'QD_2026_NORTH_SECTION_001',
+  title: 'Гидроизоляция_стыков_перекрытий_северного_корпуса',
+  severity: 'major',
+  status: 'open',
+  statusLabel: 'Ожидает подтверждения инженером',
+  availableActions: ['start'],
+  inspectionRequired: false,
+  workflowSummary: QualityDefectWorkflowSummary(
+    status: 'open',
+    availableActions: ['start'],
+    problemFlags: [],
+  ),
+);
+
 const _reviewDefect = QualityDefectModel(
   id: 4,
   defectNumber: 'QD-4',
@@ -297,6 +313,54 @@ void main() {
       tester.getTopLeft(metrics.at(2)).dy,
       greaterThan(tester.getBottomLeft(metrics.first).dy),
     );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('criticality field fits compact screen at larger text scale', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(720, 1280);
+    tester.view.devicePixelRatio = 2;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      buildScreen(_RecordingQualityRepository(), textScale: 1.3),
+    );
+    await pumpUi(tester);
+    await tester.tap(find.widgetWithText(FilledButton, 'Новое замечание'));
+    await pumpUi(tester);
+
+    expect(find.byType(DropdownButtonFormField<String>), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('quality card gives long title space above its status', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(720, 1280);
+    tester.view.devicePixelRatio = 2;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      buildScreen(
+        _RecordingQualityRepository(listDefect: _longDefect),
+        textScale: 1.3,
+      ),
+    );
+    await pumpUi(tester);
+    await tester.scrollUntilVisible(find.text(_longDefect.title), 300);
+
+    final titleFinder = find.text(_longDefect.title);
+    final statusFinder = find.text(_longDefect.statusLabel!);
+    expect(titleFinder, findsOneWidget);
+    expect(statusFinder, findsOneWidget);
+    final titleRect = tester.getRect(titleFinder);
+    final statusRect = tester.getRect(statusFinder);
+    expect(titleRect.width, greaterThan(250));
+    expect(statusRect.bottom, lessThanOrEqualTo(titleRect.top));
+    expect(tester.widget<Text>(titleFinder).maxLines, isNull);
     expect(tester.takeException(), isNull);
   });
 

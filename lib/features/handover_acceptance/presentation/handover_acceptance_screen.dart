@@ -1527,12 +1527,17 @@ class _FindingRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListTile(
-      dense: true,
-      contentPadding: EdgeInsets.zero,
-      title: Text(finding.title),
-      subtitle: Text(_severityLabel(finding.severity)),
-      trailing: Chip(label: Text(_findingStatusLabel(finding.status))),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Chip(label: Text(_findingStatusLabel(finding.status))),
+        ListTile(
+          dense: true,
+          contentPadding: EdgeInsets.zero,
+          title: Text(finding.title),
+          subtitle: Text(_severityLabel(finding.severity)),
+        ),
+      ],
     );
   }
 }

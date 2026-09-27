@@ -102,26 +102,26 @@ class _DesignManagementScreenState
           for (final item in page.items) ...[
             IndustrialCard(
               onTap: () => _openDetail(item),
-              child: ListTile(
-                contentPadding: EdgeInsets.zero,
-                title: Text(item.title),
-                subtitle: Text(
-                  [
-                    if (item.stage != null) item.stage!,
-                    if (item.discipline != null) item.discipline!,
-                  ].join(' · '),
-                ),
-                trailing:
-                    item.status == null
-                        ? const Icon(Icons.chevron_right_rounded)
-                        : Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            Text(item.status!),
-                            const Icon(Icons.chevron_right_rounded, size: 18),
-                          ],
-                        ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (item.status != null)
+                    Chip(
+                      label: Text(item.status!),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(item.title),
+                    subtitle: Text(
+                      [
+                        if (item.stage != null) item.stage!,
+                        if (item.discipline != null) item.discipline!,
+                      ].join(' · '),
+                    ),
+                    trailing: const Icon(Icons.chevron_right_rounded),
+                  ),
+                ],
               ),
             ),
             const SizedBox(height: 12),

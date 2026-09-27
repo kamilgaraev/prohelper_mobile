@@ -228,39 +228,30 @@ class _WorkOrderCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Icon(Icons.engineering_outlined),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      workOrder.title,
-                      style: AppTypography.bodyLarge(
-                        context,
-                      ).copyWith(fontWeight: FontWeight.w800),
-                    ),
-                    Text(
-                      workOrder.orderNumber,
-                      style: AppTypography.caption(context),
-                    ),
-                    if (workOrder.assigneeName != null)
-                      Text(
-                        workOrder.assigneeName!,
-                        style: AppTypography.caption(context),
-                      ),
-                  ],
-                ),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxWidth: MediaQuery.sizeOf(context).width - 48,
               ),
-              Chip(
+              child: Chip(
                 label: Text(workOrder.statusLabel),
                 visualDensity: VisualDensity.compact,
               ),
-            ],
+            ),
           ),
+          Text(
+            workOrder.title,
+            style: AppTypography.bodyLarge(
+              context,
+            ).copyWith(fontWeight: FontWeight.w800),
+          ),
+          Text(workOrder.orderNumber, style: AppTypography.caption(context)),
+          if (workOrder.assigneeName != null)
+            Text(
+              workOrder.assigneeName!,
+              style: AppTypography.caption(context),
+            ),
           const SizedBox(height: 12),
           if (workOrder.lines.isEmpty)
             Text(

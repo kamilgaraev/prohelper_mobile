@@ -1,4 +1,4 @@
-﻿import 'package:dio/dio.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -244,6 +244,48 @@ void main() {
     expect(find.text('Монтаж опалубки'), findsOneWidget);
     expect(find.text('Проверка геометрии'), findsOneWidget);
     expect(find.text('5.50 ч'), findsOneWidget);
+  });
+
+  testWidgets('keeps summary labels readable on compact screen', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(720, 1280);
+    tester.view.devicePixelRatio = 2;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          projectsProvider.overrideWith(
+            (ref) => _TestProjectsNotifier(
+              Project()
+                ..serverId = 9
+                ..name = 'Башня'
+                ..address = 'Площадка 1',
+            ),
+          ),
+          timeTrackingProvider.overrideWith(
+            (ref) => TimeTrackingNotifier(_RecordingTimeTrackingRepository()),
+          ),
+        ],
+        child: MaterialApp(
+          builder:
+              (context, child) => MediaQuery(
+                data: MediaQuery.of(
+                  context,
+                ).copyWith(textScaler: const TextScaler.linear(1.3)),
+                child: child!,
+              ),
+          home: const TimeTrackingScreen(),
+        ),
+      ),
+    );
+    await pumpUi(tester);
+
+    expect(find.text('На проверке'), findsOneWidget);
+    expect(find.text('Согласовано'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('submits visible start timer and manual entry forms', (

@@ -11,13 +11,15 @@ import 'package:prohelpers_mobile/features/warehouse/presentation/warehouse_rece
 import 'package:prohelpers_mobile/features/warehouse/presentation/warehouse_screen.dart';
 
 class _FakeWarehouseRepository extends WarehouseRepository {
-  _FakeWarehouseRepository() : super(Dio());
+  _FakeWarehouseRepository({this.summary = _summary}) : super(Dio());
+
+  final WarehouseSummaryModel summary;
 
   WarehouseReceiptPayload? createdReceipt;
   Object? createReceiptError;
 
   @override
-  Future<WarehouseSummaryModel> fetchWarehouseSummary() async => _summary;
+  Future<WarehouseSummaryModel> fetchWarehouseSummary() async => summary;
 
   @override
   Future<List<WarehouseBalanceModel>> fetchBalances(int warehouseId) async {
@@ -69,8 +71,13 @@ class _FakeWarehouseRepository extends WarehouseRepository {
 }
 
 class _FakeWarehouseNotifier extends WarehouseNotifier {
-  _FakeWarehouseNotifier(super.repository) {
-    state = const WarehouseState(isLoading: false, data: _summary, error: null);
+  _FakeWarehouseNotifier(_FakeWarehouseRepository repository)
+    : super(repository) {
+    state = WarehouseState(
+      isLoading: false,
+      data: repository.summary,
+      error: null,
+    );
   }
 
   void showCachedError() {
@@ -133,7 +140,56 @@ const _summary = WarehouseSummaryModel(
   ],
 );
 
+const _longWarehouseSummary = WarehouseSummaryModel(
+  summary: WarehouseSummaryData(
+    warehouseCount: 1,
+    uniqueItemsCount: 48,
+    lowStockCount: 3,
+    reservedItemsCount: 5,
+    recentMovementsCount: 7,
+    totalValue: 125000,
+  ),
+  warehouses: [
+    WarehouseCardModel(
+      id: 1,
+      name: 'Склад_материалов_северного_строительного_участка',
+      isMain: true,
+      uniqueItemsCount: 31,
+      totalValue: 98000,
+      address: 'Казань, Лесная улица, 15',
+      warehouseType: 'central',
+    ),
+  ],
+  recentMovements: [],
+);
+
 void main() {
+  testWidgets('warehouse card keeps long name below its badges', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(720, 1280);
+    tester.view.devicePixelRatio = 2;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await _pumpWarehouseScreen(
+      tester,
+      repository: _FakeWarehouseRepository(summary: _longWarehouseSummary),
+      mediaPicker: _FakeMediaPicker(),
+      textScale: 1.3,
+    );
+    await tester.scrollUntilVisible(
+      find.text('Склад_материалов_северного_строительного_участка'),
+      300,
+    );
+
+    expect(
+      find.text('Склад_материалов_северного_строительного_участка'),
+      findsOneWidget,
+    );
+    expect(find.text('Основной'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('показывает предупреждение поверх сохранённых данных', (
     tester,
   ) async {
@@ -316,6 +372,7 @@ Future<void> _pumpWarehouseScreen(
   WidgetTester tester, {
   required _FakeWarehouseRepository repository,
   required _FakeMediaPicker mediaPicker,
+  double textScale = 1,
 }) async {
   await tester.pumpWidget(
     ProviderScope(
@@ -328,6 +385,13 @@ Future<void> _pumpWarehouseScreen(
       ],
       child: MaterialApp(
         theme: MostTheme.lightTheme,
+        builder:
+            (context, child) => MediaQuery(
+              data: MediaQuery.of(
+                context,
+              ).copyWith(textScaler: TextScaler.linear(textScale)),
+              child: child!,
+            ),
         home: const WarehouseScreen(),
       ),
     ),

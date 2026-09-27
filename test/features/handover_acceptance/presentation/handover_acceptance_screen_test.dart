@@ -30,8 +30,9 @@ class _RecordingHandoverRepository extends HandoverAcceptanceRepository {
   List<String> resolutionPhotoPaths = const [];
   List<String> rejectionPhotoPaths = const [];
   bool queueFindingCreation = false;
+  String findingTitle = 'Скол плитки';
 
-  AcceptanceScopeModel get scope => const AcceptanceScopeModel(
+  AcceptanceScopeModel get scope => AcceptanceScopeModel(
     id: 5,
     projectId: 9,
     title: 'Секция А',
@@ -72,7 +73,7 @@ class _RecordingHandoverRepository extends HandoverAcceptanceRepository {
           AcceptanceFindingModel(
             id: 11,
             sessionId: 7,
-            title: 'Скол плитки',
+            title: findingTitle,
             severity: 'major',
             status: 'open',
           ),
@@ -83,7 +84,7 @@ class _RecordingHandoverRepository extends HandoverAcceptanceRepository {
       AcceptanceFindingModel(
         id: 11,
         sessionId: 7,
-        title: 'Скол плитки',
+        title: findingTitle,
         severity: 'major',
         status: 'open',
       ),
@@ -243,7 +244,10 @@ void main() {
       ..address = 'Площадка 1';
   }
 
-  Widget buildScreen(_RecordingHandoverRepository repository) {
+  Widget buildScreen(
+    _RecordingHandoverRepository repository, {
+    double textScale = 1,
+  }) {
     return ProviderScope(
       overrides: [
         projectsProvider.overrideWith(
@@ -256,7 +260,16 @@ void main() {
           (ref) => _FakeHandoverDocumentPicker(),
         ),
       ],
-      child: const MaterialApp(home: HandoverAcceptanceScreen()),
+      child: MaterialApp(
+        builder:
+            (context, child) => MediaQuery(
+              data: MediaQuery.of(
+                context,
+              ).copyWith(textScaler: TextScaler.linear(textScale)),
+              child: child!,
+            ),
+        home: const HandoverAcceptanceScreen(),
+      ),
     );
   }
 
@@ -473,5 +486,31 @@ void main() {
 
     expect(repository.reviewedChecklistItemId, 31);
     expect(repository.reviewedChecklistStatus, 'accepted');
+  });
+
+  testWidgets('finding row gives long title full width above status', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(720, 1280);
+    tester.view.devicePixelRatio = 2;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    const title = 'Гидроизоляция_стыков_между_секциями_северного_корпуса';
+    final repository = _RecordingHandoverRepository()..findingTitle = title;
+
+    await tester.pumpWidget(buildScreen(repository, textScale: 1.3));
+    await pumpUi(tester);
+    await tester.ensureVisible(find.text('Подробнее').first);
+    await tester.pump();
+    await tester.tap(find.text('Подробнее').first);
+    await pumpUi(tester);
+    await tester.scrollUntilVisible(
+      find.text(title),
+      250,
+      scrollable: find.byType(Scrollable).last,
+    );
+
+    expect(find.text(title), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 }

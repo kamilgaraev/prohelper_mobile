@@ -13,21 +13,22 @@ class _Repository extends MachineryOperationsRepository {
 }
 
 class _Notifier extends MachineryOperationsNotifier {
-  _Notifier() : super(_Repository()) {
-    state = const MachineryOperationsState(
+  _Notifier({MachineryAssetModel? asset}) : super(_Repository()) {
+    state = MachineryOperationsState(
       assets: [
-        MachineryAssetModel(
-          id: 10,
-          assetCode: 'VP-10',
-          name: 'Виброплита',
-          status: 'assigned',
-          statusLabel: 'Назначена',
-          availableActions: ['start_shift'],
-          projectId: 30,
-          projectName: 'ЖК Север',
-          assignmentId: 20,
-          meterHours: 125.5,
-        ),
+        asset ??
+            const MachineryAssetModel(
+              id: 10,
+              assetCode: 'VP-10',
+              name: 'Виброплита',
+              status: 'assigned',
+              statusLabel: 'Назначена',
+              availableActions: ['start_shift'],
+              projectId: 30,
+              projectName: 'ЖК Север',
+              assignmentId: 20,
+              meterHours: 125.5,
+            ),
       ],
     );
   }
@@ -67,5 +68,51 @@ void main() {
     final action = notifier.action as StartShiftAction;
     expect(action.assignmentId, 20);
     expect(action.meterStart, 125.5);
+  });
+
+  testWidgets('operator asset header fits long text at larger scale', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(720, 1280);
+    tester.view.devicePixelRatio = 2;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    const name = 'Экскаватор_гусеничный_северный_участок_корпус_17';
+    const status = 'Ожидает подтверждения механика';
+    final notifier = _Notifier(
+      asset: const MachineryAssetModel(
+        id: 10,
+        assetCode: 'EXCAVATOR_VERY_LONG_ASSET_CODE_2026_001',
+        name: name,
+        status: 'assigned',
+        statusLabel: status,
+        availableActions: ['start_shift'],
+        projectId: 30,
+        projectName: 'ЖК Север',
+        assignmentId: 20,
+        meterHours: 125.5,
+      ),
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          machineryOperationsProvider.overrideWith((ref) => notifier),
+        ],
+        child: MaterialApp(
+          builder:
+              (context, child) => MediaQuery(
+                data: MediaQuery.of(
+                  context,
+                ).copyWith(textScaler: const TextScaler.linear(1.3)),
+                child: child!,
+              ),
+          home: const OperatorShiftScreen(),
+        ),
+      ),
+    );
+
+    expect(find.text(name), findsOneWidget);
+    expect(find.text(status), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 }
