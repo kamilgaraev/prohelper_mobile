@@ -1,4 +1,4 @@
-﻿import 'package:dio/dio.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -91,7 +91,7 @@ final _request =
       ..createdAt = DateTime(2026, 3, 14);
 
 void main() {
-  Widget createWidget({SiteRequestModel? request}) {
+  Widget createWidget({SiteRequestModel? request, double textScaleFactor = 1}) {
     return ProviderScope(
       overrides: [
         siteRequestDetailProvider.overrideWith(
@@ -102,9 +102,18 @@ void main() {
           ),
         ),
       ],
-      child: const TickerMode(
+      child: TickerMode(
         enabled: false,
-        child: MaterialApp(home: SiteRequestDetailScreen(id: 1001)),
+        child: MaterialApp(
+          builder:
+              (context, child) => MediaQuery(
+                data: MediaQuery.of(
+                  context,
+                ).copyWith(textScaler: TextScaler.linear(textScaleFactor)),
+                child: child!,
+              ),
+          home: SiteRequestDetailScreen(id: 1001),
+        ),
       ),
     );
   }
@@ -154,5 +163,50 @@ void main() {
     expect(find.text('Арматура'), findsOneWidget);
     expect(find.text('Отправить на согласование'), findsNothing);
     expect(find.text('Отменить заявку'), findsNothing);
+  });
+
+  testWidgets('действия оставляют место деталям при крупном шрифте', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(720, 1280);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final request =
+        SiteRequestModel()
+          ..serverId = 1001
+          ..title = 'Тестовая заявка'
+          ..status = 'pending'
+          ..statusLabel = 'Ожидает обработки'
+          ..priority = 'medium'
+          ..priorityLabel = 'Средний'
+          ..requestType = 'material_request'
+          ..requestTypeLabel = 'Материалы'
+          ..projectId = 15
+          ..projectName = 'Тестовый'
+          ..availableTransitions = const [
+            SiteRequestTransition(status: 'approved'),
+            SiteRequestTransition(status: 'in_review'),
+            SiteRequestTransition(status: 'cancelled'),
+            SiteRequestTransition(status: 'rejected'),
+          ];
+
+    await tester.pumpWidget(
+      createWidget(request: request, textScaleFactor: 1.3),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    expect(
+      tester.getSize(find.byType(SingleChildScrollView).first).height,
+      greaterThan(500),
+    );
+    expect(find.text('Согласовать'), findsOneWidget);
+    await tester.tap(find.byTooltip('Другие действия'));
+    await tester.pumpAndSettle();
+    expect(find.text('Взять на рассмотрение'), findsOneWidget);
+    expect(find.text('Отменить заявку'), findsOneWidget);
+    expect(find.text('Отклонить'), findsOneWidget);
   });
 }

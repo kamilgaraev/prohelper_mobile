@@ -1271,33 +1271,44 @@ class _SiteRequestActions extends StatelessWidget {
           ),
         ],
       ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
+      child: Row(
         children: [
-          ProButton(
-            text: _transitionActionLabel(primaryTransition),
-            backgroundColor: _transitionColor(primaryTransition.status),
-            isLoading: isLoading,
-            onPressed: () => onTransitionSelected(primaryTransition),
+          Expanded(
+            child: ProButton(
+              text: _transitionActionLabel(primaryTransition),
+              backgroundColor: _transitionColor(primaryTransition.status),
+              isLoading: isLoading,
+              onPressed: () => onTransitionSelected(primaryTransition),
+            ),
           ),
           if (secondaryTransitions.isNotEmpty) ...[
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children:
-                  secondaryTransitions.map((transition) {
-                    return OutlinedButton(
-                      onPressed:
-                          isLoading
-                              ? null
-                              : () => onTransitionSelected(transition),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: _transitionColor(transition.status),
-                      ),
-                      child: Text(_transitionActionLabel(transition)),
-                    );
-                  }).toList(),
+            const SizedBox(width: 12),
+            PopupMenuButton<SiteRequestTransition>(
+              enabled: !isLoading,
+              tooltip: 'Другие действия',
+              onSelected: onTransitionSelected,
+              itemBuilder:
+                  (context) =>
+                      secondaryTransitions.map((transition) {
+                        return PopupMenuItem(
+                          value: transition,
+                          child: Text(
+                            _transitionActionLabel(transition),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppTypography.bodyMedium(context).copyWith(
+                              color: _transitionColor(transition.status),
+                            ),
+                          ),
+                        );
+                      }).toList(),
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Icon(
+                  Icons.more_horiz_rounded,
+                  color: theme.colorScheme.onSurface,
+                ),
+              ),
             ),
           ],
         ],
