@@ -1,4 +1,4 @@
-﻿import 'package:dio/dio.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -29,19 +29,22 @@ class _FakeProjectsNotifier extends ProjectsNotifier {
 }
 
 class _FakeScheduleRepository extends ScheduleRepository {
-  _FakeScheduleRepository() : super(Dio());
+  _FakeScheduleRepository(this.overview) : super(Dio());
+
+  final ScheduleOverviewModel overview;
 
   @override
   Future<ScheduleOverviewModel> fetchSchedules({required int projectId}) async {
-    return _overview;
+    return overview;
   }
 }
 
 class _FakeScheduleNotifier extends ScheduleNotifier {
-  _FakeScheduleNotifier() : super(_FakeScheduleRepository()) {
-    state = const ScheduleState(
+  _FakeScheduleNotifier(ScheduleOverviewModel overview)
+    : super(_FakeScheduleRepository(overview)) {
+    state = ScheduleState(
       isLoading: false,
-      overview: _overview,
+      overview: overview,
       error: null,
       projectId: 15,
     );
@@ -144,15 +147,27 @@ void main() {
       ..myRole = 'Прораб';
   }
 
-  Widget createWidget() {
+  Widget createWidget({
+    ScheduleOverviewModel overview = _overview,
+    double textScaleFactor = 1,
+  }) {
     final project = buildProject();
 
     return ProviderScope(
       overrides: [
         projectsProvider.overrideWith((ref) => _FakeProjectsNotifier(project)),
-        scheduleProvider.overrideWith((ref) => _FakeScheduleNotifier()),
+        scheduleProvider.overrideWith((ref) => _FakeScheduleNotifier(overview)),
       ],
-      child: const MaterialApp(home: ScheduleScreen()),
+      child: MaterialApp(
+        builder:
+            (context, child) => MediaQuery(
+              data: MediaQuery.of(
+                context,
+              ).copyWith(textScaler: TextScaler.linear(textScaleFactor)),
+              child: child!,
+            ),
+        home: const ScheduleScreen(),
+      ),
     );
   }
 
@@ -201,6 +216,68 @@ void main() {
     expect(find.text('Фундамент'), findsNothing);
     expect(find.text('Монтаж кровли'), findsNothing);
     expect(find.text('Найдено: 1 из 3'), findsOneWidget);
+  });
+
+  testWidgets('длинное имя и даты не ломают карточку при крупном шрифте', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(720, 1280);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    const longName =
+        'График работ по смете: 02_01_02_Архитектурно_строительные_решения_1_ЛСР_по_проекту';
+    const readableName =
+        '02 01 02 Архитектурно строительные решения 1 ЛСР по проекту';
+    const overview = ScheduleOverviewModel(
+      project: ScheduleProjectModel(id: 15, name: 'Тестовый'),
+      summary: ScheduleOverviewSummaryModel(
+        totalSchedules: 1,
+        activeSchedules: 0,
+        completedSchedules: 0,
+        averageProgressPercent: 0,
+      ),
+      schedules: [
+        ScheduleItemModel(
+          id: 1,
+          projectId: 15,
+          name: longName,
+          status: 'draft',
+          statusLabel: 'Черновик',
+          statusColor: '#6B7280',
+          overallProgressPercent: 0,
+          progressColor: '#FF9500',
+          healthStatus: 'at_risk',
+          plannedStartDate: '2026-09-18',
+          plannedEndDate: '2026-09-18',
+          plannedDurationDays: 1,
+          actualStartDate: null,
+          actualEndDate: null,
+          criticalPathCalculated: false,
+          criticalPathDurationDays: null,
+          tasksCount: 0,
+          completedTasksCount: 0,
+          overdueTasksCount: 0,
+          createdAt: null,
+          updatedAt: null,
+        ),
+      ],
+    );
+
+    await tester.pumpWidget(
+      createWidget(overview: overview, textScaleFactor: 1.3),
+    );
+    await tester.pumpAndSettle();
+    await _scrollToText(tester, readableName);
+
+    expect(tester.takeException(), isNull);
+    expect(tester.widget<Text>(find.text(readableName)).maxLines, 2);
+    final dateFinder = find.text('18.09.2026 - 18.09.2026');
+    await tester.ensureVisible(dateFinder);
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(tester.widget<Text>(dateFinder).maxLines, 2);
   });
 }
 

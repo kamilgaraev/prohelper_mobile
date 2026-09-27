@@ -14,6 +14,7 @@ import '../../../core/widgets/pro_status_banner.dart';
 import '../data/schedule_model.dart';
 import '../data/schedule_repository.dart';
 import '../domain/schedule_provider.dart';
+import 'schedule_display_name.dart';
 
 enum _TaskFilter {
   all('Все'),
@@ -444,7 +445,15 @@ class _ScheduleDetailHeader extends StatelessWidget {
                         ),
                       ),
                     const SizedBox(height: 4),
-                    Text(schedule.name, style: AppTypography.h1(context)),
+                    Tooltip(
+                      message: schedule.name,
+                      child: Text(
+                        scheduleDisplayName(schedule.name),
+                        style: AppTypography.h2(context),
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
                   ],
                 ),
               ),
