@@ -7,6 +7,84 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:prohelpers_mobile/features/time_tracking/data/time_tracking_repository.dart';
 
 void main() {
+  test('loads all pages of pending approval entries', () async {
+    final requests = <RequestOptions>[];
+    final dio = Dio(BaseOptions(baseUrl: 'https://api.example.test'));
+    dio.httpClientAdapter = _JsonAdapter((options) {
+      requests.add(options);
+      final page = options.queryParameters['page'] as int;
+      return {
+        'success': true,
+        'message': null,
+        'data': [_entryJson(id: page == 1 ? 17 : 18, status: 'submitted')],
+        'meta': {
+          'current_page': page,
+          'last_page': 2,
+          'per_page': 100,
+          'total': 2,
+        },
+      };
+    });
+
+    final approvals = await TimeTrackingRepository(
+      dio,
+    ).fetchPendingApprovals(projectId: 9);
+
+    expect(approvals.map((entry) => entry.id), [17, 18]);
+    expect(requests, hasLength(2));
+    expect(requests.map((request) => request.queryParameters['page']), [1, 2]);
+    expect(
+      requests.every((request) => request.queryParameters['per_page'] == 100),
+      isTrue,
+    );
+  });
+
+  test('fails when a pending approvals page is unexpectedly empty', () async {
+    var requestCount = 0;
+    final dio = Dio(BaseOptions(baseUrl: 'https://api.example.test'));
+    dio.httpClientAdapter = _JsonAdapter((options) {
+      requestCount++;
+      final page = options.queryParameters['page'] as int;
+      return {
+        'success': true,
+        'message': null,
+        'data':
+            page == 1
+                ? [_entryJson(status: 'submitted')]
+                : <Map<String, dynamic>>[],
+        'meta': {'current_page': page, 'last_page': 2},
+      };
+    });
+
+    await expectLater(
+      TimeTrackingRepository(dio).fetchPendingApprovals(projectId: 9),
+      throwsA(isA<TimeTrackingPaginationException>()),
+    );
+
+    expect(requestCount, 2);
+  });
+
+  test('fails when pending approvals exceed the page limit', () async {
+    var requestCount = 0;
+    final dio = Dio(BaseOptions(baseUrl: 'https://api.example.test'));
+    dio.httpClientAdapter = _JsonAdapter((options) {
+      requestCount++;
+      return {
+        'success': true,
+        'message': null,
+        'data': [_entryJson(status: 'submitted')],
+        'meta': {'current_page': 1, 'last_page': 101},
+      };
+    });
+
+    await expectLater(
+      TimeTrackingRepository(dio).fetchPendingApprovals(projectId: 9),
+      throwsA(isA<TimeTrackingPaginationException>()),
+    );
+
+    expect(requestCount, 1);
+  });
+
   test('fetches daily summary through mobile time-tracking route', () async {
     late RequestOptions request;
     final dio = Dio(BaseOptions(baseUrl: 'https://api.example.test'));
@@ -167,13 +245,14 @@ Map<String, dynamic> _totalsJson() {
 }
 
 Map<String, dynamic> _entryJson({
+  int id = 17,
   String status = 'draft',
   bool isActive = false,
   double? hours = 3.5,
   List<String> actions = const ['submit'],
 }) {
   return {
-    'id': 17,
+    'id': id,
     'organization_id': 4,
     'user_id': 8,
     'project_id': 9,

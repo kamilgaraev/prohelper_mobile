@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:isar/isar.dart';
+import 'package:prohelpers_mobile/core/network/api_exception.dart';
 import 'package:prohelpers_mobile/core/sync/queued_sync_operation.dart';
 import 'package:prohelpers_mobile/core/sync/sync_queue_service.dart';
 import 'package:prohelpers_mobile/core/sync/sync_queue_store.dart';
@@ -13,6 +14,91 @@ import 'package:prohelpers_mobile/features/safety/data/safety_repository.dart';
 import '../../../helpers/mobile_integration_test_helpers.dart';
 
 void main() {
+  test('loads all pages for the four safety registries', () async {
+    final paths = [
+      '/safety-management/incidents',
+      '/safety-management/violations',
+      '/safety-management/inspections',
+      '/safety-management/inspection-findings',
+    ];
+    final requests = <RequestOptions>[];
+    final dio = Dio(
+      BaseOptions(baseUrl: 'https://mobile-api.test/api/v1/mobile'),
+    )..httpClientAdapter = _SafetyPaginationAdapter(requests);
+    final repository = SafetyRepository(dio);
+    final fetches = <Future<List<Map<String, dynamic>>> Function()>[
+      repository.fetchIncidentPayloads,
+      repository.fetchViolationPayloads,
+      repository.fetchInspectionPayloads,
+      repository.fetchInspectionFindingPayloads,
+    ];
+
+    for (var index = 0; index < fetches.length; index++) {
+      final items = await fetches[index]();
+      expect(items, hasLength(101));
+      expect(items.first['id'], 1);
+      expect(items.last['id'], 101);
+      final endpointRequests =
+          requests.where((request) => request.path == paths[index]).toList();
+      expect(endpointRequests, hasLength(2));
+      expect(
+        endpointRequests.map((request) => request.queryParameters['page']),
+        [1, 2],
+      );
+      expect(endpointRequests.first.queryParameters['per_page'], 100);
+    }
+  });
+
+  test('stops after an empty last page without pagination metadata', () async {
+    final requests = <RequestOptions>[];
+    final dio = Dio(
+        BaseOptions(baseUrl: 'https://mobile-api.test/api/v1/mobile'),
+      )
+      ..httpClientAdapter = _SafetyPaginationAdapter(
+        requests,
+        emptySecondPage: true,
+      );
+
+    final items = await SafetyRepository(dio).fetchIncidentPayloads();
+
+    expect(items, hasLength(100));
+    expect(requests, hasLength(2));
+  });
+
+  test('reports an error when the server repeats a page', () async {
+    final requests = <RequestOptions>[];
+    final dio = Dio(
+        BaseOptions(baseUrl: 'https://mobile-api.test/api/v1/mobile'),
+      )
+      ..httpClientAdapter = _SafetyPaginationAdapter(
+        requests,
+        repeatSecondPage: true,
+      );
+
+    await expectLater(
+      SafetyRepository(dio).fetchIncidentPayloads(),
+      throwsA(isA<ApiException>()),
+    );
+    expect(requests, hasLength(2));
+  });
+
+  test('limits safety pagination to 1000 pages', () async {
+    final requests = <RequestOptions>[];
+    final dio = Dio(
+        BaseOptions(baseUrl: 'https://mobile-api.test/api/v1/mobile'),
+      )
+      ..httpClientAdapter = _SafetyPaginationAdapter(
+        requests,
+        uniqueFullPages: true,
+      );
+
+    await expectLater(
+      SafetyRepository(dio).fetchIncidentPayloads(),
+      throwsA(isA<ApiException>()),
+    );
+    expect(requests, hasLength(1000));
+  });
+
   test('sends violation evidence as photos[] multipart files', () async {
     final directory = await Directory.systemTemp.createTemp('safety-photo-');
     addTearDown(() => directory.delete(recursive: true));
@@ -130,6 +216,50 @@ void main() {
       expect(await store.all(), isEmpty);
     },
   );
+}
+
+class _SafetyPaginationAdapter implements HttpClientAdapter {
+  _SafetyPaginationAdapter(
+    this.requests, {
+    this.emptySecondPage = false,
+    this.repeatSecondPage = false,
+    this.uniqueFullPages = false,
+  });
+
+  final List<RequestOptions> requests;
+  final bool emptySecondPage;
+  final bool repeatSecondPage;
+  final bool uniqueFullPages;
+
+  @override
+  void close({bool force = false}) {}
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) async {
+    requests.add(options);
+    final page = int.parse(options.queryParameters['page'].toString());
+    final items =
+        page == 1 || repeatSecondPage
+            ? List.generate(100, (index) => {'id': index + 1})
+            : uniqueFullPages
+            ? List.generate(100, (index) => {'id': page * 100 + index + 1})
+            : emptySecondPage
+            ? <Map<String, int>>[]
+            : [
+              <String, int>{'id': 101},
+            ];
+    return ResponseBody.fromString(
+      jsonEncode({'success': true, 'data': items}),
+      200,
+      headers: {
+        Headers.contentTypeHeader: [Headers.jsonContentType],
+      },
+    );
+  }
 }
 
 class _NetworkErrorAdapter implements HttpClientAdapter {

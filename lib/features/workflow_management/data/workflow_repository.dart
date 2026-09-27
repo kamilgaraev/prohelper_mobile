@@ -10,10 +10,58 @@ final workflowRepositoryProvider = Provider<WorkflowRepository>((ref) {
   return WorkflowRepository(ref.read(dioProvider));
 });
 
+const _maxWorkflowTaskPages = 1000;
+
 class WorkflowRepository {
   WorkflowRepository(this._dio);
 
   final Dio _dio;
+
+  Future<WorkflowTaskListResult> fetchAllTasks({
+    int perPage = 50,
+    int? projectId,
+    String? status,
+    required bool assignedToMe,
+    String? search,
+  }) async {
+    final firstPage = await fetchTasks(
+      page: 1,
+      perPage: perPage,
+      projectId: projectId,
+      status: status,
+      assignedToMe: assignedToMe,
+      search: search,
+    );
+    if (firstPage.meta.lastPage > _maxWorkflowTaskPages) {
+      throw const FormatException('Workflow task page count exceeds limit');
+    }
+    final items = [...firstPage.items];
+
+    for (
+      var page = firstPage.meta.currentPage + 1;
+      page <= firstPage.meta.lastPage;
+      page++
+    ) {
+      final result = await fetchTasks(
+        page: page,
+        perPage: perPage,
+        projectId: projectId,
+        status: status,
+        assignedToMe: assignedToMe,
+        search: search,
+      );
+      if (result.items.isEmpty) {
+        throw const FormatException('Unexpected empty workflow task page');
+      }
+      items.addAll(result.items);
+    }
+
+    return WorkflowTaskListResult(
+      items: items,
+      meta: firstPage.meta,
+      summary: firstPage.summary,
+    );
+  }
 
   Future<WorkflowTaskListResult> fetchTasks({
     int page = 1,

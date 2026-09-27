@@ -121,7 +121,7 @@ class WorkflowNotifier extends StateNotifier<WorkflowState> {
     );
 
     try {
-      final result = await _repository.fetchTasks(
+      final result = await _repository.fetchAllTasks(
         projectId: state.projectFilter,
         status: state.statusFilter,
         assignedToMe: state.assignedToMe,

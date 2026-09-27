@@ -12,6 +12,8 @@ final timeTrackingRepositoryProvider = Provider<TimeTrackingRepository>((ref) {
   return TimeTrackingRepository(ref.read(dioProvider));
 });
 
+const _maxPendingApprovalPages = 100;
+
 class TimeTrackingRepository {
   TimeTrackingRepository(this._dio);
 
@@ -87,13 +89,55 @@ class TimeTrackingRepository {
     required int projectId,
   }) async {
     try {
-      final response = await _dio.get(
-        '/time-tracking/pending-approvals',
-        queryParameters: {'project_id': projectId, 'per_page': 100},
-      );
-      return MobileApiResponse.dataList(response.data)
-          .map(TimeEntryModel.fromJson)
-          .toList(growable: false);
+      const perPage = 100;
+      var page = 1;
+      var lastPage = 0;
+      final approvals = <TimeEntryModel>[];
+
+      while (lastPage == 0 || page <= lastPage) {
+        final response = await _dio.get(
+          '/time-tracking/pending-approvals',
+          queryParameters: {
+            'project_id': projectId,
+            'per_page': perPage,
+            'page': page,
+          },
+        );
+        final payload = MobileApiResponse.list(response.data);
+        final items = payload.data
+            .map(TimeEntryModel.fromJson)
+            .toList(growable: false);
+        final responseCurrentPage = payload.meta['current_page'];
+        final responseLastPage = payload.meta['last_page'];
+        if (responseCurrentPage != page ||
+            responseLastPage is! int ||
+            responseLastPage < page) {
+          throw const TimeTrackingPaginationException(
+            'Не удалось загрузить все записи на согласование. Повторите попытку.',
+          );
+        }
+
+        if (responseLastPage > _maxPendingApprovalPages) {
+          throw const TimeTrackingPaginationException(
+            'Слишком много страниц записей на согласование. Повторите попытку позже.',
+          );
+        }
+
+        if (items.isEmpty) {
+          if (page > 1 || responseLastPage > page) {
+            throw const TimeTrackingPaginationException(
+              'Не удалось загрузить все записи на согласование. Повторите попытку.',
+            );
+          }
+          break;
+        }
+
+        approvals.addAll(items);
+        lastPage = responseLastPage;
+        page++;
+      }
+
+      return approvals;
     } on DioException catch (error) {
       throw ApiException.fromDio(error);
     }
@@ -253,6 +297,10 @@ class TimeTrackingRepository {
       throw ApiException.fromDio(error);
     }
   }
+}
+
+class TimeTrackingPaginationException extends ApiException {
+  const TimeTrackingPaginationException(super.message);
 }
 
 class TimeTrackingWriteUncertainException extends ApiException {

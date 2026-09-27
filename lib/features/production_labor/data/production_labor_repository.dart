@@ -22,6 +22,9 @@ final productionLaborRepositoryProvider = Provider<ProductionLaborRepository>((
 });
 
 class ProductionLaborRepository extends SyncQueueAwareRepository {
+  static const _workOrdersPerPage = 50;
+  static const _maxWorkOrderPages = 1000;
+
   ProductionLaborRepository(
     this._dio, {
     Future<SyncQueueService>? syncQueueServiceFuture,
@@ -39,12 +42,29 @@ class ProductionLaborRepository extends SyncQueueAwareRepository {
     int? projectId,
   }) async {
     try {
-      final response = await _dio.get(
-        '/production-labor/work-orders',
-        queryParameters: {if (projectId != null) 'project_id': projectId},
-      );
+      final workOrders = <Map<String, dynamic>>[];
+      final firstPage = await _fetchWorkOrderPage(1, projectId);
+      workOrders.addAll(firstPage.data);
 
-      return _list(response.data);
+      final lastPage = _paginationPage(_lastPageValue(firstPage.meta));
+      if (lastPage == null || lastPage <= 1) {
+        return workOrders;
+      }
+      if (lastPage > _maxWorkOrderPages) {
+        throw const FormatException('Слишком много страниц нарядов.');
+      }
+
+      for (var page = 2; page <= lastPage; page++) {
+        final result = await _fetchWorkOrderPage(page, projectId);
+        if (result.data.isEmpty) {
+          throw const FormatException(
+            'Страница нарядов пуста, хотя сервер сообщает о следующих страницах.',
+          );
+        }
+        workOrders.addAll(result.data);
+      }
+
+      return workOrders;
     } on DioException catch (error) {
       throw ApiException.fromDio(error);
     } catch (_) {
@@ -138,8 +158,42 @@ class ProductionLaborRepository extends SyncQueueAwareRepository {
     }
   }
 
-  List<Map<String, dynamic>> _list(dynamic responseData) {
-    return laborMapList(MobileApiResponse.dataList(responseData));
+  Future<MobileApiResponse<List<Map<String, dynamic>>>> _fetchWorkOrderPage(
+    int page,
+    int? projectId,
+  ) async {
+    final response = await _dio.get(
+      '/production-labor/work-orders',
+      queryParameters: {
+        'page': page,
+        'per_page': _workOrdersPerPage,
+        if (projectId != null) 'project_id': projectId,
+      },
+    );
+    final result = MobileApiResponse.list(response.data);
+    return MobileApiResponse(
+      success: result.success,
+      data: laborMapList(result.data),
+      message: result.message,
+      meta: result.meta,
+    );
+  }
+
+  int? _paginationPage(dynamic value) {
+    final page = switch (value) {
+      int value => value,
+      String value => int.tryParse(value),
+      _ => null,
+    };
+    return page != null && page > 0 ? page : null;
+  }
+
+  dynamic _lastPageValue(Map<String, dynamic> meta) {
+    final nestedMeta = meta['meta'];
+    if (nestedMeta is Map) {
+      return nestedMeta['last_page'];
+    }
+    return meta['last_page'];
   }
 
   Map<String, dynamic> _object(dynamic responseData) {

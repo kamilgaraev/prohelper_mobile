@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:dio/dio.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
@@ -19,6 +21,9 @@ final machineryOperationsRepositoryProvider =
       );
     });
 
+const _machineryListPageSize = 100;
+const _maxMachineryListPages = 100;
+
 class MachineryOperationsRepository extends SyncQueueAwareRepository {
   MachineryOperationsRepository(
     this._dio, {
@@ -29,12 +34,13 @@ class MachineryOperationsRepository extends SyncQueueAwareRepository {
 
   Future<List<MachineryAssetModel>> fetchAssets({int? projectId}) async {
     try {
-      final response = await _dio.get(
-        '/machinery-operations/assets',
-        queryParameters: {if (projectId != null) 'project_id': projectId},
-      );
+      final items = await _fetchAllPages('/machinery-operations/assets', {
+        if (projectId != null) 'project_id': projectId,
+      });
 
-      return _list(response.data).map(MachineryAssetModel.fromJson).toList();
+      return items.map(MachineryAssetModel.fromJson).toList();
+    } on ApiException {
+      rethrow;
     } on DioException catch (error) {
       throw ApiException.fromDio(error);
     } catch (_) {
@@ -46,14 +52,14 @@ class MachineryOperationsRepository extends SyncQueueAwareRepository {
     int? projectId,
   }) async {
     try {
-      final response = await _dio.get(
+      final items = await _fetchAllPages(
         '/machinery-operations/shift-reports',
-        queryParameters: {if (projectId != null) 'project_id': projectId},
+        {if (projectId != null) 'project_id': projectId},
       );
 
-      return _list(
-        response.data,
-      ).map(MachineryShiftReportModel.fromJson).toList();
+      return items.map(MachineryShiftReportModel.fromJson).toList();
+    } on ApiException {
+      rethrow;
     } on DioException catch (error) {
       throw ApiException.fromDio(error);
     } catch (_) {
@@ -101,13 +107,13 @@ class MachineryOperationsRepository extends SyncQueueAwareRepository {
     int? projectId,
   }) async {
     try {
-      final response = await _dio.get(
+      final items = await _fetchAllPages(
         '/machinery-operations/maintenance-orders',
-        queryParameters: {if (projectId != null) 'project_id': projectId},
+        {if (projectId != null) 'project_id': projectId},
       );
-      return _list(
-        response.data,
-      ).map(MachineryMaintenanceOrderModel.fromJson).toList();
+      return items.map(MachineryMaintenanceOrderModel.fromJson).toList();
+    } on ApiException {
+      rethrow;
     } on DioException catch (error) {
       throw ApiException.fromDio(error);
     } catch (_) {
@@ -288,6 +294,46 @@ class MachineryOperationsRepository extends SyncQueueAwareRepository {
 
   List<Map<String, dynamic>> _list(dynamic responseData) {
     return machineryMapList(MobileApiResponse.dataList(responseData));
+  }
+
+  Future<List<Map<String, dynamic>>> _fetchAllPages(
+    String path,
+    Map<String, dynamic> filters,
+  ) async {
+    final result = <Map<String, dynamic>>[];
+    final seenPages = <String>{};
+    var page = 1;
+
+    while (true) {
+      if (page > _maxMachineryListPages) {
+        throw const ApiException(
+          'Не удалось загрузить данные раздела техники: превышен предел страниц.',
+        );
+      }
+
+      final response = await _dio.get(
+        path,
+        queryParameters: {
+          ...filters,
+          'page': page,
+          'per_page': _machineryListPageSize,
+        },
+      );
+      final items = _list(response.data);
+      if (items.isEmpty) break;
+
+      if (!seenPages.add(jsonEncode(items))) {
+        throw const ApiException(
+          'Сервер повторил страницу данных раздела техники. Не удалось загрузить все записи.',
+        );
+      }
+
+      result.addAll(items);
+      if (items.length < _machineryListPageSize) break;
+      page++;
+    }
+
+    return result;
   }
 
   Map<String, dynamic> _object(dynamic responseData) {

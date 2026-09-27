@@ -7,6 +7,68 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:prohelpers_mobile/features/workflow_management/data/workflow_repository.dart';
 
 void main() {
+  test('fetches every workflow task page in order', () async {
+    final pages = <int>[];
+    final dio = Dio(BaseOptions(baseUrl: 'https://api.example.test'));
+    dio.httpClientAdapter = _JsonAdapter((options) {
+      final page = int.parse(options.queryParameters['page'].toString());
+      pages.add(page);
+      final task = _workflowTaskJson()..['id'] = page + 16;
+      return {
+        'success': true,
+        'message': null,
+        'data': {
+          'items': [task],
+          'meta': {
+            'current_page': page,
+            'per_page': 50,
+            'total': 2,
+            'last_page': 2,
+          },
+          'summary': {
+            'by_status': {'pending': 2},
+          },
+        },
+      };
+    });
+
+    final result = await WorkflowRepository(
+      dio,
+    ).fetchAllTasks(assignedToMe: true);
+
+    expect(pages, [1, 2]);
+    expect(result.items.map((task) => task.id), [17, 18]);
+    expect(result.meta.lastPage, 2);
+  });
+
+  test('rejects an empty page while loading multiple pages', () async {
+    final dio = Dio(BaseOptions(baseUrl: 'https://api.example.test'));
+    dio.httpClientAdapter = _JsonAdapter((options) {
+      final page = int.parse(options.queryParameters['page'].toString());
+      return {
+        'success': true,
+        'message': null,
+        'data': {
+          'items': page == 1 ? [_workflowTaskJson()] : <Map<String, dynamic>>[],
+          'meta': {
+            'current_page': page,
+            'per_page': 50,
+            'total': 1,
+            'last_page': 2,
+          },
+          'summary': {
+            'by_status': {'pending': 1},
+          },
+        },
+      };
+    });
+
+    await expectLater(
+      WorkflowRepository(dio).fetchAllTasks(assignedToMe: true),
+      throwsA(isA<FormatException>()),
+    );
+  });
+
   test(
     'fetches workflow tasks through mobile route with explicit filters',
     () async {

@@ -412,6 +412,7 @@ class _BrigadeResponsesScreenState
     extends ConsumerState<BrigadeResponsesScreen> {
   FieldCatalogPage? _page;
   bool _loading = true;
+  bool _loadingMore = false;
   String? _error;
 
   @override
@@ -480,6 +481,23 @@ class _BrigadeResponsesScreenState
                 ),
                 const SizedBox(height: 10),
               ],
+              if (_page!.currentPage < _page!.lastPage)
+                OutlinedButton.icon(
+                  onPressed: _loadingMore ? null : _loadMore,
+                  icon:
+                      _loadingMore
+                          ? const SizedBox.square(
+                            dimension: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                          : const Icon(Icons.expand_more_rounded),
+                  label: Text(_loadingMore ? 'Загружаем' : 'Загрузить ещё'),
+                ),
+              if (_error != null)
+                Text(
+                  'Не удалось обновить список откликов: $_error',
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
             ],
           ],
         ),
@@ -505,6 +523,7 @@ class _BrigadeResponsesScreenState
     }
     setState(() {
       _loading = true;
+      _loadingMore = false;
       _error = null;
     });
     try {
@@ -525,6 +544,49 @@ class _BrigadeResponsesScreenState
       setState(() {
         _error = UserMessage.fromError(error);
         _loading = false;
+      });
+    }
+  }
+
+  Future<void> _loadMore() async {
+    final current = _page;
+    if (current == null ||
+        _loadingMore ||
+        current.currentPage >= current.lastPage) {
+      return;
+    }
+    setState(() {
+      _loadingMore = true;
+      _error = null;
+    });
+    try {
+      final next = await ref
+          .read(teamExpansionRepositoryProvider)
+          .fetchPage(
+            path:
+                '/team-expansion/brigade-requests/${widget.requestId}/responses',
+            filters: const {'status': 'pending'},
+            page: current.currentPage + 1,
+          );
+      if (!mounted || !identical(current, _page)) return;
+      final ids = current.items.map((item) => item.uuid).toSet();
+      setState(() {
+        _page = FieldCatalogPage(
+          items: [
+            ...current.items,
+            ...next.items.where((item) => ids.add(item.uuid)),
+          ],
+          currentPage: next.currentPage,
+          lastPage: next.lastPage,
+          total: next.total,
+        );
+        _loadingMore = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _loadingMore = false;
+        _error = UserMessage.fromError(error);
       });
     }
   }
