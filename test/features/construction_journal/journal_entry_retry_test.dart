@@ -160,6 +160,65 @@ void main() {
     },
   );
   test(
+    'server failure keeps a journal create queued and reports server status',
+    () async {
+      final store = _MemorySyncQueueStore();
+      final dio =
+          Dio()
+            ..interceptors.add(
+              InterceptorsWrapper(
+                onRequest: (options, handler) {
+                  handler.reject(
+                    DioException(
+                      requestOptions: options,
+                      response: Response<dynamic>(
+                        requestOptions: options,
+                        statusCode: 500,
+                        data: {'message': 'Internal Server Error'},
+                      ),
+                      type: DioExceptionType.badResponse,
+                    ),
+                  );
+                },
+              ),
+            );
+      final queue = SyncQueueService(
+        store: store,
+        dio: dio,
+        now: () => DateTime(2026, 9, 28, 10),
+        currentScope: () => '9:3',
+      );
+      final repository = ConstructionJournalRepository(
+        dio,
+        syncQueueServiceFuture: Future.value(queue),
+      );
+
+      await expectLater(
+        repository.createEntry(
+          journalId: 7,
+          entryDate: '2026-09-28',
+          workDescription: 'Монтаж',
+          submitIntent: true,
+          idempotencyKey: 'server-error-create',
+        ),
+        throwsA(
+          isA<SyncQueuedException>().having(
+            (error) => error.message,
+            'message',
+            SyncQueueMessages.serverFailure,
+          ),
+        ),
+      );
+
+      final pending = (await store.all()).single;
+      expect(pending.status, SyncOperationStatuses.queued);
+      expect(pending.lastBusinessError, SyncQueueMessages.serverFailure);
+      expect(pending.attemptCount, 1);
+      expect(pending.nextAttemptAt, DateTime(2026, 9, 28, 10, 1));
+    },
+  );
+
+  test(
     'offline repeated create retains one operation and the original payload across restart',
     () async {
       final store = _MemorySyncQueueStore();

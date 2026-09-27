@@ -24,6 +24,7 @@ abstract class SyncQueueAwareRepository {
         throw SyncQueuedException(
           queueId: operation.id,
           requiresReview: operation.status == SyncOperationStatuses.conflict,
+          message: operation.lastBusinessError,
         );
       }
 
@@ -40,6 +41,7 @@ abstract class SyncQueueAwareRepository {
     throw SyncQueuedException(
       queueId: operation.id,
       requiresReview: operation.status == SyncOperationStatuses.conflict,
+      message: operation.lastBusinessError,
     );
   }
 

@@ -12,6 +12,8 @@ import 'sync_queue_store.dart';
 
 class SyncQueueMessages {
   static const queuedForNetwork = 'Будет отправлено при восстановлении связи';
+  static const serverFailure =
+      'На сервере произошла ошибка. Операция сохранена и доступна для повтора.';
   static const permissionDenied =
       'Недостаточно прав для отправки сохраненной операции.';
   static const unknownOutcome =
@@ -21,12 +23,16 @@ class SyncQueueMessages {
 }
 
 class SyncQueuedException extends ApiException {
-  const SyncQueuedException({this.queueId, this.requiresReview = false})
-    : super(
-        requiresReview
-            ? SyncQueueMessages.unknownOutcome
-            : SyncQueueMessages.queuedForNetwork,
-      );
+  const SyncQueuedException({
+    this.queueId,
+    this.requiresReview = false,
+    String? message,
+  }) : super(
+         message ??
+             (requiresReview
+                 ? SyncQueueMessages.unknownOutcome
+                 : SyncQueueMessages.queuedForNetwork),
+       );
 
   final int? queueId;
   final bool requiresReview;
@@ -118,7 +124,7 @@ class SyncQueueService {
     }
 
     final statusCode = error.response?.statusCode;
-    return statusCode != null && statusCode >= 500;
+    return _isServerError(statusCode);
   }
 
   Future<QueuedSyncOperation> enqueue(
@@ -705,13 +711,29 @@ class SyncQueueService {
     DioException error,
   ) async {
     final statusCode = error.response?.statusCode;
-    if (_isNetworkError(error) || (statusCode != null && statusCode >= 500)) {
+    if (_isNetworkError(error)) {
       if (error.type == DioExceptionType.connectionTimeout ||
           _hasConfirmedIdempotencyContract(operation)) {
         operation
           ..status = SyncOperationStatuses.queued
           ..nextAttemptAt = _now().add(_backoff(operation.attemptCount))
           ..lastBusinessError = SyncQueueMessages.queuedForNetwork;
+      } else {
+        operation
+          ..status = SyncOperationStatuses.conflict
+          ..nextAttemptAt = null
+          ..lastBusinessError = SyncQueueMessages.unknownOutcome;
+      }
+      await _save(operation);
+      return;
+    }
+
+    if (_isServerError(statusCode)) {
+      if (_hasConfirmedIdempotencyContract(operation)) {
+        operation
+          ..status = SyncOperationStatuses.queued
+          ..nextAttemptAt = _now().add(_backoff(operation.attemptCount))
+          ..lastBusinessError = SyncQueueMessages.serverFailure;
       } else {
         operation
           ..status = SyncOperationStatuses.conflict
@@ -764,13 +786,28 @@ class SyncQueueService {
               : 1
       ..lastAttemptAt = operation.lastAttemptAt ?? attemptedAt;
 
-    if (_isNetworkError(error) || (statusCode != null && statusCode >= 500)) {
+    if (_isNetworkError(error)) {
       if (error.type == DioExceptionType.connectionTimeout ||
           _hasConfirmedIdempotencyContract(operation)) {
         operation
           ..status = SyncOperationStatuses.queued
           ..nextAttemptAt = attemptedAt.add(_backoff(operation.attemptCount))
           ..lastBusinessError = SyncQueueMessages.queuedForNetwork;
+      } else {
+        operation
+          ..status = SyncOperationStatuses.conflict
+          ..nextAttemptAt = null
+          ..lastBusinessError = SyncQueueMessages.unknownOutcome;
+      }
+      return;
+    }
+
+    if (_isServerError(statusCode)) {
+      if (_hasConfirmedIdempotencyContract(operation)) {
+        operation
+          ..status = SyncOperationStatuses.queued
+          ..nextAttemptAt = attemptedAt.add(_backoff(operation.attemptCount))
+          ..lastBusinessError = SyncQueueMessages.serverFailure;
       } else {
         operation
           ..status = SyncOperationStatuses.conflict
@@ -975,6 +1012,9 @@ class SyncQueueService {
       _ => false,
     };
   }
+
+  static bool _isServerError(int? statusCode) =>
+      statusCode != null && statusCode >= 500 && statusCode < 600;
 
   String _formValue(Object value) {
     if (value is String) {

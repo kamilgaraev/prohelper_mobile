@@ -798,6 +798,7 @@ class ConstructionJournalRepository extends SyncQueueAwareRepository {
     return SyncQueuedException(
       queueId: operation.id,
       requiresReview: updated?.status == SyncOperationStatuses.conflict,
+      message: updated?.lastBusinessError,
     );
   }
 
