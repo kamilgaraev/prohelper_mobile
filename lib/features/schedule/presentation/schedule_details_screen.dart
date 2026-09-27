@@ -14,6 +14,7 @@ import '../../../core/widgets/pro_status_banner.dart';
 import '../data/schedule_model.dart';
 import '../data/schedule_repository.dart';
 import '../domain/schedule_provider.dart';
+import 'schedule_display_name.dart';
 
 enum _TaskFilter {
   all('Все'),
@@ -425,6 +426,7 @@ class _ScheduleDetailHeader extends StatelessWidget {
     final schedule = detail.schedule;
     final statusColor = _parseColor(schedule.statusColor);
     final progressColor = _parseColor(schedule.progressColor);
+    final displayCode = scheduleDisplayCode(schedule.name);
 
     return IndustrialCard(
       child: Column(
@@ -443,8 +445,23 @@ class _ScheduleDetailHeader extends StatelessWidget {
                           color: Theme.of(context).colorScheme.onSurfaceVariant,
                         ),
                       ),
+                    if (displayCode != null)
+                      Text(
+                        displayCode,
+                        style: AppTypography.caption(context).copyWith(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                      ),
                     const SizedBox(height: 4),
-                    Text(schedule.name, style: AppTypography.h1(context)),
+                    Tooltip(
+                      message: schedule.name,
+                      child: Text(
+                        scheduleDisplayName(schedule.name),
+                        style: AppTypography.h2(context),
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
                   ],
                 ),
               ),

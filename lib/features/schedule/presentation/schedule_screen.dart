@@ -15,6 +15,7 @@ import '../../projects/domain/projects_provider.dart';
 import '../data/schedule_model.dart';
 import '../domain/schedule_provider.dart';
 import 'schedule_daily_plans_screen.dart';
+import 'schedule_display_name.dart';
 import 'schedule_details_screen.dart';
 
 enum _ScheduleFilter {
@@ -513,6 +514,7 @@ class _ScheduleCard extends StatelessWidget {
     final healthLabel = _healthStatusLabel(schedule.healthStatus);
     final healthColor = _healthStatusColor(context, schedule.healthStatus);
     final hasAttention = _hasAttention(schedule);
+    final displayCode = scheduleDisplayCode(schedule.name);
 
     return IndustrialCard(
       onTap: onTap,
@@ -524,32 +526,39 @@ class _ScheduleCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(schedule.name, style: AppTypography.h2(context)),
-                    if ((schedule.description ?? '').trim().isNotEmpty) ...[
-                      const SizedBox(height: 6),
-                      Text(
-                        schedule.description!,
-                        style: AppTypography.bodyMedium(
-                          context,
-                        ).copyWith(color: theme.colorScheme.onSurfaceVariant),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-              const SizedBox(width: 12),
               _ScheduleBadge(label: schedule.statusLabel, color: statusColor),
+              if (displayCode != null)
+                Text(
+                  displayCode,
+                  style: AppTypography.caption(
+                    context,
+                  ).copyWith(color: theme.colorScheme.onSurfaceVariant),
+                ),
             ],
           ),
+          const SizedBox(height: 10),
+          Text(
+            scheduleDisplayName(schedule.name),
+            style: AppTypography.h2(context),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+          if ((schedule.description ?? '').trim().isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text(
+              schedule.description!,
+              style: AppTypography.bodyMedium(
+                context,
+              ).copyWith(color: theme.colorScheme.onSurfaceVariant),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
           const SizedBox(height: 12),
           Wrap(
             spacing: 8,
@@ -655,6 +664,8 @@ class _ScheduleBadge extends StatelessWidget {
       ),
       child: Text(
         label,
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
         style: AppTypography.caption(
           context,
         ).copyWith(color: color, fontWeight: FontWeight.w700),
@@ -686,11 +697,15 @@ class _MetaPill extends StatelessWidget {
         children: [
           Icon(icon, size: 16, color: resolvedColor),
           const SizedBox(width: 6),
-          Text(
-            label,
-            style: AppTypography.caption(
-              context,
-            ).copyWith(color: resolvedColor, fontWeight: FontWeight.w600),
+          Flexible(
+            child: Text(
+              label,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: AppTypography.caption(
+                context,
+              ).copyWith(color: resolvedColor, fontWeight: FontWeight.w600),
+            ),
           ),
         ],
       ),
