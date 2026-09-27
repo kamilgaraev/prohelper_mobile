@@ -112,9 +112,10 @@ class _PendingSyncBody extends StatelessWidget {
       context: context,
       builder:
           (dialogContext) => AlertDialog(
-            title: const Text('Удалить сохранённое действие?'),
+            scrollable: true,
+            title: const Text('Удалить с устройства?'),
             content: const Text(
-              'Проверьте результат на объекте перед удалением. Действие исчезнет только с устройства; данные на сервере останутся.',
+              'Сначала проверьте результат на объекте. На сервере ничего не удалится.',
             ),
             actions: [
               TextButton(
