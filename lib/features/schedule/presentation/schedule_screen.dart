@@ -514,6 +514,7 @@ class _ScheduleCard extends StatelessWidget {
     final healthLabel = _healthStatusLabel(schedule.healthStatus);
     final healthColor = _healthStatusColor(context, schedule.healthStatus);
     final hasAttention = _hasAttention(schedule);
+    final displayCode = scheduleDisplayCode(schedule.name);
 
     return IndustrialCard(
       onTap: onTap,
@@ -525,12 +526,20 @@ class _ScheduleCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Align(
-            alignment: Alignment.centerLeft,
-            child: _ScheduleBadge(
-              label: schedule.statusLabel,
-              color: statusColor,
-            ),
+          Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              _ScheduleBadge(label: schedule.statusLabel, color: statusColor),
+              if (displayCode != null)
+                Text(
+                  displayCode,
+                  style: AppTypography.caption(
+                    context,
+                  ).copyWith(color: theme.colorScheme.onSurfaceVariant),
+                ),
+            ],
           ),
           const SizedBox(height: 10),
           Text(

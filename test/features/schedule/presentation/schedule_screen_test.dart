@@ -228,8 +228,7 @@ void main() {
 
     const longName =
         'График работ по смете: 02_01_02_Архитектурно_строительные_решения_1_ЛСР_по_проекту';
-    const readableName =
-        '02 01 02 Архитектурно строительные решения 1 ЛСР по проекту';
+    const readableName = 'Архитектурно строительные решения 1 ЛСР по проекту';
     const overview = ScheduleOverviewModel(
       project: ScheduleProjectModel(id: 15, name: 'Тестовый'),
       summary: ScheduleOverviewSummaryModel(
@@ -272,6 +271,7 @@ void main() {
     await _scrollToText(tester, readableName);
 
     expect(tester.takeException(), isNull);
+    expect(find.text('02.01.02'), findsOneWidget);
     expect(tester.widget<Text>(find.text(readableName)).maxLines, 2);
     final dateFinder = find.text('18.09.2026 - 18.09.2026');
     await tester.ensureVisible(dateFinder);

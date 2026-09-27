@@ -426,6 +426,7 @@ class _ScheduleDetailHeader extends StatelessWidget {
     final schedule = detail.schedule;
     final statusColor = _parseColor(schedule.statusColor);
     final progressColor = _parseColor(schedule.progressColor);
+    final displayCode = scheduleDisplayCode(schedule.name);
 
     return IndustrialCard(
       child: Column(
@@ -441,6 +442,13 @@ class _ScheduleDetailHeader extends StatelessWidget {
                       Text(
                         detail.project.name,
                         style: AppTypography.bodyMedium(context).copyWith(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    if (displayCode != null)
+                      Text(
+                        displayCode,
+                        style: AppTypography.caption(context).copyWith(
                           color: Theme.of(context).colorScheme.onSurfaceVariant,
                         ),
                       ),
