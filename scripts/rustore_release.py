@@ -2,6 +2,7 @@
 
 import argparse
 import base64
+import hashlib
 import http.client
 import json
 import os
@@ -34,6 +35,10 @@ class ReleaseVersion:
     code: int
 
 
+BUILD_WORKFLOW_PATH = ".github/workflows/rustore-build.yml"
+SHA256_PATTERN = re.compile(r"^[0-9a-fA-F]{64}$")
+
+
 def parse_release_tag(tag: str) -> ReleaseVersion:
     match = TAG_PATTERN.fullmatch(tag)
     if match is None:
@@ -44,6 +49,126 @@ def parse_release_tag(tag: str) -> ReleaseVersion:
     if code <= 0:
         raise ValueError("versionCode должен быть положительным целым числом")
     return ReleaseVersion(name=match.group("name"), code=code)
+
+
+def load_json_object(path: Path, label: str) -> dict[str, Any]:
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise RuStoreError(f"Не удалось прочитать {label}") from error
+    if not isinstance(value, dict):
+        raise RuStoreError(f"Некорректный формат {label}")
+    return value
+
+
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as artifact:
+        for chunk in iter(lambda: artifact.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def verify_build_run(
+    run_metadata: dict[str, Any],
+    *,
+    run_id: str,
+    release_tag: str,
+    repository: str,
+) -> str:
+    if not run_id.isdecimal() or int(run_id) <= 0:
+        raise RuStoreError("Идентификатор CI-сборки должен быть положительным числом")
+    parse_release_tag(release_tag)
+    try:
+        run_repository = run_metadata["repository"]["full_name"]
+        head_repository = run_metadata["head_repository"]["full_name"]
+    except (KeyError, TypeError):
+        raise RuStoreError("В данных CI-сборки отсутствует репозиторий") from None
+    if str(run_metadata.get("id")) != run_id:
+        raise RuStoreError("Идентификатор CI-сборки не совпадает")
+    workflow_path = run_metadata.get("path")
+    if not isinstance(workflow_path, str) or workflow_path.split("@", 1)[0] != BUILD_WORKFLOW_PATH:
+        raise RuStoreError("Запуск создан не workflow сборки Android")
+    if run_metadata.get("event") not in {"push", "workflow_dispatch"}:
+        raise RuStoreError("Недопустимый источник CI-сборки")
+    if run_metadata.get("status") != "completed" or run_metadata.get("conclusion") != "success":
+        raise RuStoreError("CI-сборка Android не завершилась успешно")
+    if run_metadata.get("head_branch") != release_tag:
+        raise RuStoreError("Тег CI-сборки не совпадает с выбранным тегом")
+    if run_repository != repository or head_repository != repository:
+        raise RuStoreError("CI-сборка получена не из этого репозитория")
+    head_sha = run_metadata.get("head_sha")
+    if not isinstance(head_sha, str) or not re.fullmatch(r"[0-9a-fA-F]{40}", head_sha):
+        raise RuStoreError("В данных CI-сборки отсутствует корректный commit SHA")
+    return head_sha.lower()
+
+
+def verify_run_metadata(args: argparse.Namespace) -> None:
+    metadata = load_json_object(args.run_metadata, "данные CI-сборки")
+    verify_build_run(
+        metadata,
+        run_id=args.run_id,
+        release_tag=args.release_tag,
+        repository=args.repository,
+    )
+    print(f"Проверена успешная Android-сборка {args.run_id} для {args.release_tag}")
+
+
+def verify_release_artifact(
+    *,
+    aab_path: Path,
+    provenance_path: Path,
+    run_metadata: dict[str, Any],
+    run_id: str,
+    expected_sha256: str,
+    release_tag: str,
+    repository: str,
+) -> str:
+    if not SHA256_PATTERN.fullmatch(expected_sha256):
+        raise RuStoreError("Ожидаемый SHA-256 должен содержать ровно 64 шестнадцатеричных символа")
+    expected_sha256 = expected_sha256.lower()
+    commit_sha = verify_build_run(
+        run_metadata,
+        run_id=run_id,
+        release_tag=release_tag,
+        repository=repository,
+    )
+    if not aab_path.is_file() or aab_path.suffix.lower() != ".aab":
+        raise RuStoreError("Файл релиза AAB не найден")
+    actual_sha256 = sha256_file(aab_path)
+    if actual_sha256 != expected_sha256:
+        raise RuStoreError("SHA-256 AAB не совпадает с утверждённым значением")
+
+    provenance = load_json_object(provenance_path, "манифест AAB")
+    expected_provenance = {
+        "run_id": int(run_id),
+        "repository": repository,
+        "workflow_path": BUILD_WORKFLOW_PATH,
+        "event": run_metadata.get("event"),
+        "ref": f"refs/tags/{release_tag}",
+        "ref_name": release_tag,
+        "ref_type": "tag",
+        "commit_sha": commit_sha,
+        "aab_sha256": actual_sha256,
+    }
+    for key, expected in expected_provenance.items():
+        if provenance.get(key) != expected:
+            raise RuStoreError(f"Манифест AAB не совпадает с CI-сборкой: {key}")
+    return actual_sha256
+
+
+def verify_artifact(args: argparse.Namespace) -> None:
+    metadata = load_json_object(args.run_metadata, "данные CI-сборки")
+    digest = verify_release_artifact(
+        aab_path=args.aab,
+        provenance_path=args.provenance,
+        run_metadata=metadata,
+        run_id=args.run_id,
+        expected_sha256=args.expected_sha256,
+        release_tag=args.release_tag,
+        repository=args.repository,
+    )
+    print(f"Подписанный AAB проверен: SHA-256 {digest}")
 
 
 def sign_with_openssl(private_key: str, message: bytes) -> bytes:
@@ -281,6 +406,13 @@ def write_github_output(name: str, value: str) -> None:
 
 def submit_release(args: argparse.Namespace) -> None:
     version = parse_release_tag(args.tag)
+    if not SHA256_PATTERN.fullmatch(args.expected_sha256):
+        raise RuStoreError("Ожидаемый SHA-256 должен содержать ровно 64 шестнадцатеричных символа")
+    if not args.aab.is_file() or args.aab.suffix.lower() != ".aab":
+        raise RuStoreError("Файл релиза AAB не найден")
+    actual_sha256 = sha256_file(args.aab)
+    if actual_sha256 != args.expected_sha256.lower():
+        raise RuStoreError("SHA-256 AAB не совпадает с утверждённым значением")
     client = create_client()
     client.authenticate()
     version_id = args.version_id
@@ -323,7 +455,25 @@ def build_parser() -> argparse.ArgumentParser:
     submit.add_argument("--min-android-version", type=int, default=5)
     submit.add_argument("--priority-update", type=int, choices=range(0, 6), default=0)
     submit.add_argument("--version-id", type=int)
+    submit.add_argument("--expected-sha256", required=True)
     submit.set_defaults(handler=submit_release)
+
+    verify_run = commands.add_parser("verify-run")
+    verify_run.add_argument("--run-metadata", required=True, type=Path)
+    verify_run.add_argument("--run-id", required=True)
+    verify_run.add_argument("--release-tag", required=True)
+    verify_run.add_argument("--repository", required=True)
+    verify_run.set_defaults(handler=verify_run_metadata)
+
+    verify = commands.add_parser("verify-artifact")
+    verify.add_argument("--aab", required=True, type=Path)
+    verify.add_argument("--provenance", required=True, type=Path)
+    verify.add_argument("--run-metadata", required=True, type=Path)
+    verify.add_argument("--run-id", required=True)
+    verify.add_argument("--expected-sha256", required=True)
+    verify.add_argument("--release-tag", required=True)
+    verify.add_argument("--repository", required=True)
+    verify.set_defaults(handler=verify_artifact)
 
     publish = commands.add_parser("publish")
     publish.add_argument("--version-id", required=True, type=int)
