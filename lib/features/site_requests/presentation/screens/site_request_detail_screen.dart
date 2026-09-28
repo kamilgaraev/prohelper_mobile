@@ -42,7 +42,7 @@ class SiteRequestDetailScreen extends ConsumerWidget {
             ),
             onPressed: () => Navigator.of(context).pop(),
           ),
-          title: Text('Детали заявки', style: AppTypography.h2(context)),
+          title: Text('Заявка', style: AppTypography.h2(context)),
         ),
         body:
             state.isLoading && state.request == null
@@ -62,20 +62,11 @@ class SiteRequestDetailScreen extends ConsumerWidget {
                 )
                 : Column(
                   children: [
-                    if (state.fromCache)
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-                        child: ProStatusBanner(
-                          title: 'Сохранённая заявка',
-                          description:
-                              state.error ??
-                              'Показаны данные с устройства. Они могут быть неактуальны.',
-                          tone: ProStatusTone.info,
-                        ),
-                      ),
                     Expanded(
                       child: _SiteRequestDetailContent(
                         request: state.request!,
+                        fromCache: state.fromCache,
+                        cacheError: state.error,
                         onEdit:
                             state.request!.canBeEdited
                                 ? () async {
@@ -267,9 +258,16 @@ class _SiteRequestTransitionDialogState
 }
 
 class _SiteRequestDetailContent extends ConsumerWidget {
-  const _SiteRequestDetailContent({required this.request, this.onEdit});
+  const _SiteRequestDetailContent({
+    required this.request,
+    required this.fromCache,
+    this.cacheError,
+    this.onEdit,
+  });
 
   final SiteRequestModel request;
+  final bool fromCache;
+  final String? cacheError;
   final Future<void> Function()? onEdit;
 
   @override
@@ -279,6 +277,17 @@ class _SiteRequestDetailContent extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (fromCache) ...[
+            ProStatusBanner(
+              title: 'Сохранённая заявка',
+              description:
+                  cacheError ??
+                  'Показаны данные с устройства. Они могут быть неактуальны.',
+              tone: ProStatusTone.info,
+              fullText: true,
+            ),
+            const SizedBox(height: 16),
+          ],
           _RequestHeroCard(request: request),
           const SizedBox(height: 16),
           _RequestAttentionBanner(request: request),
