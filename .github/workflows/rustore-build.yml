@@ -1,0 +1,213 @@
+name: Проверки и сборка Android-релиза
+
+on:
+  push:
+    tags:
+      - "android-v*"
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Существующий тег Android-релиза для сборки без отправки в магазин
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: rustore-build-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Проверки приложения
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Получение исходного кода
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+
+      - name: Установка Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: "3.13"
+
+      - name: Установка Flutter
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2
+        with:
+          flutter-version: "3.44.8"
+          channel: stable
+          cache: true
+
+      - name: Установка зависимостей
+        run: flutter pub get
+
+      - name: Проверка тега выпуска
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
+        run: |
+          python - <<'PY'
+          import os
+          from scripts.rustore_release import parse_release_tag
+
+          tag = os.environ["RELEASE_TAG"]
+          if os.environ.get("GITHUB_REF_TYPE") != "tag" or tag != os.environ["GITHUB_REF_NAME"]:
+              raise SystemExit("Сборка разрешена только с выбранного тега Android-релиза")
+          parse_release_tag(tag)
+          PY
+
+      - name: Проверка клиента RuStore
+        run: python -m unittest discover -s scripts/tests -p "test_*.py" -v
+
+      - name: Статический анализ
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings
+
+      - name: Тесты приложения
+        run: flutter test
+
+  build:
+    name: Сборка подписанного AAB
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: rustore-production
+    env:
+      RUSTORE_PROJECT_ID: ${{ vars.RUSTORE_PROJECT_ID }}
+
+    steps:
+      - name: Получение исходного кода
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+
+      - name: Установка Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: "3.13"
+
+      - name: Установка Java
+        uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+          cache-dependency-path: |
+            android/*.gradle*
+            android/gradle/wrapper/gradle-wrapper.properties
+
+      - name: Установка Flutter
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2
+        with:
+          flutter-version: "3.44.8"
+          channel: stable
+          cache: true
+
+      - name: Проверка номера версии
+        shell: bash
+        run: |
+          python - <<'PY'
+          import os
+          from scripts.rustore_release import parse_release_tag
+
+          version = parse_release_tag(os.environ["GITHUB_REF_NAME"])
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as output:
+              output.write(f"BUILD_NAME={version.name}\n")
+              output.write(f"BUILD_NUMBER={version.code}\n")
+          PY
+
+      - name: Установка зависимостей
+        run: flutter pub get
+
+      - name: Подготовка подписи Android
+        shell: bash
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          umask 077
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | tr -d '\r\n\t ' | base64 --decode > android/app/release.jks
+          {
+            printf 'storeFile=release.jks\n'
+            printf 'storePassword=%s\n' "$ANDROID_STORE_PASSWORD"
+            printf 'keyAlias=%s\n' "$ANDROID_KEY_ALIAS"
+            printf 'keyPassword=%s\n' "$ANDROID_KEY_PASSWORD"
+          } > android/key.properties
+
+      - name: Сборка Android App Bundle
+        run: >-
+          flutter build appbundle --release
+          --build-name "$BUILD_NAME"
+          --build-number "$BUILD_NUMBER"
+
+      - name: Упаковка AAB и манифеста происхождения
+        shell: bash
+        env:
+          BUILD_REPOSITORY: ${{ github.repository }}
+          BUILD_EVENT: ${{ github.event_name }}
+          BUILD_REF: ${{ github.ref }}
+          BUILD_REF_NAME: ${{ github.ref_name }}
+          BUILD_REF_TYPE: ${{ github.ref_type }}
+          BUILD_COMMIT_SHA: ${{ github.sha }}
+        run: |
+          python - <<'PY'
+          import hashlib
+          import json
+          import os
+          import shutil
+          from pathlib import Path
+
+          source = Path("build/app/outputs/bundle/release/app-release.aab")
+          if not source.is_file():
+              raise SystemExit("Подписанный AAB не создан")
+          output = Path("release-artifact")
+          output.mkdir()
+          target = output / "app-release.aab"
+          shutil.copy2(source, target)
+          provenance = {
+              "run_id": int(os.environ["GITHUB_RUN_ID"]),
+              "repository": os.environ["BUILD_REPOSITORY"],
+              "workflow_path": ".github/workflows/rustore-build.yml",
+              "event": os.environ["BUILD_EVENT"],
+              "ref": os.environ["BUILD_REF"],
+              "ref_name": os.environ["BUILD_REF_NAME"],
+              "ref_type": os.environ["BUILD_REF_TYPE"],
+              "commit_sha": os.environ["BUILD_COMMIT_SHA"],
+              "aab_sha256": hashlib.sha256(target.read_bytes()).hexdigest(),
+          }
+          (output / "provenance.json").write_text(
+              json.dumps(provenance, indent=2) + "\n", encoding="utf-8"
+          )
+          print(f"AAB SHA-256: {provenance['aab_sha256']}")
+          PY
+
+      - name: Сохранение AAB
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: rustore-aab-${{ github.run_id }}
+          path: release-artifact/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 3
+          overwrite: true
+
+      - name: Итог проверок и сборки
+        shell: bash
+        run: |
+          {
+            echo "## Подписанный AAB собран; отправка в RuStore не выполнялась"
+            echo ""
+            echo "- Тег: $GITHUB_REF_NAME"
+            echo "- CI run ID: $GITHUB_RUN_ID"
+            echo "- SHA-256: $(sha256sum release-artifact/app-release.aab | cut -d ' ' -f 1)"
+            echo "- Артефакт: rustore-aab-$GITHUB_RUN_ID"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Удаление файлов подписи
+        if: always()
+        shell: bash
+        run: rm -f android/app/release.jks android/key.properties
+
