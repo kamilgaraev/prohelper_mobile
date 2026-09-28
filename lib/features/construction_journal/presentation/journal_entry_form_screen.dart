@@ -48,6 +48,7 @@ class _JournalEntryFormScreenState
   int? _selectedEstimateId;
   int? _selectedEstimateItemId;
   bool _isLoadingOptions = false;
+  String? _formOptionsError;
   bool _isSaving = false;
   bool _isRestoring = true;
   bool _recoveryFailed = false;
@@ -459,6 +460,20 @@ class _JournalEntryFormScreenState
             onTap: _pickDate,
           ),
           const SizedBox(height: 12),
+          if (_formOptionsError != null) ...[
+            const Text(
+              'Не удалось загрузить сметы и виды работ. Повторите попытку перед отправкой записи.',
+              key: ValueKey('journal-form-options-error'),
+            ),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: _isLoadingOptions ? null : _loadFormOptions,
+                icon: const Icon(Icons.refresh),
+                label: const Text('Повторить загрузку'),
+              ),
+            ),
+          ],
           _buildEstimateSelector(),
           const SizedBox(height: 12),
           _buildField(
@@ -531,6 +546,7 @@ class _JournalEntryFormScreenState
 
   Widget _buildEstimateSelector() {
     return DropdownButtonFormField<int>(
+      isExpanded: true,
       value:
           _estimates.any((estimate) => estimate.id == _selectedEstimateId)
               ? _selectedEstimateId
@@ -619,14 +635,30 @@ class _JournalEntryFormScreenState
           style: Theme.of(context).textTheme.titleMedium,
         ),
         const SizedBox(height: 8),
-        Row(
-          children: [
-            Expanded(
-              child: _numberField(_temperatureController, 'Температура, °C'),
-            ),
-            const SizedBox(width: 8),
-            Expanded(child: _numberField(_windSpeedController, 'Ветер, м/с')),
-          ],
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final temperature = _numberField(
+              _temperatureController,
+              'Температура, °C',
+            );
+            final windSpeed = _numberField(_windSpeedController, 'Ветер, м/с');
+            final narrow =
+                constraints.maxWidth < 400 ||
+                MediaQuery.textScalerOf(context).scale(1) > 1.15;
+
+            return narrow
+                ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [temperature, const SizedBox(height: 8), windSpeed],
+                )
+                : Row(
+                  children: [
+                    Expanded(child: temperature),
+                    const SizedBox(width: 8),
+                    Expanded(child: windSpeed),
+                  ],
+                );
+          },
         ),
         const SizedBox(height: 8),
         _buildField(
@@ -647,7 +679,7 @@ class _JournalEntryFormScreenState
       ),
       inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[-0-9,.]'))],
       decoration: InputDecoration(
-        labelText: label,
+        label: Text(label, maxLines: 2),
         border: const OutlineInputBorder(),
       ),
     );
@@ -807,6 +839,7 @@ class _JournalEntryFormScreenState
     return Column(
       children: [
         DropdownButtonFormField<int>(
+          isExpanded: true,
           value:
               _selectedEstimateItems.any(
                     (item) => item.id == _selectedEstimateItemId,
@@ -822,7 +855,7 @@ class _JournalEntryFormScreenState
                   .map(
                     (item) => DropdownMenuItem<int>(
                       value: item.id,
-                      child: Text(item.displayName),
+                      child: Text(item.displayName, softWrap: true),
                     ),
                   )
                   .toList(),
@@ -866,6 +899,7 @@ class _JournalEntryFormScreenState
   Future<void> _loadFormOptions() async {
     setState(() {
       _isLoadingOptions = true;
+      _formOptionsError = null;
     });
 
     try {
@@ -875,6 +909,13 @@ class _JournalEntryFormScreenState
       if (mounted) {
         setState(() {
           _options = options;
+          _formOptionsError = null;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _formOptionsError = 'Не удалось загрузить справочники.';
         });
       }
     } finally {
@@ -937,6 +978,13 @@ class _JournalEntryFormScreenState
 
   Future<void> _save({required bool isDraft}) async {
     if (_isSaving || _isRestoring) return;
+    if (!isDraft &&
+        (_isLoadingOptions || _formOptionsError != null || _options == null)) {
+      _showMessage(
+        'Дождитесь загрузки смет и видов работ, затем отправьте запись.',
+      );
+      return;
+    }
     final repository = ref.read(constructionJournalRepositoryProvider);
     if (_hasRecoveredEntry) {
       setState(() => _isSaving = true);
@@ -1356,6 +1404,7 @@ class _WorkVolumeCard extends StatelessWidget {
               children: [
                 Expanded(
                   child: DropdownButtonFormField<int>(
+                    isExpanded: true,
                     value:
                         workTypes.any(
                               (workType) => workType.id == input.workTypeId,
@@ -1501,8 +1550,13 @@ class _WorkVolumeInput {
 
   void applyWorkType(ConstructionJournalWorkTypeOption? workType) {
     workTypeId = workType?.id;
-    measurementUnitId = workType?.measurementUnitId;
-    measurementUnitName = workType?.measurementUnit?.displayName;
+    if (estimateItemId == null || measurementUnitId == null) {
+      measurementUnitId = workType?.measurementUnitId;
+      measurementUnitName = workType?.measurementUnit?.displayName;
+    } else if (measurementUnitName == null &&
+        workType?.measurementUnitId == measurementUnitId) {
+      measurementUnitName = workType?.measurementUnit?.displayName;
+    }
   }
 
   void dispose() {

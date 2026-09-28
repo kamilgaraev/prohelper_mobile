@@ -24,6 +24,17 @@ final warehouseRepositoryProvider = Provider<WarehouseRepository>((ref) {
   );
 });
 
+enum WarehouseWriteOffCategory {
+  loss('loss'),
+  damage('damage'),
+  disposal('disposal'),
+  inventoryAdjustment('inventory_adjustment');
+
+  const WarehouseWriteOffCategory(this.apiValue);
+
+  final String apiValue;
+}
+
 class WarehouseTaskPage {
   const WarehouseTaskPage({
     required this.items,
@@ -226,6 +237,7 @@ class WarehouseRepository extends SyncQueueAwareRepository {
     required double quantity,
     String? documentNumber,
     required String reason,
+    required WarehouseWriteOffCategory operationCategory,
   }) async {
     const endpoint = '/warehouse/operations/write-off';
     final idempotencyKey = _newWarehouseIdempotencyKey();
@@ -234,6 +246,7 @@ class WarehouseRepository extends SyncQueueAwareRepository {
       'material_id': materialId,
       'quantity': quantity,
       'reason': reason.trim(),
+      'operation_category': operationCategory.apiValue,
       if ((documentNumber ?? '').trim().isNotEmpty)
         'document_number': documentNumber!.trim(),
       'idempotency_key': idempotencyKey,

@@ -85,11 +85,13 @@ class _RecordingSafetyRepository extends SafetyRepository {
 }
 
 class _TestSafetyNotifier extends SafetyNotifier {
-  _TestSafetyNotifier(this.repository) : super(repository) {
-    state = const SafetyState(
+  _TestSafetyNotifier(this.repository, {SafetyAdmissionModel? myAdmission})
+    : super(repository) {
+    state = SafetyState(
       isLoading: false,
       projectFilter: 9,
       permits: _permits,
+      myAdmission: myAdmission,
     );
   }
 
@@ -152,7 +154,10 @@ void main() {
       ..address = 'Площадка 1';
   }
 
-  Widget buildScreen(_RecordingSafetyRepository repository) {
+  Widget buildScreen(
+    _RecordingSafetyRepository repository, {
+    SafetyAdmissionModel? myAdmission,
+  }) {
     return ProviderScope(
       overrides: [
         permissionServiceProvider.overrideWithValue(
@@ -168,7 +173,9 @@ void main() {
         projectsProvider.overrideWith(
           (ref) => _TestProjectsNotifier(project()),
         ),
-        safetyProvider.overrideWith((ref) => _TestSafetyNotifier(repository)),
+        safetyProvider.overrideWith(
+          (ref) => _TestSafetyNotifier(repository, myAdmission: myAdmission),
+        ),
       ],
       child: const MaterialApp(home: SafetyScreen()),
     );
@@ -350,6 +357,52 @@ void main() {
     await pumpUi(tester);
 
     expect(find.text('Тяжесть'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('admission card fits 240dp with large text', (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(240, 900);
+    tester.view.platformDispatcher.textScaleFactorTestValue = 1.3;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.platformDispatcher.clearTextScaleFactorTestValue);
+
+    final repository = _RecordingSafetyRepository();
+    await tester.pumpWidget(
+      buildScreen(
+        repository,
+        myAdmission: const SafetyAdmissionModel(
+          employeeId: 1,
+          status: 'not_admitted',
+          statusLabel: 'Требуется подтверждение допуска',
+          blocked: true,
+          expiresSoon: false,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+
+    await tester.scrollUntilVisible(
+      find.text('Мой допуск'),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(find.text('Мой допуск'), findsOneWidget);
+    expect(find.text('Требуется подтверждение допуска'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    await tester.scrollUntilVisible(
+      find.text('Подробнее'),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.ensureVisible(find.text('Подробнее').first);
+    await tester.pump();
+    await tester.tap(find.text('Подробнее').first);
+    await tester.pumpAndSettle();
+    expect(find.text('Наряд-допуск'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }

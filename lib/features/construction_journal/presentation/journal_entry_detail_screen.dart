@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
+import '../../../core/error/user_message.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../core/design/pro_status.dart';
@@ -16,7 +17,7 @@ import '../domain/construction_journal_provider.dart';
 import '../../projects/domain/projects_provider.dart';
 import 'journal_entry_form_screen.dart';
 
-class JournalEntryDetailScreen extends ConsumerWidget {
+class JournalEntryDetailScreen extends ConsumerStatefulWidget {
   const JournalEntryDetailScreen({
     super.key,
     required this.journalId,
@@ -29,7 +30,21 @@ class JournalEntryDetailScreen extends ConsumerWidget {
   final int? projectId;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<JournalEntryDetailScreen> createState() =>
+      _JournalEntryDetailScreenState();
+}
+
+class _JournalEntryDetailScreenState
+    extends ConsumerState<JournalEntryDetailScreen> {
+  String? _activeAction;
+
+  @override
+  Widget build(BuildContext context) {
+    final navigator = Navigator.of(context);
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+    final journalId = widget.journalId;
+    final entryId = widget.entryId;
+    final projectId = widget.projectId;
     final scope = (
       entryId: entryId,
       projectId:
@@ -241,88 +256,115 @@ class JournalEntryDetailScreen extends ConsumerWidget {
               children: [
                 if (entry.hasAction(ConstructionJournalActionKeys.update))
                   OutlinedButton.icon(
-                    onPressed: () async {
-                      final updated = await Navigator.of(context).push<bool>(
-                        MaterialPageRoute(
-                          builder:
-                              (_) => JournalEntryFormScreen(
-                                journalId: journalId,
-                                initialEntry: entry,
-                              ),
-                        ),
-                      );
-
-                      if (updated == true) {
-                        await notifier.load();
-                      }
-                    },
+                    onPressed:
+                        _activeAction == null
+                            ? () async {
+                              final updated = await navigator.push<bool>(
+                                MaterialPageRoute(
+                                  builder:
+                                      (_) => JournalEntryFormScreen(
+                                        journalId: journalId,
+                                        initialEntry: entry,
+                                      ),
+                                ),
+                              );
+                              if (updated == true && mounted) {
+                                await notifier.load();
+                              }
+                            }
+                            : null,
                     icon: const Icon(Icons.edit_outlined),
                     label: const Text('Редактировать'),
                   ),
                 if (entry.hasAction(ConstructionJournalActionKeys.submit))
                   ElevatedButton.icon(
-                    onPressed: () async {
-                      await ref
-                          .read(constructionJournalRepositoryProvider)
-                          .submitEntry(entryId);
-                      await notifier.load();
-                    },
-                    icon: const Icon(Icons.send_outlined),
-                    label: const Text('Отправить'),
+                    onPressed:
+                        _activeAction == null
+                            ? () async => _runAction('submit', () async {
+                              await ref
+                                  .read(constructionJournalRepositoryProvider)
+                                  .submitEntry(entryId);
+                              await notifier.load();
+                            })
+                            : null,
+                    icon: _actionIcon('submit', Icons.send_outlined),
+                    label: Text(_actionLabel('submit', 'Отправить')),
                   ),
                 if (entry.hasAction(ConstructionJournalActionKeys.approve))
                   ElevatedButton.icon(
-                    onPressed: () async {
-                      await ref
-                          .read(constructionJournalRepositoryProvider)
-                          .approveEntry(entryId);
-                      await notifier.load();
-                    },
-                    icon: const Icon(Icons.check_circle_outline_rounded),
-                    label: const Text('Утвердить'),
+                    onPressed:
+                        _activeAction == null
+                            ? () async => _runAction('approve', () async {
+                              await ref
+                                  .read(constructionJournalRepositoryProvider)
+                                  .approveEntry(entryId);
+                              await notifier.load();
+                            })
+                            : null,
+                    icon: _actionIcon(
+                      'approve',
+                      Icons.check_circle_outline_rounded,
+                    ),
+                    label: Text(_actionLabel('approve', 'Утвердить')),
                   ),
                 if (entry.hasAction(ConstructionJournalActionKeys.reject))
                   OutlinedButton.icon(
                     onPressed:
-                        () =>
-                            _showRejectDialog(context, ref, notifier, entryId),
+                        _activeAction == null
+                            ? () => _showRejectDialog(
+                              context,
+                              onReject:
+                                  (reason) => _runAction('reject', () async {
+                                    await ref
+                                        .read(
+                                          constructionJournalRepositoryProvider,
+                                        )
+                                        .rejectEntry(entryId, reason);
+                                    await notifier.load();
+                                  }),
+                            )
+                            : null,
                     icon: const Icon(Icons.close_rounded),
                     label: const Text('Отклонить'),
                   ),
                 if (entry.hasAction(ConstructionJournalActionKeys.delete))
                   OutlinedButton.icon(
-                    onPressed: () async {
-                      await ref
-                          .read(constructionJournalRepositoryProvider)
-                          .deleteEntry(entryId);
-                      if (context.mounted) {
-                        Navigator.of(context).pop(true);
-                      }
-                    },
-                    icon: const Icon(Icons.delete_outline_rounded),
-                    label: const Text('Удалить'),
+                    onPressed:
+                        _activeAction == null
+                            ? () async => _runAction('delete', () async {
+                              await ref
+                                  .read(constructionJournalRepositoryProvider)
+                                  .deleteEntry(entryId);
+                              if (mounted) navigator.pop(true);
+                            })
+                            : null,
+                    icon: _actionIcon('delete', Icons.delete_outline_rounded),
+                    label: Text(_actionLabel('delete', 'Удалить')),
                   ),
                 if (entry.hasAction(
                   ConstructionJournalActionKeys.exportDailyReport,
                 ))
                   OutlinedButton.icon(
-                    onPressed: () async {
-                      final url = await ref
-                          .read(constructionJournalRepositoryProvider)
-                          .exportDailyReport(entryId);
-                      await Clipboard.setData(ClipboardData(text: url));
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text(
-                              'Ссылка на дневной отчет скопирована в буфер.',
-                            ),
-                          ),
-                        );
-                      }
-                    },
-                    icon: const Icon(Icons.download_outlined),
-                    label: const Text('Дневной отчет'),
+                    onPressed:
+                        _activeAction == null
+                            ? () async => _runAction('export', () async {
+                              final url = await ref
+                                  .read(constructionJournalRepositoryProvider)
+                                  .exportDailyReport(entryId);
+                              await Clipboard.setData(ClipboardData(text: url));
+                              if (mounted) {
+                                scaffoldMessenger.showSnackBar(
+                                  const SnackBar(
+                                    content: Text(
+                                      'Ссылка на дневной отчет скопирована в буфер.',
+                                    ),
+                                  ),
+                                );
+                              }
+                            })
+                            : null,
+                    icon: _actionIcon('export', Icons.download_outlined),
+                    label: Text(_actionLabel('export', 'Дневной отчет')),
                   ),
               ],
             ),
@@ -331,6 +373,38 @@ class JournalEntryDetailScreen extends ConsumerWidget {
       ),
     );
   }
+
+  Future<bool> _runAction(
+    String action,
+    Future<void> Function() perform,
+  ) async {
+    if (_activeAction != null) return false;
+    setState(() => _activeAction = action);
+    try {
+      await perform();
+      return true;
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(UserMessage.fromError(error))));
+      }
+      return false;
+    } finally {
+      if (mounted) setState(() => _activeAction = null);
+    }
+  }
+
+  Widget _actionIcon(String action, IconData icon) =>
+      _activeAction == action
+          ? const SizedBox.square(
+            dimension: 18,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          )
+          : Icon(icon);
+
+  String _actionLabel(String action, String label) =>
+      _activeAction == action ? 'Выполняется…' : label;
 }
 
 class _FieldResourcesCard extends StatelessWidget {
@@ -513,45 +587,53 @@ class _StatusBadge extends StatelessWidget {
 }
 
 Future<void> _showRejectDialog(
-  BuildContext context,
-  WidgetRef ref,
-  ConstructionJournalEntryDetailNotifier notifier,
-  int entryId,
-) async {
+  BuildContext context, {
+  required Future<bool> Function(String) onReject,
+}) async {
   final controller = TextEditingController();
+  var submitting = false;
 
   await showDialog<void>(
     context: context,
-    builder: (context) {
-      return AlertDialog(
-        title: const Text('Отклонить запись'),
-        content: TextField(
-          controller: controller,
-          minLines: 3,
-          maxLines: 5,
-          decoration: const InputDecoration(
-            labelText: 'Причина отклонения',
-            border: OutlineInputBorder(),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Отмена'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              await ref
-                  .read(constructionJournalRepositoryProvider)
-                  .rejectEntry(entryId, controller.text.trim());
-              if (context.mounted) {
-                Navigator.of(context).pop();
-              }
-              await notifier.load();
-            },
-            child: const Text('Отклонить'),
-          ),
-        ],
+    builder: (dialogContext) {
+      return StatefulBuilder(
+        builder: (context, setDialogState) {
+          return AlertDialog(
+            title: const Text('Отклонить запись'),
+            content: TextField(
+              controller: controller,
+              minLines: 3,
+              maxLines: 5,
+              decoration: const InputDecoration(
+                labelText: 'Причина отклонения',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('Отмена'),
+              ),
+              ElevatedButton(
+                onPressed:
+                    submitting
+                        ? null
+                        : () async {
+                          setDialogState(() => submitting = true);
+                          final succeeded = await onReject(
+                            controller.text.trim(),
+                          );
+                          if (succeeded && dialogContext.mounted) {
+                            Navigator.of(dialogContext).pop();
+                          } else if (dialogContext.mounted) {
+                            setDialogState(() => submitting = false);
+                          }
+                        },
+                child: Text(submitting ? 'Выполняется…' : 'Отклонить'),
+              ),
+            ],
+          );
+        },
       );
     },
   );

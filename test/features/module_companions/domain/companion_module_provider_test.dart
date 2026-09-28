@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:prohelpers_mobile/core/network/api_exception.dart';
@@ -104,6 +107,58 @@ void main() {
     expect(detail.sections.single.title, 'Основное');
   });
 
+  test('accepts PTO document response and reloads companion list', () async {
+    final requests = <RequestOptions>[];
+    final dio = Dio(BaseOptions(baseUrl: 'https://api.example.test'));
+    dio.httpClientAdapter = _JsonAdapter((options) {
+      requests.add(options);
+      if (options.method == 'POST') {
+        return {
+          'success': true,
+          'message': 'Документ обновлён',
+          'data': {
+            'id': 7,
+            'document_set_id': 42,
+            'title': 'Исполнительная схема',
+            'status': 'remarks',
+            'result': {
+              'document_date': null,
+              'approved_at': null,
+              'submitted_at': null,
+            },
+            'files': [],
+            'comments': [],
+            'available_actions': [],
+          },
+        };
+      }
+      return {
+        'success': true,
+        'data': companionListJson(slug: 'executive-documentation'),
+      };
+    });
+    final notifier = CompanionModuleNotifier(
+      CompanionModuleRepository(dio),
+      'executive-documentation',
+    )..syncProject(9);
+
+    await notifier.executeExecutiveDocumentAction(
+      documentId: 7,
+      action: 'add_remark',
+      comment: 'Нужно исправить',
+    );
+
+    expect(requests.map((request) => request.method), ['POST', 'GET']);
+    expect(
+      requests.first.path,
+      '/pto/executive-documents/7/actions/add_remark',
+    );
+    expect(requests.last.path, '/companions/executive-documentation');
+    expect(requests.last.queryParameters['project_id'], 9);
+    expect(notifier.state.list?.items.single.id, 42);
+    expect(notifier.state.error, isNull);
+  });
+
   test('loads next server page and appends unique items', () async {
     final repository = _RecordingCompanionRepository();
     final notifier = CompanionModuleNotifier(repository, 'contract-management');
@@ -135,4 +190,26 @@ void main() {
 
     expect(malformed.state.malformedContract, isTrue);
   });
+}
+
+class _JsonAdapter implements HttpClientAdapter {
+  _JsonAdapter(this.handler);
+
+  final Map<String, dynamic> Function(RequestOptions options) handler;
+
+  @override
+  void close({bool force = false}) {}
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) async => ResponseBody.fromString(
+    jsonEncode(handler(options)),
+    200,
+    headers: {
+      Headers.contentTypeHeader: [Headers.jsonContentType],
+    },
+  );
 }

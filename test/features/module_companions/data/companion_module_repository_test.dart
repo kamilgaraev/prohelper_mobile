@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:prohelpers_mobile/core/network/api_exception.dart';
 import 'package:prohelpers_mobile/features/module_companions/data/companion_module_repository.dart';
 
 import '../companion_module_test_data.dart';
@@ -72,9 +73,7 @@ void main() {
       final dio = Dio(BaseOptions(baseUrl: 'https://api.example.test'));
       dio.httpClientAdapter = _JsonAdapter((options) {
         request = options;
-        return _responseData(
-          companionDetailJson(slug: 'executive-documentation'),
-        );
+        return _responseData(executiveDocumentActionResponse());
       });
 
       await CompanionModuleRepository(dio).executeExecutiveDocumentAction(
@@ -88,12 +87,44 @@ void main() {
       expect((request.data as Map)['comment'], 'Нужно исправить');
     },
   );
+
+  test('executive document action forwards API error envelopes', () async {
+    final dio = Dio(BaseOptions(baseUrl: 'https://api.example.test'));
+    dio.httpClientAdapter = _JsonAdapter(
+      (_) => {
+        'success': false,
+        'message': 'Комментарий обязателен',
+        'errors': {
+          'comment': ['Комментарий обязателен'],
+        },
+      },
+      statusCode: 422,
+    );
+
+    await expectLater(
+      CompanionModuleRepository(dio).executeExecutiveDocumentAction(
+        documentId: 7,
+        action: 'add_remark',
+        comment: '',
+      ),
+      throwsA(
+        isA<ApiException>()
+            .having((error) => error.statusCode, 'statusCode', 422)
+            .having(
+              (error) => error.message,
+              'message',
+              'Комментарий обязателен',
+            ),
+      ),
+    );
+  });
 }
 
 class _JsonAdapter implements HttpClientAdapter {
-  _JsonAdapter(this.handler);
+  _JsonAdapter(this.handler, {this.statusCode = 200});
 
   final Map<String, dynamic> Function(RequestOptions options) handler;
+  final int statusCode;
 
   @override
   void close({bool force = false}) {}
@@ -106,13 +137,24 @@ class _JsonAdapter implements HttpClientAdapter {
   ) async {
     return ResponseBody.fromString(
       jsonEncode(handler(options)),
-      200,
+      statusCode,
       headers: {
         Headers.contentTypeHeader: [Headers.jsonContentType],
       },
     );
   }
 }
+
+Map<String, dynamic> executiveDocumentActionResponse() => {
+  'id': 7,
+  'document_set_id': 42,
+  'title': 'Исполнительная схема',
+  'status': 'remarks',
+  'result': {'document_date': null, 'approved_at': null, 'submitted_at': null},
+  'files': [],
+  'comments': [],
+  'available_actions': [],
+};
 
 Map<String, dynamic> _responseData(Map<String, dynamic> data) {
   return {'success': true, 'message': null, 'data': data};

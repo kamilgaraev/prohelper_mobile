@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/error/user_message.dart';
@@ -14,6 +15,7 @@ import '../../../core/widgets/app_permission_state.dart';
 import '../../../core/widgets/pro_record_card.dart';
 import '../../projects/domain/projects_provider.dart';
 import '../data/field_catalog_repository.dart';
+import '../data/project_files_repository.dart';
 
 class FieldCatalogOption {
   const FieldCatalogOption(
@@ -43,6 +45,7 @@ class FieldCatalogScreen extends ConsumerStatefulWidget {
     this.appBarAction,
     this.appBarActionBuilder,
     this.detailActionBuilder,
+    this.detailFieldLabels,
   });
 
   final String title;
@@ -63,6 +66,7 @@ class FieldCatalogScreen extends ConsumerStatefulWidget {
     int? projectId,
   )?
   detailActionBuilder;
+  final Map<String, String>? detailFieldLabels;
 
   @override
   ConsumerState<FieldCatalogScreen> createState() => _FieldCatalogScreenState();
@@ -346,6 +350,7 @@ class _FieldCatalogScreenState extends ConsumerState<FieldCatalogScreen> {
               icon: widget.icon,
               projectId: _usesProjectScope ? _contextProjectId : null,
               actionBuilder: widget.detailActionBuilder,
+              detailFieldLabels: widget.detailFieldLabels,
             ),
       ),
     );
@@ -378,6 +383,7 @@ class FieldCatalogDetailScreen extends ConsumerStatefulWidget {
     this.projectId,
     this.entity,
     this.actionBuilder,
+    this.detailFieldLabels,
   });
 
   final String title;
@@ -393,6 +399,7 @@ class FieldCatalogDetailScreen extends ConsumerStatefulWidget {
     int? projectId,
   )?
   actionBuilder;
+  final Map<String, String>? detailFieldLabels;
 
   @override
   ConsumerState<FieldCatalogDetailScreen> createState() =>
@@ -402,6 +409,7 @@ class FieldCatalogDetailScreen extends ConsumerStatefulWidget {
 class _FieldCatalogDetailScreenState
     extends ConsumerState<FieldCatalogDetailScreen> {
   late Future<FieldCatalogEntry> _future;
+  bool _downloadingProjectFile = false;
 
   @override
   void initState() {
@@ -512,14 +520,34 @@ class _FieldCatalogDetailScreenState
                 padding: const EdgeInsets.only(bottom: 12),
                 child: FilledButton.icon(
                   onPressed:
-                      () =>
-                          _openDownload(entry.fields['download_url'] as String),
-                  icon: const Icon(Icons.download_rounded),
-                  label: const Text('Скачать файл'),
+                      _downloadingProjectFile
+                          ? null
+                          : widget.catalog == 'project-files'
+                          ? _downloadProjectFile
+                          : () => _openDownload(
+                            entry.fields['download_url'] as String,
+                          ),
+                  icon:
+                      _downloadingProjectFile
+                          ? const SizedBox.square(
+                            dimension: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                          : const Icon(Icons.download_rounded),
+                  label: Text(
+                    _downloadingProjectFile
+                        ? 'Получаем ссылку'
+                        : 'Скачать файл',
+                  ),
                 ),
               ),
             for (final item in entry.fields.entries)
-              if (_catalogField(widget.catalog, item.key, item.value)
+              if (_catalogField(
+                    widget.catalog,
+                    item.key,
+                    item.value,
+                    detailFieldLabels: widget.detailFieldLabels,
+                  )
                   case final field?)
                 Card(
                   child: ListTile(
@@ -532,6 +560,39 @@ class _FieldCatalogDetailScreenState
       },
     ),
   );
+
+  Future<void> _downloadProjectFile() async {
+    final projectId = widget.projectId;
+    if (projectId == null || _downloadingProjectFile) {
+      _showProjectFileDownloadError();
+      return;
+    }
+    setState(() => _downloadingProjectFile = true);
+    try {
+      final entry = await ref
+          .read(projectFilesRepositoryProvider)
+          .fetchDetail(projectId: projectId, fileId: widget.uuid);
+      if (!mounted) return;
+      final freshUrl = entry.fields['download_url'];
+      if (freshUrl is! String || freshUrl.isEmpty) {
+        _showProjectFileDownloadError();
+        return;
+      }
+      await _openDownload(freshUrl);
+    } catch (_) {
+      if (mounted) _showProjectFileDownloadError();
+    } finally {
+      if (mounted) setState(() => _downloadingProjectFile = false);
+    }
+  }
+
+  void _showProjectFileDownloadError() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Не удалось получить ссылку на файл. Повторите попытку.'),
+      ),
+    );
+  }
 
   Future<void> _openDownload(String value) async {
     final uri = Uri.tryParse(value);
@@ -800,6 +861,7 @@ const _templateReportTypeLabels = <String, String>{
 };
 
 String? _catalogSubtitle(String catalog, FieldCatalogEntry entry) {
+  if (catalog == 'project-files') return null;
   if (catalog == 'templates') {
     return _templateReportTypeLabels[_displayValue(
       entry.fields['report_type'],
@@ -820,9 +882,21 @@ String? _catalogSubtitle(String catalog, FieldCatalogEntry entry) {
 ({String label, String value})? _catalogField(
   String catalog,
   String key,
-  dynamic value,
-) {
+  dynamic value, {
+  Map<String, String>? detailFieldLabels,
+}) {
   if (key == 'download_url') return null;
+  if (detailFieldLabels != null) {
+    final label = detailFieldLabels[key];
+    if (label == null || value == null) return null;
+    final text = switch (key) {
+      'size' => _formatFileSize(value),
+      'mime_type' => _formatFileType(value),
+      'created_at' => _formatFileDate(value),
+      _ => _displayValue(value),
+    };
+    return text == null ? null : (label: label, value: text);
+  }
   if (catalog == 'templates') {
     if (key == 'report_type') {
       final type = _displayValue(value);
@@ -893,6 +967,38 @@ String? _catalogSubtitle(String catalog, FieldCatalogEntry entry) {
     text = _displayValue(value);
   }
   return text == null || text.isEmpty ? null : (label: label, value: text);
+}
+
+String? _formatFileSize(dynamic value) {
+  if (value is! num || value < 0) return null;
+  if (value < 1024) return '${value.toInt()} Б';
+  final kilobytes = value / 1024;
+  if (kilobytes < 1024) return '${kilobytes.toStringAsFixed(1)} КБ';
+  return '${(kilobytes / 1024).toStringAsFixed(1)} МБ';
+}
+
+String? _formatFileType(dynamic value) {
+  final mimeType = _displayValue(value)?.toLowerCase();
+  if (mimeType == null) return null;
+  if (mimeType.startsWith('image/')) return 'Изображение';
+  return const {
+        'application/pdf': 'PDF',
+        'application/msword': 'DOC',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document':
+            'DOCX',
+        'application/vnd.ms-excel': 'XLS',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':
+            'XLSX',
+      }[mimeType] ??
+      'Документ';
+}
+
+String? _formatFileDate(dynamic value) {
+  final text = _displayValue(value);
+  final date = text == null ? null : DateTime.tryParse(text);
+  return date == null
+      ? null
+      : DateFormat('dd.MM.yyyy HH:mm').format(date.toLocal());
 }
 
 String? _displayValue(dynamic value) {

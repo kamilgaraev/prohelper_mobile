@@ -800,20 +800,37 @@ class _InfoRow extends StatelessWidget {
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 120,
-            child: Text(
-              label,
-              style: AppTypography.bodyMedium(
-                context,
-              ).copyWith(color: theme.colorScheme.onSurfaceVariant),
-            ),
-          ),
-          Expanded(child: Text(value, style: AppTypography.bodyLarge(context))),
-        ],
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final compact =
+              constraints.maxWidth < 400 ||
+              MediaQuery.textScalerOf(context).scale(1) > 1.15;
+          final labelText = Text(
+            label,
+            style: AppTypography.bodyMedium(
+              context,
+            ).copyWith(color: theme.colorScheme.onSurfaceVariant),
+          );
+          final valueText = Text(
+            value,
+            style: AppTypography.bodyLarge(context),
+          );
+
+          if (compact) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [labelText, const SizedBox(height: 2), valueText],
+            );
+          }
+
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(width: 120, child: labelText),
+              Expanded(child: valueText),
+            ],
+          );
+        },
       ),
     );
   }

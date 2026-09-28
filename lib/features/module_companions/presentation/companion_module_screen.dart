@@ -647,42 +647,59 @@ class _CompanionItemCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final color = _toneColor(context, item.statusTone);
+    final compact = MediaQuery.sizeOf(context).width < 400;
+    final title = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          item.title,
+          style: AppTypography.bodyLarge(context).copyWith(
+            fontWeight: FontWeight.w900,
+            color: theme.colorScheme.onSurface,
+          ),
+        ),
+        if (item.subtitle != null) ...[
+          const SizedBox(height: 4),
+          Text(
+            item.subtitle!,
+            style: AppTypography.bodyMedium(
+              context,
+            ).copyWith(color: theme.colorScheme.onSurfaceVariant),
+          ),
+        ],
+      ],
+    );
 
     return IndustrialCard(
       onTap: onTap,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      item.title,
-                      style: AppTypography.bodyLarge(context).copyWith(
-                        fontWeight: FontWeight.w900,
-                        color: theme.colorScheme.onSurface,
-                      ),
-                    ),
-                    if (item.subtitle != null) ...[
-                      const SizedBox(height: 4),
-                      Text(
-                        item.subtitle!,
-                        style: AppTypography.bodyMedium(
-                          context,
-                        ).copyWith(color: theme.colorScheme.onSurfaceVariant),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-              if (item.statusLabel != null)
-                _StatusPill(label: item.statusLabel!, color: color),
-            ],
-          ),
+          if (compact)
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                title,
+                if (item.statusLabel != null) ...[
+                  const SizedBox(height: 8),
+                  _StatusPill(
+                    label: item.statusLabel!,
+                    color: color,
+                    maxWidth: MediaQuery.sizeOf(context).width - 64,
+                    allowWrap: true,
+                  ),
+                ],
+              ],
+            )
+          else
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(child: title),
+                if (item.statusLabel != null)
+                  _StatusPill(label: item.statusLabel!, color: color),
+              ],
+            ),
           const SizedBox(height: 14),
           Row(
             children: [
@@ -1062,14 +1079,23 @@ class _MetricBlock extends StatelessWidget {
 }
 
 class _StatusPill extends StatelessWidget {
-  const _StatusPill({required this.label, required this.color});
+  const _StatusPill({
+    required this.label,
+    required this.color,
+    this.maxWidth,
+    this.allowWrap = false,
+  });
 
   final String label;
   final Color color;
+  final double? maxWidth;
+  final bool allowWrap;
 
   @override
   Widget build(BuildContext context) {
     return Container(
+      constraints:
+          maxWidth == null ? null : BoxConstraints(maxWidth: maxWidth!),
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.12),
@@ -1078,8 +1104,8 @@ class _StatusPill extends StatelessWidget {
       ),
       child: Text(
         label,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
+        maxLines: allowWrap ? null : 1,
+        overflow: allowWrap ? TextOverflow.visible : TextOverflow.ellipsis,
         style: AppTypography.caption(
           context,
         ).copyWith(color: color, fontWeight: FontWeight.w900),

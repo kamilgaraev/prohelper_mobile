@@ -1395,18 +1395,46 @@ class _MyAdmissionCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Icon(Icons.health_and_safety_outlined, color: color),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text('Мой допуск', style: AppTypography.h2(context)),
-              ),
-              Chip(
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final title = Text(
+                'Мой допуск',
+                style: AppTypography.h2(context),
+              );
+              final status = Chip(
                 label: Text(current.statusLabel),
                 visualDensity: VisualDensity.compact,
-              ),
-            ],
+              );
+
+              final narrow =
+                  MediaQuery.sizeOf(context).width < 360 ||
+                  MediaQuery.textScalerOf(context).scale(1) > 1.15;
+              if (narrow) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.health_and_safety_outlined, color: color),
+                        const SizedBox(width: 10),
+                        Expanded(child: title),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    status,
+                  ],
+                );
+              }
+
+              return Row(
+                children: [
+                  Icon(Icons.health_and_safety_outlined, color: color),
+                  const SizedBox(width: 10),
+                  Expanded(child: title),
+                  status,
+                ],
+              );
+            },
           ),
           const SizedBox(height: 10),
           Text(
@@ -2000,20 +2028,29 @@ class _PermitDetailLine extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 112,
-            child: Text(label, style: AppTypography.caption(context)),
-          ),
-          Expanded(
-            child: Text(value, style: AppTypography.bodyMedium(context)),
-          ),
-        ],
-      ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final labelText = Text(label, style: AppTypography.caption(context));
+        final valueText = Text(value, style: AppTypography.bodyMedium(context));
+        final narrow = constraints.maxWidth < 280;
+
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child:
+              narrow
+                  ? Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [labelText, valueText],
+                  )
+                  : Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SizedBox(width: 112, child: labelText),
+                      Expanded(child: valueText),
+                    ],
+                  ),
+        );
+      },
     );
   }
 }
@@ -2332,22 +2369,50 @@ class _CardHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Icon(icon, color: theme.colorScheme.primary),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Text(
-            title,
-            style: AppTypography.bodyLarge(
-              context,
-            ).copyWith(fontWeight: FontWeight.w800),
-          ),
-        ),
-        const SizedBox(width: 8),
-        Chip(label: Text(label), visualDensity: VisualDensity.compact),
-      ],
+    return LayoutBuilder(
+      builder: (context, _) {
+        final titleText = Text(
+          title,
+          style: AppTypography.bodyLarge(
+            context,
+          ).copyWith(fontWeight: FontWeight.w800),
+        );
+        final statusChip = Chip(
+          label: Text(label),
+          visualDensity: VisualDensity.compact,
+        );
+        final narrow =
+            MediaQuery.sizeOf(context).width < 360 ||
+            MediaQuery.textScalerOf(context).scale(1) > 1.15;
+
+        if (narrow) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(icon, color: theme.colorScheme.primary),
+                  const SizedBox(width: 8),
+                  Expanded(child: titleText),
+                ],
+              ),
+              const SizedBox(height: 8),
+              statusChip,
+            ],
+          );
+        }
+
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(icon, color: theme.colorScheme.primary),
+            const SizedBox(width: 8),
+            Expanded(child: titleText),
+            const SizedBox(width: 8),
+            statusChip,
+          ],
+        );
+      },
     );
   }
 }

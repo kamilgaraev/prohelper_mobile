@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:prohelpers_mobile/core/sync/queued_sync_operation.dart';
@@ -10,6 +11,236 @@ import 'package:prohelpers_mobile/features/construction_journal/data/constructio
 import 'package:prohelpers_mobile/features/construction_journal/presentation/journal_entry_form_screen.dart';
 
 void main() {
+  testWidgets('journal form fits 240dp with large text', (tester) async {
+    await _pumpJournalForm(tester, width: 240, textScale: 1.3);
+
+    expect(find.text('Погодные условия'), findsOneWidget);
+    expect(
+      tester
+          .renderObject<RenderParagraph>(find.text('Температура, °C'))
+          .didExceedMaxLines,
+      isFalse,
+    );
+    expect(
+      tester
+          .renderObject<RenderParagraph>(find.text('Ветер, м/с'))
+          .didExceedMaxLines,
+      isFalse,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('journal form shows full temperature label at 360dp', (
+    tester,
+  ) async {
+    await _pumpJournalForm(tester, width: 360, textScale: 1);
+
+    expect(find.text('Погодные условия'), findsOneWidget);
+    expect(
+      tester
+          .renderObject<RenderParagraph>(find.text('Температура, °C'))
+          .didExceedMaxLines,
+      isFalse,
+    );
+    expect(
+      tester
+          .renderObject<RenderParagraph>(find.text('Ветер, м/с'))
+          .didExceedMaxLines,
+      isFalse,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('journal options error can retry without losing description', (
+    tester,
+  ) async {
+    await _pumpJournalForm(
+      tester,
+      width: 360,
+      textScale: 1,
+      failFirstOptionsRequest: true,
+    );
+
+    final description = find.byWidgetPredicate(
+      (widget) =>
+          widget is TextField &&
+          widget.decoration?.labelText == 'Описание работ',
+    );
+    await tester.enterText(description, 'Сохранённое описание');
+    expect(
+      find.byKey(const ValueKey('journal-form-options-error')),
+      findsOneWidget,
+    );
+    expect(find.text('Повторить загрузку'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('Сохранить черновик'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(
+      tester
+          .widget<OutlinedButton>(
+            find.widgetWithText(OutlinedButton, 'Сохранить черновик'),
+          )
+          .onPressed,
+      isNotNull,
+    );
+    await tester.scrollUntilVisible(
+      find.text('Повторить загрузку'),
+      -300,
+      scrollable: find.byType(Scrollable).first,
+    );
+
+    await tester.tap(find.text('Повторить загрузку'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('journal-form-options-error')),
+      findsNothing,
+    );
+    expect(
+      tester.widget<TextField>(description).controller!.text,
+      'Сохранённое описание',
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  for (final viewport in [
+    (width: 360.0, textScale: 1.0),
+    (width: 240.0, textScale: 1.3),
+  ]) {
+    testWidgets(
+      'long estimate item stays usable at ${viewport.width}dp × ${viewport.textScale}',
+      (tester) async {
+        await _pumpJournalForm(
+          tester,
+          width: viewport.width,
+          textScale: viewport.textScale,
+          includeLongEstimateOptions: true,
+        );
+
+        await tester.tap(find.text('Смета'));
+        await tester.pumpAndSettle();
+        await tester.tap(
+          find.text('СМ-2026-0003 - Журнал производства работ').last,
+        );
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+
+        await tester.scrollUntilVisible(
+          find.text('Объемы выполненных работ'),
+          250,
+          scrollable: find.byType(Scrollable).first,
+        );
+        expect(find.text('Позиция сметы'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+
+        await tester.tap(find.text('Позиция сметы'));
+        await tester.pumpAndSettle();
+        await tester.tap(
+          find.textContaining(
+            'Устройство монолитной железобетонной фундаментной плиты',
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+
+        await tester.tap(find.text('Добавить из сметы'));
+        await tester.pumpAndSettle();
+        expect(find.text('Вид работ'), findsOneWidget);
+        expect(find.text('Ед. изм.'), findsOneWidget);
+        expect(find.text('кг'), findsOneWidget);
+        expect(
+          find.byWidgetPredicate(
+            (widget) =>
+                widget is TextField &&
+                widget.decoration?.labelText == 'Количество',
+          ),
+          findsOneWidget,
+        );
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
+  testWidgets('estimate item unit survives work type without a unit', (
+    tester,
+  ) async {
+    Map<String, dynamic>? createPayload;
+    await _pumpJournalForm(
+      tester,
+      width: 360,
+      textScale: 1,
+      includeLongEstimateOptions: true,
+      onEntryCreate: (payload) => createPayload = payload,
+    );
+
+    await tester.enterText(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField &&
+            widget.decoration?.labelText == 'Описание работ',
+      ),
+      'Монтаж арматуры',
+    );
+    await tester.tap(find.text('Дата записи'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('OK'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Смета'));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.text('СМ-2026-0003 - Журнал производства работ').last,
+    );
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('Объемы выполненных работ'),
+      250,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(find.text('Позиция сметы'));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.textContaining(
+        'Устройство монолитной железобетонной фундаментной плиты',
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Добавить из сметы'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Арматурные работы'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Арматурные работы').last);
+    await tester.pumpAndSettle();
+    expect(find.text('кг'), findsOneWidget);
+
+    await tester.enterText(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField && widget.decoration?.labelText == 'Количество',
+      ),
+      '12.5',
+    );
+    await tester.scrollUntilVisible(
+      find.text('Сохранить черновик'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.ensureVisible(find.text('Сохранить черновик'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Сохранить черновик'));
+    await tester.pumpAndSettle();
+
+    expect(createPayload, isNotNull);
+    final volume = (createPayload!['work_volumes'] as List).single as Map;
+    expect(volume['estimate_item_id'], 19);
+    expect(volume['work_type_id'], 91);
+    expect(volume['measurement_unit_id'], 6);
+    expect(volume['quantity'], 12.5);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets(
     'saving a new draft returns to the journal without a pending-operation error',
     (tester) async {
@@ -256,9 +487,7 @@ void main() {
                     response: Response(
                       requestOptions: options,
                       statusCode: 422,
-                      data: {
-                        'message': 'Нет протокола для участка А',
-                      },
+                      data: {'message': 'Нет протокола для участка А'},
                     ),
                     type: DioExceptionType.badResponse,
                   ),
@@ -309,6 +538,163 @@ void main() {
     expect(find.textContaining('Отклонено сервером'), findsWidgets);
     expect(find.textContaining('Нет протокола для участка А'), findsWidgets);
   });
+}
+
+Future<void> _pumpJournalForm(
+  WidgetTester tester, {
+  required double width,
+  required double textScale,
+  bool failFirstOptionsRequest = false,
+  bool includeLongEstimateOptions = false,
+  void Function(Map<String, dynamic>)? onEntryCreate,
+}) async {
+  tester.view.physicalSize = Size(width, 1000);
+  tester.view.devicePixelRatio = 1;
+  addTearDown(tester.view.resetPhysicalSize);
+  addTearDown(tester.view.resetDevicePixelRatio);
+
+  final store = _Store();
+  var optionRequests = 0;
+  final dio =
+      Dio()
+        ..interceptors.add(
+          InterceptorsWrapper(
+            onRequest: (options, handler) {
+              if (options.path.endsWith('/entries')) {
+                final payload = options.data;
+                if (payload is Map) {
+                  onEntryCreate?.call(Map<String, dynamic>.from(payload));
+                }
+                handler.resolve(
+                  Response(
+                    requestOptions: options,
+                    data: {
+                      'data': {
+                        'id': 42,
+                        'journal_id': 7,
+                        'entry_number': 1,
+                        'entry_date': '2026-09-20',
+                        'work_description': 'Монтаж арматуры',
+                        'status': 'draft',
+                        'status_label': 'Черновик',
+                        'workflow_state': 'ready',
+                        'workVolumes': <dynamic>[],
+                        'workers': <dynamic>[],
+                        'equipment': <dynamic>[],
+                        'materials': <dynamic>[],
+                        'blockers': <dynamic>[],
+                        'available_actions': <dynamic>[],
+                      },
+                    },
+                  ),
+                );
+                return;
+              }
+              if (options.path.endsWith('/entry-form-options') &&
+                  failFirstOptionsRequest &&
+                  optionRequests++ == 0) {
+                handler.reject(
+                  DioException(
+                    requestOptions: options,
+                    response: Response(
+                      requestOptions: options,
+                      statusCode: 422,
+                      data: const {'message': 'Invalid options request'},
+                    ),
+                    type: DioExceptionType.badResponse,
+                  ),
+                );
+                return;
+              }
+              handler.resolve(
+                Response(
+                  requestOptions: options,
+                  data: _formOptionsResponse(includeLongEstimateOptions),
+                ),
+              );
+            },
+          ),
+        );
+  final repository = ConstructionJournalRepository(
+    dio,
+    syncQueueServiceFuture: Future.value(
+      SyncQueueService(store: store, dio: dio),
+    ),
+  );
+
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [
+        constructionJournalRepositoryProvider.overrideWithValue(repository),
+      ],
+      child: MaterialApp(
+        builder:
+            (context, child) => MediaQuery(
+              data: MediaQuery.of(
+                context,
+              ).copyWith(textScaler: TextScaler.linear(textScale)),
+              child: child!,
+            ),
+        home: const JournalEntryFormScreen(journalId: 7),
+      ),
+    ),
+  );
+  await tester.pumpAndSettle();
+}
+
+Map<String, dynamic> _formOptionsResponse(bool includeLongEstimateOptions) {
+  return {
+    'data': {
+      'estimates':
+          includeLongEstimateOptions
+              ? [
+                {
+                  'id': 301,
+                  'number': 'СМ-2026-0003',
+                  'name': 'Журнал производства работ',
+                  'items': [
+                    {
+                      'id': 19,
+                      'estimate_id': 301,
+                      'name':
+                          'Устройство монолитной железобетонной фундаментной плиты толщиной 400 мм с армированием в два ряда и подготовкой основания',
+                      'item_type': 'work',
+                      'position_number': '12.1.3.004-0007',
+                      'quantity': 25.0,
+                      'quantity_total': 25.0,
+                      'work_type_id': 91,
+                      'measurement_unit_id': 6,
+                      'workType': {
+                        'id': 91,
+                        'name': 'Арматурные работы',
+                        'measurement_unit_id': null,
+                        'measurementUnit': null,
+                      },
+                      'measurementUnit': {
+                        'id': 6,
+                        'name': 'килограмм',
+                        'short_name': 'кг',
+                      },
+                      'contract_links': [],
+                    },
+                  ],
+                },
+              ]
+              : <dynamic>[],
+      'work_types':
+          includeLongEstimateOptions
+              ? [
+                {
+                  'id': 91,
+                  'name': 'Арматурные работы',
+                  'measurement_unit_id': null,
+                  'measurementUnit': null,
+                },
+              ]
+              : <dynamic>[],
+      'project_materials': <dynamic>[],
+    },
+  };
 }
 
 class _Store implements SyncQueueStore {

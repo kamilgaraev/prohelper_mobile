@@ -23,6 +23,12 @@ class ProjectFilesScreen extends StatelessWidget {
     apiPrefix: '/files',
     projectScoped: true,
     icon: Icons.folder_outlined,
+    detailFieldLabels: const {
+      'description': 'Описание',
+      'size': 'Размер',
+      'mime_type': 'Формат',
+      'created_at': 'Дата загрузки',
+    },
     appBarActionBuilder:
         (context, refresh) => _ProjectFileUploadAction(onUploaded: refresh),
   );
@@ -113,16 +119,7 @@ class _ProjectFileUploadActionState
       } else {
         final result = await FilePicker.pickFiles(
           type: FileType.custom,
-          allowedExtensions: const [
-            'pdf',
-            'doc',
-            'docx',
-            'xls',
-            'xlsx',
-            'odt',
-            'ods',
-            'txt',
-          ],
+          allowedExtensions: const ['pdf', 'doc', 'docx', 'xls', 'xlsx'],
           allowMultiple: false,
           withData: false,
         );

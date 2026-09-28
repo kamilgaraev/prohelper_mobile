@@ -40,13 +40,23 @@ class _FakeCompanionRepository extends CompanionModuleRepository {
 }
 
 class _FakeCompanionNotifier extends CompanionModuleNotifier {
-  _FakeCompanionNotifier({String moduleSlug = 'contract-management'})
-    : _moduleSlug = moduleSlug,
-      super(_FakeCompanionRepository(), moduleSlug) {
+  _FakeCompanionNotifier({
+    String moduleSlug = 'contract-management',
+    String? itemStatus,
+    String? statusLabel,
+    String? itemTitle,
+  }) : _moduleSlug = moduleSlug,
+       _itemStatus = itemStatus,
+       _statusLabel = statusLabel,
+       _itemTitle = itemTitle,
+       super(_FakeCompanionRepository(), moduleSlug) {
     _setLoadedState(moduleSlug: moduleSlug);
   }
 
   final String _moduleSlug;
+  final String? _itemStatus;
+  final String? _statusLabel;
+  final String? _itemTitle;
   String? query;
   String? status;
   String? action;
@@ -93,7 +103,7 @@ class _FakeCompanionNotifier extends CompanionModuleNotifier {
   }
 
   @override
-  Future<CompanionModuleDetailModel> executeExecutiveDocumentAction({
+  Future<void> executeExecutiveDocumentAction({
     required int documentId,
     required String action,
     String? comment,
@@ -102,18 +112,24 @@ class _FakeCompanionNotifier extends CompanionModuleNotifier {
   }) async {
     executiveAction = action;
     executiveDocumentId = documentId;
-    return CompanionModuleDetailModel.fromJson(
-      companionDetailJson(slug: _moduleSlug),
-    );
   }
 
   void _setLoadedState({int? projectId, String? moduleSlug}) {
+    final listJson = companionListJson(slug: moduleSlug ?? _moduleSlug);
+    final item = (listJson['items'] as List).single;
+    if (_statusLabel != null) {
+      item['status_label'] = _statusLabel;
+    }
+    if (_itemStatus != null) {
+      item['status'] = _itemStatus;
+    }
+    if (_itemTitle != null) {
+      item['title'] = _itemTitle;
+    }
     state = CompanionModuleState(
       isLoading: false,
       projectId: projectId,
-      list: CompanionModuleListModel.fromJson(
-        companionListJson(slug: moduleSlug ?? _moduleSlug),
-      ),
+      list: CompanionModuleListModel.fromJson(listJson),
     );
   }
 }
@@ -123,6 +139,7 @@ void main() {
     Widget child,
     _FakeCompanionNotifier notifier, {
     _FakeProjectsNotifier? projectsNotifier,
+    double textScale = 1,
   }) {
     return ProviderScope(
       overrides: [
@@ -131,9 +148,59 @@ void main() {
         ),
         companionModuleProvider.overrideWith((ref, moduleSlug) => notifier),
       ],
-      child: MaterialApp(home: child),
+      child: MaterialApp(
+        builder:
+            (context, child) => MediaQuery(
+              data: MediaQuery.of(
+                context,
+              ).copyWith(textScaler: TextScaler.linear(textScale)),
+              child: child!,
+            ),
+        home: child,
+      ),
     );
   }
+
+  testWidgets(
+    'real customer-review status fits companion card at narrow sizes',
+    (tester) async {
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      const itemTitle = 'Изменение условий договора и графика работ №482';
+
+      for (final (width, textScale) in [(360.0, 1.0), (240.0, 1.3)]) {
+        tester.view.physicalSize = Size(width, 800);
+        final notifier = _FakeCompanionNotifier(
+          moduleSlug: 'change-management',
+          itemStatus: 'customer_review',
+          statusLabel: 'Согласование с заказчиком',
+          itemTitle: itemTitle,
+        );
+
+        await tester.pumpWidget(
+          buildApp(
+            const CompanionModuleScreen(
+              moduleSlug: 'change-management',
+              title: 'Изменения',
+              icon: Icons.change_circle_outlined,
+            ),
+            notifier,
+            textScale: textScale,
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        expect(find.text('Согласование с заказчиком'), findsOneWidget);
+        expect(
+          tester.widget<Text>(find.text('Согласование с заказчиком')).maxLines,
+          isNull,
+        );
+        expect(tester.getSize(find.text(itemTitle)).width, greaterThan(80));
+      }
+    },
+  );
 
   testWidgets('shows companion list screen and runs filters', (tester) async {
     final notifier = _FakeCompanionNotifier();

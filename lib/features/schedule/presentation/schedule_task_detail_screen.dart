@@ -289,17 +289,32 @@ class _DetailLine extends StatelessWidget {
     if ((value ?? '').isEmpty) return const SizedBox.shrink();
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 150,
-            child: Text(label, style: AppTypography.caption(context)),
-          ),
-          Expanded(
-            child: Text(value!, style: AppTypography.bodyMedium(context)),
-          ),
-        ],
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final compact =
+              constraints.maxWidth < 400 ||
+              MediaQuery.textScalerOf(context).scale(1) > 1.15;
+          final labelText = Text(label, style: AppTypography.caption(context));
+          final valueText = Text(
+            value!,
+            style: AppTypography.bodyMedium(context),
+          );
+
+          if (compact) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [labelText, const SizedBox(height: 2), valueText],
+            );
+          }
+
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(width: 150, child: labelText),
+              Expanded(child: valueText),
+            ],
+          );
+        },
       ),
     );
   }
