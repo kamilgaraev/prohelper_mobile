@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:prohelpers_mobile/core/network/api_exception.dart';
+import 'package:prohelpers_mobile/core/storage/cached_entity_codec.dart';
 import 'package:prohelpers_mobile/core/storage/entity_snapshot_service.dart';
 import 'package:prohelpers_mobile/core/storage/entity_snapshot_store.dart';
 import 'package:prohelpers_mobile/core/storage/snapshot_read.dart';
@@ -107,6 +108,90 @@ void main() {
       expect(afterRevocation.data, isNull);
     },
   );
+
+  test('HTTP 4xx не подменяется совпадающим кешем и не удаляет его', () async {
+    final store = MemoryEntitySnapshotStore();
+    const owner = EntitySnapshotOwner(userId: 7, orgId: 10);
+    final repository = _SiteRequestsRepository();
+    final adapter = SiteRequestsSnapshotAdapter(
+      repository: repository,
+      snapshots: Future.value(
+        EntitySnapshotService(store: store, resolveOwner: () => owner),
+      ),
+    );
+    const search = 'лесов';
+
+    final seeded = await adapter.load(
+      online: true,
+      projectId: 15,
+      search: search,
+    );
+    expect(seeded.data?.single.title, 'Аренда лесов');
+
+    for (final statusCode in [401, 404, 422]) {
+      repository.listErrorStatus = statusCode;
+      final failed = await adapter.load(
+        online: true,
+        projectId: 15,
+        search: search,
+      );
+
+      expect(failed.presence, SnapshotPresence.error);
+      expect(failed.data, isEmpty);
+      expect(failed.fromCache, isFalse);
+    }
+
+    repository.listErrorStatus = null;
+    final stillCached = await adapter.load(
+      online: false,
+      projectId: 15,
+      search: search,
+    );
+    expect(stillCached.data?.single.title, 'Аренда лесов');
+    expect(stillCached.fromCache, isTrue);
+  });
+
+  test('403 скрывает чистые строки, но сохраняет dirty снимок', () async {
+    final store = MemoryEntitySnapshotStore();
+    const owner = EntitySnapshotOwner(userId: 7, orgId: 10);
+    final service = EntitySnapshotService(
+      store: store,
+      resolveOwner: () => owner,
+    );
+    final repository = _SiteRequestsRepository();
+    final adapter = SiteRequestsSnapshotAdapter(
+      repository: repository,
+      snapshots: Future.value(service),
+    );
+    await adapter.load(online: true, projectId: 15);
+    await service.putSnapshot(
+      cachedEntityFromPayload(
+        type: SiteRequestsSnapshotAdapter.typeFor(SiteRequestsScope.all),
+        remoteId: '43',
+        payload: {..._request, 'id': 43, 'title': 'Локальное изменение'},
+        projectId: 15,
+        dirty: true,
+      ),
+      expectedOwner: owner,
+    );
+
+    repository.permissionDenied = true;
+    final denied = await adapter.load(online: true, projectId: 15);
+    final remaining = await store.findList(
+      userId: owner.userId,
+      orgId: owner.orgId,
+      type: SiteRequestsSnapshotAdapter.typeFor(SiteRequestsScope.all),
+      projectId: 15,
+    );
+
+    expect(denied.presence, SnapshotPresence.permissionDenied);
+    expect(remaining.map((entity) => entity.remoteId), contains('43'));
+    expect(
+      remaining.singleWhere((entity) => entity.remoteId == '43').dirty,
+      isTrue,
+    );
+    expect(remaining.map((entity) => entity.remoteId), isNot(contains('42')));
+  });
 }
 
 class _SiteRequestsRepository extends SiteRequestsRepository {
@@ -115,6 +200,7 @@ class _SiteRequestsRepository extends SiteRequestsRepository {
   var listFetchCount = 0;
   var detailFetchCount = 0;
   var permissionDenied = false;
+  int? listErrorStatus;
   String title = 'Аренда лесов';
 
   @override
@@ -135,6 +221,9 @@ class _SiteRequestsRepository extends SiteRequestsRepository {
     expect(projectId, 15);
     if (permissionDenied) {
       throw const ApiException('Нет доступа.', statusCode: 403);
+    }
+    if (listErrorStatus case final statusCode?) {
+      throw ApiException('HTTP $statusCode', statusCode: statusCode);
     }
     return [
       {..._request, 'title': title},

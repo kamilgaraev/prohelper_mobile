@@ -2,6 +2,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/network/api_exception.dart';
 import '../../../core/storage/entity_snapshot_provider.dart';
+import '../../../core/storage/entity_snapshot_store.dart';
 import '../../../core/storage/snapshot_read.dart';
 import '../../../core/sync/sync_queue_provider.dart';
 import '../../auth/domain/auth_provider.dart';
@@ -71,6 +72,7 @@ class SiteRequestsState {
     int? projectFilter,
     SiteRequestsScope? scope,
     bool clearStatusFilter = false,
+    bool clearSearchFilter = false,
     bool clearProjectFilter = false,
   }) {
     return SiteRequestsState(
@@ -87,7 +89,8 @@ class SiteRequestsState {
               : error as String?,
       statusFilter:
           clearStatusFilter ? null : (statusFilter ?? this.statusFilter),
-      searchFilter: searchFilter ?? this.searchFilter,
+      searchFilter:
+          clearSearchFilter ? null : (searchFilter ?? this.searchFilter),
       urgentOnly: urgentOnly ?? this.urgentOnly,
       assignedUserFilter: assignedUserFilter ?? this.assignedUserFilter,
       requestTypeFilter: requestTypeFilter ?? this.requestTypeFilter,
@@ -157,9 +160,6 @@ class SiteRequestsNotifier extends StateNotifier<SiteRequestsState> {
         error: null,
         currentPage: 1,
         hasMore: true,
-        requests: [],
-        fromCache: false,
-        hasDirtyLocal: false,
       );
     } else {
       state = state.copyWith(
@@ -190,17 +190,30 @@ class SiteRequestsNotifier extends StateNotifier<SiteRequestsState> {
             read.presence == SnapshotPresence.permissionDenied
                 ? const <SiteRequestModel>[]
                 : (read.data ?? const <SiteRequestModel>[]);
+        final keepExistingAfterReadError =
+            refresh &&
+            read.error != null &&
+            read.data == null &&
+            state.requests.isNotEmpty &&
+            read.presence != SnapshotPresence.permissionDenied;
         state = state.copyWith(
           isLoading: false,
           requests:
-              refresh
+              read.presence == SnapshotPresence.permissionDenied
+                  ? const <SiteRequestModel>[]
+                  : keepExistingAfterReadError
+                  ? state.requests
+                  : refresh
                   ? newRequests
                   : _mergeRequests(state.requests, newRequests),
           currentPage: state.currentPage + 1,
           hasMore: read.hasMore,
           permissionDenied: read.presence == SnapshotPresence.permissionDenied,
-          fromCache: read.fromCache,
-          hasDirtyLocal: read.hasDirtyLocal,
+          fromCache: keepExistingAfterReadError ? true : read.fromCache,
+          hasDirtyLocal:
+              keepExistingAfterReadError
+                  ? state.hasDirtyLocal
+                  : read.hasDirtyLocal,
           error: read.error,
         );
         return;
@@ -222,7 +235,7 @@ class SiteRequestsNotifier extends StateNotifier<SiteRequestsState> {
       if (!mounted || requestEpoch != _requestEpoch) return;
       state = state.copyWith(
         isLoading: false,
-        requests: [...state.requests, ...newRequests],
+        requests: refresh ? newRequests : [...state.requests, ...newRequests],
         currentPage: state.currentPage + 1,
         hasMore: newRequests.isNotEmpty,
         fromCache: false,
@@ -230,11 +243,14 @@ class SiteRequestsNotifier extends StateNotifier<SiteRequestsState> {
       );
     } catch (error) {
       if (!mounted || requestEpoch != _requestEpoch) return;
+      final permissionDenied = _isPermissionDenied(error);
       state = state.copyWith(
         isLoading: false,
-        permissionDenied: _isPermissionDenied(error),
-        fromCache: false,
-        hasDirtyLocal: false,
+        requests:
+            permissionDenied ? const <SiteRequestModel>[] : state.requests,
+        permissionDenied: permissionDenied,
+        fromCache: permissionDenied ? false : state.fromCache,
+        hasDirtyLocal: permissionDenied ? false : state.hasDirtyLocal,
         error: _errorMessage(error),
       );
     }
@@ -258,7 +274,9 @@ class SiteRequestsNotifier extends StateNotifier<SiteRequestsState> {
       return;
     }
 
+    _requestEpoch++;
     state = state.copyWith(
+      isLoading: false,
       projectFilter: projectId,
       clearProjectFilter: projectId == null,
       requests: [],
@@ -276,7 +294,9 @@ class SiteRequestsNotifier extends StateNotifier<SiteRequestsState> {
       return;
     }
 
+    _requestEpoch++;
     state = state.copyWith(
+      isLoading: false,
       scope: scope,
       requests: [],
       currentPage: 1,
@@ -298,7 +318,10 @@ class SiteRequestsNotifier extends StateNotifier<SiteRequestsState> {
   }
 
   void setSearchFilter(String? value) {
-    state = state.copyWith(searchFilter: value);
+    state = state.copyWith(
+      searchFilter: value,
+      clearSearchFilter: value == null,
+    );
     loadRequests(refresh: true);
   }
 
@@ -335,12 +358,70 @@ class SiteRequestsNotifier extends StateNotifier<SiteRequestsState> {
     String status, {
     String? notes,
   }) async {
+    final adapter = _snapshotAdapter;
+    EntitySnapshotOwner? expectedOwner;
+    if (adapter != null) {
+      try {
+        expectedOwner = await adapter.currentOwner();
+      } catch (_) {}
+    }
+
     try {
-      final updatedRequest = await _repository.changeSiteRequestStatus(
+      final payload = await _repository.changeSiteRequestStatusPayload(
         requestId,
         status,
         notes: notes,
       );
+      final updatedRequest = SiteRequestModel.fromJson(payload);
+      var snapshotSaveFailed = false;
+
+      if (adapter != null) {
+        try {
+          await adapter.saveAcknowledgedDetail(
+            payload: payload,
+            requestId: requestId,
+            projectId: updatedRequest.projectId ?? state.projectFilter,
+            expectedOwner: expectedOwner,
+          );
+        } catch (_) {
+          if (expectedOwner != null &&
+              await adapter.isCurrentOwner(expectedOwner)) {
+            snapshotSaveFailed = true;
+            try {
+              await adapter.invalidateCleanDetail(
+                requestId: requestId,
+                projectId: updatedRequest.projectId ?? state.projectFilter,
+                payload: payload,
+                expectedOwner: expectedOwner,
+              );
+            } catch (_) {}
+          }
+        }
+        try {
+          await adapter.updateExistingListAliasesFromAcknowledgedDetail(
+            payload: payload,
+            requestId: requestId,
+            projectId: updatedRequest.projectId ?? state.projectFilter,
+            expectedOwner: expectedOwner,
+          );
+        } catch (_) {
+          snapshotSaveFailed = true;
+        }
+        if (!await adapter.isCurrentOwner(expectedOwner)) {
+          if (mounted) {
+            state = state.copyWith(
+              requests: const [],
+              permissionDenied: true,
+              fromCache: false,
+              hasDirtyLocal: false,
+              error: null,
+            );
+          }
+          return;
+        }
+      }
+
+      if (!mounted) return;
 
       final nextRequests = [...state.requests];
       final index = nextRequests.indexWhere(
@@ -357,8 +438,25 @@ class SiteRequestsNotifier extends StateNotifier<SiteRequestsState> {
         }
       }
 
-      state = state.copyWith(requests: nextRequests, error: null);
+      state = state.copyWith(
+        requests: nextRequests,
+        error:
+            snapshotSaveFailed
+                ? 'Статус изменён на сервере, но локальная копия не обновлена.'
+                : null,
+      );
     } catch (error) {
+      if (!mounted) return;
+      if (adapter != null && !await adapter.isCurrentOwner(expectedOwner)) {
+        state = state.copyWith(
+          requests: const [],
+          permissionDenied: true,
+          fromCache: false,
+          hasDirtyLocal: false,
+          error: null,
+        );
+        return;
+      }
       state = state.copyWith(
         permissionDenied: _isPermissionDenied(error),
         error: _errorMessage(error),

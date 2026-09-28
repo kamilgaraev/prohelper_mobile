@@ -597,6 +597,8 @@ class _PaymentDocumentFormScreenState
   PaymentPartyOption? _payee;
   int _contractorPage = 1;
   int _contractorLastPage = 1;
+  int _optionsRetryPage = 1;
+  bool _optionsRetryAppend = false;
   int _searchRequest = 0;
   Timer? _searchDebounce;
   bool _optionsLoading = true;
@@ -632,12 +634,18 @@ class _PaymentDocumentFormScreenState
   }
 
   Future<void> _loadOptions({int page = 1, bool append = false}) async {
+    if (!mounted || (append && _optionsLoadingMore)) return;
     final request = ++_searchRequest;
     if (mounted) {
       setState(() {
         _optionsLoading = !append;
         _optionsLoadingMore = append;
         _optionsError = null;
+        if (!append) {
+          _contractors = [];
+          _contractorPage = 1;
+          _contractorLastPage = 1;
+        }
       });
     }
     try {
@@ -666,12 +674,23 @@ class _PaymentDocumentFormScreenState
         _optionsLoading = false;
         _optionsLoadingMore = false;
         _optionsError = _message(error);
+        _optionsRetryPage = page;
+        _optionsRetryAppend = append;
       });
     }
   }
 
   void _searchParties(String value) {
     _searchDebounce?.cancel();
+    setState(() {
+      _searchRequest++;
+      _optionsLoading = true;
+      _optionsLoadingMore = false;
+      _optionsError = null;
+      _contractors = [];
+      _contractorPage = 1;
+      _contractorLastPage = 1;
+    });
     _searchDebounce = Timer(
       const Duration(milliseconds: 350),
       () => _loadOptions(),
@@ -748,65 +767,71 @@ class _PaymentDocumentFormScreenState
                   'Если сторону не менять, она останется как в документе.',
                 ),
               ],
-              if (_optionsLoading)
-                const LinearProgressIndicator()
-              else if (_optionsError != null) ...[
+              if (_optionsLoading || _optionsLoadingMore)
+                const LinearProgressIndicator(),
+              if (_optionsError != null) ...[
                 Text(
                   _optionsError!,
                   style: TextStyle(color: Theme.of(context).colorScheme.error),
                 ),
                 TextButton.icon(
-                  onPressed: _busy ? null : () => _loadOptions(),
+                  onPressed:
+                      _busy || _optionsLoading || _optionsLoadingMore
+                          ? null
+                          : () => _loadOptions(
+                            page: _optionsRetryPage,
+                            append: _optionsRetryAppend,
+                          ),
                   icon: const Icon(Icons.refresh),
                   label: const Text('Повторить загрузку сторон'),
                 ),
-              ] else ...[
-                _partyDropdown(
-                  key: const ValueKey('payment-payer'),
-                  label: 'Плательщик',
-                  selected: _payer,
-                  choices: _partyChoices(_payer),
-                  existingName:
-                      '${widget.document?.values['payer_name'] ?? ''}',
-                  onChanged: (value) => setState(() => _payer = value),
+              ] else if (!_optionsLoading &&
+                  !_optionsLoadingMore &&
+                  _contractors.isEmpty)
+                const Text('Контрагенты не найдены.'),
+              _partyDropdown(
+                key: const ValueKey('payment-payer'),
+                label: 'Плательщик',
+                selected: _payer,
+                choices: _partyChoices(_payer),
+                existingName: '${widget.document?.values['payer_name'] ?? ''}',
+                onChanged: (value) => setState(() => _payer = value),
+              ),
+              _partyDropdown(
+                key: const ValueKey('payment-payee'),
+                label: 'Получатель',
+                selected: _payee,
+                choices: _partyChoices(_payee),
+                existingName: '${widget.document?.values['payee_name'] ?? ''}',
+                onChanged: (value) => setState(() => _payee = value),
+              ),
+              TextField(
+                key: const ValueKey('payment-party-search'),
+                controller: _partySearch,
+                enabled: !_busy,
+                onChanged: _searchParties,
+                decoration: const InputDecoration(
+                  labelText: 'Найти контрагента',
+                  prefixIcon: Icon(Icons.search),
                 ),
-                _partyDropdown(
-                  key: const ValueKey('payment-payee'),
-                  label: 'Получатель',
-                  selected: _payee,
-                  choices: _partyChoices(_payee),
-                  existingName:
-                      '${widget.document?.values['payee_name'] ?? ''}',
-                  onChanged: (value) => setState(() => _payee = value),
-                ),
-                TextField(
-                  key: const ValueKey('payment-party-search'),
-                  controller: _partySearch,
-                  enabled: !_busy,
-                  onChanged: _searchParties,
-                  decoration: const InputDecoration(
-                    labelText: 'Найти контрагента',
-                    prefixIcon: Icon(Icons.search),
-                  ),
-                ),
-                if (_contractorPage < _contractorLastPage)
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: TextButton.icon(
-                      onPressed:
-                          _optionsLoadingMore || _busy
-                              ? null
-                              : () => _loadOptions(
-                                page: _contractorPage + 1,
-                                append: true,
-                              ),
-                      icon: const Icon(Icons.expand_more),
-                      label: Text(
-                        _optionsLoadingMore ? 'Загрузка…' : 'Ещё контрагенты',
-                      ),
+              ),
+              if (_contractorPage < _contractorLastPage)
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    onPressed:
+                        _optionsLoading || _optionsLoadingMore || _busy
+                            ? null
+                            : () => _loadOptions(
+                              page: _contractorPage + 1,
+                              append: true,
+                            ),
+                    icon: const Icon(Icons.expand_more),
+                    label: Text(
+                      _optionsLoadingMore ? 'Загрузка…' : 'Ещё контрагенты',
                     ),
                   ),
-              ],
+                ),
               const SizedBox(height: 8),
               Text(
                 'Банковские реквизиты',
@@ -913,7 +938,8 @@ class _PaymentDocumentFormScreenState
         widget.document == null && selected == null
             ? (_) => 'Выберите $label в списке'
             : null,
-    onChanged: _busy ? null : onChanged,
+    onChanged:
+        _busy || _optionsLoading || _optionsLoadingMore ? null : onChanged,
   );
   Future<void> _save() async {
     if (_busy) return;

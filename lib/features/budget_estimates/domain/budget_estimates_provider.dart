@@ -1,7 +1,9 @@
-﻿import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/error/user_message.dart';
 import '../../../core/network/api_exception.dart';
+import '../../../core/storage/cached_entity_codec.dart';
+import '../../auth/domain/auth_provider.dart';
 import '../data/budget_estimate_model.dart';
 import '../data/budget_estimates_repository.dart';
 
@@ -56,17 +58,21 @@ class BudgetEstimatesNotifier extends StateNotifier<BudgetEstimatesState> {
     : super(const BudgetEstimatesState());
 
   final BudgetEstimatesRepository _repository;
+  int _summaryRequestVersion = 0;
 
   void syncProject(int? projectId) {
     if (state.projectId == projectId) {
       return;
     }
 
+    _summaryRequestVersion++;
+
     state = state.copyWith(projectId: projectId, summary: null, error: null);
   }
 
   Future<void> loadSummary() async {
     final projectId = state.projectId;
+    final requestVersion = ++_summaryRequestVersion;
 
     if (projectId == null) {
       state = state.copyWith(
@@ -88,11 +94,21 @@ class BudgetEstimatesNotifier extends StateNotifier<BudgetEstimatesState> {
 
     try {
       final summary = await _repository.fetchSummary(projectId: projectId);
+      if (!mounted ||
+          requestVersion != _summaryRequestVersion ||
+          state.projectId != projectId) {
+        return;
+      }
       state = state.copyWith(isLoading: false, summary: summary);
     } catch (error) {
+      if (!mounted ||
+          requestVersion != _summaryRequestVersion ||
+          state.projectId != projectId) {
+        return;
+      }
       state = state.copyWith(
         isLoading: false,
-        summary: null,
+        summary: isSnapshotOffline(error) ? state.summary : null,
         permissionDenied: _isPermissionDenied(error),
         malformedContract: error is FormatException,
         error: UserMessage.fromError(error),
@@ -129,6 +145,11 @@ bool _isPermissionDenied(Object error) {
 
 final budgetEstimatesProvider =
     StateNotifierProvider<BudgetEstimatesNotifier, BudgetEstimatesState>((ref) {
+      ref.watch(
+        authProvider.select(
+          (state) => state is AuthAuthenticated ? state.sessionIdentity : null,
+        ),
+      );
       return BudgetEstimatesNotifier(
         ref.read(budgetEstimatesRepositoryProvider),
       );

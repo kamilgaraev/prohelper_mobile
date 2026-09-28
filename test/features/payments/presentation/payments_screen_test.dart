@@ -22,6 +22,9 @@ class _TestPaymentsRepository extends PaymentsRepository {
   bool failNextDecision = false;
   bool failNextRegistration = false;
   bool failNextCreate = false;
+  bool failNextOptions = false;
+  bool returnEmptyOptionsNext = false;
+  Completer<PaymentFormOptions>? pendingOptions;
   bool canApprove = true;
   bool canReject = true;
   bool canRegisterPayment = true;
@@ -63,6 +66,33 @@ class _TestPaymentsRepository extends PaymentsRepository {
     int perPage = 20,
   }) async {
     optionRequests.add((search ?? '', page));
+    if (failNextOptions) {
+      failNextOptions = false;
+      throw const ApiException(
+        'Не удалось загрузить стороны.',
+        statusCode: 500,
+      );
+    }
+    final pending = pendingOptions;
+    pendingOptions = null;
+    if (pending != null) return pending.future;
+    if (returnEmptyOptionsNext) {
+      returnEmptyOptionsNext = false;
+      return PaymentFormOptions(
+        currentOrganization: const PaymentPartyOption(
+          id: 7,
+          name: 'МОСТ',
+          type: 'organization',
+          inn: '7701000000',
+        ),
+        contractors: PaymentContractorPage(
+          items: const [],
+          currentPage: 1,
+          lastPage: 1,
+          total: 0,
+        ),
+      );
+    }
     return PaymentFormOptions(
       currentOrganization: const PaymentPartyOption(
         id: 7,
@@ -453,6 +483,391 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+
+  testWidgets('party search keeps its focused field mounted while loading', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(240, 426);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final repository = _TestPaymentsRepository();
+    await tester.pumpWidget(
+      _paymentHarness(
+        screen: const PaymentDocumentFormScreen(projectId: 52),
+        repository: repository,
+        storage: _TestSecureStorage(),
+        textScale: 1.3,
+      ),
+    );
+    await tester.tap(find.text('Открыть'));
+    await tester.pumpAndSettle();
+
+    final search = find.byKey(const ValueKey('payment-party-search'));
+    await tester.ensureVisible(search);
+    final searchElement = tester.element(search);
+    final pendingOptions = Completer<PaymentFormOptions>();
+    repository.pendingOptions = pendingOptions;
+    await tester.enterText(search, 'Север');
+    await tester.pump(const Duration(milliseconds: 351));
+    await tester.pump();
+
+    expect(find.byType(LinearProgressIndicator), findsOneWidget);
+    expect(search, findsOneWidget);
+    expect(identical(searchElement, tester.element(search)), isTrue);
+    expect(tester.widget<TextField>(search).controller!.text, 'Север');
+    expect(tester.testTextInput.isVisible, isTrue);
+
+    pendingOptions.complete(
+      PaymentFormOptions(
+        currentOrganization: const PaymentPartyOption(
+          id: 7,
+          name: 'МОСТ',
+          type: 'organization',
+          inn: '7701000000',
+        ),
+        contractors: PaymentContractorPage(
+          items: const [
+            PaymentPartyOption(
+              id: 32,
+              name: 'ООО Север',
+              type: 'contractor',
+              inn: '7703000000',
+            ),
+          ],
+          currentPage: 1,
+          lastPage: 1,
+          total: 1,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(search, findsOneWidget);
+    expect(tester.widget<TextField>(search).controller!.text, 'Север');
+    expect(tester.testTextInput.isVisible, isTrue);
+    final payee = find.byKey(const ValueKey('payment-payee'));
+    await tester.ensureVisible(payee);
+    await tester.tap(payee);
+    await tester.pumpAndSettle();
+    expect(find.text('Контрагент: ООО Север · ИНН 7703000000'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('new search supersedes an in-flight contractor page', (
+    tester,
+  ) async {
+    final repository = _TestPaymentsRepository();
+    await tester.pumpWidget(
+      _paymentHarness(
+        screen: const PaymentDocumentFormScreen(projectId: 52),
+        repository: repository,
+        storage: _TestSecureStorage(),
+      ),
+    );
+    await tester.tap(find.text('Открыть'));
+    await tester.pumpAndSettle();
+
+    final appendResponse = Completer<PaymentFormOptions>();
+    repository.pendingOptions = appendResponse;
+    final more = find.text('Ещё контрагенты');
+    await tester.ensureVisible(more);
+    await tester.tap(more);
+    await tester.pump();
+    expect(repository.optionRequests.last, ('', 2));
+    expect(
+      tester
+          .widget<TextButton>(find.widgetWithText(TextButton, 'Загрузка…'))
+          .onPressed,
+      isNull,
+    );
+
+    final searchResponse = Completer<PaymentFormOptions>();
+    repository.pendingOptions = searchResponse;
+    final search = find.byKey(const ValueKey('payment-party-search'));
+    await tester.ensureVisible(search);
+    await tester.enterText(search, 'Новая выборка');
+    await tester.pump(const Duration(milliseconds: 351));
+    await tester.pump();
+    expect(repository.optionRequests.last, ('Новая выборка', 1));
+
+    searchResponse.complete(
+      PaymentFormOptions(
+        currentOrganization: const PaymentPartyOption(
+          id: 7,
+          name: 'МОСТ',
+          type: 'organization',
+          inn: '7701000000',
+        ),
+        contractors: PaymentContractorPage(
+          items: const [
+            PaymentPartyOption(
+              id: 33,
+              name: 'ООО Новая выборка',
+              type: 'contractor',
+              inn: '7704000000',
+            ),
+          ],
+          currentPage: 1,
+          lastPage: 1,
+          total: 1,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(search, findsOneWidget);
+    expect(find.text('Ещё контрагенты'), findsNothing);
+
+    appendResponse.complete(
+      PaymentFormOptions(
+        currentOrganization: const PaymentPartyOption(
+          id: 7,
+          name: 'МОСТ',
+          type: 'organization',
+          inn: '7701000000',
+        ),
+        contractors: PaymentContractorPage(
+          items: const [
+            PaymentPartyOption(
+              id: 34,
+              name: 'Устаревшая страница',
+              type: 'contractor',
+              inn: '7705000000',
+            ),
+          ],
+          currentPage: 2,
+          lastPage: 2,
+          total: 2,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final payee = find.byKey(const ValueKey('payment-payee'));
+    await tester.ensureVisible(payee);
+    await tester.tap(payee);
+    await tester.pumpAndSettle();
+    expect(
+      find.text('Контрагент: ООО Новая выборка · ИНН 7704000000'),
+      findsOneWidget,
+    );
+    expect(
+      find.text('Контрагент: Устаревшая страница · ИНН 7705000000'),
+      findsNothing,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('typing immediately invalidates a pending contractor page', (
+    tester,
+  ) async {
+    final repository = _TestPaymentsRepository();
+    await tester.pumpWidget(
+      _paymentHarness(
+        screen: const PaymentDocumentFormScreen(projectId: 52),
+        repository: repository,
+        storage: _TestSecureStorage(),
+      ),
+    );
+    await tester.tap(find.text('Открыть'));
+    await tester.pumpAndSettle();
+
+    final appendResponse = Completer<PaymentFormOptions>();
+    repository.pendingOptions = appendResponse;
+    await tester.ensureVisible(find.text('Ещё контрагенты'));
+    await tester.tap(find.text('Ещё контрагенты'));
+    await tester.pump();
+    expect(repository.optionRequests.last, ('', 2));
+
+    final search = find.byKey(const ValueKey('payment-party-search'));
+    final searchElement = tester.element(search);
+    await tester.enterText(search, 'Новая выборка');
+    await tester.pump(const Duration(milliseconds: 100));
+    appendResponse.complete(
+      PaymentFormOptions(
+        currentOrganization: const PaymentPartyOption(
+          id: 7,
+          name: 'МОСТ',
+          type: 'organization',
+          inn: '7701000000',
+        ),
+        contractors: PaymentContractorPage(
+          items: const [
+            PaymentPartyOption(
+              id: 34,
+              name: 'Устаревшая страница',
+              type: 'contractor',
+              inn: '7705000000',
+            ),
+          ],
+          currentPage: 2,
+          lastPage: 2,
+          total: 2,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final payee = find.byKey(const ValueKey('payment-payee'));
+    await tester.ensureVisible(payee);
+    await tester.tap(payee);
+    await tester.pump();
+    expect(repository.optionRequests, hasLength(2));
+    expect(
+      find.text('Контрагент: Устаревшая страница · ИНН 7705000000'),
+      findsNothing,
+    );
+    expect(identical(searchElement, tester.element(search)), isTrue);
+    expect(tester.widget<TextField>(search).controller!.text, 'Новая выборка');
+    expect(find.byType(LinearProgressIndicator), findsOneWidget);
+
+    await tester.pump(const Duration(milliseconds: 251));
+    await tester.pumpAndSettle();
+    expect(repository.optionRequests.last, ('Новая выборка', 1));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('failed contractor page retry appends the same page', (
+    tester,
+  ) async {
+    final repository = _TestPaymentsRepository();
+    await tester.pumpWidget(
+      _paymentHarness(
+        screen: const PaymentDocumentFormScreen(projectId: 52),
+        repository: repository,
+        storage: _TestSecureStorage(),
+      ),
+    );
+    await tester.tap(find.text('Открыть'));
+    await tester.pumpAndSettle();
+    repository.failNextOptions = true;
+    await tester.ensureVisible(find.text('Ещё контрагенты'));
+    await tester.tap(find.text('Ещё контрагенты'));
+    await tester.pumpAndSettle();
+
+    expect(repository.optionRequests.last, ('', 2));
+    expect(find.text('Не удалось загрузить стороны.'), findsOneWidget);
+    expect(find.byKey(const ValueKey('payment-party-search')), findsOneWidget);
+    final retryResponse = Completer<PaymentFormOptions>();
+    repository.pendingOptions = retryResponse;
+    await tester.ensureVisible(find.text('Повторить загрузку сторон'));
+    await tester.tap(find.text('Повторить загрузку сторон'));
+    await tester.pump();
+    expect(repository.optionRequests.last, ('', 2));
+    expect(
+      tester
+          .widget<TextButton>(find.widgetWithText(TextButton, 'Загрузка…'))
+          .onPressed,
+      isNull,
+    );
+    retryResponse.complete(
+      PaymentFormOptions(
+        currentOrganization: const PaymentPartyOption(
+          id: 7,
+          name: 'МОСТ',
+          type: 'organization',
+          inn: '7701000000',
+        ),
+        contractors: PaymentContractorPage(
+          items: const [
+            PaymentPartyOption(
+              id: 32,
+              name: 'ООО Вторая страница',
+              type: 'contractor',
+              inn: '7706000000',
+            ),
+          ],
+          currentPage: 2,
+          lastPage: 2,
+          total: 21,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final payee = find.byKey(const ValueKey('payment-payee'));
+    await tester.ensureVisible(payee);
+    await tester.tap(payee);
+    await tester.pumpAndSettle();
+    expect(
+      find.text('Контрагент: ООО Поставка · ИНН 7702000000'),
+      findsOneWidget,
+    );
+    expect(
+      find.text('Контрагент: ООО Вторая страница · ИНН 7706000000'),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('party search error keeps selections and retries inline', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(240, 426);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final repository = _TestPaymentsRepository();
+    await tester.pumpWidget(
+      _paymentHarness(
+        screen: const PaymentDocumentFormScreen(projectId: 52),
+        repository: repository,
+        storage: _TestSecureStorage(),
+        textScale: 1.3,
+      ),
+    );
+    await tester.tap(find.text('Открыть'));
+    await tester.pumpAndSettle();
+    await _fillNewPaymentForm(tester);
+
+    repository.failNextOptions = true;
+    final search = find.byKey(const ValueKey('payment-party-search'));
+    await tester.ensureVisible(search);
+    await tester.enterText(search, 'Не найден');
+    await tester.pump(const Duration(milliseconds: 351));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Не удалось загрузить стороны.'), findsOneWidget);
+    expect(search, findsOneWidget);
+    expect(tester.widget<TextField>(search).controller!.text, 'Не найден');
+    final dropdowns = tester
+        .widgetList<DropdownButtonFormField<PaymentPartyOption>>(
+          find.byType(DropdownButtonFormField<PaymentPartyOption>),
+        );
+    expect(dropdowns, hasLength(2));
+    expect(dropdowns.first.initialValue?.id, 7);
+    expect(dropdowns.last.initialValue?.id, 31);
+    expect(find.text('Повторить загрузку сторон'), findsOneWidget);
+
+    await tester.ensureVisible(find.text('Повторить загрузку сторон'));
+    await tester.tap(find.text('Повторить загрузку сторон'));
+    await tester.pumpAndSettle();
+    expect(search, findsOneWidget);
+    expect(tester.widget<TextField>(search).controller!.text, 'Не найден');
+    expect(repository.optionRequests.last, ('Не найден', 1));
+    final retriedDropdowns = tester
+        .widgetList<DropdownButtonFormField<PaymentPartyOption>>(
+          find.byType(DropdownButtonFormField<PaymentPartyOption>),
+        );
+    expect(retriedDropdowns.first.initialValue?.id, 7);
+    expect(retriedDropdowns.last.initialValue?.id, 31);
+
+    repository.returnEmptyOptionsNext = true;
+    await tester.enterText(search, 'Нет результатов');
+    await tester.pump(const Duration(milliseconds: 351));
+    await tester.pumpAndSettle();
+    expect(find.text('Контрагенты не найдены.'), findsOneWidget);
+    expect(search, findsOneWidget);
+    expect(
+      tester.widget<TextField>(search).controller!.text,
+      'Нет результатов',
+    );
+    final emptyResultDropdowns = tester
+        .widgetList<DropdownButtonFormField<PaymentPartyOption>>(
+          find.byType(DropdownButtonFormField<PaymentPartyOption>),
+        );
+    expect(emptyResultDropdowns, hasLength(2));
+    expect(emptyResultDropdowns.first.initialValue?.id, 7);
+    expect(emptyResultDropdowns.last.initialValue?.id, 31);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets(
     'rejection reason stays available after validation and 422 retry',

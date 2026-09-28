@@ -3,12 +3,15 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/error/user_message.dart';
 import '../../../core/services/permission_service.dart';
+import '../../../core/storage/cached_entity_codec.dart';
 import '../../../core/widgets/app_empty_state.dart';
 import '../../../core/widgets/app_error_state.dart';
 import '../../../core/widgets/app_loading_state.dart';
 import '../../../core/widgets/app_permission_state.dart';
 import '../../../core/widgets/pro_record_card.dart';
 import '../../projects/domain/projects_provider.dart';
+import '../../auth/data/auth_session_identity.dart';
+import '../../auth/domain/auth_provider.dart';
 import '../data/field_catalog_repository.dart';
 import '../data/team_expansion_repository.dart';
 import 'field_catalog_screen.dart';
@@ -30,8 +33,14 @@ class _BrigadesScreenState extends ConsumerState<BrigadesScreen> {
   bool _loading = true;
   bool _loadingMore = false;
   String? _error;
+  String? _staleError;
   int? _projectId;
   int _version = 0;
+  AuthSessionIdentity? _contextIdentity;
+  AuthSessionIdentity? _loadedIdentity;
+  int? _loadedProjectId;
+  _BrigadeTab? _loadedTab;
+  String? _loadedQuery;
 
   @override
   void initState() {
@@ -44,6 +53,8 @@ class _BrigadesScreenState extends ConsumerState<BrigadesScreen> {
               : _BrigadeTab.invitations;
     }
     _projectId = ref.read(projectsProvider).selectedProject?.serverId;
+    final auth = ref.read(authProvider);
+    _contextIdentity = auth is AuthAuthenticated ? auth.sessionIdentity : null;
     Future.microtask(_load);
   }
 
@@ -55,6 +66,21 @@ class _BrigadesScreenState extends ConsumerState<BrigadesScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final identity = ref.watch(
+      authProvider.select(
+        (state) => state is AuthAuthenticated ? state.sessionIdentity : null,
+      ),
+    );
+    if (identity != _contextIdentity) {
+      _contextIdentity = identity;
+      Future.microtask(() {
+        if (identity == null) {
+          _clearForMissingIdentity();
+        } else {
+          _load();
+        }
+      });
+    }
     final projectId = ref.watch(
       projectsProvider.select((state) => state.selectedProject?.serverId),
     );
@@ -62,6 +88,12 @@ class _BrigadesScreenState extends ConsumerState<BrigadesScreen> {
       _projectId = projectId;
       Future.microtask(_load);
     }
+    final hasMatchingOwner =
+        identity != null &&
+        _loadedIdentity == identity &&
+        _loadedProjectId == projectId &&
+        _loadedTab == _tab;
+    final visiblePage = hasMatchingOwner ? _page : null;
     final permissions = ref.watch(permissionServiceProvider);
     final canSee = switch (_tab) {
       _BrigadeTab.catalog => permissions.hasPermission('brigades.catalog.view'),
@@ -172,15 +204,15 @@ class _BrigadesScreenState extends ConsumerState<BrigadesScreen> {
                 title: 'Раздел недоступен',
                 description: 'У вас нет права просматривать этот список.',
               )
-            else if (_loading && _page == null)
+            else if (_loading && visiblePage == null)
               const AppLoadingState(message: 'Загружаем список')
-            else if (_error != null && _page == null)
+            else if (_error != null && visiblePage == null)
               AppErrorState(
                 title: 'Не удалось загрузить список',
                 description: _error,
                 onRetry: _load,
               )
-            else if (_page?.items.isEmpty ?? true)
+            else if (visiblePage?.items.isEmpty ?? true)
               AppEmptyState(
                 icon: Icons.groups_outlined,
                 title: switch (_tab) {
@@ -198,12 +230,24 @@ class _BrigadesScreenState extends ConsumerState<BrigadesScreen> {
                 },
               )
             else ...[
+              if (_loadedQuery != _query || _staleError != null)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Text(
+                    _loadedQuery != _query
+                        ? 'Показан последний успешно загруженный список. Он может не учитывать текущий поиск.'
+                        : 'Не удалось обновить список. Показаны данные последней успешной загрузки.',
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                  ),
+                ),
               Text(
-                'Показано ${_page!.items.length} из ${_page!.total}',
+                'Показано ${visiblePage!.items.length} из ${visiblePage.total}',
                 style: Theme.of(context).textTheme.bodySmall,
               ),
               const SizedBox(height: 8),
-              for (final entry in _page!.items) ...[
+              for (final entry in visiblePage.items) ...[
                 ProRecordCard(
                   title: entry.title,
                   subtitle: entry.subtitle ?? 'Открыть карточку',
@@ -225,7 +269,8 @@ class _BrigadesScreenState extends ConsumerState<BrigadesScreen> {
                 ),
                 const SizedBox(height: 10),
               ],
-              if (_page!.currentPage < _page!.lastPage)
+              if (_loadedQuery == _query &&
+                  visiblePage.currentPage < visiblePage.lastPage)
                 OutlinedButton.icon(
                   onPressed: _loadingMore ? null : _loadMore,
                   icon:
@@ -257,6 +302,31 @@ class _BrigadesScreenState extends ConsumerState<BrigadesScreen> {
 
   Future<void> _load() async {
     final version = ++_version;
+    final auth = ref.read(authProvider);
+    final requestIdentity =
+        auth is AuthAuthenticated ? auth.sessionIdentity : null;
+    final requestProjectId =
+        ref.read(projectsProvider).selectedProject?.serverId;
+    final requestTab = _tab;
+    final requestQuery = _query;
+    if (requestIdentity == null) {
+      setState(() {
+        _page = null;
+        _loadedIdentity = null;
+        _loadedProjectId = null;
+        _loadedTab = null;
+        _loadedQuery = null;
+        _loading = false;
+        _loadingMore = false;
+        _error = null;
+        _staleError = null;
+      });
+      return;
+    }
+    final sameOwner =
+        _loadedIdentity == requestIdentity &&
+        _loadedProjectId == requestProjectId &&
+        _loadedTab == requestTab;
     final permission = switch (_tab) {
       _BrigadeTab.catalog => 'brigades.catalog.view',
       _BrigadeTab.requests => 'brigades.requests.view',
@@ -265,15 +335,27 @@ class _BrigadesScreenState extends ConsumerState<BrigadesScreen> {
     if (!ref.read(permissionServiceProvider).hasPermission(permission)) {
       setState(() {
         _page = null;
+        _loadedIdentity = null;
+        _loadedProjectId = null;
+        _loadedTab = null;
+        _loadedQuery = null;
+        _staleError = null;
         _loading = false;
       });
       return;
     }
     setState(() {
-      _page = null;
+      if (!sameOwner) {
+        _page = null;
+        _loadedIdentity = null;
+        _loadedProjectId = null;
+        _loadedTab = null;
+        _loadedQuery = null;
+      }
       _loading = true;
       _loadingMore = false;
       _error = null;
+      _staleError = null;
     });
     try {
       final page = await ref
@@ -281,21 +363,58 @@ class _BrigadesScreenState extends ConsumerState<BrigadesScreen> {
           .fetchPage(
             path: _path,
             filters: {
-              if (_tab == _BrigadeTab.catalog && _query != null)
-                'search': _query,
-              if (_tab != _BrigadeTab.catalog && _projectId != null)
-                'project_id': _projectId,
+              if (requestTab == _BrigadeTab.catalog && requestQuery != null)
+                'search': requestQuery,
+              if (requestTab != _BrigadeTab.catalog && requestProjectId != null)
+                'project_id': requestProjectId,
             },
           );
-      if (!mounted || version != _version) return;
+      if (!mounted ||
+          version != _version ||
+          ref.read(authProvider) is! AuthAuthenticated ||
+          (ref.read(authProvider) as AuthAuthenticated).sessionIdentity !=
+              requestIdentity ||
+          ref.read(projectsProvider).selectedProject?.serverId !=
+              requestProjectId ||
+          _tab != requestTab) {
+        return;
+      }
       setState(() {
         _page = page;
+        _loadedIdentity = requestIdentity;
+        _loadedProjectId = requestProjectId;
+        _loadedTab = requestTab;
+        _loadedQuery = requestQuery;
         _loading = false;
       });
     } catch (error) {
       if (!mounted || version != _version) return;
+      final currentAuth = ref.read(authProvider);
+      final requestOwnerStillCurrent =
+          currentAuth is AuthAuthenticated &&
+          currentAuth.sessionIdentity == requestIdentity &&
+          ref.read(projectsProvider).selectedProject?.serverId ==
+              requestProjectId &&
+          _tab == requestTab;
+      if (isSnapshotOffline(error) &&
+          sameOwner &&
+          requestOwnerStillCurrent &&
+          _page != null) {
+        setState(() {
+          _staleError = UserMessage.fromError(error);
+          _error = null;
+          _loading = false;
+        });
+        return;
+      }
       setState(() {
+        _page = null;
+        _loadedIdentity = null;
+        _loadedProjectId = null;
+        _loadedTab = null;
+        _loadedQuery = null;
         _error = UserMessage.fromError(error);
+        _staleError = null;
         _loading = false;
       });
     }
@@ -303,7 +422,23 @@ class _BrigadesScreenState extends ConsumerState<BrigadesScreen> {
 
   Future<void> _loadMore() async {
     final current = _page;
-    if (current == null || _loadingMore) return;
+    final auth = ref.read(authProvider);
+    final requestIdentity =
+        auth is AuthAuthenticated ? auth.sessionIdentity : null;
+    final requestProjectId =
+        ref.read(projectsProvider).selectedProject?.serverId;
+    final requestTab = _tab;
+    final requestQuery = _query;
+    final requestVersion = _version;
+    if (current == null ||
+        _loadingMore ||
+        requestIdentity == null ||
+        _loadedIdentity != requestIdentity ||
+        _loadedProjectId != requestProjectId ||
+        _loadedTab != requestTab ||
+        _loadedQuery != requestQuery) {
+      return;
+    }
     setState(() {
       _loadingMore = true;
       _error = null;
@@ -314,14 +449,25 @@ class _BrigadesScreenState extends ConsumerState<BrigadesScreen> {
           .fetchPage(
             path: _path,
             filters: {
-              if (_tab == _BrigadeTab.catalog && _query != null)
-                'search': _query,
-              if (_tab != _BrigadeTab.catalog && _projectId != null)
-                'project_id': _projectId,
+              if (requestTab == _BrigadeTab.catalog && requestQuery != null)
+                'search': requestQuery,
+              if (requestTab != _BrigadeTab.catalog && requestProjectId != null)
+                'project_id': requestProjectId,
             },
             page: current.currentPage + 1,
           );
-      if (!mounted || current != _page) return;
+      if (!mounted ||
+          requestVersion != _version ||
+          current != _page ||
+          _tab != requestTab ||
+          _query != requestQuery ||
+          ref.read(authProvider) is! AuthAuthenticated ||
+          (ref.read(authProvider) as AuthAuthenticated).sessionIdentity !=
+              requestIdentity ||
+          ref.read(projectsProvider).selectedProject?.serverId !=
+              requestProjectId) {
+        return;
+      }
       final ids = current.items.map((item) => item.uuid).toSet();
       setState(() {
         _page = FieldCatalogPage(
@@ -336,12 +482,45 @@ class _BrigadesScreenState extends ConsumerState<BrigadesScreen> {
         _loadingMore = false;
       });
     } catch (error) {
-      if (!mounted) return;
+      if (!mounted || requestVersion != _version) return;
+      final currentAuth = ref.read(authProvider);
+      final ownerStillCurrent =
+          currentAuth is AuthAuthenticated &&
+          currentAuth.sessionIdentity == requestIdentity &&
+          ref.read(projectsProvider).selectedProject?.serverId ==
+              requestProjectId &&
+          _tab == requestTab &&
+          _query == requestQuery;
+      if (!ownerStillCurrent) return;
       setState(() {
         _loadingMore = false;
         _error = UserMessage.fromError(error);
+        if (!isSnapshotOffline(error)) {
+          _page = null;
+          _loadedIdentity = null;
+          _loadedProjectId = null;
+          _loadedTab = null;
+          _loadedQuery = null;
+          _staleError = null;
+        }
       });
     }
+  }
+
+  void _clearForMissingIdentity() {
+    if (!mounted || ref.read(authProvider) is AuthAuthenticated) return;
+    _version++;
+    setState(() {
+      _page = null;
+      _loadedIdentity = null;
+      _loadedProjectId = null;
+      _loadedTab = null;
+      _loadedQuery = null;
+      _loading = false;
+      _loadingMore = false;
+      _error = null;
+      _staleError = null;
+    });
   }
 
   Future<void> _openBrigade(FieldCatalogEntry entry) async {

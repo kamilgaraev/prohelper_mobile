@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:prohelpers_mobile/core/network/api_exception.dart';
 import 'package:prohelpers_mobile/core/storage/cached_entity.dart';
 import 'package:prohelpers_mobile/core/storage/entity_snapshot_service.dart';
 import 'package:prohelpers_mobile/core/storage/entity_snapshot_store.dart';
@@ -319,9 +320,12 @@ class _SiteRequestRepository extends SiteRequestsRepository {
   @override
   Future<Map<String, dynamic>> fetchSiteRequestDetailsPayload(int id) async {
     if (detailOffline) {
-      throw DioException(
-        requestOptions: RequestOptions(path: '/site-requests/$id'),
-        type: DioExceptionType.connectionError,
+      throw ApiException.fromDio(
+        DioException(
+          requestOptions: RequestOptions(path: '/site-requests/$id'),
+          type: DioExceptionType.connectionError,
+        ),
+        fallbackMessage: 'Не удалось загрузить детали заявки.',
       );
     }
     return Map<String, dynamic>.from(payload);
@@ -343,9 +347,12 @@ class _SiteRequestRepository extends SiteRequestsRepository {
   }) async {
     listFetchCount++;
     if (listOffline) {
-      throw DioException(
-        requestOptions: RequestOptions(path: '/site-requests'),
-        type: DioExceptionType.connectionError,
+      throw ApiException.fromDio(
+        DioException(
+          requestOptions: RequestOptions(path: '/site-requests'),
+          type: DioExceptionType.connectionError,
+        ),
+        fallbackMessage: 'Не удалось загрузить заявки.',
       );
     }
     return [Map<String, dynamic>.from(payload)];

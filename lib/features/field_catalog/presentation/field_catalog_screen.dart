@@ -7,12 +7,15 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/error/user_message.dart';
 import '../../../core/network/api_exception.dart';
+import '../../../core/storage/cached_entity_codec.dart';
 import '../../../core/services/permission_service.dart';
 import '../../../core/widgets/app_empty_state.dart';
 import '../../../core/widgets/app_error_state.dart';
 import '../../../core/widgets/app_loading_state.dart';
 import '../../../core/widgets/app_permission_state.dart';
 import '../../../core/widgets/pro_record_card.dart';
+import '../../auth/data/auth_session_identity.dart';
+import '../../auth/domain/auth_provider.dart';
 import '../../projects/domain/projects_provider.dart';
 import '../data/field_catalog_repository.dart';
 import '../data/project_files_repository.dart';
@@ -81,15 +84,23 @@ class _FieldCatalogScreenState extends ConsumerState<FieldCatalogScreen> {
   bool _loading = true;
   bool _loadingMore = false;
   String? _error;
+  String? _staleError;
   bool _permissionDenied = false;
   int _requestVersion = 0;
   int? _contextProjectId;
+  AuthSessionIdentity? _contextIdentity;
+  AuthSessionIdentity? _loadedIdentity;
+  int? _loadedProjectId;
+  String? _loadedEntity;
+  String? _loadedQuery;
 
   @override
   void initState() {
     super.initState();
     _entity = widget.entities.isEmpty ? null : widget.entities.first.key;
     _contextProjectId = ref.read(projectsProvider).selectedProject?.serverId;
+    final auth = ref.read(authProvider);
+    _contextIdentity = auth is AuthAuthenticated ? auth.sessionIdentity : null;
     Future.microtask(_load);
   }
 
@@ -102,6 +113,21 @@ class _FieldCatalogScreenState extends ConsumerState<FieldCatalogScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final identity = ref.watch(
+      authProvider.select(
+        (state) => state is AuthAuthenticated ? state.sessionIdentity : null,
+      ),
+    );
+    if (identity != _contextIdentity) {
+      _contextIdentity = identity;
+      Future.microtask(() {
+        if (identity == null) {
+          _clearForMissingIdentity();
+        } else {
+          _load();
+        }
+      });
+    }
     final projectId = ref.watch(
       projectsProvider.select((value) => value.selectedProject?.serverId),
     );
@@ -109,6 +135,12 @@ class _FieldCatalogScreenState extends ConsumerState<FieldCatalogScreen> {
       _contextProjectId = projectId;
       Future.microtask(_load);
     }
+    final hasMatchingOwner =
+        identity != null &&
+        _loadedIdentity == identity &&
+        _loadedProjectId == (_usesProjectScope ? projectId : null) &&
+        _loadedEntity == _entity;
+    final visiblePage = hasMatchingOwner ? _page : null;
     return Scaffold(
       appBar: AppBar(
         title: Text(
@@ -187,20 +219,26 @@ class _FieldCatalogScreenState extends ConsumerState<FieldCatalogScreen> {
                 },
               ),
             if (_searchEnabled) const SizedBox(height: 16),
-            if (_loading && _page == null)
+            if ((_loadedQuery != (_searchEnabled ? _query : null) ||
+                    _staleError != null) &&
+                visiblePage != null)
+              _StaleCatalogDataNotice(
+                previousQuery: _loadedQuery != (_searchEnabled ? _query : null),
+              ),
+            if (_loading && visiblePage == null)
               const AppLoadingState(message: 'Загружаем записи')
-            else if (_permissionDenied && _page == null)
+            else if (_permissionDenied && visiblePage == null)
               const AppPermissionState(
                 title: 'Раздел недоступен',
                 description: 'У вас нет прав для просмотра этих записей.',
               )
-            else if (_error != null && _page == null)
+            else if (_error != null && visiblePage == null)
               AppErrorState(
                 title: 'Не удалось загрузить записи',
                 description: _error,
                 onRetry: _load,
               )
-            else if (_page?.items.isEmpty ?? true)
+            else if (visiblePage?.items.isEmpty ?? true)
               AppEmptyState(
                 icon: widget.icon,
                 title: 'Записей пока нет',
@@ -208,11 +246,11 @@ class _FieldCatalogScreenState extends ConsumerState<FieldCatalogScreen> {
               )
             else ...[
               Text(
-                'Показано ${_page!.items.length} из ${_page!.total}',
+                'Показано ${visiblePage!.items.length} из ${visiblePage.total}',
                 style: Theme.of(context).textTheme.bodySmall,
               ),
               const SizedBox(height: 8),
-              for (final entry in _page!.items) ...[
+              for (final entry in visiblePage.items) ...[
                 ProRecordCard(
                   title: entry.title,
                   subtitle:
@@ -234,7 +272,8 @@ class _FieldCatalogScreenState extends ConsumerState<FieldCatalogScreen> {
                 ),
                 const SizedBox(height: 10),
               ],
-              if (_page!.currentPage < _page!.lastPage)
+              if (_loadedQuery == (_searchEnabled ? _query : null) &&
+                  visiblePage.currentPage < visiblePage.lastPage)
                 OutlinedButton.icon(
                   onPressed: _loadingMore ? null : _loadMore,
                   icon:
@@ -260,11 +299,42 @@ class _FieldCatalogScreenState extends ConsumerState<FieldCatalogScreen> {
 
   Future<void> _load() async {
     final version = ++_requestVersion;
+    final identity = ref.read(authProvider);
+    final requestIdentity =
+        identity is AuthAuthenticated ? identity.sessionIdentity : null;
+    final requestProjectId = _usesProjectScope ? _contextProjectId : null;
+    final requestEntity = _entity;
+    final requestQuery = _searchEnabled ? _query : null;
+    if (requestIdentity == null) {
+      setState(() {
+        _page = null;
+        _loadedIdentity = null;
+        _loadedProjectId = null;
+        _loadedEntity = null;
+        _loadedQuery = null;
+        _loading = false;
+        _loadingMore = false;
+        _error = null;
+        _staleError = null;
+      });
+      return;
+    }
+    final sameOwner =
+        _loadedIdentity == requestIdentity &&
+        _loadedProjectId == requestProjectId &&
+        _loadedEntity == requestEntity;
     setState(() {
       _loading = true;
       _loadingMore = false;
-      _page = null;
+      if (!sameOwner) {
+        _page = null;
+        _loadedIdentity = null;
+        _loadedProjectId = null;
+        _loadedEntity = null;
+        _loadedQuery = null;
+      }
       _error = null;
+      _staleError = null;
       _permissionDenied = false;
     });
     try {
@@ -274,20 +344,59 @@ class _FieldCatalogScreenState extends ConsumerState<FieldCatalogScreen> {
             catalog: widget.catalog,
             apiPrefix: widget.apiPrefix,
             entity: _entity,
-            query: _searchEnabled ? _query : null,
+            query: requestQuery,
             queryParameter: widget.queryParameter,
-            projectId: _usesProjectScope ? _contextProjectId : null,
+            projectId: requestProjectId,
             extraQueryParameters: widget.extraQueryParameters,
           );
       if (!mounted || version != _requestVersion) return;
+      final currentAuth = ref.read(authProvider);
+      if (currentAuth is! AuthAuthenticated ||
+          currentAuth.sessionIdentity != requestIdentity ||
+          (_usesProjectScope &&
+              ref.read(projectsProvider).selectedProject?.serverId !=
+                  requestProjectId) ||
+          _entity != requestEntity) {
+        return;
+      }
       setState(() {
         _page = page;
+        _loadedIdentity = requestIdentity;
+        _loadedProjectId = requestProjectId;
+        _loadedEntity = requestEntity;
+        _loadedQuery = requestQuery;
         _loading = false;
       });
     } catch (error) {
       if (!mounted || version != _requestVersion) return;
+      final currentAuth = ref.read(authProvider);
+      final requestOwnerStillCurrent =
+          currentAuth is AuthAuthenticated &&
+          currentAuth.sessionIdentity == requestIdentity &&
+          (!_usesProjectScope ||
+              ref.read(projectsProvider).selectedProject?.serverId ==
+                  requestProjectId) &&
+          _entity == requestEntity;
+      if (isSnapshotOffline(error) &&
+          sameOwner &&
+          requestOwnerStillCurrent &&
+          _page != null) {
+        setState(() {
+          _staleError = UserMessage.fromError(error);
+          _error = null;
+          _loading = false;
+          _permissionDenied = false;
+        });
+        return;
+      }
       setState(() {
+        _page = null;
+        _loadedIdentity = null;
+        _loadedProjectId = null;
+        _loadedEntity = null;
+        _loadedQuery = null;
         _error = UserMessage.fromError(error);
+        _staleError = null;
         _permissionDenied = error is ApiException && error.statusCode == 403;
         _loading = false;
       });
@@ -296,7 +405,25 @@ class _FieldCatalogScreenState extends ConsumerState<FieldCatalogScreen> {
 
   Future<void> _loadMore() async {
     final current = _page;
-    if (current == null || _loadingMore) return;
+    final auth = ref.read(authProvider);
+    final requestIdentity =
+        auth is AuthAuthenticated ? auth.sessionIdentity : null;
+    final requestProjectId =
+        _usesProjectScope
+            ? ref.read(projectsProvider).selectedProject?.serverId
+            : null;
+    final requestEntity = _entity;
+    final requestQuery = _searchEnabled ? _query : null;
+    final requestVersion = _requestVersion;
+    if (current == null ||
+        _loadingMore ||
+        requestIdentity == null ||
+        _loadedIdentity != requestIdentity ||
+        _loadedProjectId != requestProjectId ||
+        _loadedEntity != requestEntity ||
+        _loadedQuery != requestQuery) {
+      return;
+    }
     setState(() {
       _loadingMore = true;
       _error = null;
@@ -307,14 +434,26 @@ class _FieldCatalogScreenState extends ConsumerState<FieldCatalogScreen> {
           .fetchPage(
             catalog: widget.catalog,
             apiPrefix: widget.apiPrefix,
-            entity: _entity,
-            query: _searchEnabled ? _query : null,
+            entity: requestEntity,
+            query: requestQuery,
             queryParameter: widget.queryParameter,
-            projectId: _usesProjectScope ? _contextProjectId : null,
+            projectId: requestProjectId,
             extraQueryParameters: widget.extraQueryParameters,
             page: current.currentPage + 1,
           );
-      if (!mounted || current != _page) return;
+      if (!mounted ||
+          requestVersion != _requestVersion ||
+          current != _page ||
+          _queryForCurrentRequest != requestQuery ||
+          _entity != requestEntity ||
+          (ref.read(authProvider) is! AuthAuthenticated) ||
+          (ref.read(authProvider) as AuthAuthenticated).sessionIdentity !=
+              requestIdentity ||
+          (_usesProjectScope &&
+              ref.read(projectsProvider).selectedProject?.serverId !=
+                  requestProjectId)) {
+        return;
+      }
       final ids = current.items.map((item) => item.uuid).toSet();
       setState(() {
         _page = FieldCatalogPage(
@@ -329,12 +468,49 @@ class _FieldCatalogScreenState extends ConsumerState<FieldCatalogScreen> {
         _loadingMore = false;
       });
     } catch (error) {
-      if (!mounted) return;
+      if (!mounted || requestVersion != _requestVersion) return;
+      final currentAuth = ref.read(authProvider);
+      final ownerStillCurrent =
+          currentAuth is AuthAuthenticated &&
+          currentAuth.sessionIdentity == requestIdentity &&
+          _entity == requestEntity &&
+          (!_usesProjectScope ||
+              ref.read(projectsProvider).selectedProject?.serverId ==
+                  requestProjectId);
+      if (!ownerStillCurrent) return;
       setState(() {
         _loadingMore = false;
         _error = UserMessage.fromError(error);
+        if (!isSnapshotOffline(error)) {
+          _page = null;
+          _loadedIdentity = null;
+          _loadedProjectId = null;
+          _loadedEntity = null;
+          _loadedQuery = null;
+          _staleError = null;
+          _permissionDenied = error is ApiException && error.statusCode == 403;
+        }
       });
     }
+  }
+
+  String? get _queryForCurrentRequest => _searchEnabled ? _query : null;
+
+  void _clearForMissingIdentity() {
+    if (!mounted || ref.read(authProvider) is AuthAuthenticated) return;
+    _requestVersion++;
+    setState(() {
+      _page = null;
+      _loadedIdentity = null;
+      _loadedProjectId = null;
+      _loadedEntity = null;
+      _loadedQuery = null;
+      _loading = false;
+      _loadingMore = false;
+      _error = null;
+      _staleError = null;
+      _permissionDenied = false;
+    });
   }
 
   Future<void> _open(FieldCatalogEntry entry) async {
@@ -370,6 +546,25 @@ class _FieldCatalogScreenState extends ConsumerState<FieldCatalogScreen> {
 
   bool get _searchEnabled =>
       widget.allowSearch && (_entityOption?.supportsSearch ?? true);
+}
+
+class _StaleCatalogDataNotice extends StatelessWidget {
+  const _StaleCatalogDataNotice({required this.previousQuery});
+
+  final bool previousQuery;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Text(
+        previousQuery
+            ? 'Показан последний успешно загруженный список. Он может не учитывать текущий поиск.'
+            : 'Не удалось обновить список. Показаны данные последней успешной загрузки.',
+        style: TextStyle(color: Theme.of(context).colorScheme.error),
+      ),
+    );
+  }
 }
 
 class FieldCatalogDetailScreen extends ConsumerStatefulWidget {

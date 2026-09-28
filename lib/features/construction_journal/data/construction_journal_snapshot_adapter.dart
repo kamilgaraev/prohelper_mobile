@@ -113,7 +113,7 @@ class ConstructionJournalSnapshotAdapter {
           hasDirtyLocal: true,
         );
       }
-      if (isSnapshotOffline(error) || cached.hasData) {
+      if (isSnapshotOffline(error)) {
         return cached;
       }
       return SnapshotRead(

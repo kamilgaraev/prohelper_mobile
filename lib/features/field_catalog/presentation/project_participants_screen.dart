@@ -5,12 +5,15 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/error/user_message.dart';
 import '../../../core/services/permission_service.dart';
+import '../../../core/storage/cached_entity_codec.dart';
 import '../../../core/widgets/app_empty_state.dart';
 import '../../../core/widgets/app_error_state.dart';
 import '../../../core/widgets/app_loading_state.dart';
 import '../../../core/widgets/app_permission_state.dart';
 import '../../../core/widgets/pro_record_card.dart';
 import '../../projects/domain/projects_provider.dart';
+import '../../auth/data/auth_session_identity.dart';
+import '../../auth/domain/auth_provider.dart';
 import '../data/project_participants_repository.dart';
 
 class ProjectParticipantsScreen extends ConsumerStatefulWidget {
@@ -28,17 +31,24 @@ class _ProjectParticipantsScreenState
   ProjectParticipantsPage? _page;
   String? _query;
   String? _error;
+  String? _staleError;
   int? _loadedProjectId;
   int _version = 0;
   bool _loading = false;
   bool _loadingMore = false;
   bool _showAvailable = false;
   final Set<int> _binding = {};
+  AuthSessionIdentity? _loadedIdentity;
+  AuthSessionIdentity? _contextIdentity;
+  bool? _loadedAvailableUsers;
+  String? _loadedQuery;
 
   @override
   void initState() {
     super.initState();
     _loadedProjectId = ref.read(projectsProvider).selectedProject?.serverId;
+    final auth = ref.read(authProvider);
+    _contextIdentity = auth is AuthAuthenticated ? auth.sessionIdentity : null;
     Future.microtask(_load);
   }
 
@@ -51,6 +61,21 @@ class _ProjectParticipantsScreenState
 
   @override
   Widget build(BuildContext context) {
+    final identity = ref.watch(
+      authProvider.select(
+        (state) => state is AuthAuthenticated ? state.sessionIdentity : null,
+      ),
+    );
+    if (identity != _contextIdentity) {
+      _contextIdentity = identity;
+      Future.microtask(() {
+        if (identity == null) {
+          _clearForMissingIdentity();
+        } else {
+          _load();
+        }
+      });
+    }
     final project = ref.watch(
       projectsProvider.select((state) => state.selectedProject),
     );
@@ -65,6 +90,12 @@ class _ProjectParticipantsScreenState
     final canAssign = ref
         .watch(permissionServiceProvider)
         .hasPermission('projects.participants.assign');
+    final hasMatchingOwner =
+        identity != null &&
+        identity == _loadedIdentity &&
+        projectId == _loadedProjectId &&
+        _showAvailable == _loadedAvailableUsers;
+    final visiblePage = hasMatchingOwner ? _page : null;
 
     return Scaffold(
       appBar: AppBar(
@@ -116,6 +147,11 @@ class _ProjectParticipantsScreenState
                   setState(() {
                     _showAvailable = showAvailable;
                     _page = null;
+                    _loadedIdentity = null;
+                    _loadedProjectId = null;
+                    _loadedAvailableUsers = null;
+                    _loadedQuery = null;
+                    _staleError = null;
                     _query = null;
                     _search.clear();
                   });
@@ -152,27 +188,39 @@ class _ProjectParticipantsScreenState
                 },
               ),
               const SizedBox(height: 14),
-              if (_loading && _page == null)
+              if (_loading && visiblePage == null)
                 const AppLoadingState(message: 'Загружаем состав объекта')
-              else if (_error != null && _page == null)
+              else if (_error != null && visiblePage == null)
                 AppErrorState(
                   title: 'Не удалось загрузить участников',
                   description: _error,
                   onRetry: _load,
                 )
-              else if (_page?.items.isEmpty ?? true)
+              else if (visiblePage?.items.isEmpty ?? true)
                 const AppEmptyState(
                   icon: Icons.groups_outlined,
                   title: 'Пользователи не найдены',
                   description: 'Измените запрос или обновите список.',
                 )
               else ...[
+                if (_loadedQuery != _query || _staleError != null)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: Text(
+                      _loadedQuery != _query
+                          ? 'Показан последний успешно загруженный список. Он может не учитывать текущий поиск.'
+                          : 'Не удалось обновить список. Показаны данные последней успешной загрузки.',
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                    ),
+                  ),
                 Text(
-                  'Показано ${_page!.items.length} из ${_page!.total}',
+                  'Показано ${visiblePage!.items.length} из ${visiblePage.total}',
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
                 const SizedBox(height: 8),
-                for (final participant in _page!.items) ...[
+                for (final participant in visiblePage.items) ...[
                   ProRecordCard(
                     title: participant.name,
                     subtitle: [
@@ -204,7 +252,8 @@ class _ProjectParticipantsScreenState
                   ),
                   const SizedBox(height: 10),
                 ],
-                if (_page!.currentPage < _page!.lastPage)
+                if (_loadedQuery == _query &&
+                    visiblePage.currentPage < visiblePage.lastPage)
                   OutlinedButton.icon(
                     onPressed: _loadingMore ? null : _loadMore,
                     icon:
@@ -233,7 +282,26 @@ class _ProjectParticipantsScreenState
 
   Future<void> _load() async {
     final projectId = ref.read(projectsProvider).selectedProject?.serverId;
+    final auth = ref.read(authProvider);
+    final requestIdentity =
+        auth is AuthAuthenticated ? auth.sessionIdentity : null;
+    final requestQuery = _query;
+    final requestAvailableUsers = _showAvailable;
     final version = ++_version;
+    if (requestIdentity == null) {
+      setState(() {
+        _page = null;
+        _loadedIdentity = null;
+        _loadedProjectId = null;
+        _loadedAvailableUsers = null;
+        _loadedQuery = null;
+        _loading = false;
+        _loadingMore = false;
+        _error = null;
+        _staleError = null;
+      });
+      return;
+    }
     final permissions = ref.read(permissionServiceProvider);
     final allowed =
         _showAvailable
@@ -242,34 +310,84 @@ class _ProjectParticipantsScreenState
     if (projectId == null || !allowed) {
       setState(() {
         _page = null;
+        _loadedIdentity = null;
+        _loadedProjectId = null;
+        _loadedAvailableUsers = null;
+        _loadedQuery = null;
+        _staleError = null;
         _loading = false;
         _error = null;
       });
       return;
     }
+    final sameOwner =
+        _loadedIdentity == requestIdentity &&
+        _loadedProjectId == projectId &&
+        _loadedAvailableUsers == requestAvailableUsers;
     setState(() {
       _loading = true;
       _loadingMore = false;
-      _page = null;
+      if (!sameOwner) {
+        _page = null;
+        _loadedIdentity = null;
+        _loadedProjectId = null;
+        _loadedAvailableUsers = null;
+        _loadedQuery = null;
+      }
       _error = null;
+      _staleError = null;
     });
     try {
       final page = await ref
           .read(projectParticipantsRepositoryProvider)
           .fetchPage(
             projectId: projectId,
-            query: _query,
-            availableUsers: _showAvailable,
+            query: requestQuery,
+            availableUsers: requestAvailableUsers,
           );
       if (!mounted || version != _version) return;
+      final currentAuth = ref.read(authProvider);
+      if (currentAuth is! AuthAuthenticated ||
+          currentAuth.sessionIdentity != requestIdentity ||
+          ref.read(projectsProvider).selectedProject?.serverId != projectId ||
+          _showAvailable != requestAvailableUsers) {
+        return;
+      }
       setState(() {
         _page = page;
+        _loadedIdentity = requestIdentity;
+        _loadedProjectId = projectId;
+        _loadedAvailableUsers = requestAvailableUsers;
+        _loadedQuery = requestQuery;
         _loading = false;
       });
     } catch (error) {
       if (!mounted || version != _version) return;
+      final currentAuth = ref.read(authProvider);
+      final requestOwnerStillCurrent =
+          currentAuth is AuthAuthenticated &&
+          currentAuth.sessionIdentity == requestIdentity &&
+          ref.read(projectsProvider).selectedProject?.serverId == projectId &&
+          _showAvailable == requestAvailableUsers;
+      if (isSnapshotOffline(error) &&
+          sameOwner &&
+          requestOwnerStillCurrent &&
+          _page != null) {
+        setState(() {
+          _staleError = UserMessage.fromError(error);
+          _error = null;
+          _loading = false;
+        });
+        return;
+      }
       setState(() {
+        _page = null;
+        _loadedIdentity = null;
+        _loadedProjectId = null;
+        _loadedAvailableUsers = null;
+        _loadedQuery = null;
         _error = UserMessage.fromError(error);
+        _staleError = null;
         _loading = false;
       });
     }
@@ -278,12 +396,28 @@ class _ProjectParticipantsScreenState
   Future<void> _loadMore() async {
     final page = _page;
     final projectId = ref.read(projectsProvider).selectedProject?.serverId;
+    final auth = ref.read(authProvider);
+    final requestIdentity =
+        auth is AuthAuthenticated ? auth.sessionIdentity : null;
+    final requestQuery = _query;
+    final requestAvailableUsers = _showAvailable;
+    final requestVersion = _version;
     final permissions = ref.read(permissionServiceProvider);
     final allowed =
         _showAvailable
             ? permissions.hasPermission('projects.participants.assign')
             : permissions.hasPermission('projects.view');
-    if (page == null || projectId == null || _loadingMore || !allowed) return;
+    if (page == null ||
+        projectId == null ||
+        _loadingMore ||
+        !allowed ||
+        requestIdentity == null ||
+        _loadedIdentity != requestIdentity ||
+        _loadedProjectId != projectId ||
+        _loadedAvailableUsers != requestAvailableUsers ||
+        _loadedQuery != requestQuery) {
+      return;
+    }
     setState(() {
       _loadingMore = true;
       _error = null;
@@ -293,11 +427,22 @@ class _ProjectParticipantsScreenState
           .read(projectParticipantsRepositoryProvider)
           .fetchPage(
             projectId: projectId,
-            query: _query,
-            availableUsers: _showAvailable,
+            query: requestQuery,
+            availableUsers: requestAvailableUsers,
             page: page.currentPage + 1,
           );
-      if (!mounted || projectId != _loadedProjectId || page != _page) return;
+      if (!mounted ||
+          requestVersion != _version ||
+          projectId != ref.read(projectsProvider).selectedProject?.serverId ||
+          projectId != _loadedProjectId ||
+          page != _page ||
+          _query != requestQuery ||
+          _showAvailable != requestAvailableUsers ||
+          ref.read(authProvider) is! AuthAuthenticated ||
+          (ref.read(authProvider) as AuthAuthenticated).sessionIdentity !=
+              requestIdentity) {
+        return;
+      }
       final ids = page.items.map((item) => item.id).toSet();
       setState(() {
         _page = ProjectParticipantsPage(
@@ -312,12 +457,44 @@ class _ProjectParticipantsScreenState
         _loadingMore = false;
       });
     } catch (error) {
-      if (!mounted) return;
+      if (!mounted || requestVersion != _version) return;
+      final currentAuth = ref.read(authProvider);
+      final ownerStillCurrent =
+          currentAuth is AuthAuthenticated &&
+          currentAuth.sessionIdentity == requestIdentity &&
+          ref.read(projectsProvider).selectedProject?.serverId == projectId &&
+          _query == requestQuery &&
+          _showAvailable == requestAvailableUsers;
+      if (!ownerStillCurrent) return;
       setState(() {
         _loadingMore = false;
         _error = UserMessage.fromError(error);
+        if (!isSnapshotOffline(error)) {
+          _page = null;
+          _loadedIdentity = null;
+          _loadedProjectId = null;
+          _loadedAvailableUsers = null;
+          _loadedQuery = null;
+          _staleError = null;
+        }
       });
     }
+  }
+
+  void _clearForMissingIdentity() {
+    if (!mounted || ref.read(authProvider) is AuthAuthenticated) return;
+    _version++;
+    setState(() {
+      _page = null;
+      _loadedIdentity = null;
+      _loadedProjectId = null;
+      _loadedAvailableUsers = null;
+      _loadedQuery = null;
+      _loading = false;
+      _loadingMore = false;
+      _error = null;
+      _staleError = null;
+    });
   }
 
   Future<void> _bind(int userId) async {

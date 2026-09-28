@@ -144,6 +144,46 @@ void main() {
     },
   );
 
+  test('cached snapshot is fallback only for offline transport errors', () {
+    const cached = SnapshotRead<String>(
+      presence: SnapshotPresence.ready,
+      data: 'Сохранённые данные',
+      fromCache: true,
+    );
+
+    for (final statusCode in [400, 401, 404, 422]) {
+      final result = snapshotFailureRead(
+        cached: cached,
+        error: ApiException('HTTP $statusCode', statusCode: statusCode),
+        fallback: 'Ошибка обновления.',
+        permissionFallback: 'Нет доступа.',
+      );
+
+      expect(result.presence, SnapshotPresence.error);
+      expect(result.data, isNull);
+      expect(result.fromCache, isFalse);
+    }
+
+    final offline = snapshotFailureRead(
+      cached: cached,
+      error: const ApiException('Сервер не ответил.'),
+      fallback: 'Ошибка обновления.',
+      permissionFallback: 'Нет доступа.',
+    );
+    expect(offline.presence, SnapshotPresence.ready);
+    expect(offline.data, 'Сохранённые данные');
+    expect(offline.fromCache, isTrue);
+
+    final malformed = snapshotFailureRead(
+      cached: cached,
+      error: const FormatException('Некорректный ответ.'),
+      fallback: 'Ошибка формата.',
+      permissionFallback: 'Нет доступа.',
+    );
+    expect(malformed.presence, SnapshotPresence.error);
+    expect(malformed.data, isNull);
+  });
+
   test(
     'does not return old owner data when identity changes during refresh',
     () async {

@@ -142,6 +142,19 @@ class _CompanionModuleScreenState extends ConsumerState<CompanionModuleScreen> {
                       (status) => ref.read(provider.notifier).setStatus(status),
                 ),
                 const SizedBox(height: 16),
+                if (state.showingStaleList && list != null)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: Text(
+                      state.listQuery != state.query ||
+                              state.listStatus != state.status
+                          ? 'Показан последний успешно загруженный список. Он может не учитывать текущие фильтры.'
+                          : 'Не удалось обновить список. Показаны данные последней успешной загрузки.',
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                    ),
+                  ),
                 if (state.isLoading && list == null)
                   const AppLoadingState(message: 'Загружаем раздел')
                 else if (state.permissionDenied)
@@ -179,7 +192,10 @@ class _CompanionModuleScreenState extends ConsumerState<CompanionModuleScreen> {
                     ),
                     const SizedBox(height: 12),
                   ],
-                  if (list.meta.currentPage < list.meta.lastPage)
+                  if (!state.showingStaleList &&
+                      state.listQuery == state.query &&
+                      state.listStatus == state.status &&
+                      list.meta.currentPage < list.meta.lastPage)
                     OutlinedButton.icon(
                       onPressed:
                           state.isLoadingMore
@@ -198,7 +214,9 @@ class _CompanionModuleScreenState extends ConsumerState<CompanionModuleScreen> {
                         state.isLoadingMore ? 'Загружаем' : 'Загрузить ещё',
                       ),
                     ),
-                  if (state.error != null && list.items.isNotEmpty)
+                  if (state.error != null &&
+                      list.items.isNotEmpty &&
+                      !state.showingStaleList)
                     Padding(
                       padding: const EdgeInsets.only(top: 8),
                       child: Text(

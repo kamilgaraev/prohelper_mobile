@@ -62,7 +62,7 @@ SnapshotRead<T> snapshotFailureRead<T>({
   }
 
   final message = snapshotErrorMessage(error, fallback);
-  if (cached.hasData) {
+  if (isSnapshotOffline(error) && cached.hasData) {
     return SnapshotRead(
       presence: cached.presence,
       data: cached.data,

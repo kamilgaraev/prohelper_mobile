@@ -167,6 +167,16 @@ class _FakeCompanionNotifier extends CompanionModuleNotifier {
     );
   }
 
+  void showStaleListForQuery() {
+    final listJson = companionListJson(slug: _moduleSlug, lastPage: 2);
+    state = state.copyWith(
+      list: CompanionModuleListModel.fromJson(listJson),
+      query: 'new query',
+      showingStaleList: true,
+      error: 'Нет соединения',
+    );
+  }
+
   void _setRequiresComment(Map<String, dynamic> item, bool requiresComment) {
     final actions = item['available_actions'] as List<dynamic>?;
     if (actions == null || actions.isEmpty) return;
@@ -273,6 +283,33 @@ void main() {
     await tester.tap(find.text('Черновик'));
     await tester.pump();
     expect(notifier.status, 'draft');
+  });
+
+  testWidgets('labels previous companion list after offline search', (
+    tester,
+  ) async {
+    final notifier = _FakeCompanionNotifier();
+    await tester.pumpWidget(
+      buildApp(
+        const CompanionModuleScreen(
+          moduleSlug: 'contract-management',
+          title: 'Договоры',
+          icon: Icons.assignment_outlined,
+        ),
+        notifier,
+      ),
+    );
+    await tester.pump();
+
+    notifier.showStaleListForQuery();
+    await tester.pump();
+
+    expect(find.text('C-001'), findsOneWidget);
+    expect(
+      find.textContaining('может не учитывать текущие фильтры'),
+      findsOneWidget,
+    );
+    expect(find.text('Загрузить ещё'), findsNothing);
   });
 
   testWidgets('requires a selected project for field workflow lists', (

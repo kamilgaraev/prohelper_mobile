@@ -45,6 +45,8 @@ class _SiteRequestsScreenState extends ConsumerState<SiteRequestsScreen> {
   _RequestFilter _selectedFilter = _RequestFilter.all;
   String _searchQuery = '';
   Timer? _searchDebounce;
+  bool _contextSyncScheduled = false;
+  final Set<int> _activeStatusRequestIds = {};
 
   bool get _isApprovalsMode => widget.scope == SiteRequestsScope.approvals;
 
@@ -104,24 +106,34 @@ class _SiteRequestsScreenState extends ConsumerState<SiteRequestsScreen> {
     SiteRequestModel request,
     String status,
   ) async {
+    if (!_activeStatusRequestIds.add(request.serverId)) return;
+    setState(() {});
+
     try {
-      var notes = '';
       if (status == 'rejected' || status == 'cancelled') {
-        notes = await _askForTransitionComment(context, status) ?? '';
-        if (!context.mounted) {
-          return;
-        }
+        await _askForTransitionComment(
+          context,
+          status,
+          onSubmit:
+              (notes) => ref
+                  .read(siteRequestsProvider.notifier)
+                  .changeStatus(request.serverId, status, notes: notes),
+        );
+        return;
       }
 
       await ref
           .read(siteRequestsProvider.notifier)
-          .changeStatus(request.serverId, status, notes: notes);
+          .changeStatus(request.serverId, status);
     } catch (error) {
       if (!context.mounted) {
         return;
       }
 
       AppErrorNotice.show(context, error);
+    } finally {
+      _activeStatusRequestIds.remove(request.serverId);
+      if (mounted) setState(() {});
     }
   }
 
@@ -130,46 +142,24 @@ class _SiteRequestsScreenState extends ConsumerState<SiteRequestsScreen> {
     SiteRequestModel request,
     String? status,
   ) {
-    if (status == null) {
+    if (status == null || _activeStatusRequestIds.contains(request.serverId)) {
       return null;
     }
 
     return () => _changeRequestStatus(context, request, status);
   }
 
-  Future<String?> _askForTransitionComment(
+  Future<void> _askForTransitionComment(
     BuildContext context,
-    String status,
-  ) async {
-    final controller = TextEditingController();
-
-    return showDialog<String>(
+    String status, {
+    required Future<void> Function(String notes) onSubmit,
+  }) {
+    return showDialog<void>(
       context: context,
       builder:
-          (dialogContext) => AlertDialog(
-            title: Text(
-              status == 'rejected'
-                  ? 'Причина отклонения'
-                  : 'Комментарий к отмене',
-            ),
-            content: TextField(
-              controller: controller,
-              maxLines: 3,
-              decoration: const InputDecoration(
-                hintText: 'Добавьте комментарий',
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(dialogContext),
-                child: const Text('Назад'),
-              ),
-              TextButton(
-                onPressed:
-                    () => Navigator.pop(dialogContext, controller.text.trim()),
-                child: const Text('Подтвердить'),
-              ),
-            ],
+          (_) => _SiteRequestInlineTransitionDialog(
+            status: status,
+            onSubmit: onSubmit,
           ),
     );
   }
@@ -178,6 +168,9 @@ class _SiteRequestsScreenState extends ConsumerState<SiteRequestsScreen> {
   Widget build(BuildContext context) {
     final state = ref.watch(siteRequestsProvider);
     final selectedProject = ref.watch(projectsProvider).selectedProject;
+    final isContextChanging =
+        state.projectFilter != selectedProject?.serverId ||
+        state.scope != widget.scope;
     final theme = Theme.of(context);
     final filteredRequests =
         state.requests
@@ -212,19 +205,17 @@ class _SiteRequestsScreenState extends ConsumerState<SiteRequestsScreen> {
       AppErrorNotice.show(context, next.error!);
     });
 
-    if (state.scope != widget.scope && !state.isLoading) {
+    if (isContextChanging && !_contextSyncScheduled) {
+      _contextSyncScheduled = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        ref.read(siteRequestsProvider.notifier).syncScope(widget.scope);
-        ref.read(siteRequestsProvider.notifier).loadRequests(refresh: true);
-      });
-    }
-
-    if (selectedProject?.serverId != state.projectFilter && !state.isLoading) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        ref
-            .read(siteRequestsProvider.notifier)
-            .syncProject(selectedProject?.serverId);
-        ref.read(siteRequestsProvider.notifier).loadRequests(refresh: true);
+        _contextSyncScheduled = false;
+        if (!mounted) return;
+        final notifier = ref.read(siteRequestsProvider.notifier);
+        notifier.syncScope(widget.scope);
+        notifier.syncProject(
+          ref.read(projectsProvider).selectedProject?.serverId,
+        );
+        notifier.loadRequests(refresh: true);
       });
     }
 
@@ -282,33 +273,12 @@ class _SiteRequestsScreenState extends ConsumerState<SiteRequestsScreen> {
                         'Сначала выберите объект, чтобы работать с заявками.',
                   ),
                 )
-              else if (state.error != null && state.requests.isEmpty)
-                SliverFillRemaining(
-                  child: AppErrorState(
-                    title:
-                        state.permissionDenied
-                            ? (_isApprovalsMode
-                                ? 'Нет доступа к согласованию заявок'
-                                : 'Нет доступа к заявкам объекта')
-                            : _isApprovalsMode
-                            ? 'Не удалось загрузить очередь согласования'
-                            : 'Не удалось загрузить заявки',
-                    description:
-                        state.error == null
-                            ? null
-                            : UserMessage.fromError(state.error!),
-                    onRetry:
-                        () => ref
-                            .read(siteRequestsProvider.notifier)
-                            .loadRequests(refresh: true),
-                  ),
-                )
-              else if (state.isLoading && state.requests.isEmpty)
+              else if (isContextChanging)
                 const SliverFillRemaining(
                   child: AppLoadingState(message: 'Загружаем заявки'),
                 )
               else ...[
-                if (state.fromCache)
+                if (state.fromCache && state.requests.isNotEmpty)
                   SliverPadding(
                     padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
                     sliver: SliverToBoxAdapter(
@@ -319,19 +289,20 @@ class _SiteRequestsScreenState extends ConsumerState<SiteRequestsScreen> {
                       ),
                     ),
                   ),
-                SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-                  sliver: SliverToBoxAdapter(
-                    child: _RequestsOperationalBanner(
-                      scope: widget.scope,
-                      totalCount: state.requests.length,
-                      pendingCount: pendingCount,
-                      inReviewCount: inReviewCount,
-                      urgentCount: urgentCount,
-                      inWorkCount: inWorkCount,
+                if (state.requests.isNotEmpty)
+                  SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                    sliver: SliverToBoxAdapter(
+                      child: _RequestsOperationalBanner(
+                        scope: widget.scope,
+                        totalCount: state.requests.length,
+                        pendingCount: pendingCount,
+                        inReviewCount: inReviewCount,
+                        urgentCount: urgentCount,
+                        inWorkCount: inWorkCount,
+                      ),
                     ),
                   ),
-                ),
                 SliverPadding(
                   padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
                   sliver: SliverToBoxAdapter(
@@ -353,8 +324,10 @@ class _SiteRequestsScreenState extends ConsumerState<SiteRequestsScreen> {
                     child: _RequestsFiltersCard(
                       controller: _searchController,
                       selectedFilter: _selectedFilter,
-                      resultCount: filteredRequests.length,
-                      totalCount: state.requests.length,
+                      resultLabel:
+                          state.isLoading && state.requests.isEmpty
+                              ? null
+                              : 'Найдено: ${filteredRequests.length} из ${state.requests.length}',
                       options: filterOptions,
                       searchHint: 'Поиск заявок',
                       onFilterChanged: (filter) {
@@ -374,7 +347,48 @@ class _SiteRequestsScreenState extends ConsumerState<SiteRequestsScreen> {
                     ),
                   ),
                 ),
-                if (state.requests.isEmpty && !state.isLoading)
+                if (state.error != null && state.requests.isEmpty)
+                  SliverFillRemaining(
+                    child: AppErrorState(
+                      title:
+                          state.permissionDenied
+                              ? (_isApprovalsMode
+                                  ? 'Нет доступа к согласованию заявок'
+                                  : 'Нет доступа к заявкам объекта')
+                              : _isApprovalsMode
+                              ? 'Не удалось загрузить очередь согласования'
+                              : 'Не удалось загрузить заявки',
+                      description: UserMessage.fromError(state.error!),
+                      onRetry:
+                          () => ref
+                              .read(siteRequestsProvider.notifier)
+                              .loadRequests(refresh: true),
+                    ),
+                  )
+                else if (state.isLoading && state.requests.isEmpty)
+                  SliverFillRemaining(
+                    hasScrollBody: false,
+                    child: Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Загружаем заявки',
+                            style: AppTypography.caption(context),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
+                    ),
+                  )
+                else if (state.requests.isEmpty && !state.isLoading)
                   SliverFillRemaining(
                     child: AppEmptyState(
                       icon:
@@ -443,7 +457,7 @@ class _SiteRequestsScreenState extends ConsumerState<SiteRequestsScreen> {
                       }, childCount: filteredRequests.length),
                     ),
                   ),
-                if (state.isLoading)
+                if (state.isLoading && state.requests.isNotEmpty)
                   const SliverToBoxAdapter(
                     child: Padding(
                       padding: EdgeInsets.all(24),
@@ -504,6 +518,106 @@ class _SiteRequestsScreenState extends ConsumerState<SiteRequestsScreen> {
         ].join(' ').toLowerCase();
 
     return haystack.contains(normalizedQuery);
+  }
+}
+
+class _SiteRequestInlineTransitionDialog extends StatefulWidget {
+  const _SiteRequestInlineTransitionDialog({
+    required this.status,
+    required this.onSubmit,
+  });
+
+  final String status;
+  final Future<void> Function(String notes) onSubmit;
+
+  @override
+  State<_SiteRequestInlineTransitionDialog> createState() =>
+      _SiteRequestInlineTransitionDialogState();
+}
+
+class _SiteRequestInlineTransitionDialogState
+    extends State<_SiteRequestInlineTransitionDialog> {
+  final _controller = TextEditingController();
+  bool _isSubmitting = false;
+  String? _errorMessage;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    if (_isSubmitting) return;
+    final notes = _controller.text.trim();
+    setState(() {
+      _isSubmitting = true;
+      _errorMessage = null;
+    });
+
+    try {
+      await widget.onSubmit(notes);
+      if (!mounted) return;
+      Navigator.of(context).pop();
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _isSubmitting = false;
+        _errorMessage = UserMessage.fromError(error);
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isRejection = widget.status == 'rejected';
+
+    return PopScope(
+      canPop: !_isSubmitting,
+      child: AlertDialog(
+        title: Text(
+          isRejection ? 'Причина отклонения' : 'Комментарий к отмене',
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            TextField(
+              key: const ValueKey('site-request-inline-transition-comment'),
+              controller: _controller,
+              enabled: !_isSubmitting,
+              maxLines: 3,
+              decoration: const InputDecoration(
+                hintText: 'Добавьте комментарий',
+              ),
+            ),
+            if (_errorMessage != null) ...[
+              const SizedBox(height: 12),
+              Semantics(
+                liveRegion: true,
+                child: Text(
+                  _errorMessage!,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: theme.colorScheme.error,
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: _isSubmitting ? null : () => Navigator.of(context).pop(),
+            child: const Text('Назад'),
+          ),
+          TextButton(
+            onPressed: _isSubmitting ? null : _submit,
+            child: Text(_isSubmitting ? 'Сохраняем…' : 'Подтвердить'),
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -678,8 +792,7 @@ class _RequestsFiltersCard extends StatelessWidget {
   const _RequestsFiltersCard({
     required this.controller,
     required this.selectedFilter,
-    required this.resultCount,
-    required this.totalCount,
+    required this.resultLabel,
     required this.options,
     required this.searchHint,
     required this.onFilterChanged,
@@ -688,8 +801,7 @@ class _RequestsFiltersCard extends StatelessWidget {
 
   final TextEditingController controller;
   final _RequestFilter selectedFilter;
-  final int resultCount;
-  final int totalCount;
+  final String? resultLabel;
   final List<_FilterOption> options;
   final String searchHint;
   final ValueChanged<_RequestFilter> onFilterChanged;
@@ -711,7 +823,7 @@ class _RequestsFiltersCard extends StatelessWidget {
       selectedValue: selectedFilter,
       onFilterChanged: onFilterChanged,
       onClearSearch: onClearSearch,
-      resultLabel: 'Найдено: $resultCount из $totalCount',
+      resultLabel: resultLabel,
     );
   }
 }

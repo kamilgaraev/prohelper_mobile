@@ -5,6 +5,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:prohelpers_mobile/core/network/api_exception.dart';
+import 'package:prohelpers_mobile/core/storage/secure_storage_service.dart';
+import 'package:prohelpers_mobile/features/auth/data/auth_repository.dart';
+import 'package:prohelpers_mobile/features/auth/data/auth_session_identity.dart';
+import 'package:prohelpers_mobile/features/auth/data/user_model.dart';
+import 'package:prohelpers_mobile/features/auth/domain/auth_provider.dart';
 import 'package:prohelpers_mobile/features/budget_estimates/data/budget_estimate_model.dart';
 import 'package:prohelpers_mobile/features/budget_estimates/data/budget_estimates_repository.dart';
 import 'package:prohelpers_mobile/features/budget_estimates/domain/budget_estimates_provider.dart';
@@ -31,6 +36,8 @@ class _RecordingBudgetRepository extends BudgetEstimatesRepository {
   int approvalCalls = 0;
   final approvalComments = <String?>[];
   Object? nextApprovalError;
+  Object? nextSummaryError;
+  Object? nextEstimateError;
   Completer<void>? approvalGate;
 
   @override
@@ -45,6 +52,11 @@ class _RecordingBudgetRepository extends BudgetEstimatesRepository {
     loadedSearch = search;
     loadedStatus = status;
     loadedPage = page;
+    final error = nextEstimateError;
+    if (error != null) {
+      nextEstimateError = null;
+      throw error;
+    }
     final items =
         _summary.estimates.where((estimate) {
           return (status == null || estimate.status == status) &&
@@ -67,6 +79,11 @@ class _RecordingBudgetRepository extends BudgetEstimatesRepository {
     required int projectId,
   }) async {
     loadedProjectId = projectId;
+    final error = nextSummaryError;
+    if (error != null) {
+      nextSummaryError = null;
+      throw error;
+    }
     if (includeApprovals) return _summary;
     return BudgetEstimateSummaryModel(
       project: _summary.project,
@@ -124,6 +141,48 @@ class _TestProjectsRepository extends ProjectsRepository {
   Future<List<Project>> fetchProjects() async => const [];
 }
 
+class _TestSecureStorageService extends SecureStorageService {
+  @override
+  Future<String?> getToken() async => null;
+
+  @override
+  Future<void> saveToken(String token) async {}
+
+  @override
+  Future<void> clearToken() async {}
+}
+
+class _TestAuthRepository extends AuthRepository {
+  _TestAuthRepository(SecureStorageService storage) : super(Dio(), storage);
+}
+
+class _TestAuthNotifier extends AuthNotifier {
+  _TestAuthNotifier()
+    : super(
+        _TestAuthRepository(_TestSecureStorageService()),
+        _TestSecureStorageService(),
+      ) {
+    final user =
+        User()
+          ..serverId = 1
+          ..email = 'test@example.test'
+          ..name = 'Test'
+          ..organizationsJson = '[]'
+          ..currentOrganizationId = 4;
+    state = AuthAuthenticated(
+      user,
+      sessionIdentity: const AuthSessionIdentity(
+        userId: 1,
+        organizationId: 4,
+        sessionId: 'test-session',
+      ),
+    );
+  }
+
+  @override
+  Future<void> checkAuth() async {}
+}
+
 class _TestProjectsNotifier extends ProjectsNotifier {
   _TestProjectsNotifier(Project? project) : super(_TestProjectsRepository()) {
     state = ProjectsState(
@@ -150,6 +209,7 @@ void main() {
   }) {
     return ProviderScope(
       overrides: [
+        authProvider.overrideWith((ref) => _TestAuthNotifier()),
         projectsProvider.overrideWith(
           (ref) => _TestProjectsNotifier(selectedProject),
         ),
@@ -297,6 +357,102 @@ void main() {
     await pumpUi(tester);
     expect(repository.loadedStatus, 'approved');
     expect(find.text('Сметы не найдены'), findsOneWidget);
+  });
+
+  testWidgets(
+    'keeps last successful summary and estimate list after offline refresh',
+    (tester) async {
+      final repository = _RecordingBudgetRepository();
+      useLargeSurface(tester);
+
+      await tester.pumpWidget(
+        buildApp(
+          const BudgetEstimatesScreen(),
+          repository,
+          selectedProject: project(),
+        ),
+      );
+      await pumpUi(tester);
+
+      repository.nextSummaryError = const ApiException('Нет соединения');
+      repository.nextEstimateError = const ApiException('Нет соединения');
+      await tester.tap(find.byTooltip('Обновить'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(find.text('Каркас секции А'), findsWidgets);
+      expect(find.text('Поиск по сметам'), findsOneWidget);
+      expect(
+        find.text(
+          'Не удалось обновить сводку. Показаны данные последней успешной загрузки.',
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.text(
+          'Не удалось обновить список. Показаны данные последней успешной загрузки.',
+        ),
+        findsOneWidget,
+      );
+    },
+  );
+
+  testWidgets('labels previous estimate query when search fails offline', (
+    tester,
+  ) async {
+    final repository = _RecordingBudgetRepository();
+    useLargeSurface(tester);
+
+    await tester.pumpWidget(
+      buildApp(
+        const BudgetEstimatesScreen(),
+        repository,
+        selectedProject: project(),
+      ),
+    );
+    await pumpUi(tester);
+
+    repository.nextEstimateError = const ApiException('Нет соединения');
+    await tester.enterText(find.byType(TextField).first, 'другой запрос');
+    await tester.pump(const Duration(milliseconds: 350));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Каркас секции А'), findsWidgets);
+    expect(
+      find.textContaining('может не учитывать текущие фильтры'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('does not retain budget data after permission denial', (
+    tester,
+  ) async {
+    final repository = _RecordingBudgetRepository();
+    useLargeSurface(tester);
+
+    await tester.pumpWidget(
+      buildApp(
+        const BudgetEstimatesScreen(),
+        repository,
+        selectedProject: project(),
+      ),
+    );
+    await pumpUi(tester);
+
+    repository.nextSummaryError = const ApiException(
+      'Нет доступа',
+      statusCode: 403,
+    );
+    await tester.tap(find.byTooltip('Обновить'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(find.text('Каркас секции А'), findsNothing);
+    expect(find.text('Поиск по сметам'), findsNothing);
+    expect(
+      find.text('Для вашей роли не открыт просмотр смет выбранного объекта.'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('shows explicit empty state without selected project', (

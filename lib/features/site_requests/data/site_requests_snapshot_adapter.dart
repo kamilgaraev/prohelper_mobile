@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
 
+import '../../../core/network/api_exception.dart';
 import '../../../core/storage/cached_entity.dart';
 import '../../../core/storage/cached_entity_codec.dart';
 import '../../../core/storage/entity_snapshot_service.dart';
@@ -101,10 +102,7 @@ class SiteRequestsSnapshotAdapter {
 
       if (local != null && !local.dirty) {
         try {
-          final mergedPayload = {
-            ...decodeSnapshotPayload(local),
-            ...payload,
-          };
+          final mergedPayload = {...decodeSnapshotPayload(local), ...payload};
           await service.putSnapshot(
             cachedEntityFromPayload(
               type: type,
@@ -169,10 +167,7 @@ class SiteRequestsSnapshotAdapter {
         type: type,
         projectId: projectId,
         at: at,
-        extra: {
-          ...decodeSnapshotPayload(marker),
-          'stale_after_mutation': true,
-        },
+        extra: {...decodeSnapshotPayload(marker), 'stale_after_mutation': true},
       ),
       expectedOwner: expectedOwner,
     );
@@ -409,7 +404,17 @@ class SiteRequestsSnapshotAdapter {
           hasDirtyLocal: true,
         );
       }
-      if (isSnapshotOffline(error) || cached.hasData) {
+      if (error is ApiException &&
+          error.statusCode != null &&
+          error.statusCode! >= 400 &&
+          error.statusCode! < 500) {
+        return SnapshotRead(
+          presence: SnapshotPresence.error,
+          data: const <SiteRequestModel>[],
+          error: snapshotErrorMessage(error, 'Не удалось загрузить заявки.'),
+        );
+      }
+      if (isSnapshotOffline(error)) {
         return SnapshotRead(
           presence: cached.presence,
           data: cached.data,

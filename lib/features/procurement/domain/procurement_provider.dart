@@ -2,6 +2,8 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/error/user_message.dart';
 import '../../../core/network/api_exception.dart';
+import '../../../core/storage/cached_entity_codec.dart';
+import '../../auth/domain/auth_provider.dart';
 import '../data/procurement_model.dart';
 import '../data/procurement_repository.dart';
 
@@ -28,6 +30,14 @@ class ProcurementState {
     this.orderQuery = '',
     this.requestStatus,
     this.orderStatus,
+    this.hasSuccessfulRequestsPage = false,
+    this.requestsPageProjectId,
+    this.requestsPageQuery = '',
+    this.requestsPageStatus,
+    this.hasSuccessfulOrdersPage = false,
+    this.ordersPageProjectId,
+    this.ordersPageQuery = '',
+    this.ordersPageStatus,
     this.requestsError,
     this.ordersError,
     this.permissionDenied = false,
@@ -46,11 +56,33 @@ class ProcurementState {
   final String orderQuery;
   final String? requestStatus;
   final String? orderStatus;
+  final bool hasSuccessfulRequestsPage;
+  final int? requestsPageProjectId;
+  final String requestsPageQuery;
+  final String? requestsPageStatus;
+  final bool hasSuccessfulOrdersPage;
+  final int? ordersPageProjectId;
+  final String ordersPageQuery;
+  final String? ordersPageStatus;
   final String? requestsError;
   final String? ordersError;
   final bool permissionDenied;
   final bool malformedContract;
   final String? error;
+
+  bool get requestsShowingPreviousQuery =>
+      requests.items.isNotEmpty &&
+      hasSuccessfulRequestsPage &&
+      (requestsPageProjectId != projectId ||
+          requestsPageQuery != requestQuery ||
+          requestsPageStatus != requestStatus);
+
+  bool get ordersShowingPreviousQuery =>
+      orders.items.isNotEmpty &&
+      hasSuccessfulOrdersPage &&
+      (ordersPageProjectId != projectId ||
+          ordersPageQuery != orderQuery ||
+          ordersPageStatus != orderStatus);
 
   ProcurementState copyWith({
     bool? isLoading,
@@ -64,6 +96,14 @@ class ProcurementState {
     String? orderQuery,
     Object? requestStatus = _requestStatusSentinel,
     Object? orderStatus = _orderStatusSentinel,
+    bool? hasSuccessfulRequestsPage,
+    Object? requestsPageProjectId = _requestsPageProjectSentinel,
+    String? requestsPageQuery,
+    Object? requestsPageStatus = _requestsPageStatusSentinel,
+    bool? hasSuccessfulOrdersPage,
+    Object? ordersPageProjectId = _ordersPageProjectSentinel,
+    String? ordersPageQuery,
+    Object? ordersPageStatus = _ordersPageStatusSentinel,
     Object? requestsError = _requestsErrorSentinel,
     Object? ordersError = _ordersErrorSentinel,
     bool? permissionDenied,
@@ -100,6 +140,28 @@ class ProcurementState {
           identical(orderStatus, _orderStatusSentinel)
               ? this.orderStatus
               : orderStatus as String?,
+      hasSuccessfulRequestsPage:
+          hasSuccessfulRequestsPage ?? this.hasSuccessfulRequestsPage,
+      requestsPageProjectId:
+          identical(requestsPageProjectId, _requestsPageProjectSentinel)
+              ? this.requestsPageProjectId
+              : requestsPageProjectId as int?,
+      requestsPageQuery: requestsPageQuery ?? this.requestsPageQuery,
+      requestsPageStatus:
+          identical(requestsPageStatus, _requestsPageStatusSentinel)
+              ? this.requestsPageStatus
+              : requestsPageStatus as String?,
+      hasSuccessfulOrdersPage:
+          hasSuccessfulOrdersPage ?? this.hasSuccessfulOrdersPage,
+      ordersPageProjectId:
+          identical(ordersPageProjectId, _ordersPageProjectSentinel)
+              ? this.ordersPageProjectId
+              : ordersPageProjectId as int?,
+      ordersPageQuery: ordersPageQuery ?? this.ordersPageQuery,
+      ordersPageStatus:
+          identical(ordersPageStatus, _ordersPageStatusSentinel)
+              ? this.ordersPageStatus
+              : ordersPageStatus as String?,
       requestsError:
           identical(requestsError, _requestsErrorSentinel)
               ? this.requestsError
@@ -121,6 +183,10 @@ const _requestsSentinel = Object();
 const _ordersSentinel = Object();
 const _requestStatusSentinel = Object();
 const _orderStatusSentinel = Object();
+const _requestsPageProjectSentinel = Object();
+const _requestsPageStatusSentinel = Object();
+const _ordersPageProjectSentinel = Object();
+const _ordersPageStatusSentinel = Object();
 const _requestsErrorSentinel = Object();
 const _ordersErrorSentinel = Object();
 const _errorSentinel = Object();
@@ -161,39 +227,84 @@ class ProcurementNotifier extends StateNotifier<ProcurementState> {
         lastPage: 0,
         total: 0,
       ),
+      hasSuccessfulRequestsPage: false,
+      requestsPageProjectId: null,
+      requestsPageQuery: '',
+      requestsPageStatus: null,
+      hasSuccessfulOrdersPage: false,
+      ordersPageProjectId: null,
+      ordersPageQuery: '',
+      ordersPageStatus: null,
     );
   }
 
   Future<void> loadSummary() async {
+    if (!mounted) return;
     final summaryRevision = ++_summaryRevision;
     final contextRevision = _contextRevision;
     _requestsRevision++;
     _ordersRevision++;
     state = state.copyWith(
       isLoading: true,
+      loadingRequests: false,
+      loadingOrders: false,
       permissionDenied: false,
       malformedContract: false,
       error: null,
     );
+    final projectId = state.projectId;
 
     try {
-      final summary = await _repository.fetchSummary(
-        projectId: state.projectId,
-      );
+      final summary = await _repository.fetchSummary(projectId: projectId);
       if (contextRevision != _contextRevision ||
-          summaryRevision != _summaryRevision) {
+          summaryRevision != _summaryRevision ||
+          !mounted) {
         return;
       }
       state = state.copyWith(isLoading: false, summary: summary, error: null);
       await Future.wait([_loadRequestPage(), _loadOrderPage()]);
     } catch (error) {
       if (contextRevision != _contextRevision ||
-          summaryRevision != _summaryRevision) {
+          summaryRevision != _summaryRevision ||
+          !mounted) {
         return;
       }
+      final preserveSummary =
+          isSnapshotOffline(error) &&
+          state.summary != null &&
+          state.projectId == projectId;
       state = state.copyWith(
         isLoading: false,
-        summary: null,
+        summary: preserveSummary ? state.summary : null,
+        requests:
+            preserveSummary
+                ? state.requests
+                : const ProcurementPage<ProcurementPurchaseRequestModel>(
+                  items: [],
+                  currentPage: 0,
+                  lastPage: 0,
+                  total: 0,
+                ),
+        hasSuccessfulRequestsPage:
+            preserveSummary && state.hasSuccessfulRequestsPage,
+        requestsPageProjectId:
+            preserveSummary ? state.requestsPageProjectId : null,
+        requestsPageQuery: preserveSummary ? state.requestsPageQuery : '',
+        requestsPageStatus: preserveSummary ? state.requestsPageStatus : null,
+        orders:
+            preserveSummary
+                ? state.orders
+                : const ProcurementPage<ProcurementPurchaseOrderModel>(
+                  items: [],
+                  currentPage: 0,
+                  lastPage: 0,
+                  total: 0,
+                ),
+        hasSuccessfulOrdersPage:
+            preserveSummary && state.hasSuccessfulOrdersPage,
+        ordersPageProjectId: preserveSummary ? state.ordersPageProjectId : null,
+        ordersPageQuery: preserveSummary ? state.ordersPageQuery : '',
+        ordersPageStatus: preserveSummary ? state.ordersPageStatus : null,
         permissionDenied: _isPermissionDenied(error),
         malformedContract: error is FormatException,
         error: UserMessage.fromError(error),
@@ -202,20 +313,27 @@ class ProcurementNotifier extends StateNotifier<ProcurementState> {
   }
 
   Future<void> loadMoreRequests() async {
-    if (state.loadingRequests || !state.requests.hasMore) return;
+    if (state.loadingRequests ||
+        state.requestsShowingPreviousQuery ||
+        !state.requests.hasMore) {
+      return;
+    }
     final contextRevision = _contextRevision;
     final revision = _requestsRevision;
     final projectId = state.projectId;
+    final query = state.requestQuery;
+    final status = state.requestStatus;
     state = state.copyWith(loadingRequests: true, requestsError: null);
     try {
       final next = await _repository.fetchPurchaseRequests(
         projectId: projectId,
         page: state.requests.currentPage + 1,
-        status: state.requestStatus,
-        query: state.requestQuery,
+        status: status,
+        query: query,
       );
       if (contextRevision != _contextRevision ||
-          revision != _requestsRevision) {
+          revision != _requestsRevision ||
+          !mounted) {
         return;
       }
       state = state.copyWith(
@@ -226,33 +344,63 @@ class ProcurementNotifier extends StateNotifier<ProcurementState> {
           lastPage: next.lastPage,
           total: next.total,
         ),
+        hasSuccessfulRequestsPage: true,
+        requestsPageProjectId: projectId,
+        requestsPageQuery: query,
+        requestsPageStatus: status,
       );
     } catch (error) {
       if (contextRevision != _contextRevision ||
-          revision != _requestsRevision) {
+          revision != _requestsRevision ||
+          !mounted) {
         return;
       }
-      state = state.copyWith(
-        loadingRequests: false,
-        requestsError: UserMessage.fromError(error),
-      );
+      if (isSnapshotOffline(error)) {
+        state = state.copyWith(
+          loadingRequests: false,
+          requestsError: UserMessage.fromError(error),
+        );
+      } else {
+        state = state.copyWith(
+          loadingRequests: false,
+          requestsError: UserMessage.fromError(error),
+          requests: const ProcurementPage<ProcurementPurchaseRequestModel>(
+            items: [],
+            currentPage: 0,
+            lastPage: 0,
+            total: 0,
+          ),
+          hasSuccessfulRequestsPage: false,
+          requestsPageProjectId: null,
+          requestsPageQuery: '',
+          requestsPageStatus: null,
+        );
+      }
     }
   }
 
   Future<void> loadMoreOrders() async {
-    if (state.loadingOrders || !state.orders.hasMore) return;
+    if (state.loadingOrders ||
+        state.ordersShowingPreviousQuery ||
+        !state.orders.hasMore) {
+      return;
+    }
     final contextRevision = _contextRevision;
     final revision = _ordersRevision;
     final projectId = state.projectId;
+    final query = state.orderQuery;
+    final status = state.orderStatus;
     state = state.copyWith(loadingOrders: true, ordersError: null);
     try {
       final next = await _repository.fetchPurchaseOrders(
         projectId: projectId,
         page: state.orders.currentPage + 1,
-        status: state.orderStatus,
-        query: state.orderQuery,
+        status: status,
+        query: query,
       );
-      if (contextRevision != _contextRevision || revision != _ordersRevision) {
+      if (contextRevision != _contextRevision ||
+          revision != _ordersRevision ||
+          !mounted) {
         return;
       }
       state = state.copyWith(
@@ -263,15 +411,38 @@ class ProcurementNotifier extends StateNotifier<ProcurementState> {
           lastPage: next.lastPage,
           total: next.total,
         ),
+        hasSuccessfulOrdersPage: true,
+        ordersPageProjectId: projectId,
+        ordersPageQuery: query,
+        ordersPageStatus: status,
       );
     } catch (error) {
-      if (contextRevision != _contextRevision || revision != _ordersRevision) {
+      if (contextRevision != _contextRevision ||
+          revision != _ordersRevision ||
+          !mounted) {
         return;
       }
-      state = state.copyWith(
-        loadingOrders: false,
-        ordersError: UserMessage.fromError(error),
-      );
+      if (isSnapshotOffline(error)) {
+        state = state.copyWith(
+          loadingOrders: false,
+          ordersError: UserMessage.fromError(error),
+        );
+      } else {
+        state = state.copyWith(
+          loadingOrders: false,
+          ordersError: UserMessage.fromError(error),
+          orders: const ProcurementPage<ProcurementPurchaseOrderModel>(
+            items: [],
+            currentPage: 0,
+            lastPage: 0,
+            total: 0,
+          ),
+          hasSuccessfulOrdersPage: false,
+          ordersPageProjectId: null,
+          ordersPageQuery: '',
+          ordersPageStatus: null,
+        );
+      }
     }
   }
 
@@ -280,16 +451,11 @@ class ProcurementNotifier extends StateNotifier<ProcurementState> {
     String? query,
     bool clearStatus = false,
   }) async {
+    if (!mounted) return;
     _requestsRevision++;
     state = state.copyWith(
       requestStatus: clearStatus ? null : status ?? state.requestStatus,
       requestQuery: query ?? state.requestQuery,
-      requests: const ProcurementPage<ProcurementPurchaseRequestModel>(
-        items: [],
-        currentPage: 0,
-        lastPage: 0,
-        total: 0,
-      ),
     );
     await _loadRequestPage();
   }
@@ -299,16 +465,11 @@ class ProcurementNotifier extends StateNotifier<ProcurementState> {
     String? query,
     bool clearStatus = false,
   }) async {
+    if (!mounted) return;
     _ordersRevision++;
     state = state.copyWith(
       orderStatus: clearStatus ? null : status ?? state.orderStatus,
       orderQuery: query ?? state.orderQuery,
-      orders: const ProcurementPage<ProcurementPurchaseOrderModel>(
-        items: [],
-        currentPage: 0,
-        lastPage: 0,
-        total: 0,
-      ),
     );
     await _loadOrderPage();
   }
@@ -317,31 +478,60 @@ class ProcurementNotifier extends StateNotifier<ProcurementState> {
     final contextRevision = _contextRevision;
     final revision = _requestsRevision;
     final projectId = state.projectId;
+    final query = state.requestQuery;
+    final status = state.requestStatus;
     state = state.copyWith(loadingRequests: true, requestsError: null);
     try {
       final page = await _repository.fetchPurchaseRequests(
         projectId: projectId,
-        status: state.requestStatus,
-        query: state.requestQuery,
+        status: status,
+        query: query,
       );
       if (contextRevision != _contextRevision ||
-          revision != _requestsRevision) {
+          revision != _requestsRevision ||
+          !mounted) {
         return;
       }
       state = state.copyWith(
         requests: page,
         loadingRequests: false,
         requestsError: null,
+        hasSuccessfulRequestsPage: true,
+        requestsPageProjectId: projectId,
+        requestsPageQuery: query,
+        requestsPageStatus: status,
       );
     } catch (error) {
       if (contextRevision != _contextRevision ||
-          revision != _requestsRevision) {
+          revision != _requestsRevision ||
+          !mounted) {
         return;
       }
-      state = state.copyWith(
-        loadingRequests: false,
-        requestsError: UserMessage.fromError(error),
-      );
+      final preservePage =
+          isSnapshotOffline(error) &&
+          state.hasSuccessfulRequestsPage &&
+          state.requestsPageProjectId == projectId;
+      if (preservePage) {
+        state = state.copyWith(
+          loadingRequests: false,
+          requestsError: UserMessage.fromError(error),
+        );
+      } else {
+        state = state.copyWith(
+          loadingRequests: false,
+          requestsError: UserMessage.fromError(error),
+          requests: const ProcurementPage<ProcurementPurchaseRequestModel>(
+            items: [],
+            currentPage: 0,
+            lastPage: 0,
+            total: 0,
+          ),
+          hasSuccessfulRequestsPage: false,
+          requestsPageProjectId: null,
+          requestsPageQuery: '',
+          requestsPageStatus: null,
+        );
+      }
     }
   }
 
@@ -349,29 +539,60 @@ class ProcurementNotifier extends StateNotifier<ProcurementState> {
     final contextRevision = _contextRevision;
     final revision = _ordersRevision;
     final projectId = state.projectId;
+    final query = state.orderQuery;
+    final status = state.orderStatus;
     state = state.copyWith(loadingOrders: true, ordersError: null);
     try {
       final page = await _repository.fetchPurchaseOrders(
         projectId: projectId,
-        status: state.orderStatus,
-        query: state.orderQuery,
+        status: status,
+        query: query,
       );
-      if (contextRevision != _contextRevision || revision != _ordersRevision) {
+      if (contextRevision != _contextRevision ||
+          revision != _ordersRevision ||
+          !mounted) {
         return;
       }
       state = state.copyWith(
         orders: page,
         loadingOrders: false,
         ordersError: null,
+        hasSuccessfulOrdersPage: true,
+        ordersPageProjectId: projectId,
+        ordersPageQuery: query,
+        ordersPageStatus: status,
       );
     } catch (error) {
-      if (contextRevision != _contextRevision || revision != _ordersRevision) {
+      if (contextRevision != _contextRevision ||
+          revision != _ordersRevision ||
+          !mounted) {
         return;
       }
-      state = state.copyWith(
-        loadingOrders: false,
-        ordersError: UserMessage.fromError(error),
-      );
+      final preservePage =
+          isSnapshotOffline(error) &&
+          state.hasSuccessfulOrdersPage &&
+          state.ordersPageProjectId == projectId;
+      if (preservePage) {
+        state = state.copyWith(
+          loadingOrders: false,
+          ordersError: UserMessage.fromError(error),
+        );
+      } else {
+        state = state.copyWith(
+          loadingOrders: false,
+          ordersError: UserMessage.fromError(error),
+          orders: const ProcurementPage<ProcurementPurchaseOrderModel>(
+            items: [],
+            currentPage: 0,
+            lastPage: 0,
+            total: 0,
+          ),
+          hasSuccessfulOrdersPage: false,
+          ordersPageProjectId: null,
+          ordersPageQuery: '',
+          ordersPageStatus: null,
+        );
+      }
     }
   }
 
@@ -446,5 +667,10 @@ bool _isPermissionDenied(Object error) {
 
 final procurementProvider =
     StateNotifierProvider<ProcurementNotifier, ProcurementState>((ref) {
+      ref.watch(
+        authProvider.select(
+          (state) => state is AuthAuthenticated ? state.sessionIdentity : null,
+        ),
+      );
       return ProcurementNotifier(ref.read(procurementRepositoryProvider));
     });
