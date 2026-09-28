@@ -97,6 +97,85 @@ void main() {
     expect(repository.submitCalls, 1);
     expect(repository.detailCalls, 1);
   });
+
+  testWidgets('compact rejected header fits at 240dp with large text', (
+    tester,
+  ) async {
+    await _expectCompactHeader(
+      tester,
+      width: 240,
+      status: 'rejected',
+      statusLabel: 'Отклонено',
+    );
+  });
+
+  testWidgets('compact submitted header fits at 360dp with large text', (
+    tester,
+  ) async {
+    await _expectCompactHeader(
+      tester,
+      width: 360,
+      status: 'submitted',
+      statusLabel: 'На утверждении',
+    );
+  });
+}
+
+Future<void> _expectCompactHeader(
+  WidgetTester tester, {
+  required double width,
+  required String status,
+  required String statusLabel,
+}) async {
+  tester.view.devicePixelRatio = 1;
+  tester.view.physicalSize = Size(width, 800);
+  addTearDown(tester.view.resetPhysicalSize);
+  addTearDown(tester.view.resetDevicePixelRatio);
+  final repository = _HeaderRepository(status, statusLabel);
+  final notifier = ConstructionJournalEntryDetailNotifier(
+    repository,
+    7,
+    projectId: 52,
+  );
+  await notifier.load();
+  const scope = (entryId: 7, projectId: 52);
+
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [
+        constructionJournalRepositoryProvider.overrideWithValue(repository),
+        constructionJournalEntryDetailProvider(
+          scope,
+        ).overrideWith((ref) => notifier),
+      ],
+      child: MaterialApp(
+        home: MediaQuery(
+          data: MediaQueryData(
+            size: Size(width, 800),
+            textScaler: TextScaler.linear(1.3),
+          ),
+          child: const JournalEntryDetailScreen(
+            journalId: 17,
+            entryId: 7,
+            projectId: 52,
+          ),
+        ),
+      ),
+    ),
+  );
+  await tester.pumpAndSettle();
+
+  expect(find.text(statusLabel), findsOneWidget);
+  final titleFinder = find.byKey(const ValueKey('journal-entry-card-title'));
+  final dateFinder = find.byKey(const ValueKey('journal-entry-card-date'));
+  expect(find.text('Запись №7', skipOffstage: false), findsWidgets);
+  expect(find.text('28.09.2026'), findsOneWidget);
+  expect(tester.widget<Text>(titleFinder).maxLines, 1);
+  expect(tester.widget<Text>(dateFinder).maxLines, 1);
+  expect(tester.getSize(titleFinder).height, lessThan(60));
+  expect(tester.getSize(dateFinder).height, lessThan(40));
+  expect(tester.getSize(titleFinder).width, greaterThan(width - 130));
+  expect(tester.takeException(), isNull);
 }
 
 class _Repository extends ConstructionJournalRepository {
@@ -156,6 +235,29 @@ class _SubmitRepository extends ConstructionJournalRepository {
     submitCalls++;
     throw const SyncQueuedException(requiresReview: true);
   }
+}
+
+class _HeaderRepository extends ConstructionJournalRepository {
+  _HeaderRepository(this.status, this.statusLabel) : super(Dio());
+
+  final String status;
+  final String statusLabel;
+
+  @override
+  Future<ConstructionJournalEntryModel> fetchEntryDetail(int entryId) async =>
+      ConstructionJournalEntryModel(
+        id: 7,
+        journalId: 17,
+        entryDate: '2026-09-28',
+        entryNumber: 7,
+        workDescription: 'QA_ASCII_LONGDESCRIPTIONWITHOUTSPACES',
+        status: status,
+        statusLabel: statusLabel,
+        workflowState: status,
+        workVolumes: const [],
+        blockers: const [],
+        availableActions: const [],
+      );
 }
 
 ConstructionJournalEntryModel _entry(String action, String label) =>

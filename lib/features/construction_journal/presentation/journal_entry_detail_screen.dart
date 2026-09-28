@@ -115,69 +115,88 @@ class _JournalEntryDetailScreenState
             if (state.fromCache || state.hasDirtyLocal)
               const SizedBox(height: 12),
             IndustrialCard(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final compactHeader =
+                      constraints.maxWidth < 400 ||
+                      MediaQuery.textScalerOf(context).scale(1) > 1.15;
+                  final titleAndDate = Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Запись №${entry.entryNumber}',
-                              style: AppTypography.h2(context),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              _formatDate(entry.entryDate),
-                              style: AppTypography.caption(context),
-                            ),
-                          ],
-                        ),
+                      Text(
+                        'Запись №${entry.entryNumber}',
+                        key: const ValueKey('journal-entry-card-title'),
+                        maxLines: 1,
+                        softWrap: false,
+                        style: AppTypography.h2(context),
                       ),
-                      _StatusBadge(
-                        status: entry.status,
-                        label: entry.statusLabel,
+                      const SizedBox(height: 4),
+                      Text(
+                        _formatDate(entry.entryDate),
+                        key: const ValueKey('journal-entry-card-date'),
+                        maxLines: 1,
+                        softWrap: false,
+                        style: AppTypography.caption(context),
                       ),
                     ],
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    entry.workDescription,
-                    style: AppTypography.bodyMedium(context),
-                  ),
-                  if ((entry.problemsDescription ?? '').trim().isNotEmpty) ...[
-                    const SizedBox(height: 12),
-                    _Section(
-                      title: 'Проблемы',
-                      value: entry.problemsDescription!,
-                    ),
-                  ],
-                  if ((entry.safetyNotes ?? '').trim().isNotEmpty) ...[
-                    const SizedBox(height: 12),
-                    _Section(title: 'Безопасность', value: entry.safetyNotes!),
-                  ],
-                  if ((entry.visitorsNotes ?? '').trim().isNotEmpty) ...[
-                    const SizedBox(height: 12),
-                    _Section(
-                      title: 'Замечания посетителей',
-                      value: entry.visitorsNotes!,
-                    ),
-                  ],
-                  if ((entry.qualityNotes ?? '').trim().isNotEmpty) ...[
-                    const SizedBox(height: 12),
-                    _Section(title: 'Качество', value: entry.qualityNotes!),
-                  ],
-                  if ((entry.rejectionReason ?? '').trim().isNotEmpty) ...[
-                    const SizedBox(height: 12),
-                    _Section(
-                      title: 'Причина отклонения',
-                      value: entry.rejectionReason!,
-                      color: AppColors.error,
-                    ),
-                  ],
-                ],
+                  );
+                  final status = _StatusBadge(
+                    status: entry.status,
+                    label: entry.statusLabel,
+                  );
+
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (compactHeader) ...[
+                        titleAndDate,
+                        const SizedBox(height: 8),
+                        status,
+                      ] else
+                        Row(children: [Expanded(child: titleAndDate), status]),
+                      const SizedBox(height: 16),
+                      Text(
+                        entry.workDescription,
+                        style: AppTypography.bodyMedium(context),
+                      ),
+                      if ((entry.problemsDescription ?? '')
+                          .trim()
+                          .isNotEmpty) ...[
+                        const SizedBox(height: 12),
+                        _Section(
+                          title: 'Проблемы',
+                          value: entry.problemsDescription!,
+                        ),
+                      ],
+                      if ((entry.safetyNotes ?? '').trim().isNotEmpty) ...[
+                        const SizedBox(height: 12),
+                        _Section(
+                          title: 'Безопасность',
+                          value: entry.safetyNotes!,
+                        ),
+                      ],
+                      if ((entry.visitorsNotes ?? '').trim().isNotEmpty) ...[
+                        const SizedBox(height: 12),
+                        _Section(
+                          title: 'Замечания посетителей',
+                          value: entry.visitorsNotes!,
+                        ),
+                      ],
+                      if ((entry.qualityNotes ?? '').trim().isNotEmpty) ...[
+                        const SizedBox(height: 12),
+                        _Section(title: 'Качество', value: entry.qualityNotes!),
+                      ],
+                      if ((entry.rejectionReason ?? '').trim().isNotEmpty) ...[
+                        const SizedBox(height: 12),
+                        _Section(
+                          title: 'Причина отклонения',
+                          value: entry.rejectionReason!,
+                          color: AppColors.error,
+                        ),
+                      ],
+                    ],
+                  );
+                },
               ),
             ),
             if (entry.blockers.isNotEmpty) ...[
