@@ -151,6 +151,7 @@ class DesignPackageModel {
     this.projectStage,
     this.discipline,
     this.status,
+    this.statusLabel,
     this.plannedIssueDate,
     this.result = const [],
     this.files = const [],
@@ -166,6 +167,7 @@ class DesignPackageModel {
   final String? projectStage;
   final String? discipline;
   final String? status;
+  final String? statusLabel;
   final DateTime? plannedIssueDate;
   final List<DesignPackageValue> result;
   final List<DesignPackageFile> files;
@@ -173,32 +175,50 @@ class DesignPackageModel {
   final List<DesignPackageHistoryEntry> workflowHistory;
   final List<DesignPackageAction> availableActions;
 
-  factory DesignPackageModel.fromJson(Map<String, dynamic> json) =>
-      DesignPackageModel(
-        id: _int(json['id'], 0),
-        projectId: _nullableInt(json['project_id']),
-        title: _string(json['title'], 'Пакет документации'),
-        stage: _nullableString(json['stage']),
-        projectStage: _nullableString(json['project_stage']),
-        discipline: _nullableString(json['discipline']),
-        status: _nullableString(json['status']),
-        plannedIssueDate: _date(json['planned_issue_date']),
-        result: _resultRows(json['result']),
-        files: _maps(
-          json['files'],
-        ).map(DesignPackageFile.fromJson).toList(growable: false),
-        comments: _maps(
-          json['comments'],
-        ).map(DesignPackageComment.fromJson).toList(growable: false),
-        workflowHistory: _maps(
-          json['workflow_history'],
-        ).map(DesignPackageHistoryEntry.fromJson).toList(growable: false),
-        availableActions: _maps(json['available_actions'])
-            .map(DesignPackageAction.fromJson)
-            .where((action) => action.key.isNotEmpty)
-            .toList(growable: false),
-      );
+  factory DesignPackageModel.fromJson(Map<String, dynamic> json) {
+    final status = _nullableString(json['status']);
+
+    return DesignPackageModel(
+      id: _int(json['id'], 0),
+      projectId: _nullableInt(json['project_id']),
+      title: _string(json['title'], 'Пакет документации'),
+      stage: _nullableString(json['stage']),
+      projectStage: _nullableString(json['project_stage']),
+      discipline: _nullableString(json['discipline']),
+      status: status,
+      statusLabel:
+          _nullableString(json['status_label']) ??
+          _designPackageStatusLabels[status],
+      plannedIssueDate: _date(json['planned_issue_date']),
+      result: _resultRows(json['result']),
+      files: _maps(
+        json['files'],
+      ).map(DesignPackageFile.fromJson).toList(growable: false),
+      comments: _maps(
+        json['comments'],
+      ).map(DesignPackageComment.fromJson).toList(growable: false),
+      workflowHistory: _maps(
+        json['workflow_history'],
+      ).map(DesignPackageHistoryEntry.fromJson).toList(growable: false),
+      availableActions: _maps(json['available_actions'])
+          .map(DesignPackageAction.fromJson)
+          .where((action) => action.key.isNotEmpty)
+          .toList(growable: false),
+    );
+  }
 }
+
+const _designPackageStatusLabels = <String, String>{
+  'draft': 'Черновик',
+  'in_work': 'В работе',
+  'ready_for_norm_control': 'Готов к нормоконтролю',
+  'under_norm_control': 'На нормоконтроле',
+  'returned': 'Возвращен в работу',
+  'under_customer_review': 'На проверке заказчика',
+  'approved': 'Согласован',
+  'issued': 'Выпущен',
+  'archived': 'В архиве',
+};
 
 List<DesignPackageValue> _resultRows(Object? value) {
   if (value is! Map) return const [];

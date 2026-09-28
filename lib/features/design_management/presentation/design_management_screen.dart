@@ -105,9 +105,9 @@ class _DesignManagementScreenState
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  if (item.status != null)
+                  if (item.statusLabel != null || item.status != null)
                     Chip(
-                      label: Text(item.status!),
+                      label: Text(item.statusLabel ?? item.status!),
                       visualDensity: VisualDensity.compact,
                     ),
                   ListTile(
@@ -438,10 +438,10 @@ class _InfoCard extends StatelessWidget {
             title: const Text('Раздел'),
             subtitle: Text(package.discipline!),
           ),
-        if (package.status != null)
+        if (package.statusLabel != null || package.status != null)
           ListTile(
             title: const Text('Статус'),
-            subtitle: Text(package.status!),
+            subtitle: Text(package.statusLabel ?? package.status!),
           ),
         if (package.plannedIssueDate != null)
           ListTile(

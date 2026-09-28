@@ -98,6 +98,17 @@ class _TestProjectsNotifier extends ProjectsNotifier {
           ..name = 'Башня';
     state = ProjectsState(projects: [project], selectedProject: project);
   }
+
+  void selectProjectId(int projectId) {
+    final project =
+        Project()
+          ..serverId = projectId
+          ..name = 'Объект $projectId';
+    state = state.copyWith(
+      projects: [...state.projects, project],
+      selectedProject: project,
+    );
+  }
 }
 
 FieldCatalogPage _fieldPage(String title) => FieldCatalogPage(
@@ -161,6 +172,7 @@ class _ParticipantsRepository extends ProjectParticipantsRepository {
   _ParticipantsRepository(this.responses) : super(Dio());
 
   final List<Object> responses;
+  int requests = 0;
 
   @override
   Future<ProjectParticipantsPage> fetchPage({
@@ -170,6 +182,7 @@ class _ParticipantsRepository extends ProjectParticipantsRepository {
     int page = 1,
     int perPage = 20,
   }) async {
+    requests++;
     final response = responses.removeAt(0);
     if (response is Completer<ProjectParticipantsPage>) return response.future;
     if (response is! ProjectParticipantsPage) {
@@ -179,16 +192,38 @@ class _ParticipantsRepository extends ProjectParticipantsRepository {
   }
 }
 
+class _PendingParticipantsRepository extends ProjectParticipantsRepository {
+  _PendingParticipantsRepository(this.response) : super(Dio());
+
+  final Completer<ProjectParticipantsPage> response;
+  int requests = 0;
+
+  @override
+  Future<ProjectParticipantsPage> fetchPage({
+    required int projectId,
+    String? query,
+    bool availableUsers = false,
+    int page = 1,
+    int perPage = 20,
+  }) {
+    requests++;
+    return response.future;
+  }
+}
+
 void main() {
   Widget buildApp(
     Widget screen, {
     List<Override> repositoryOverrides = const [],
     _TestAuthNotifier? authNotifier,
+    _TestProjectsNotifier? projectsNotifier,
   }) {
     return ProviderScope(
       overrides: [
         authProvider.overrideWith((ref) => authNotifier ?? _TestAuthNotifier()),
-        projectsProvider.overrideWith((ref) => _TestProjectsNotifier()),
+        projectsProvider.overrideWith(
+          (ref) => projectsNotifier ?? _TestProjectsNotifier(),
+        ),
         permissionServiceProvider.overrideWithValue(
           PermissionService(
             context: UserContext.office,
@@ -311,6 +346,97 @@ void main() {
     await tester.pump(const Duration(milliseconds: 500));
     expect(find.text('Сохранённый участник'), findsNothing);
     expect(find.text('Не удалось загрузить участников'), findsOneWidget);
+  });
+
+  testWidgets('participants do not restart the initial load for same owner', (
+    tester,
+  ) async {
+    final response = Completer<ProjectParticipantsPage>();
+    final repository = _PendingParticipantsRepository(response);
+    await tester.pumpWidget(
+      buildApp(
+        const ProjectParticipantsScreen(),
+        repositoryOverrides: [
+          projectParticipantsRepositoryProvider.overrideWithValue(repository),
+        ],
+      ),
+    );
+    for (var frame = 0; frame < 4; frame++) {
+      await tester.pump(const Duration(milliseconds: 10));
+    }
+
+    expect(repository.requests, 1);
+    expect(find.text('Загружаем состав объекта'), findsOneWidget);
+
+    response.complete(
+      const ProjectParticipantsPage(
+        items: [],
+        currentPage: 1,
+        lastPage: 1,
+        total: 0,
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Пользователи не найдены'), findsOneWidget);
+  });
+
+  testWidgets('participants ignore an older response after project switch', (
+    tester,
+  ) async {
+    final oldResponse = Completer<ProjectParticipantsPage>();
+    final projectsNotifier = _TestProjectsNotifier();
+    final repository = _ParticipantsRepository([
+      oldResponse,
+      const ProjectParticipantsPage(
+        items: [
+          ProjectParticipant(
+            id: 52,
+            name: 'Участник объекта 52',
+            email: '52@example.test',
+          ),
+        ],
+        currentPage: 1,
+        lastPage: 1,
+        total: 1,
+      ),
+    ]);
+    await tester.pumpWidget(
+      buildApp(
+        const ProjectParticipantsScreen(),
+        projectsNotifier: projectsNotifier,
+        repositoryOverrides: [
+          projectParticipantsRepositoryProvider.overrideWithValue(repository),
+        ],
+      ),
+    );
+    for (var frame = 0; frame < 4; frame++) {
+      await tester.pump(const Duration(milliseconds: 10));
+    }
+    expect(repository.requests, 1);
+
+    projectsNotifier.selectProjectId(52);
+    await tester.pump();
+    await tester.pumpAndSettle();
+    expect(repository.requests, 2);
+    expect(find.text('Участник объекта 52'), findsOneWidget);
+
+    oldResponse.complete(
+      const ProjectParticipantsPage(
+        items: [
+          ProjectParticipant(
+            id: 9,
+            name: 'Старый участник объекта 9',
+            email: '9@example.test',
+          ),
+        ],
+        currentPage: 1,
+        lastPage: 1,
+        total: 1,
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Участник объекта 52'), findsOneWidget);
+    expect(find.text('Старый участник объекта 9'), findsNothing);
   });
 
   testWidgets('field catalog ignores append started before a new search', (
