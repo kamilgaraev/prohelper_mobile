@@ -66,20 +66,29 @@ class ScheduleNotifier extends StateNotifier<ScheduleState> {
 
   final ScheduleRepository _repository;
   final ScheduleSnapshotAdapter? _snapshotAdapter;
+  int _loadGeneration = 0;
+
+  bool _isCurrentLoad(int generation, int projectId) =>
+      mounted && generation == _loadGeneration && state.projectId == projectId;
 
   Future<void> load({int? projectId}) async {
+    if (!mounted) return;
+    final generation = ++_loadGeneration;
     if (projectId == null) {
-      state = state.copyWith(
-        isLoading: false,
-        overview: null,
-        error: 'Сначала выберите объект.',
-        projectId: null,
-      );
+      state = const ScheduleState(error: 'Сначала выберите объект.');
       return;
     }
 
-    state = state.copyWith(isLoading: true, error: null, projectId: projectId);
-    state = state.copyWith(permissionDenied: false);
+    final sameProject = state.projectId == projectId;
+    state = state.copyWith(
+      isLoading: true,
+      overview: sameProject ? state.overview : null,
+      error: null,
+      projectId: projectId,
+      permissionDenied: false,
+      fromCache: sameProject && state.fromCache,
+      hasDirtyLocal: sameProject && state.hasDirtyLocal,
+    );
 
     try {
       final adapter = _snapshotAdapter;
@@ -88,6 +97,10 @@ class ScheduleNotifier extends StateNotifier<ScheduleState> {
           online: true,
           projectId: projectId,
         );
+        if (!_isCurrentLoad(generation, projectId)) return;
+        if (read.data != null && read.data!.project.id != projectId) {
+          throw const FormatException('Schedule project mismatch');
+        }
         final denied = read.presence == SnapshotPresence.permissionDenied;
         state = state.copyWith(
           isLoading: false,
@@ -100,6 +113,10 @@ class ScheduleNotifier extends StateNotifier<ScheduleState> {
         return;
       }
       final overview = await _repository.fetchSchedules(projectId: projectId);
+      if (!_isCurrentLoad(generation, projectId)) return;
+      if (overview.project.id != projectId) {
+        throw const FormatException('Schedule project mismatch');
+      }
       state = state.copyWith(
         isLoading: false,
         overview: overview,
@@ -107,9 +124,12 @@ class ScheduleNotifier extends StateNotifier<ScheduleState> {
         hasDirtyLocal: false,
       );
     } catch (error) {
+      if (!_isCurrentLoad(generation, projectId)) return;
+      final denied = _isPermissionDenied(error);
       state = state.copyWith(
         isLoading: false,
-        permissionDenied: _isPermissionDenied(error),
+        overview: denied ? null : state.overview,
+        permissionDenied: denied,
         fromCache: false,
         hasDirtyLocal: false,
         error: _errorMessage(error),
@@ -120,10 +140,20 @@ class ScheduleNotifier extends StateNotifier<ScheduleState> {
 
 final scheduleProvider = StateNotifierProvider<ScheduleNotifier, ScheduleState>(
   (ref) {
-    return ScheduleNotifier(
+    ref.watch(
+      authProvider.select(
+        (state) => state is AuthAuthenticated ? state.sessionIdentity : null,
+      ),
+    );
+    final projectId = ref.watch(
+      projectsProvider.select((state) => state.selectedProject?.serverId),
+    );
+    final notifier = ScheduleNotifier(
       ref.read(scheduleRepositoryProvider),
       snapshotAdapter: ref.read(scheduleSnapshotAdapterProvider),
     );
+    notifier.load(projectId: projectId);
+    return notifier;
   },
 );
 
@@ -188,11 +218,19 @@ final scheduleDetailProvider = StateNotifierProvider.family<
   ScheduleDetailState,
   int
 >((ref, scheduleId) {
+  ref.watch(
+    authProvider.select(
+      (state) => state is AuthAuthenticated ? state.sessionIdentity : null,
+    ),
+  );
+  final projectId = ref.watch(
+    projectsProvider.select((state) => state.selectedProject?.serverId),
+  );
   return ScheduleDetailNotifier(
     ref.read(scheduleRepositoryProvider),
     scheduleId,
     snapshotAdapter: ref.read(scheduleSnapshotAdapterProvider),
-    projectId: ref.read(projectsProvider).selectedProject?.serverId,
+    projectId: projectId,
   );
 });
 
@@ -212,8 +250,15 @@ class ScheduleDetailNotifier extends StateNotifier<ScheduleDetailState> {
   final int _scheduleId;
   final ScheduleSnapshotAdapter? _snapshotAdapter;
   final int? _projectId;
+  int _loadGeneration = 0;
 
   Future<void> load() async {
+    if (!mounted) return;
+    final generation = ++_loadGeneration;
+    if (_snapshotAdapter != null && _projectId == null) {
+      state = const ScheduleDetailState(error: 'Сначала выберите объект.');
+      return;
+    }
     state = state.copyWith(
       isLoading: true,
       permissionDenied: false,
@@ -228,6 +273,14 @@ class ScheduleDetailNotifier extends StateNotifier<ScheduleDetailState> {
           scheduleId: _scheduleId,
           projectId: _projectId,
         );
+        if (!mounted || generation != _loadGeneration) return;
+        if (read.data != null && read.data!.schedule.projectId != _projectId) {
+          state = const ScheduleDetailState(
+            error:
+                'График относится к другому объекту. Откройте график выбранного объекта.',
+          );
+          return;
+        }
         final denied = read.presence == SnapshotPresence.permissionDenied;
         state = state.copyWith(
           isLoading: false,
@@ -240,6 +293,14 @@ class ScheduleDetailNotifier extends StateNotifier<ScheduleDetailState> {
         return;
       }
       final detail = await _repository.fetchScheduleDetails(_scheduleId);
+      if (!mounted || generation != _loadGeneration) return;
+      if (_projectId != null && detail.schedule.projectId != _projectId) {
+        state = const ScheduleDetailState(
+          error:
+              'График относится к другому объекту. Откройте график выбранного объекта.',
+        );
+        return;
+      }
       state = state.copyWith(
         isLoading: false,
         detail: detail,
@@ -247,6 +308,7 @@ class ScheduleDetailNotifier extends StateNotifier<ScheduleDetailState> {
         hasDirtyLocal: false,
       );
     } catch (error) {
+      if (!mounted || generation != _loadGeneration) return;
       state = state.copyWith(
         isLoading: false,
         permissionDenied: _isPermissionDenied(error),
@@ -311,27 +373,65 @@ final dailyWorkPlansProvider =
           (state) => state is AuthAuthenticated ? state.sessionIdentity : null,
         ),
       );
-      return DailyWorkPlansNotifier(
+      final projectId = ref.watch(
+        projectsProvider.select((state) => state.selectedProject?.serverId),
+      );
+      final notifier = DailyWorkPlansNotifier(
         ref.read(scheduleRepositoryProvider),
         snapshotAdapter: ref.read(scheduleSnapshotAdapterProvider),
+        isCurrentProject:
+            (projectId) =>
+                ref.read(projectsProvider).selectedProject?.serverId ==
+                projectId,
       );
+      notifier.load(projectId: projectId);
+      return notifier;
     });
 
 class DailyWorkPlansNotifier extends StateNotifier<DailyWorkPlansState> {
   DailyWorkPlansNotifier(
     this._repository, {
     ScheduleSnapshotAdapter? snapshotAdapter,
+    bool Function(int projectId)? isCurrentProject,
   }) : _snapshotAdapter = snapshotAdapter,
+       _isCurrentProject = isCurrentProject,
        super(const DailyWorkPlansState());
 
   final ScheduleRepository _repository;
   final ScheduleSnapshotAdapter? _snapshotAdapter;
+  final bool Function(int projectId)? _isCurrentProject;
   int _loadGeneration = 0;
 
   bool _isCurrentLoad(int generation, int projectId) {
     return mounted &&
         generation == _loadGeneration &&
         state.projectId == projectId;
+  }
+
+  void _requireCurrentProject() {
+    if (!mounted) {
+      throw const ApiException(
+        'Выбран другой объект. Откройте дневной план заново.',
+      );
+    }
+    final projectId = state.projectId;
+    if (projectId == null || _isCurrentProject?.call(projectId) == false) {
+      throw const ApiException(
+        'Выбран другой объект. Откройте дневной план заново.',
+      );
+    }
+  }
+
+  void _requirePlan(DailyWorkPlanModel plan) {
+    _requireCurrentProject();
+    if (plan.projectId != state.projectId ||
+        !state.plans.any(
+          (item) => item.id == plan.id && item.projectId == state.projectId,
+        )) {
+      throw const ApiException(
+        'Дневной план относится к другому объекту. Откройте план выбранного объекта.',
+      );
+    }
   }
 
   Future<void> load({required int? projectId}) async {
@@ -369,6 +469,10 @@ class DailyWorkPlansNotifier extends StateNotifier<DailyWorkPlansState> {
         final denied = read.presence == SnapshotPresence.permissionDenied;
         final preserveCurrent =
             !denied && read.retainCurrentData && retainedPlans.isNotEmpty;
+        if (!denied &&
+            read.data?.any((plan) => plan.projectId != projectId) == true) {
+          throw const FormatException('Daily plan project mismatch');
+        }
         state = state.copyWith(
           isLoading: false,
           plans:
@@ -391,6 +495,9 @@ class DailyWorkPlansNotifier extends StateNotifier<DailyWorkPlansState> {
       }
       final plans = await _repository.fetchDailyWorkPlans(projectId: projectId);
       if (!_isCurrentLoad(generation, projectId)) return;
+      if (plans.any((plan) => plan.projectId != projectId)) {
+        throw const FormatException('Daily plan project mismatch');
+      }
       state = state.copyWith(
         isLoading: false,
         plans: plans,
@@ -415,7 +522,17 @@ class DailyWorkPlansNotifier extends StateNotifier<DailyWorkPlansState> {
     DailyWorkPlanAssignmentModel assignment,
     DailyWorkFactInput input,
   ) async {
-    if (!mounted) return;
+    _requireCurrentProject();
+    if (!state.plans.any(
+      (plan) =>
+          plan.projectId == state.projectId &&
+          plan.id == assignment.dailyWorkPlanId &&
+          plan.assignments.any((item) => item.id == assignment.id),
+    )) {
+      throw const ApiException(
+        'Задание уже недоступно на выбранном объекте. Откройте дневной план заново.',
+      );
+    }
     final projectId = state.projectId;
     final updatedAssignment = await _repository.recordDailyWorkFact(
       assignmentId: assignment.id,
@@ -465,18 +582,32 @@ class DailyWorkPlansNotifier extends StateNotifier<DailyWorkPlansState> {
     DailyWorkConstraintModel constraint,
     String? comment,
   ) async {
+    _requireCurrentProject();
+    if (!state.plans.any(
+      (plan) =>
+          plan.projectId == state.projectId &&
+          plan.assignments.any(
+            (assignment) =>
+                assignment.constraints.any((item) => item.id == constraint.id),
+          ),
+    )) {
+      throw const ApiException(
+        'Препятствие уже недоступно на выбранном объекте. Откройте дневной план заново.',
+      );
+    }
+    final projectId = state.projectId;
     await _repository.createLinkedConstraintAction(
       constraintId: constraint.id,
       comment: comment?.trim().isEmpty == true ? null : comment,
     );
 
-    if (state.projectId != null) {
-      await load(projectId: state.projectId);
+    if (mounted && projectId != null && state.projectId == projectId) {
+      await load(projectId: projectId);
     }
   }
 
   Future<void> submit(DailyWorkPlanModel plan, {String? summaryComment}) async {
-    if (!mounted) return;
+    _requirePlan(plan);
     final projectId = state.projectId;
     final updatedPlan = await _repository.submitDailyWorkPlan(
       dailyPlanId: plan.id,

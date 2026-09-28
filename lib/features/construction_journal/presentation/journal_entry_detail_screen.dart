@@ -283,6 +283,7 @@ class _JournalEntryDetailScreenState
                                   builder:
                                       (_) => JournalEntryFormScreen(
                                         journalId: journalId,
+                                        projectId: scope.projectId,
                                         initialEntry: entry,
                                       ),
                                 ),

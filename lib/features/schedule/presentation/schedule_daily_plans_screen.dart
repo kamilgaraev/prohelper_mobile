@@ -29,19 +29,18 @@ class _ScheduleDailyPlansScreenState
   String? _selectedWorkDate;
 
   @override
-  void initState() {
-    super.initState();
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final projectId = ref.read(projectsProvider).selectedProject?.serverId;
-      ref.read(dailyWorkPlansProvider.notifier).load(projectId: projectId);
-    });
-  }
-
-  @override
   Widget build(BuildContext context) {
+    ref.listen<int?>(
+      projectsProvider.select((state) => state.selectedProject?.serverId),
+      (_, __) {
+        if (_selectedWorkDate != null) {
+          setState(() => _selectedWorkDate = null);
+        }
+      },
+    );
     final state = ref.watch(dailyWorkPlansProvider);
     final selectedProject = ref.watch(projectsProvider).selectedProject;
+    final isCurrentProject = state.projectId == selectedProject?.serverId;
     final visiblePlans =
         _selectedWorkDate == null
             ? state.plans
@@ -81,7 +80,8 @@ class _ScheduleDailyPlansScreenState
                       'Сначала выберите объект, чтобы открыть дневные планы работ.',
                 ),
               )
-            else if (state.isLoading && state.plans.isEmpty)
+            else if (!isCurrentProject ||
+                state.isLoading && state.plans.isEmpty)
               const SliverFillRemaining(
                 child: AppLoadingState(message: 'Загружаем дневные планы'),
               )

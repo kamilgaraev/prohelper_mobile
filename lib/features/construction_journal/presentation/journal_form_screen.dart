@@ -23,6 +23,7 @@ class _JournalFormScreenState extends ConsumerState<JournalFormScreen> {
   int? _contractId;
   Future<List<ConstructionJournalContractOption>>? _contractsFuture;
   bool _isSaving = false;
+  int? _boundProjectId;
 
   bool get _isEdit => widget.initialJournal != null;
 
@@ -40,9 +41,10 @@ class _JournalFormScreenState extends ConsumerState<JournalFormScreen> {
             ? null
             : DateTime.tryParse(widget.initialJournal!.startDate);
     _contractId = widget.initialJournal?.contractId;
-    final projectId =
+    _boundProjectId =
         widget.initialJournal?.projectId ??
         ref.read(projectsProvider).selectedProject?.serverId;
+    final projectId = _boundProjectId;
     if (projectId != null) {
       _contractsFuture = ref
           .read(constructionJournalRepositoryProvider)
@@ -153,7 +155,9 @@ class _JournalFormScreenState extends ConsumerState<JournalFormScreen> {
           const SizedBox(height: 24),
           ElevatedButton(
             onPressed:
-                _isSaving ? null : () => _save(selectedProject?.serverId),
+                _isSaving || selectedProject?.serverId != _boundProjectId
+                    ? null
+                    : () => _save(selectedProject?.serverId),
             child: Text(_isEdit ? 'Сохранить' : 'Создать'),
           ),
         ],
@@ -162,6 +166,20 @@ class _JournalFormScreenState extends ConsumerState<JournalFormScreen> {
   }
 
   Future<void> _save(int? projectId) async {
+    if (_boundProjectId == null ||
+        projectId != _boundProjectId ||
+        ref.read(projectsProvider).selectedProject?.serverId !=
+            _boundProjectId) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Выбран другой объект. Закройте форму и откройте её снова.',
+          ),
+        ),
+      );
+      return;
+    }
+
     if (_nameController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Укажите название журнала.')),

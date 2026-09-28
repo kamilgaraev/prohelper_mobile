@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
@@ -37,20 +39,41 @@ class _ConstructionJournalScreenState
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<int?>(
+      projectsProvider.select((state) => state.selectedProject?.serverId),
+      (previous, next) {
+        if (previous != next) {
+          unawaited(
+            ref
+                .read(constructionJournalProvider.notifier)
+                .load(projectId: next),
+          );
+        }
+      },
+    );
     final state = ref.watch(constructionJournalProvider);
     final selectedProject = ref.watch(projectsProvider).selectedProject;
+    final projectMatches =
+        selectedProject != null && state.projectId == selectedProject.serverId;
     final canCreate =
         state.availableActions.hasAction(
           ConstructionJournalActionKeys.create,
         ) &&
-        selectedProject != null;
+        projectMatches;
     Future<void> createJournal() async {
-      if (selectedProject == null) return;
+      if (!projectMatches ||
+          ref.read(projectsProvider).selectedProject?.serverId !=
+              selectedProject.serverId) {
+        return;
+      }
       final created = await Navigator.of(context).push<bool>(
         MaterialPageRoute(builder: (_) => const JournalFormScreen()),
       );
 
-      if (created == true && mounted) {
+      if (created == true &&
+          mounted &&
+          ref.read(projectsProvider).selectedProject?.serverId ==
+              selectedProject.serverId) {
         await ref
             .read(constructionJournalProvider.notifier)
             .load(projectId: selectedProject.serverId);
@@ -70,10 +93,13 @@ class _ConstructionJournalScreenState
         ],
       ),
       body: RefreshIndicator(
-        onRefresh:
-            () => ref
-                .read(constructionJournalProvider.notifier)
-                .load(projectId: selectedProject?.serverId),
+        onRefresh: () {
+          final currentProjectId =
+              ref.read(projectsProvider).selectedProject?.serverId;
+          return ref
+              .read(constructionJournalProvider.notifier)
+              .load(projectId: currentProjectId);
+        },
         child: CustomScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           slivers: [
@@ -86,7 +112,8 @@ class _ConstructionJournalScreenState
                       'Сначала выберите объект, чтобы открыть журнал работ.',
                 ),
               )
-            else if (state.isLoading && state.items.isEmpty)
+            else if (!projectMatches ||
+                (state.isLoading && state.items.isEmpty))
               const SliverFillRemaining(
                 child: AppLoadingState(message: 'Загружаем журналы работ'),
               )
@@ -163,15 +190,35 @@ class _ConstructionJournalScreenState
                         padding: const EdgeInsets.only(bottom: 12),
                         child: IndustrialCard(
                           onTap:
-                              () => Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder:
-                                      (_) => ConstructionJournalDetailScreen(
-                                        journalId: journal.id,
-                                        projectId: selectedProject.serverId,
+                              journal.projectId != selectedProject.serverId
+                                  ? null
+                                  : () {
+                                    final currentProjectId =
+                                        ref
+                                            .read(projectsProvider)
+                                            .selectedProject
+                                            ?.serverId;
+                                    if (!mounted ||
+                                        currentProjectId != journal.projectId ||
+                                        ref
+                                                .read(
+                                                  constructionJournalProvider,
+                                                )
+                                                .projectId !=
+                                            journal.projectId) {
+                                      return;
+                                    }
+                                    Navigator.of(context).push(
+                                      MaterialPageRoute(
+                                        builder:
+                                            (_) =>
+                                                ConstructionJournalDetailScreen(
+                                                  journalId: journal.id,
+                                                  projectId: journal.projectId,
+                                                ),
                                       ),
-                                ),
-                              ),
+                                    );
+                                  },
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [

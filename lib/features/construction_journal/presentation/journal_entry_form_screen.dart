@@ -8,6 +8,7 @@ import '../../../core/network/api_exception.dart';
 import '../../../core/sync/queued_sync_operation.dart';
 import '../../../core/sync/sync_queue_service.dart';
 import '../../../core/widgets/app_error_notice.dart';
+import '../../projects/domain/projects_provider.dart';
 import '../data/construction_journal_models.dart';
 import '../data/construction_journal_repository.dart';
 import '../data/journal_entry_operation_recovery.dart';
@@ -16,10 +17,12 @@ class JournalEntryFormScreen extends ConsumerStatefulWidget {
   const JournalEntryFormScreen({
     super.key,
     required this.journalId,
+    this.projectId,
     this.initialEntry,
   });
 
   final int journalId;
+  final int? projectId;
   final ConstructionJournalEntryModel? initialEntry;
 
   @override
@@ -61,8 +64,13 @@ class _JournalEntryFormScreenState
   _JournalSyncStatus? _syncStatus;
   String? _serverRejectionReason;
   final ScrollController _formScrollController = ScrollController();
+  int? _boundProjectId;
 
   bool get _isEdit => widget.initialEntry != null;
+
+  bool get _isBoundProjectCurrent =>
+      _boundProjectId == null ||
+      ref.read(projectsProvider).selectedProject?.serverId == _boundProjectId;
 
   bool get _hasRecoveredEntry =>
       _recoveredEntry != null || _pendingOperation?.entryId != null;
@@ -98,6 +106,9 @@ class _JournalEntryFormScreenState
   @override
   void initState() {
     super.initState();
+    _boundProjectId =
+        widget.projectId ??
+        ref.read(projectsProvider).selectedProject?.serverId;
     _descriptionController = TextEditingController(
       text: widget.initialEntry?.workDescription ?? '',
     );
@@ -364,6 +375,11 @@ class _JournalEntryFormScreenState
 
   @override
   Widget build(BuildContext context) {
+    final selectedProjectId = ref.watch(
+      projectsProvider.select((state) => state.selectedProject?.serverId),
+    );
+    final projectChanged =
+        _boundProjectId != null && selectedProjectId != _boundProjectId;
     if (_recoveryFailed || (_pendingOperation != null && !_hasRecoveredEntry)) {
       return Scaffold(
         appBar: AppBar(title: const Text('Восстановление записи')),
@@ -387,7 +403,10 @@ class _JournalEntryFormScreenState
               const SizedBox(height: 16),
               ElevatedButton(
                 onPressed:
-                    _isSaving || _isRestoring || _mustReviewBeforeRetry
+                    _isSaving ||
+                            _isRestoring ||
+                            _mustReviewBeforeRetry ||
+                            projectChanged
                         ? null
                         : () {
                           if (_recoveryFailed) {
@@ -521,7 +540,10 @@ class _JournalEntryFormScreenState
               Expanded(
                 child: OutlinedButton(
                   onPressed:
-                      _isSaving || _isRestoring || _mustReviewBeforeRetry
+                      _isSaving ||
+                              _isRestoring ||
+                              _mustReviewBeforeRetry ||
+                              projectChanged
                           ? null
                           : () => _save(isDraft: true),
                   child: const Text('Сохранить черновик'),
@@ -531,7 +553,10 @@ class _JournalEntryFormScreenState
               Expanded(
                 child: ElevatedButton(
                   onPressed:
-                      _isSaving || _isRestoring || _mustReviewBeforeRetry
+                      _isSaving ||
+                              _isRestoring ||
+                              _mustReviewBeforeRetry ||
+                              projectChanged
                           ? null
                           : () => _save(isDraft: false),
                   child: const Text('Отправить'),
@@ -978,6 +1003,10 @@ class _JournalEntryFormScreenState
 
   Future<void> _save({required bool isDraft}) async {
     if (_isSaving || _isRestoring) return;
+    if (!_isBoundProjectCurrent) {
+      _showMessage('Выбран другой объект. Закройте форму и откройте её снова.');
+      return;
+    }
     if (!isDraft &&
         (_isLoadingOptions || _formOptionsError != null || _options == null)) {
       _showMessage(
@@ -999,6 +1028,12 @@ class _JournalEntryFormScreenState
             _pendingOperation = null;
           }
           if (mounted) Navigator.of(context).pop(true);
+          return;
+        }
+        if (!_isBoundProjectCurrent) {
+          _showMessage(
+            'Выбран другой объект. Закройте форму и откройте её снова.',
+          );
           return;
         }
         _recoveredEntry = current;
@@ -1056,6 +1091,7 @@ class _JournalEntryFormScreenState
 
     try {
       if (_isEdit) {
+        if (!_isBoundProjectCurrent) return;
         final updatedEntry = await repository.updateEntry(
           entryId: widget.initialEntry!.id,
           entryDate: _entryDate!.toIso8601String().split('T').first,
@@ -1072,6 +1108,7 @@ class _JournalEntryFormScreenState
           materials: materials,
         );
         if (!isDraft) {
+          if (!_isBoundProjectCurrent) return;
           await repository.submitEntry(
             updatedEntry.id,
             journalId: widget.journalId,
@@ -1079,6 +1116,7 @@ class _JournalEntryFormScreenState
         }
       } else if (_hasRecoveredEntry) {
         final recoveredId = _recoveredEntry?.id ?? _pendingOperation!.entryId!;
+        if (!_isBoundProjectCurrent) return;
         final updatedEntry = await repository.updateEntry(
           entryId: recoveredId,
           entryDate: _entryDate!.toIso8601String().split('T').first,
@@ -1095,6 +1133,7 @@ class _JournalEntryFormScreenState
           materials: materials,
         );
         if (!isDraft) {
+          if (!_isBoundProjectCurrent) return;
           await repository.submitEntry(
             updatedEntry.id,
             journalId: widget.journalId,
@@ -1109,6 +1148,7 @@ class _JournalEntryFormScreenState
         }
       } else if (_pendingOperation != null &&
           _pendingOperation!.entryId == null) {
+        if (!_isBoundProjectCurrent) return;
         final createdEntry = await repository.retryPendingCreate(
           _pendingOperation!,
         );
@@ -1117,6 +1157,7 @@ class _JournalEntryFormScreenState
         if (pendingSubmit) {
           _recoveredEntry = createdEntry;
           _submitOperationKey ??= '$_operationKey:submit';
+          if (!_isBoundProjectCurrent) return;
           await repository.submitEntry(
             createdEntry.id,
             journalId: widget.journalId,
@@ -1129,6 +1170,7 @@ class _JournalEntryFormScreenState
         }
       } else {
         _operationKey ??= _newLocalKey();
+        if (!_isBoundProjectCurrent) return;
         final createdEntry = await repository.createEntry(
           journalId: widget.journalId,
           entryDate: _entryDate!.toIso8601String().split('T').first,
