@@ -6,15 +6,23 @@ import 'package:prohelpers_mobile/features/site_requests/data/site_request_model
 import 'package:prohelpers_mobile/features/site_requests/data/site_requests_repository.dart';
 import 'package:prohelpers_mobile/features/site_requests/domain/site_request_detail_provider.dart';
 import 'package:prohelpers_mobile/features/site_requests/presentation/screens/site_request_detail_screen.dart';
+import 'package:prohelpers_mobile/core/network/api_exception.dart';
 
 class _FakeSiteRequestsRepository extends SiteRequestsRepository {
-  _FakeSiteRequestsRepository(this.request, {List<Map<String, dynamic>>? files})
-    : files = files ?? [],
-      super(Dio());
+  _FakeSiteRequestsRepository(
+    this.request, {
+    List<Map<String, dynamic>>? files,
+    this.assignees = const [],
+    this.assignmentError,
+  }) : files = files ?? [],
+       super(Dio());
 
   final SiteRequestModel request;
   final List<Map<String, dynamic>> files;
+  final List<Map<String, dynamic>> assignees;
+  final Object? assignmentError;
   final List<int> deletedFileIds = [];
+  final List<int?> assignedUserIds = [];
 
   @override
   Future<SiteRequestModel> fetchSiteRequestDetails(int id) async {
@@ -30,6 +38,17 @@ class _FakeSiteRequestsRepository extends SiteRequestsRepository {
   Future<void> deleteFile(int requestId, int fileId) async {
     deletedFileIds.add(fileId);
     files.removeWhere((file) => file['id'] == fileId);
+  }
+
+  @override
+  Future<List<Map<String, dynamic>>> fetchAssignees(int requestId) async =>
+      List<Map<String, dynamic>>.from(assignees);
+
+  @override
+  Future<SiteRequestModel> assignSiteRequest(int requestId, int? userId) async {
+    assignedUserIds.add(userId);
+    if (assignmentError case final error?) throw error;
+    return request;
   }
 }
 
@@ -126,6 +145,7 @@ void main() {
     _FakeSiteRequestsRepository? repository,
     double textScaleFactor = 1,
     bool fromCache = false,
+    bool enableTickers = false,
   }) {
     final fakeRepository =
         repository ?? _FakeSiteRequestsRepository(request ?? _request);
@@ -140,7 +160,7 @@ void main() {
         ),
       ],
       child: TickerMode(
-        enabled: false,
+        enabled: enableTickers,
         child: MaterialApp(
           builder:
               (context, child) => MediaQuery(
@@ -217,6 +237,246 @@ void main() {
     await tester.pumpAndSettle();
     expect(tester.widget<Text>(find.text(cacheMessage)).maxLines, isNull);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('показывает причину пустого списка без действия снятия', (
+    tester,
+  ) async {
+    final request =
+        SiteRequestModel()
+          ..serverId = 1001
+          ..title = 'Тестовая заявка'
+          ..status = 'in_progress'
+          ..priority = 'medium'
+          ..requestType = 'material_request'
+          ..projectId = 15
+          ..projectName = 'Тестовый объект'
+          ..canBeAssigned = true;
+    final repository = _FakeSiteRequestsRepository(request);
+
+    await tester.pumpWidget(
+      createWidget(
+        request: request,
+        repository: repository,
+        enableTickers: true,
+      ),
+    );
+    await tester.pump();
+    await tester.ensureVisible(find.text('Назначить исполнителя'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Назначить исполнителя'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Исполнители объекта'), findsOneWidget);
+    expect(find.text('Нет активных участников объекта'), findsOneWidget);
+    expect(find.text('Снять исполнителя'), findsNothing);
+  });
+
+  testWidgets('сохраняет снятие назначенного исполнителя при пустом списке', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(720, 1280);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final request =
+        SiteRequestModel()
+          ..serverId = 1001
+          ..title = 'Тестовая заявка'
+          ..status = 'in_progress'
+          ..priority = 'medium'
+          ..requestType = 'material_request'
+          ..projectId = 15
+          ..projectName = 'Тестовый объект'
+          ..assignedUserId = 88
+          ..canBeAssigned = true;
+    final repository = _FakeSiteRequestsRepository(request);
+
+    await tester.pumpWidget(
+      createWidget(
+        request: request,
+        repository: repository,
+        enableTickers: true,
+      ),
+    );
+    await tester.pump();
+    expect(
+      find.text('Не отображается среди активных участников'),
+      findsOneWidget,
+    );
+    expect(find.text('Исполнитель пока не назначен.'), findsNothing);
+    await tester.ensureVisible(find.text('Назначить исполнителя'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Назначить исполнителя'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Нет активных участников объекта'), findsOneWidget);
+    expect(find.text('Снять исполнителя'), findsOneWidget);
+    await tester.ensureVisible(find.text('Снять исполнителя'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Снять исполнителя'));
+    await tester.pumpAndSettle();
+
+    expect(repository.assignedUserIds, [null]);
+  });
+
+  testWidgets('оставляет доступным выбор активного исполнителя', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(720, 1280);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final request =
+        SiteRequestModel()
+          ..serverId = 1001
+          ..title = 'Тестовая заявка'
+          ..status = 'in_progress'
+          ..priority = 'medium'
+          ..requestType = 'material_request'
+          ..projectId = 15
+          ..projectName = 'Тестовый объект'
+          ..canBeAssigned = true;
+    final repository = _FakeSiteRequestsRepository(
+      request,
+      assignees: const [
+        {'id': 24, 'name': 'Анна Сидорова'},
+      ],
+    );
+
+    await tester.pumpWidget(
+      createWidget(
+        request: request,
+        repository: repository,
+        enableTickers: true,
+      ),
+    );
+    await tester.pump();
+    await tester.ensureVisible(find.text('Назначить исполнителя'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Назначить исполнителя'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Нет активных участников объекта'), findsNothing);
+    expect(find.text('Снять исполнителя'), findsNothing);
+    expect(find.text('Анна Сидорова'), findsOneWidget);
+    await tester.ensureVisible(find.text('Анна Сидорова'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Анна Сидорова'));
+    await tester.pumpAndSettle();
+
+    expect(repository.assignedUserIds, [24]);
+  });
+
+  testWidgets('ошибка назначения при потере сети не дублируется в AX', (
+    tester,
+  ) async {
+    final request =
+        SiteRequestModel()
+          ..serverId = 1001
+          ..title = 'Тестовая заявка'
+          ..status = 'in_progress'
+          ..priority = 'medium'
+          ..requestType = 'material_request'
+          ..projectId = 15
+          ..projectName = 'Тестовый объект'
+          ..canBeAssigned = true;
+    final repository = _FakeSiteRequestsRepository(
+      request,
+      assignees: const [
+        {'id': 24, 'name': 'Анна Сидорова'},
+      ],
+      assignmentError: ApiException.fromDio(
+        DioException(
+          requestOptions: RequestOptions(path: '/site-requests/1001/assign'),
+          type: DioExceptionType.connectionError,
+        ),
+      ),
+    );
+
+    await tester.pumpWidget(
+      createWidget(
+        request: request,
+        repository: repository,
+        enableTickers: true,
+      ),
+    );
+    await tester.pump();
+    await tester.ensureVisible(find.text('Назначить исполнителя'));
+    await tester.tap(find.text('Назначить исполнителя'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Анна Сидорова'));
+    await tester.pumpAndSettle();
+
+    const message = 'Нет соединения с сервером. Проверьте интернет.';
+    expect(repository.assignedUserIds, [24]);
+    expect(request.assignedUserId, isNull);
+    expect(find.text(message), findsOneWidget);
+    final semantics = tester.ensureSemantics();
+    expect(
+      tester
+          .getSemantics(find.byKey(const Key('app-error-notice-message')))
+          .label,
+      'Ошибка: $message',
+    );
+    semantics.dispose();
+  });
+
+  testWidgets('ошибка снятия исполнителя сохраняет подтверждённое назначение', (
+    tester,
+  ) async {
+    final request =
+        SiteRequestModel()
+          ..serverId = 1001
+          ..title = 'Тестовая заявка'
+          ..status = 'in_progress'
+          ..priority = 'medium'
+          ..requestType = 'material_request'
+          ..projectId = 15
+          ..projectName = 'Тестовый объект'
+          ..assignedUserId = 88
+          ..assignedUserName = 'Иван Сидоров'
+          ..canBeAssigned = true;
+    final repository = _FakeSiteRequestsRepository(
+      request,
+      assignmentError: ApiException.fromDio(
+        DioException(
+          requestOptions: RequestOptions(path: '/site-requests/1001/assign'),
+          type: DioExceptionType.connectionError,
+        ),
+      ),
+    );
+
+    await tester.pumpWidget(
+      createWidget(
+        request: request,
+        repository: repository,
+        enableTickers: true,
+      ),
+    );
+    await tester.pump();
+    await tester.ensureVisible(find.text('Назначить исполнителя'));
+    await tester.tap(find.text('Назначить исполнителя'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Снять исполнителя'));
+    await tester.tap(find.text('Снять исполнителя'));
+    await tester.pumpAndSettle();
+
+    const message = 'Нет соединения с сервером. Проверьте интернет.';
+    expect(repository.assignedUserIds, [null]);
+    expect(request.assignedUserId, 88);
+    expect(find.text('Иван Сидоров'), findsOneWidget);
+    expect(find.text(message), findsOneWidget);
+    final semantics = tester.ensureSemantics();
+    expect(
+      tester
+          .getSemantics(find.byKey(const Key('app-error-notice-message')))
+          .label,
+      'Ошибка: $message',
+    );
+    semantics.dispose();
   });
 
   testWidgets('детали заявки показывают сохранённые три знака количества', (

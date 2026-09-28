@@ -5,6 +5,7 @@ import '../../../core/error/user_message.dart';
 import '../../../core/design/pro_status.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_typography.dart';
+import '../../../core/utils/quantity_format.dart';
 import '../../auth/domain/auth_provider.dart';
 import '../../../core/widgets/app_empty_state.dart';
 import '../../../core/widgets/app_error_state.dart';
@@ -1001,9 +1002,9 @@ class _TaskCard extends StatelessWidget {
                     icon: Icons.straighten_rounded,
                     label:
                         task.completedQuantity != null
-                            ? '${_formatQuantity(task.completedQuantity!)}/${_formatQuantity(task.quantity!)} ${task.measurementUnit ?? ''}'
+                            ? '${formatQuantity(task.completedQuantity!)}/${formatQuantity(task.quantity!)} ${task.measurementUnit ?? ''}'
                                 .trim()
-                            : '${_formatQuantity(task.quantity!)} ${task.measurementUnit ?? ''}'
+                            : '${formatQuantity(task.quantity!)} ${task.measurementUnit ?? ''}'
                                 .trim(),
                   ),
               ],
@@ -1096,11 +1097,13 @@ class _TaskMeta extends StatelessWidget {
         children: [
           Icon(icon, size: 16, color: theme.colorScheme.onSurfaceVariant),
           const SizedBox(width: 6),
-          Text(
-            label,
-            style: AppTypography.caption(context).copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-              fontWeight: FontWeight.w600,
+          Flexible(
+            child: Text(
+              label,
+              style: AppTypography.caption(context).copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ),
         ],
@@ -1295,10 +1298,6 @@ String _formatDate(String? value) {
   final day = date.day.toString().padLeft(2, '0');
   final month = date.month.toString().padLeft(2, '0');
   return '$day.$month.${date.year}';
-}
-
-String _formatQuantity(double value) {
-  return value.toStringAsFixed(value.truncateToDouble() == value ? 0 : 2);
 }
 
 Color _parseColor(String value) {

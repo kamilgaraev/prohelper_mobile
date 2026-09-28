@@ -7,6 +7,7 @@ import '../../../core/error/user_message.dart';
 import '../../../core/storage/cached_entity_codec.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_typography.dart';
+import '../../../core/utils/quantity_format.dart';
 import '../../../core/widgets/app_empty_state.dart';
 import '../../../core/widgets/app_error_state.dart';
 import '../../../core/widgets/app_loading_state.dart';
@@ -1459,9 +1460,7 @@ String _quantityLabel(BudgetEstimateLineItemModel item) {
   }
 
   final unit = item.measurementUnitLabel;
-  final value = quantity.toStringAsFixed(
-    quantity.truncateToDouble() == quantity ? 0 : 2,
-  );
+  final value = formatQuantity(quantity, maxFractionDigits: 8);
 
   return unit == null ? value : '$value $unit';
 }

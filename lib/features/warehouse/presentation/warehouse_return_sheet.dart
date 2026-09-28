@@ -3,6 +3,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/theme/app_typography.dart';
 import '../../../core/sync/sync_queue_service.dart';
+import '../../../core/utils/quantity_format.dart';
 import '../../../core/widgets/app_error_notice.dart';
 import '../data/warehouse_custody_model.dart';
 import '../domain/warehouse_provider.dart';
@@ -176,5 +177,5 @@ class _WarehouseReturnSheetState extends ConsumerState<WarehouseReturnSheet> {
 }
 
 String _formatQuantity(double value) {
-  return value.toStringAsFixed(value.truncateToDouble() == value ? 0 : 2);
+  return formatQuantity(value, maxFractionDigits: 3);
 }

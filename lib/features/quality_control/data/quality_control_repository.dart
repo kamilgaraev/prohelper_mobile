@@ -243,6 +243,8 @@ class QualityControlRepository extends SyncQueueAwareRepository {
       if (trimmedComment != null && trimmedComment.isNotEmpty)
         'comment': trimmedComment,
     };
+    final idempotencyKey = _newIdempotencyKey();
+    payload['idempotency_key'] = idempotencyKey;
     for (var index = 0; index < normalizedPhotoPaths.length; index++) {
       payload['photos[$index][type]'] = 'after';
     }
@@ -275,6 +277,7 @@ class QualityControlRepository extends SyncQueueAwareRepository {
       final response = await _dio.post(
         '/quality-control/defects/$id/resolve',
         data: data,
+        options: Options(headers: {'Idempotency-Key': idempotencyKey}),
       );
       return QualityDefectModel.fromJson(
         MobileApiResponse.dataMap(response.data),

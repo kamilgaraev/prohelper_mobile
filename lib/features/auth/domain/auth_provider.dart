@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/error/user_message.dart';
@@ -10,6 +11,16 @@ import '../data/auth_session_identity.dart';
 import '../data/user_model.dart';
 import '../../notifications/data/mobile_push_service.dart';
 import 'auth_session_provider.dart';
+
+Future<bool> _hasNoActiveNetwork() async {
+  try {
+    final connectivity = await Connectivity().checkConnectivity();
+    return connectivity.isNotEmpty &&
+        connectivity.every((result) => result == ConnectivityResult.none);
+  } catch (_) {
+    return false;
+  }
+}
 
 abstract class AuthState {
   User? get user => null;
@@ -66,8 +77,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
     bool autoCheckAuth = true,
     Future<void> Function()? beforeLogout,
     void Function()? onSessionInvalidated,
+    Future<bool> Function()? isDefinitelyOffline,
   }) : _onSessionInvalidated = onSessionInvalidated,
        _beforeLogout = beforeLogout,
+       _isDefinitelyOffline = isDefinitelyOffline ?? _hasNoActiveNetwork,
        super(AuthInitial()) {
     if (autoCheckAuth) checkAuth();
   }
@@ -77,6 +90,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
   final SecureStorageService _storage;
   final void Function()? _onSessionInvalidated;
   final Future<void> Function()? _beforeLogout;
+  final Future<bool> Function() _isDefinitelyOffline;
   bool _loggingOut = false;
   int _operation = 0;
   Future<void> _offlineMutationQueue = Future<void>.value();
@@ -88,6 +102,28 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
     if (token == null || token.isEmpty) {
       state = AuthUnauthenticated();
+      return;
+    }
+
+    var isDefinitelyOffline = false;
+    try {
+      isDefinitelyOffline = await _isDefinitelyOffline().timeout(
+        const Duration(milliseconds: 500),
+      );
+    } catch (_) {}
+    if (!_isCurrent(operation)) return;
+    if (isDefinitelyOffline) {
+      final cached = await _readOfflineUser(token);
+      if (!_isCurrent(operation)) return;
+      if (cached == null) {
+        state = AuthUnauthenticated();
+        return;
+      }
+      state = AuthAuthenticated(
+        cached.$1,
+        sessionIdentity: cached.$2,
+        isOnlineVerified: false,
+      );
       return;
     }
 

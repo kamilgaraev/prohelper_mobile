@@ -51,6 +51,12 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen> {
               : 'Финансовые документы',
         ),
         actions: [
+          if (id != null && _canCreate)
+            IconButton(
+              tooltip: 'Создать документ',
+              onPressed: () => _create(id),
+              icon: const Icon(Icons.add_rounded),
+            ),
           IconButton(
             tooltip: 'Обновить',
             onPressed: id == null ? null : () => _load(reset: true),
@@ -58,14 +64,6 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen> {
           ),
         ],
       ),
-      floatingActionButton:
-          id == null || !_canCreate
-              ? null
-              : FloatingActionButton.extended(
-                onPressed: () => _create(id),
-                icon: const Icon(Icons.add),
-                label: const Text('Документ'),
-              ),
       body:
           id == null
               ? const Center(child: Text('Выберите объект'))
@@ -76,7 +74,7 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen> {
               : RefreshIndicator(
                 onRefresh: () => _load(reset: true),
                 child: ListView(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 96),
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
                   children: [
                     if (_error != null)
                       _ErrorPanel(

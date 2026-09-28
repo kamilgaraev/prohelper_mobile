@@ -249,6 +249,20 @@ class _SiteRequestsScreenState extends ConsumerState<SiteRequestsScreen> {
             ],
           ),
           centerTitle: false,
+          actions: [
+            if (canCreateRequest)
+              IconButton(
+                tooltip: 'Новая заявка',
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const SiteRequestFormScreen(),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.add_rounded),
+              ),
+          ],
         ),
         body: RefreshIndicator(
           onRefresh: () async {
@@ -468,28 +482,10 @@ class _SiteRequestsScreenState extends ConsumerState<SiteRequestsScreen> {
                     ),
                   ),
               ],
-              const SliverToBoxAdapter(child: SizedBox(height: 80)),
+              const SliverToBoxAdapter(child: SizedBox(height: 16)),
             ],
           ),
         ),
-        floatingActionButton:
-            canCreateRequest
-                ? FloatingActionButton(
-                  onPressed: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => const SiteRequestFormScreen(),
-                      ),
-                    );
-                  },
-                  backgroundColor: theme.colorScheme.primary,
-                  child: const Icon(
-                    Icons.add_rounded,
-                    color: Colors.white,
-                    size: 32,
-                  ),
-                )
-                : null,
       ),
     );
   }

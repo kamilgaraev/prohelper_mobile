@@ -298,7 +298,12 @@ class _SiteRequestDetailContent extends ConsumerWidget {
             request: request,
             onAssign:
                 request.canBeAssigned
-                    ? () => _assignRequest(context, ref, request.serverId)
+                    ? () => _assignRequest(
+                      context,
+                      ref,
+                      request.serverId,
+                      hasAssignedUser: request.assignedUserId != null,
+                    )
                     : null,
           ),
           _RequestFilesCard(requestId: request.serverId),
@@ -494,8 +499,9 @@ class _RequestContextCard extends StatelessWidget {
 Future<void> _assignRequest(
   BuildContext context,
   WidgetRef ref,
-  int requestId,
-) async {
+  int requestId, {
+  required bool hasAssignedUser,
+}) async {
   try {
     final repository = ref.read(siteRequestsRepositoryProvider);
     final assignees = await repository.fetchAssignees(requestId);
@@ -505,11 +511,25 @@ Future<void> _assignRequest(
       builder:
           (sheetContext) => SafeArea(
             child: ListView(
+              shrinkWrap: true,
               children: [
-                ListTile(
-                  title: const Text('Снять исполнителя'),
-                  onTap: () => Navigator.pop(sheetContext, -1),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
+                  child: Text(
+                    'Исполнители объекта',
+                    style: AppTypography.h2(sheetContext),
+                  ),
                 ),
+                if (assignees.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.fromLTRB(20, 4, 20, 20),
+                    child: Text('Нет активных участников объекта'),
+                  ),
+                if (hasAssignedUser)
+                  ListTile(
+                    title: const Text('Снять исполнителя'),
+                    onTap: () => Navigator.pop(sheetContext, -1),
+                  ),
                 ...assignees.map((user) {
                   final id = int.tryParse(user['id']?.toString() ?? '');
                   return ListTile(
@@ -707,6 +727,13 @@ class _RequestActorsCard extends StatelessWidget {
               label: 'Исполнитель',
               value: request.assignedUserName!,
             ),
+          if (request.assignedUserId != null &&
+              (request.assignedUserName ?? '').trim().isEmpty)
+            _ParamRow(
+              icon: Icons.assignment_ind_outlined,
+              label: 'Исполнитель',
+              value: 'Не отображается среди активных участников',
+            ),
           if (onAssign != null)
             Align(
               alignment: Alignment.centerLeft,
@@ -717,7 +744,8 @@ class _RequestActorsCard extends StatelessWidget {
               ),
             ),
           if ((request.userName ?? '').trim().isEmpty &&
-              (request.assignedUserName ?? '').trim().isEmpty)
+              (request.assignedUserName ?? '').trim().isEmpty &&
+              request.assignedUserId == null)
             Text(
               'Исполнитель пока не назначен.',
               style: AppTypography.bodyMedium(context),

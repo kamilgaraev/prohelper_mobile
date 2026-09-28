@@ -344,6 +344,49 @@ void main() {
     },
   );
 
+  testWidgets('queued draft is announced without an error notice', (
+    tester,
+  ) async {
+    await _pumpJournalForm(
+      tester,
+      width: 360,
+      textScale: 1,
+      failCreateOffline: true,
+    );
+
+    await tester.tap(find.text('Дата записи'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('OK'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField &&
+            widget.decoration?.labelText == 'Описание работ',
+      ),
+      'Работы для очереди',
+    );
+    await tester.scrollUntilVisible(
+      find.text('Сохранить черновик'),
+      400,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.ensureVisible(find.text('Сохранить черновик'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Сохранить черновик'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Восстановление записи'), findsOneWidget);
+    expect(find.text('В очереди'), findsOneWidget);
+    expect(
+      find.text('Будет отправлено при восстановлении связи'),
+      findsWidgets,
+    );
+    expect(find.text('Продолжить отправку'), findsOneWidget);
+    expect(find.byKey(const ValueKey('app-error-notice')), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('shows notice when known ID cannot be checked offline', (
     tester,
   ) async {
@@ -545,6 +588,7 @@ Future<void> _pumpJournalForm(
   required double width,
   required double textScale,
   bool failFirstOptionsRequest = false,
+  bool failCreateOffline = false,
   bool includeLongEstimateOptions = false,
   void Function(Map<String, dynamic>)? onEntryCreate,
 }) async {
@@ -561,6 +605,15 @@ Future<void> _pumpJournalForm(
           InterceptorsWrapper(
             onRequest: (options, handler) {
               if (options.path.endsWith('/entries')) {
+                if (failCreateOffline) {
+                  handler.reject(
+                    DioException(
+                      requestOptions: options,
+                      type: DioExceptionType.connectionError,
+                    ),
+                  );
+                  return;
+                }
                 final payload = options.data;
                 if (payload is Map) {
                   onEntryCreate?.call(Map<String, dynamic>.from(payload));

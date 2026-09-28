@@ -64,8 +64,10 @@ void main() {
       expect(list.data?.single.title, 'Аренда лесов');
       expect(detail.data?.title, 'Аренда лесов');
       expect(restoredList.data?.single.title, 'Аренда лесов');
+      expect(restoredList.data?.single.assignedUserId, 23);
       expect(restoredList.fromCache, isTrue);
       expect(restoredDetail.data?.title, 'Аренда лесов');
+      expect(restoredDetail.data?.assignedUserId, 23);
       expect(restoredDetail.fromCache, isTrue);
       expect(mismatchedFilter.presence, SnapshotPresence.missing);
       expect(otherProject.presence, SnapshotPresence.missing);
@@ -250,6 +252,7 @@ class _SiteRequestsRepository extends SiteRequestsRepository {
 final _request = <String, dynamic>{
   'id': 42,
   'project_id': 15,
+  'assigned_to': 23,
   'title': 'Аренда лесов',
   'status': 'pending',
   'status_label': 'На согласовании',

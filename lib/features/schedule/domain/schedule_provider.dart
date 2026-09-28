@@ -4,6 +4,7 @@ import '../../../core/network/api_exception.dart';
 import '../../../core/storage/entity_snapshot_provider.dart';
 import '../../../core/storage/snapshot_read.dart';
 import '../../../core/sync/sync_queue_provider.dart';
+import '../../auth/domain/auth_provider.dart';
 import '../../projects/domain/projects_provider.dart';
 import '../data/schedule_model.dart';
 import '../data/schedule_repository.dart';
@@ -305,6 +306,11 @@ class DailyWorkPlansState {
 
 final dailyWorkPlansProvider =
     StateNotifierProvider<DailyWorkPlansNotifier, DailyWorkPlansState>((ref) {
+      ref.watch(
+        authProvider.select(
+          (state) => state is AuthAuthenticated ? state.sessionIdentity : null,
+        ),
+      );
       return DailyWorkPlansNotifier(
         ref.read(scheduleRepositoryProvider),
         snapshotAdapter: ref.read(scheduleSnapshotAdapterProvider),
@@ -320,18 +326,36 @@ class DailyWorkPlansNotifier extends StateNotifier<DailyWorkPlansState> {
 
   final ScheduleRepository _repository;
   final ScheduleSnapshotAdapter? _snapshotAdapter;
+  int _loadGeneration = 0;
+
+  bool _isCurrentLoad(int generation, int projectId) {
+    return mounted &&
+        generation == _loadGeneration &&
+        state.projectId == projectId;
+  }
 
   Future<void> load({required int? projectId}) async {
+    if (!mounted) return;
+    final generation = ++_loadGeneration;
     if (projectId == null) {
+      if (!mounted || generation != _loadGeneration) return;
       state = const DailyWorkPlansState(error: 'Сначала выберите объект.');
       return;
     }
 
+    final isSameProject = state.projectId == projectId;
+    final retainedPlans =
+        isSameProject ? state.plans : const <DailyWorkPlanModel>[];
+    final retainedFromCache = isSameProject && state.fromCache;
+    final retainedHasDirtyLocal = isSameProject && state.hasDirtyLocal;
     state = state.copyWith(
       isLoading: true,
       permissionDenied: false,
       error: null,
       projectId: projectId,
+      plans: retainedPlans,
+      fromCache: retainedFromCache,
+      hasDirtyLocal: retainedHasDirtyLocal,
     );
 
     try {
@@ -341,19 +365,32 @@ class DailyWorkPlansNotifier extends StateNotifier<DailyWorkPlansState> {
           online: true,
           projectId: projectId,
         );
+        if (!_isCurrentLoad(generation, projectId)) return;
         final denied = read.presence == SnapshotPresence.permissionDenied;
+        final preserveCurrent =
+            !denied && read.retainCurrentData && retainedPlans.isNotEmpty;
         state = state.copyWith(
           isLoading: false,
           plans:
-              denied ? const <DailyWorkPlanModel>[] : (read.data ?? const []),
+              denied
+                  ? const <DailyWorkPlanModel>[]
+                  : preserveCurrent
+                  ? retainedPlans
+                  : (read.data ?? const []),
           permissionDenied: denied,
-          fromCache: read.fromCache,
-          hasDirtyLocal: read.hasDirtyLocal,
+          fromCache:
+              !denied &&
+              (read.fromCache || (preserveCurrent && retainedFromCache)),
+          hasDirtyLocal:
+              !denied &&
+              (read.hasDirtyLocal ||
+                  (preserveCurrent && retainedHasDirtyLocal)),
           error: read.error,
         );
         return;
       }
       final plans = await _repository.fetchDailyWorkPlans(projectId: projectId);
+      if (!_isCurrentLoad(generation, projectId)) return;
       state = state.copyWith(
         isLoading: false,
         plans: plans,
@@ -361,11 +398,14 @@ class DailyWorkPlansNotifier extends StateNotifier<DailyWorkPlansState> {
         hasDirtyLocal: false,
       );
     } catch (error) {
+      if (!_isCurrentLoad(generation, projectId)) return;
+      final denied = _isDailyPlansPermissionDenied(error);
       state = state.copyWith(
         isLoading: false,
-        permissionDenied: _isPermissionDenied(error),
-        fromCache: false,
-        hasDirtyLocal: false,
+        plans: denied ? const <DailyWorkPlanModel>[] : retainedPlans,
+        permissionDenied: denied,
+        fromCache: !denied && retainedFromCache,
+        hasDirtyLocal: !denied && retainedHasDirtyLocal,
         error: _errorMessage(error),
       );
     }
@@ -375,38 +415,50 @@ class DailyWorkPlansNotifier extends StateNotifier<DailyWorkPlansState> {
     DailyWorkPlanAssignmentModel assignment,
     DailyWorkFactInput input,
   ) async {
+    if (!mounted) return;
+    final projectId = state.projectId;
     final updatedAssignment = await _repository.recordDailyWorkFact(
       assignmentId: assignment.id,
       input: input,
     );
 
+    if (!mounted || projectId == null || state.projectId != projectId) return;
     state = state.copyWith(
-      plans:
-          state.plans
-              .map(
-                (plan) => DailyWorkPlanModel(
-                  id: plan.id,
-                  projectId: plan.projectId,
-                  scheduleId: plan.scheduleId,
-                  lookaheadPlanId: plan.lookaheadPlanId,
-                  scheduleName: plan.scheduleName,
-                  workDate: plan.workDate,
-                  status: plan.status,
-                  statusLabel: plan.statusLabel,
-                  availableActions: plan.availableActions,
-                  assignments:
-                      plan.assignments
-                          .map(
-                            (item) =>
-                                item.id == updatedAssignment.id
-                                    ? updatedAssignment
-                                    : item,
-                          )
-                          .toList(),
-                ),
-              )
-              .toList(),
+      plans: _mergeAssignment(state.plans, updatedAssignment),
     );
+
+    await load(projectId: projectId);
+  }
+
+  List<DailyWorkPlanModel> _mergeAssignment(
+    List<DailyWorkPlanModel> plans,
+    DailyWorkPlanAssignmentModel updatedAssignment,
+  ) {
+    return plans
+        .map(
+          (plan) => DailyWorkPlanModel(
+            id: plan.id,
+            projectId: plan.projectId,
+            scheduleId: plan.scheduleId,
+            lookaheadPlanId: plan.lookaheadPlanId,
+            scheduleName: plan.scheduleName,
+            workDate: plan.workDate,
+            status: plan.status,
+            statusLabel: plan.statusLabel,
+            submitBlockers: plan.submitBlockers,
+            availableActions: plan.availableActions,
+            assignments:
+                plan.assignments
+                    .map(
+                      (item) =>
+                          item.id == updatedAssignment.id
+                              ? updatedAssignment
+                              : item,
+                    )
+                    .toList(),
+          ),
+        )
+        .toList();
   }
 
   Future<void> createLinkedConstraintAction(
@@ -424,12 +476,15 @@ class DailyWorkPlansNotifier extends StateNotifier<DailyWorkPlansState> {
   }
 
   Future<void> submit(DailyWorkPlanModel plan, {String? summaryComment}) async {
+    if (!mounted) return;
+    final projectId = state.projectId;
     final updatedPlan = await _repository.submitDailyWorkPlan(
       dailyPlanId: plan.id,
       summaryComment:
           summaryComment?.trim().isEmpty == true ? null : summaryComment,
     );
 
+    if (!mounted || projectId == null || state.projectId != projectId) return;
     state = state.copyWith(
       plans:
           state.plans
@@ -441,6 +496,11 @@ class DailyWorkPlansNotifier extends StateNotifier<DailyWorkPlansState> {
 
 bool _isPermissionDenied(Object error) {
   return error is ApiException && error.statusCode == 403;
+}
+
+bool _isDailyPlansPermissionDenied(Object error) {
+  return error is ApiException &&
+      (error.statusCode == 401 || error.statusCode == 403);
 }
 
 String _errorMessage(Object error) {

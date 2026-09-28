@@ -1211,7 +1211,13 @@ class _JournalEntryFormScreenState
         if (_formScrollController.hasClients) {
           _formScrollController.jumpTo(0);
         }
-        if (mounted) AppErrorNotice.show(context, error);
+        if (mounted) {
+          if (error is SyncQueuedException && !error.requiresReview) {
+            _showMessage(error.message);
+          } else {
+            AppErrorNotice.show(context, error);
+          }
+        }
       }
     } finally {
       if (mounted) {

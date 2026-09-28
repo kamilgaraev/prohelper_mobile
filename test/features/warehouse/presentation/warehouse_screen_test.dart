@@ -6,6 +6,9 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:prohelpers_mobile/core/network/api_exception.dart';
+import 'package:prohelpers_mobile/core/models/user_context.dart';
+import 'package:prohelpers_mobile/core/providers/module_provider.dart';
+import 'package:prohelpers_mobile/core/services/permission_service.dart';
 import 'package:prohelpers_mobile/core/theme/pro_theme.dart';
 import 'package:prohelpers_mobile/core/widgets/pro_metric_tile.dart';
 import 'package:prohelpers_mobile/features/warehouse/data/warehouse_media_picker.dart';
@@ -14,14 +17,13 @@ import 'package:prohelpers_mobile/features/warehouse/data/warehouse_summary_mode
 import 'package:prohelpers_mobile/features/warehouse/domain/warehouse_provider.dart';
 import 'package:prohelpers_mobile/features/warehouse/presentation/warehouse_receipt_sheet.dart';
 import 'package:prohelpers_mobile/features/warehouse/presentation/warehouse_screen.dart';
-import 'package:prohelpers_mobile/features/auth/data/user_model.dart';
-import 'package:prohelpers_mobile/features/auth/domain/auth_provider.dart';
-import '../../../helpers/mobile_integration_test_helpers.dart';
 
 class _FakeWarehouseRepository extends WarehouseRepository {
-  _FakeWarehouseRepository({this.summary = _summary}) : super(Dio());
+  _FakeWarehouseRepository({this.summary = _summary, this.balanceQuantity = 15})
+    : super(Dio());
 
   final WarehouseSummaryModel summary;
+  final double balanceQuantity;
 
   WarehouseReceiptPayload? createdReceipt;
   Object? createReceiptError;
@@ -35,22 +37,22 @@ class _FakeWarehouseRepository extends WarehouseRepository {
 
   @override
   Future<List<WarehouseBalanceModel>> fetchBalances(int warehouseId) async {
-    return const [
+    return [
       WarehouseBalanceModel(
         warehouseId: 1,
         warehouseName: 'Основной склад',
         materialId: 7,
         materialName: 'Цемент М500',
-        availableQuantity: 15,
+        availableQuantity: balanceQuantity,
         reservedQuantity: 2,
-        totalQuantity: 17,
+        totalQuantity: balanceQuantity + 2,
         averagePrice: 320,
         totalValue: 4800,
         isLowStock: false,
-        photoGallery: [
+        photoGallery: const [
           WarehousePhotoModel(id: 1, url: 'https://example.com/balance.jpg'),
         ],
-        assetPhotoGallery: [],
+        assetPhotoGallery: const [],
         measurementUnit: 'меш.',
       ),
     ];
@@ -246,7 +248,56 @@ const _narrowWarehouseSummary = WarehouseSummaryModel(
   recentMovements: [],
 );
 
+WarehouseSummaryModel _summaryWithMovementQuantity(double quantity) {
+  final movement = _summary.recentMovements.single;
+  return WarehouseSummaryModel(
+    summary: _summary.summary,
+    warehouses: _summary.warehouses,
+    recentMovements: [
+      WarehouseMovementModel(
+        id: movement.id,
+        movementType: movement.movementType,
+        movementTypeLabel: movement.movementTypeLabel,
+        quantity: quantity,
+        price: movement.price,
+        photoGallery: movement.photoGallery,
+        warehouseName: movement.warehouseName,
+        materialName: movement.materialName,
+        measurementUnit: movement.measurementUnit,
+        projectName: movement.projectName,
+        documentNumber: movement.documentNumber,
+        reason: movement.reason,
+        movementDate: movement.movementDate,
+      ),
+    ],
+  );
+}
+
 void main() {
+  testWidgets('keeps thousandth precision for movement and balance', (
+    tester,
+  ) async {
+    final repository = _FakeWarehouseRepository(
+      summary: _summaryWithMovementQuantity(0.001),
+      balanceQuantity: 0.001,
+    );
+    await _pumpWarehouseScreen(
+      tester,
+      repository: repository,
+      mediaPicker: _FakeMediaPicker(),
+    );
+
+    await _ensureVisible(tester, find.text('0.001 меш.'));
+    expect(find.text('0.001 меш.'), findsOneWidget);
+
+    final balancesButton = find.text('Остатки').last;
+    await _ensureVisible(tester, balancesButton);
+    await tester.tap(balancesButton);
+    await tester.pumpAndSettle();
+
+    expect(find.text('0.001 меш.'), findsNWidgets(2));
+  });
+
   testWidgets('warehouse metric grid adapts to narrow and regular widths', (
     tester,
   ) async {
@@ -332,6 +383,7 @@ void main() {
       repository: _FakeWarehouseRepository(),
       mediaPicker: _FakeMediaPicker(),
       textScale: 1.3,
+      permissions: const {'warehouse.receipts'},
     );
 
     await tester.scrollUntilVisible(
@@ -598,7 +650,7 @@ void main() {
 
     expect(find.text('Склад'), findsOneWidget);
     expect(find.byType(FloatingActionButton), findsNothing);
-    expect(find.text('Оприходовать'), findsOneWidget);
+    expect(find.text('Оприходовать'), findsNothing);
     await _ensureVisible(tester, find.text('Склады'));
     expect(find.text('Склады'), findsOneWidget);
     expect(find.text('Основной склад'), findsWidgets);
@@ -613,6 +665,7 @@ void main() {
       tester,
       repository: _FakeWarehouseRepository(),
       mediaPicker: _FakeMediaPicker(cameraPath: '/tmp/camera-photo.jpg'),
+      permissions: const {'warehouse.receipts'},
     );
 
     await tester.tap(find.text('Оприходовать'));
@@ -743,6 +796,81 @@ void main() {
       semantics.dispose();
     }
   });
+
+  testWidgets('warehouse entries stay hidden without their grants', (
+    tester,
+  ) async {
+    await _pumpWarehouseScreen(
+      tester,
+      repository: _FakeWarehouseRepository(),
+      mediaPicker: _FakeMediaPicker(),
+    );
+
+    expect(find.text('Оприходовать'), findsNothing);
+    expect(find.text('У меня на ответственности'), findsNothing);
+    await _ensureVisible(tester, find.text('Остатки').last);
+    expect(find.widgetWithText(FilledButton, 'Приход'), findsNothing);
+    await tester.tap(find.text('Остатки').last);
+    await tester.pumpAndSettle();
+    expect(find.widgetWithText(FilledButton, 'Приход'), findsNothing);
+    expect(find.widgetWithText(OutlinedButton, 'Списать'), findsNothing);
+  });
+
+  testWidgets('write-off permission enables write-off without receipt grant', (
+    tester,
+  ) async {
+    await _pumpWarehouseScreen(
+      tester,
+      repository: _FakeWarehouseRepository(),
+      mediaPicker: _FakeMediaPicker(),
+      permissions: const {'warehouse.write_offs'},
+    );
+
+    expect(find.text('Оприходовать'), findsNothing);
+    final balancesButton = find.widgetWithText(OutlinedButton, 'Остатки');
+    await _ensureVisible(tester, balancesButton);
+    await tester.tap(balancesButton);
+    await tester.pumpAndSettle();
+    expect(find.widgetWithText(OutlinedButton, 'Списать'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, 'Приход'), findsNothing);
+  });
+
+  testWidgets('receipt grant exposes all warehouse receipt entry points', (
+    tester,
+  ) async {
+    await _pumpWarehouseScreen(
+      tester,
+      repository: _FakeWarehouseRepository(),
+      mediaPicker: _FakeMediaPicker(),
+      permissions: const {'warehouse.receipts'},
+    );
+
+    expect(find.text('Оприходовать'), findsOneWidget);
+    await _ensureVisible(tester, find.text('Материалы на объект'));
+    expect(find.text('Материалы на объект'), findsOneWidget);
+    await _ensureVisible(
+      tester,
+      find.widgetWithText(OutlinedButton, 'Остатки'),
+    );
+    expect(find.widgetWithText(FilledButton, 'Приход'), findsOneWidget);
+    await tester.tap(find.widgetWithText(OutlinedButton, 'Остатки'));
+    await tester.pumpAndSettle();
+    expect(find.widgetWithText(FilledButton, 'Приход'), findsNWidgets(2));
+  });
+
+  testWidgets('granular custody-view grant exposes custody entry', (
+    tester,
+  ) async {
+    await _pumpWarehouseScreen(
+      tester,
+      repository: _FakeWarehouseRepository(),
+      mediaPicker: _FakeMediaPicker(),
+      permissions: const {'warehouse.view_custody'},
+    );
+
+    await _ensureVisible(tester, find.text('У меня на ответственности'));
+    expect(find.text('У меня на ответственности'), findsOneWidget);
+  });
 }
 
 Future<void> _pumpWarehouseScreen(
@@ -751,17 +879,12 @@ Future<void> _pumpWarehouseScreen(
   required _FakeMediaPicker mediaPicker,
   double textScale = 1,
   bool canWriteOff = false,
+  Set<String> permissions = const <String>{},
 }) async {
-  final user =
-      User()
-        ..serverId = 1
-        ..email = 'warehouse@test.local'
-        ..name = 'Пользователь'
-        ..organizationName = 'МОСТ'
-        ..organizationsJson = '[]'
-        ..roles = const []
-        ..permissionsJson =
-            canWriteOff ? '{"warehouse":["manage_stock"]}' : '{}';
+  final grants = <String>{
+    ...permissions,
+    if (canWriteOff) 'warehouse.manage_stock',
+  };
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
@@ -770,14 +893,13 @@ Future<void> _pumpWarehouseScreen(
         warehouseProvider.overrideWith(
           (ref) => _FakeWarehouseNotifier(repository),
         ),
-        if (canWriteOff)
-          authProvider.overrideWith(
-            (ref) => TestAuthNotifier(
-              user: user,
-              storage: MemorySecureStorageService(),
-              authenticated: true,
-            ),
+        permissionServiceProvider.overrideWithValue(
+          PermissionService(
+            context: UserContext.field,
+            activeModules: const {AppModule.basicWarehouse},
+            grantedPermissions: grants,
           ),
+        ),
       ],
       child: MaterialApp(
         theme: MostTheme.lightTheme,

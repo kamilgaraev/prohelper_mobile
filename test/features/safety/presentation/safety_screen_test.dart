@@ -274,6 +274,74 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('permit details action remains tappable at 360dp', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(360, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(buildScreen(_RecordingSafetyRepository()));
+    await pumpUi(tester);
+    final details = find.text('Подробнее');
+    await tester.scrollUntilVisible(
+      details,
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.ensureVisible(details);
+    await tester.pump();
+
+    final detailsButton = find.ancestor(
+      of: details.first,
+      matching: find.byType(OutlinedButton),
+    );
+    final detailsRect = tester.getRect(detailsButton);
+    final fabRect = tester.getRect(find.byType(FloatingActionButton));
+    expect(detailsRect.overlaps(fabRect), isFalse);
+
+    await tester.tapAt(detailsRect.center);
+    await pumpUi(tester);
+    expect(find.text('Наряд-допуск'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('safety actions remain reachable at 240dp and large text', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(240, 426);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      buildScreen(_RecordingSafetyRepository(), textScale: 1.3),
+    );
+    await pumpUi(tester);
+    expect(find.byType(FloatingActionButton), findsNothing);
+    expect(find.widgetWithText(FilledButton, 'Новая запись'), findsOneWidget);
+
+    final details = find.text('Подробнее');
+    await tester.scrollUntilVisible(
+      details,
+      120,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.ensureVisible(details);
+    await tester.pump();
+    final detailsButton = find.ancestor(
+      of: details,
+      matching: find.byType(OutlinedButton),
+    );
+    final detailsRect = tester.getRect(detailsButton);
+    await tester.tapAt(detailsRect.center);
+    await pumpUi(tester);
+
+    expect(find.text('Наряд-допуск'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('submits incident type and visible occurrence time', (
     tester,
   ) async {

@@ -305,6 +305,56 @@ void main() {
     },
   );
 
+  testWidgets('procurement card remains tappable at 240dp and large text', (
+    tester,
+  ) async {
+    final repository = _RecordingProcurementRepository();
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(240, 426);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      buildApp(
+        const MediaQuery(
+          data: MediaQueryData(
+            size: Size(240, 426),
+            textScaler: TextScaler.linear(1.3),
+          ),
+          child: ProcurementScreen(),
+        ),
+        repository,
+        selectedProject: project(),
+      ),
+    );
+    await pumpUi(tester);
+    expect(find.byType(FloatingActionButton), findsNothing);
+    final createRequest = find.text('Заявка на закупку');
+    await tester.scrollUntilVisible(
+      createRequest,
+      120,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.ensureVisible(createRequest);
+    await tester.pump();
+    expect(createRequest, findsOneWidget);
+    final request = find.text('Поставка бетона');
+    await tester.scrollUntilVisible(
+      request,
+      120,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.ensureVisible(request.first);
+    await tester.pump();
+    final requestRect = tester.getRect(request.first);
+    await tester.tapAt(requestRect.center);
+    await pumpUi(tester);
+
+    expect(repository.fetchedPurchaseRequestId, 12);
+    expect(find.text('Состав заявки'), findsWidgets);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('submits approval and rejection from summary', (tester) async {
     final repository = _RecordingProcurementRepository();
     useLargeSurface(tester);

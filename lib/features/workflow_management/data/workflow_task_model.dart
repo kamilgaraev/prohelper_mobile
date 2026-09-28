@@ -106,6 +106,8 @@ class WorkflowTaskModel {
     this.totalAmount,
     this.completionDate,
     this.notes,
+    this.workName,
+    this.description,
   });
 
   final int id;
@@ -136,6 +138,8 @@ class WorkflowTaskModel {
   final double? totalAmount;
   final String? completionDate;
   final String? notes;
+  final String? workName;
+  final String? description;
   final String status;
   final String statusLabel;
   final List<String> availableActions;
@@ -146,6 +150,11 @@ class WorkflowTaskModel {
   final String updatedAt;
 
   String get title {
+    final workName = this.workName?.trim();
+    if (workName != null && workName.isNotEmpty) {
+      return workName;
+    }
+
     final workType = workTypeLabel?.trim();
     if (workType != null && workType.isNotEmpty) {
       return workType;
@@ -160,6 +169,9 @@ class WorkflowTaskModel {
   bool get canComment => availableActions.contains('comment');
 
   factory WorkflowTaskModel.fromJson(Map<String, dynamic> json) {
+    final status = _requiredStringIn(json, 'status', _workflowStatuses);
+    final statusLabel = _nullableString(json['status_label']);
+
     return WorkflowTaskModel(
       id: _requiredInt(json, 'id'),
       organizationId: _requiredInt(json, 'organization_id'),
@@ -195,8 +207,14 @@ class WorkflowTaskModel {
       totalAmount: _nullableDouble(json['total_amount']),
       completionDate: _nullableString(json['completion_date']),
       notes: _nullableString(json['notes']),
-      status: _requiredStringIn(json, 'status', _workflowStatuses),
-      statusLabel: _requiredString(json, 'status_label'),
+      workName: _nullableString(json['work_name']),
+      description: _nullableString(json['description']),
+      status: status,
+      statusLabel:
+          statusLabel ??
+          (status == 'in_review'
+              ? 'На проверке'
+              : _requiredString(json, 'status_label')),
       availableActions: _requiredStringListIn(
         json,
         'available_actions',

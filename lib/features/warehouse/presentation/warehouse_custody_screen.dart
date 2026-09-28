@@ -2,9 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/error/user_message.dart';
+import '../../../core/providers/module_provider.dart';
+import '../../../core/services/permission_service.dart';
 import '../../../core/sync/sync_queue_service.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_typography.dart';
+import '../../../core/utils/quantity_format.dart';
 import '../../../core/widgets/app_empty_state.dart';
 import '../../../core/widgets/app_error_notice.dart';
 import '../../../core/widgets/industrial_card.dart';
@@ -67,6 +70,25 @@ class _WarehouseCustodyScreenState
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(warehouseProvider);
+    final permissions = ref.watch(permissionServiceProvider);
+    final canReceiveMaterials =
+        permissions.canAccessModule(AppModule.basicWarehouse) &&
+        permissions.hasAnyPermission(const [
+          'warehouse.receipts',
+          'warehouse.manage_stock',
+        ]);
+    final canIssueToResponsible =
+        permissions.canAccessModule(AppModule.basicWarehouse) &&
+        permissions.hasAnyPermission(const [
+          'warehouse.issue_to_responsible',
+          'warehouse.manage_stock',
+        ]);
+    final canReturnFromResponsible =
+        permissions.canAccessModule(AppModule.basicWarehouse) &&
+        permissions.hasAnyPermission(const [
+          'warehouse.return_from_responsible',
+          'warehouse.manage_stock',
+        ]);
     final selectedProject = ref.watch(projectsProvider).selectedProject;
     final stock = state.projectMaterialStock;
     final projectStockItems =
@@ -112,7 +134,10 @@ class _WarehouseCustodyScreenState
                   padding: const EdgeInsets.only(bottom: 12),
                   child: _CustodyBalanceCard(
                     balance: balance,
-                    onReturn: () => _showReturnSheet(balance),
+                    onReturn:
+                        canReturnFromResponsible
+                            ? () => _showReturnSheet(balance)
+                            : null,
                     onConsume: _openConstructionJournal,
                   ),
                 ),
@@ -139,7 +164,10 @@ class _WarehouseCustodyScreenState
                   padding: const EdgeInsets.only(bottom: 12),
                   child: _ProjectStockCard(
                     stock: item,
-                    onIssue: () => _showIssueSheet(item),
+                    onIssue:
+                        canIssueToResponsible
+                            ? () => _showIssueSheet(item)
+                            : null,
                   ),
                 ),
               ),
@@ -187,7 +215,7 @@ class _WarehouseCustodyScreenState
                               child: _DeliveryCard(
                                 delivery: delivery,
                                 onReceive:
-                                    delivery.canReceive
+                                    canReceiveMaterials && delivery.canReceive
                                         ? () => _showReceiveSheet(delivery)
                                         : null,
                               ),
@@ -397,7 +425,7 @@ class _CustodyBalanceCard extends StatelessWidget {
   });
 
   final WarehouseCustodyBalanceModel balance;
-  final VoidCallback onReturn;
+  final VoidCallback? onReturn;
   final VoidCallback onConsume;
 
   @override
@@ -431,14 +459,16 @@ class _CustodyBalanceCard extends StatelessWidget {
                   label: const Text('Списать в работу'),
                 ),
               ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: onReturn,
-                  icon: const Icon(Icons.keyboard_return_outlined),
-                  label: const Text('Вернуть на объект'),
+              if (onReturn != null) ...[
+                const SizedBox(width: 8),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: onReturn,
+                    icon: const Icon(Icons.keyboard_return_outlined),
+                    label: const Text('Вернуть на объект'),
+                  ),
                 ),
-              ),
+              ],
             ],
           ),
         ],
@@ -451,7 +481,7 @@ class _ProjectStockCard extends StatelessWidget {
   const _ProjectStockCard({required this.stock, required this.onIssue});
 
   final ProjectMaterialStockItemModel stock;
-  final VoidCallback onIssue;
+  final VoidCallback? onIssue;
 
   @override
   Widget build(BuildContext context) {
@@ -472,15 +502,17 @@ class _ProjectStockCard extends StatelessWidget {
             '${_formatQuantity(stock.onProjectQuantity)} ${stock.materialUnit ?? ''}',
             style: AppTypography.h2(context),
           ),
-          const SizedBox(height: 12),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton.icon(
-              onPressed: onIssue,
-              icon: const Icon(Icons.assignment_ind_outlined),
-              label: const Text('Взять под ответственность'),
+          if (onIssue != null) ...[
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: onIssue,
+                icon: const Icon(Icons.assignment_ind_outlined),
+                label: const Text('Взять под ответственность'),
+              ),
             ),
-          ),
+          ],
         ],
       ),
     );
@@ -614,5 +646,5 @@ class _InlineLoading extends StatelessWidget {
 }
 
 String _formatQuantity(double value) {
-  return value.toStringAsFixed(value.truncateToDouble() == value ? 0 : 2);
+  return formatQuantity(value, maxFractionDigits: 3);
 }

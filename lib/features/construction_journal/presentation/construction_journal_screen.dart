@@ -44,10 +44,6 @@ class _ConstructionJournalScreenState
           ConstructionJournalActionKeys.create,
         ) &&
         selectedProject != null;
-    final compactAction =
-        MediaQuery.sizeOf(context).width < 400 &&
-        MediaQuery.textScalerOf(context).scale(1) > 1.15;
-
     Future<void> createJournal() async {
       if (selectedProject == null) return;
       final created = await Navigator.of(context).push<bool>(
@@ -62,15 +58,17 @@ class _ConstructionJournalScreenState
     }
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Журнал работ')),
-      floatingActionButton:
-          canCreate && !compactAction
-              ? FloatingActionButton.extended(
-                onPressed: createJournal,
-                icon: const Icon(Icons.add_rounded),
-                label: const Text('Новый журнал'),
-              )
-              : null,
+      appBar: AppBar(
+        title: const Text('Журнал работ'),
+        actions: [
+          if (canCreate)
+            IconButton(
+              tooltip: 'Новый журнал',
+              onPressed: createJournal,
+              icon: const Icon(Icons.add_rounded),
+            ),
+        ],
+      ),
       body: RefreshIndicator(
         onRefresh:
             () => ref
@@ -121,17 +119,6 @@ class _ConstructionJournalScreenState
                               ? ProStatusTone.warning
                               : ProStatusTone.info,
                       fullText: true,
-                    ),
-                  ),
-                ),
-              if (canCreate && compactAction)
-                SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-                  sliver: SliverToBoxAdapter(
-                    child: FilledButton.icon(
-                      onPressed: createJournal,
-                      icon: const Icon(Icons.add_rounded),
-                      label: const Text('Новый журнал'),
                     ),
                   ),
                 ),
