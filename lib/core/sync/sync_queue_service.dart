@@ -957,6 +957,9 @@ class SyncQueueService {
         path == '/production-labor/output-entries',
       ('quality_control', 'create_defect') =>
         path == '/quality-control/defects',
+      ('quality_control', 'resolve_defect') => RegExp(
+        r'^/quality-control/defects/\d+/resolve$',
+      ).hasMatch(path),
       ('safety', 'create_incident') => path == '/safety-management/incidents',
       ('safety', 'create_violation') => path == '/safety-management/violations',
       ('safety', 'create_inspection_finding') =>
@@ -993,7 +996,11 @@ class SyncQueueService {
     List<String> temporaryAttachments,
   ) async {
     final attachments = operation.attachments;
-    final payload = operation.payload;
+    final payload =
+        operation.moduleSlug == 'quality_control' &&
+                operation.operationType == 'resolve_defect'
+            ? Map<String, dynamic>.from(operation.payload)
+            : operation.payload;
     payload.remove('queue_scope');
     payload.remove('queue_owner_identity');
     payload.remove('queue_session_id');
@@ -1031,6 +1038,13 @@ class SyncQueueService {
       ]) {
         payload.remove(key);
       }
+    }
+    if (operation.moduleSlug == 'quality_control' &&
+        operation.operationType == 'resolve_defect' &&
+        RegExp(r'^/quality-control/defects/\d+/resolve$').hasMatch(
+          Uri.tryParse(operation.endpoint)?.path ?? operation.endpoint,
+        )) {
+      payload.remove('idempotency_key');
     }
     if (attachments.isEmpty) {
       return payload;

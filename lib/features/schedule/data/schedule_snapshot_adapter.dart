@@ -1,10 +1,25 @@
 import '../../../core/storage/cached_entity_codec.dart';
 import '../../../core/storage/entity_snapshot_service.dart';
 import '../../../core/storage/entity_snapshot_store.dart';
+import '../../../core/network/api_exception.dart';
 import '../../../core/storage/snapshot_load.dart';
 import '../../../core/storage/snapshot_read.dart';
 import 'schedule_model.dart';
 import 'schedule_repository.dart';
+
+class ScheduleDailyPlansRead extends SnapshotRead<List<DailyWorkPlanModel>> {
+  const ScheduleDailyPlansRead({
+    required super.presence,
+    super.data,
+    super.error,
+    super.fromCache,
+    super.hasDirtyLocal,
+    super.hasMore,
+    this.retainCurrentData = false,
+  });
+
+  final bool retainCurrentData;
+}
 
 class ScheduleSnapshotAdapter {
   ScheduleSnapshotAdapter({
@@ -129,13 +144,13 @@ class ScheduleSnapshotAdapter {
     );
   }
 
-  Future<SnapshotRead<List<DailyWorkPlanModel>>> loadDailyPlans({
+  Future<ScheduleDailyPlansRead> loadDailyPlans({
     required bool online,
     required int projectId,
   }) async {
     final cached = await readDailyPlansCached(projectId: projectId);
     if (!online) {
-      return cached;
+      return _dailyPlansRead(cached);
     }
 
     EntitySnapshotService? service;
@@ -145,7 +160,7 @@ class ScheduleSnapshotAdapter {
       await _flushQueue?.call();
       final currentService = await _snapshots;
       final expectedOwner = currentService.currentOwner;
-      if (expectedOwner == null) return cached;
+      if (expectedOwner == null) return _dailyPlansRead(cached);
       service = currentService;
       owner = expectedOwner;
 
@@ -155,7 +170,7 @@ class ScheduleSnapshotAdapter {
           projectId: projectId,
         );
       } catch (error) {
-        permissionDeniedByFetch = isSnapshotPermissionDenied(error);
+        permissionDeniedByFetch = _isDailyPlansAccessDenied(error);
         rethrow;
       }
       final today = todayKey();
@@ -174,14 +189,14 @@ class ScheduleSnapshotAdapter {
         ];
       }, expectedOwner: expectedOwner);
       final models = payloads.map(DailyWorkPlanModel.fromJson).toList();
-      return SnapshotRead(
+      return ScheduleDailyPlansRead(
         presence:
             models.isEmpty ? SnapshotPresence.empty : SnapshotPresence.ready,
         data: models,
         fromCache: false,
       );
     } catch (error) {
-      if (isSnapshotPermissionDenied(error)) {
+      if (_isDailyPlansAccessDenied(error)) {
         if (permissionDeniedByFetch && service != null && owner != null) {
           try {
             await service.invalidateScope(
@@ -191,7 +206,7 @@ class ScheduleSnapshotAdapter {
             );
           } catch (_) {}
         }
-        return SnapshotRead(
+        return ScheduleDailyPlansRead(
           presence: SnapshotPresence.permissionDenied,
           error: snapshotErrorMessage(
             error,
@@ -200,16 +215,17 @@ class ScheduleSnapshotAdapter {
         );
       }
       if (isSnapshotConflict(error)) {
-        return SnapshotRead(
+        return ScheduleDailyPlansRead(
           presence: SnapshotPresence.conflict,
           data: cached.data,
           error: SnapshotUserMessages.conflict,
           fromCache: cached.hasData,
           hasDirtyLocal: true,
+          retainCurrentData: true,
         );
       }
       if (isSnapshotOffline(error)) {
-        return SnapshotRead(
+        return ScheduleDailyPlansRead(
           presence: cached.presence,
           data: cached.data,
           error: snapshotErrorMessage(
@@ -218,16 +234,36 @@ class ScheduleSnapshotAdapter {
           ),
           fromCache: cached.hasData,
           hasDirtyLocal: cached.hasDirtyLocal,
+          retainCurrentData: true,
         );
       }
-      return SnapshotRead(
+      return ScheduleDailyPlansRead(
         presence: SnapshotPresence.error,
         error: snapshotErrorMessage(
           error,
           'Данные дневных планов пришли неполными. Обновите экран и повторите попытку.',
         ),
+        retainCurrentData: error is! SnapshotOwnerChangedException,
       );
     }
+  }
+
+  bool _isDailyPlansAccessDenied(Object error) {
+    return error is ApiException &&
+        (error.statusCode == 401 || error.statusCode == 403);
+  }
+
+  ScheduleDailyPlansRead _dailyPlansRead(
+    SnapshotRead<List<DailyWorkPlanModel>> read,
+  ) {
+    return ScheduleDailyPlansRead(
+      presence: read.presence,
+      data: read.data,
+      error: read.error,
+      fromCache: read.fromCache,
+      hasDirtyLocal: read.hasDirtyLocal,
+      hasMore: read.hasMore,
+    );
   }
 
   Future<SnapshotRead<List<DailyWorkPlanModel>>> readDailyPlansCached({

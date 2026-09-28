@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:prohelpers_mobile/core/widgets/industrial_card.dart';
 import 'package:prohelpers_mobile/features/construction_journal/data/construction_journal_models.dart';
 import 'package:prohelpers_mobile/features/construction_journal/data/construction_journal_repository.dart';
 import 'package:prohelpers_mobile/features/construction_journal/domain/construction_journal_provider.dart';
@@ -15,9 +16,19 @@ class _JournalRepository extends ConstructionJournalRepository {
 }
 
 class _JournalNotifier extends ConstructionJournalNotifier {
-  _JournalNotifier() : super(_JournalRepository()) {
+  _JournalNotifier({bool canCreate = false}) : super(_JournalRepository()) {
+    final actions =
+        canCreate
+            ? const [
+              ConstructionJournalActionModel(
+                action: ConstructionJournalActionKeys.create,
+                label: 'Создать журнал',
+              ),
+            ]
+            : const <ConstructionJournalActionModel>[];
     state = ConstructionJournalState(
-      items: const [
+      availableActions: actions,
+      items: [
         ConstructionJournalModel(
           id: 1,
           projectId: 9,
@@ -30,7 +41,7 @@ class _JournalNotifier extends ConstructionJournalNotifier {
           approvedEntries: 2,
           submittedEntries: 2,
           rejectedEntries: 1,
-          availableActions: [],
+          availableActions: actions,
         ),
       ],
       summary: const ConstructionJournalSummary(
@@ -101,6 +112,44 @@ void main() {
 
     expect(find.text(title), findsOneWidget);
     expect(find.text('Ожидает подтверждения заказчика'), findsOneWidget);
+    expect(find.byTooltip('Новый журнал'), findsNothing);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('journal creation stays in app bar above scrollable card', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(360, 800);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          projectsProvider.overrideWith((ref) => _ProjectsNotifier()),
+          constructionJournalProvider.overrideWith(
+            (ref) => _JournalNotifier(canCreate: true),
+          ),
+        ],
+        child: const MaterialApp(home: ConstructionJournalScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final createButton = find.byTooltip('Новый журнал');
+    expect(find.byType(FloatingActionButton), findsNothing);
+    expect(createButton, findsOneWidget);
+    await tester.drag(find.byType(CustomScrollView), const Offset(0, -2000));
+    await tester.pumpAndSettle();
+    final title = find.text(
+      'Журнал_монтажных_работ_северного_корпуса_секции_А',
+    );
+    final card =
+        find.ancestor(of: title, matching: find.byType(IndustrialCard)).first;
+    expect(
+      tester.getRect(card).overlaps(tester.getRect(createButton)),
+      isFalse,
+    );
+    expect(tester.getRect(card).contains(const Offset(316, 756)), isTrue);
   });
 }

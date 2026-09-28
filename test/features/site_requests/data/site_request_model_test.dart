@@ -58,6 +58,23 @@ void main() {
     },
   );
 
+  test('парсит assigned_to и использует ID relation как fallback', () {
+    final inactiveAssignee = SiteRequestModel.fromJson({
+      ...basePayload(),
+      'assigned_to': '88',
+      'assigned_user': null,
+    });
+    final relationFallback = SiteRequestModel.fromJson({
+      ...basePayload(),
+      'assigned_user': {'id': 91, 'name': 'Анна Сидорова'},
+    });
+
+    expect(inactiveAssignee.assignedUserId, 88);
+    expect(inactiveAssignee.assignedUserName, isNull);
+    expect(relationFallback.assignedUserId, 91);
+    expect(relationFallback.assignedUserName, 'Анна Сидорова');
+  });
+
   test('парсит закупочный контур только из актуальных snake_case полей', () {
     final model = SiteRequestModel.fromJson({
       ...basePayload(),

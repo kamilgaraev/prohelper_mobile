@@ -5,6 +5,7 @@ import '../../../core/error/user_message.dart';
 import '../../../core/sync/sync_queue_service.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_typography.dart';
+import '../../../core/utils/quantity_format.dart';
 import '../../../core/widgets/app_empty_state.dart';
 import '../../../core/widgets/app_error_notice.dart';
 import '../../../core/widgets/app_error_state.dart';
@@ -607,5 +608,5 @@ Color _statusColor(String status) {
 }
 
 String _formatQuantity(double value) {
-  return value.toStringAsFixed(value.truncateToDouble() == value ? 0 : 2);
+  return formatQuantity(value, maxFractionDigits: 3);
 }

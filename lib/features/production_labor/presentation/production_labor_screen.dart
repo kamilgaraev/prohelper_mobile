@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/theme/app_typography.dart';
+import '../../../core/utils/quantity_format.dart';
 import '../../../core/design/pro_status.dart';
 import '../../../core/widgets/app_action_buttons.dart';
 import '../../../core/widgets/app_empty_state.dart';
@@ -314,11 +315,11 @@ class _WorkOrderLineTile extends StatelessWidget {
           Text(line.name, style: AppTypography.bodyMedium(context)),
           const SizedBox(height: 4),
           Text(
-            'Принято ${_formatNumber(line.acceptedQuantity)} из ${_formatNumber(line.plannedQuantity)} ${line.unit}',
+            'Принято ${formatQuantity(line.acceptedQuantity)} из ${formatQuantity(line.plannedQuantity)} ${line.unit}',
             style: AppTypography.caption(context),
           ),
           Text(
-            'Осталось ${_formatNumber(line.remainingQuantity)} ${line.unit}',
+            'Осталось ${formatQuantity(line.remainingQuantity)} ${line.unit}',
             style: AppTypography.caption(context),
           ),
           if (shouldShowSafetyNotice) ...[
@@ -486,7 +487,7 @@ class _OutputSheetState extends State<_OutputSheet> {
           title: 'Данные факта',
           children: [
             Text(
-              'Осталось ${_formatNumber(widget.line.remainingQuantity)} ${widget.line.unit}',
+              'Осталось ${formatQuantity(widget.line.remainingQuantity)} ${widget.line.unit}',
               style: AppTypography.caption(context),
             ),
             const SizedBox(height: 12),
@@ -855,14 +856,6 @@ double? _parseOptionalDouble(String? value) {
 
 void _showLaborError(BuildContext context, Object error) {
   AppErrorNotice.show(context, error);
-}
-
-String _formatNumber(double value) {
-  if (value == value.roundToDouble()) {
-    return value.toInt().toString();
-  }
-
-  return value.toStringAsFixed(1);
 }
 
 String _safetyAdmissionLabel(String status) {

@@ -67,7 +67,7 @@ class _PendingSyncBody extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(
-            'Все операции отправлены',
+            'Нет неотправленных действий',
             style: AppTypography.bodyLarge(
               context,
             ).copyWith(fontWeight: FontWeight.w700),

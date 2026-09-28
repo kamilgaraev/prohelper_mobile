@@ -39,6 +39,48 @@ void main() {
 
     expect(() => WorkflowTaskModel.fromJson(json), throwsFormatException);
   });
+
+  test('prefers manual work name and keeps description optional', () {
+    final json =
+        _workflowTaskJson()
+          ..['work_type_label'] = 'прочее'
+          ..['work_name'] = 'QA: проверка кладки'
+          ..['description'] = 'Ручная тестовая запись';
+
+    final task = WorkflowTaskModel.fromJson(json);
+
+    expect(task.title, 'QA: проверка кладки');
+    expect(task.description, 'Ручная тестовая запись');
+
+    json['work_name'] = '   ';
+    json['description'] = null;
+
+    final legacyTask = WorkflowTaskModel.fromJson(json);
+    expect(legacyTask.title, 'прочее');
+    expect(legacyTask.description, isNull);
+  });
+
+  test('uses review label fallback without changing the workflow status', () {
+    final json =
+        _workflowTaskJson()
+          ..['status'] = 'in_review'
+          ..remove('status_label')
+          ..['available_actions'] = ['approve', 'reject', 'comment'];
+    final summary = json['workflow_summary'] as Map<String, dynamic>;
+    summary['status'] = 'in_review';
+    summary['stage'] = 'in_review';
+    summary['stage_label'] = 'На проверке';
+    summary['available_actions'] = ['approve', 'reject', 'comment'];
+    summary['next_action'] = 'approve';
+
+    final task = WorkflowTaskModel.fromJson(json);
+
+    expect(task.status, 'in_review');
+    expect(task.statusLabel, 'На проверке');
+    expect(task.statusHistory.single.action, 'request_changes');
+    expect(task.statusHistory.single.toStatus, 'in_review');
+    expect(task.canRequestChanges, isFalse);
+  });
 }
 
 Map<String, dynamic> _workflowTaskJson() {

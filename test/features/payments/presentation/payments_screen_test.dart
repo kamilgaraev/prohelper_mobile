@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:prohelpers_mobile/core/widgets/pro_card.dart';
 import 'package:prohelpers_mobile/features/payments/data/payment_document_model.dart';
 import 'package:prohelpers_mobile/features/payments/data/payments_repository.dart';
 import 'package:prohelpers_mobile/features/payments/presentation/payments_screen.dart';
@@ -15,7 +16,11 @@ import 'package:prohelpers_mobile/features/projects/data/projects_repository.dar
 import 'package:prohelpers_mobile/features/projects/domain/projects_provider.dart';
 
 class _TestPaymentsRepository extends PaymentsRepository {
-  _TestPaymentsRepository() : super(Dio());
+  _TestPaymentsRepository({this.canCreate = false, this.pageItems})
+    : super(Dio());
+
+  final bool canCreate;
+  final List<PaymentDocumentModel>? pageItems;
 
   Map<String, dynamic>? updatedValues;
   bool failNextUpdate = false;
@@ -43,18 +48,20 @@ class _TestPaymentsRepository extends PaymentsRepository {
     String? search,
   }) async {
     return PaymentDocumentPage(
-      items: [
-        PaymentDocumentModel.fromJson({
-          'id': 52,
-          'payment_purpose': 'Поставка арматуры для перекрытия секции А',
-          'status': 'partially_paid',
-          'status_label': 'Частично оплачен',
-          'amount': '123 456,78 ₽',
-        }),
-      ],
+      items:
+          pageItems ??
+          [
+            PaymentDocumentModel.fromJson({
+              'id': 52,
+              'payment_purpose': 'Поставка арматуры для перекрытия секции А',
+              'status': 'partially_paid',
+              'status_label': 'Частично оплачен',
+              'amount': '123 456,78 ₽',
+            }),
+          ],
       currentPage: page,
       lastPage: page,
-      canCreate: false,
+      canCreate: canCreate,
     );
   }
 
@@ -1203,6 +1210,7 @@ void main() {
         findsOneWidget,
       );
       expect(find.text('Частично оплачен · 123 456,78 ₽'), findsOneWidget);
+      expect(find.byTooltip('Создать документ'), findsNothing);
       expect(
         tester
             .getSize(find.text('Поставка арматуры для перекрытия секции А'))
@@ -1212,4 +1220,68 @@ void main() {
       expect(tester.takeException(), isNull);
     });
   }
+
+  testWidgets(
+    'payment detail and create targets remain separate while scrolling',
+    (tester) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(360, 800);
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final items = List.generate(
+        8,
+        (index) => PaymentDocumentModel.fromJson({
+          'id': 52 + index,
+          'payment_purpose': 'Платёж ${index + 1}: поставка арматуры',
+          'status': 'partially_paid',
+          'status_label': 'Частично оплачен',
+          'amount': '123 456,78 ₽',
+        }),
+      );
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            projectsProvider.overrideWith((ref) => _SelectedProjectNotifier()),
+            paymentsRepositoryProvider.overrideWithValue(
+              _TestPaymentsRepository(canCreate: true, pageItems: items),
+            ),
+          ],
+          child: MaterialApp(
+            builder:
+                (context, child) => MediaQuery(
+                  data: MediaQuery.of(
+                    context,
+                  ).copyWith(textScaler: const TextScaler.linear(1.3)),
+                  child: child!,
+                ),
+            home: const PaymentsScreen(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final createAction = find.byTooltip('Создать документ');
+      expect(find.byType(FloatingActionButton), findsNothing);
+      expect(createAction, findsOneWidget);
+      await tester.drag(find.byType(ListView), const Offset(0, -2000));
+      await tester.pumpAndSettle();
+
+      final card =
+          find
+              .ancestor(
+                of: find.text('Платёж 8: поставка арматуры'),
+                matching: find.byType(ProCard),
+              )
+              .first;
+      final cardRect = tester.getRect(card);
+      expect(cardRect.overlaps(tester.getRect(createAction)), isFalse);
+      const formerlyCoveredPoint = Offset(236, 756);
+      expect(cardRect.contains(formerlyCoveredPoint), isTrue);
+
+      await tester.tapAt(formerlyCoveredPoint);
+      await tester.pump();
+      expect(find.byType(PaymentDocumentFormScreen), findsNothing);
+    },
+  );
 }

@@ -756,22 +756,34 @@ class _ApprovalCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  approval.reasonLabel ?? approval.statusLabel,
-                  style: AppTypography.bodyLarge(
-                    context,
-                  ).copyWith(fontWeight: FontWeight.w900),
-                ),
-              ),
-              const SizedBox(width: 10),
-              _StatusPill(
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final title = Text(
+                approval.reasonLabel ?? approval.statusLabel,
+                style: AppTypography.bodyLarge(
+                  context,
+                ).copyWith(fontWeight: FontWeight.w900),
+              );
+              final status = _StatusPill(
                 label: approval.statusLabel,
                 color: _approvalColor(approval.status, theme),
-              ),
-            ],
+              );
+
+              if (constraints.maxWidth < 300) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [title, const SizedBox(height: 8), status],
+                );
+              }
+
+              return Row(
+                children: [
+                  Expanded(child: title),
+                  const SizedBox(width: 10),
+                  status,
+                ],
+              );
+            },
           ),
           if (supplier != null) ...[
             const SizedBox(height: 8),
@@ -996,24 +1008,36 @@ class _PurchaseRequestCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    request.title,
-                    style: AppTypography.bodyLarge(
-                      context,
-                    ).copyWith(fontWeight: FontWeight.w900),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                const SizedBox(width: 10),
-                _StatusPill(
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final title = Text(
+                  request.title,
+                  style: AppTypography.bodyLarge(
+                    context,
+                  ).copyWith(fontWeight: FontWeight.w900),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                );
+                final status = _StatusPill(
                   label: request.statusLabel,
                   color: _requestColor(request.status, theme),
-                ),
-              ],
+                );
+
+                if (constraints.maxWidth < 300) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [title, const SizedBox(height: 8), status],
+                  );
+                }
+
+                return Row(
+                  children: [
+                    Expanded(child: title),
+                    const SizedBox(width: 10),
+                    status,
+                  ],
+                );
+              },
             ),
             const SizedBox(height: 8),
             Text(

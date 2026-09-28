@@ -1,4 +1,4 @@
-﻿class QualityDefectRef {
+class QualityDefectRef {
   const QualityDefectRef({required this.id, required this.name});
 
   final int id;
@@ -220,9 +220,10 @@ class QualityDefectModel {
           ).map(QualityDefectPhotoModel.fromJson).toList(),
       statusHistory:
           _requiredMapList(
-            json,
-            'status_history',
-          ).map(QualityDefectHistoryModel.fromJson).toList(),
+              json,
+              'status_history',
+            ).map(QualityDefectHistoryModel.fromJson).toList()
+            ..sort(_compareHistory),
       problemFlags:
           _requiredMapList(
             json,
@@ -230,6 +231,27 @@ class QualityDefectModel {
           ).map(QualityDefectProblemFlag.fromJson).toList(),
     );
   }
+}
+
+int _compareHistory(
+  QualityDefectHistoryModel left,
+  QualityDefectHistoryModel right,
+) {
+  final leftTime = DateTime.tryParse(left.changedAt ?? '');
+  final rightTime = DateTime.tryParse(right.changedAt ?? '');
+
+  if (leftTime != null && rightTime != null) {
+    final byTime = leftTime.compareTo(rightTime);
+    if (byTime != 0) {
+      return byTime;
+    }
+  } else if (leftTime != null) {
+    return -1;
+  } else if (rightTime != null) {
+    return 1;
+  }
+
+  return left.id.compareTo(right.id);
 }
 
 int _requiredInt(Map<String, dynamic> json, String key) {

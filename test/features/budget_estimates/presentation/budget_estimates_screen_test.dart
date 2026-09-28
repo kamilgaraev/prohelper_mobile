@@ -641,6 +641,7 @@ void main() {
     expect(repository.fetchedEstimateId, 17);
     expect(find.text('Смета'), findsOneWidget);
     expect(find.text('Бетон М300'), findsOneWidget);
+    expect(find.textContaining('0.00000001 м3'), findsOneWidget);
     expect(find.text('Уточнение марки бетона'), findsOneWidget);
   });
 
@@ -745,8 +746,8 @@ const _item = BudgetEstimateLineItemModel(
   name: 'Бетон М300',
   itemType: 'material',
   measurementUnitLabel: 'м3',
-  quantity: 20,
-  quantityTotal: 20,
+  quantity: 0.00000001,
+  quantityTotal: null,
   unitPrice: 4000,
   currentUnitPrice: 4100,
   totalAmount: 80000,

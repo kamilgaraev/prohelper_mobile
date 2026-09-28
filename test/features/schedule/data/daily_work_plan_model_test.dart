@@ -1,4 +1,4 @@
-﻿import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_test/flutter_test.dart';
 import 'package:prohelpers_mobile/features/schedule/data/schedule_model.dart';
 
 void main() {
@@ -16,6 +16,12 @@ void main() {
         {'action': 'record_fact', 'label': 'Зафиксировать факт'},
         {'action': 'submit', 'label': 'На приемку'},
       ],
+      'submit_blockers': [
+        {
+          'code': 'open_hard_constraint',
+          'message': 'Сначала закройте блокирующее условие.',
+        },
+      ],
       'assignments': [
         {
           'id': 51,
@@ -26,6 +32,7 @@ void main() {
           'status': 'planned',
           'status_label': 'Запланировано',
           'planned_quantity': '10',
+          'measurement_unit': 'шт',
           'completed_quantity': null,
           'planned_work_hours': '8',
           'actual_work_hours': null,
@@ -79,8 +86,14 @@ void main() {
 
     expect(plan.id, 41);
     expect(plan.hasAction(ScheduleActionKeys.recordFact), isTrue);
+    expect(plan.submitBlockers.single.code, 'open_hard_constraint');
+    expect(
+      plan.submitBlockers.single.message,
+      'Сначала закройте блокирующее условие.',
+    );
     expect(plan.availableActions.first.label, 'Зафиксировать факт');
     expect(plan.assignments.single.plannedQuantity, 10);
+    expect(plan.assignments.single.measurementUnit, 'шт');
     expect(plan.assignments.single.statusLabel, 'Запланировано');
     expect(plan.assignments.single.factStatusOptions.first.status, 'done');
     expect(
@@ -108,6 +121,32 @@ void main() {
       'safety_incident',
     );
     expect(plan.assignments.single.constraints.last.linkedAction?.id, 88);
+  });
+
+  test('missing or null submit blockers remain an empty list', () {
+    final legacyPayload = {
+      'id': 41,
+      'project_id': 3,
+      'schedule_id': 5,
+      'schedule_name': 'Tower schedule',
+      'lookahead_plan_id': 9,
+      'work_date': '2026-06-08',
+      'status': 'published',
+      'status_label': 'Опубликован',
+      'available_actions': [
+        {'action': 'submit', 'label': 'На приемку'},
+      ],
+      'assignments': [],
+    };
+
+    expect(DailyWorkPlanModel.fromJson(legacyPayload).submitBlockers, isEmpty);
+    expect(
+      DailyWorkPlanModel.fromJson({
+        ...legacyPayload,
+        'submit_blockers': null,
+      }).submitBlockers,
+      isEmpty,
+    );
   });
 
   test('rejects legacy scalar daily plan actions', () {

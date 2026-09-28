@@ -285,6 +285,7 @@ class DailyWorkPlanModel {
     required this.statusLabel,
     required this.availableActions,
     required this.assignments,
+    this.submitBlockers = const [],
   });
 
   final int id;
@@ -297,6 +298,7 @@ class DailyWorkPlanModel {
   final String statusLabel;
   final List<ScheduleActionModel> availableActions;
   final List<DailyWorkPlanAssignmentModel> assignments;
+  final List<DailyWorkPlanSubmitBlockerModel> submitBlockers;
 
   bool hasAction(String action) {
     return availableActions.any((item) => item.action == action);
@@ -322,6 +324,30 @@ class DailyWorkPlanModel {
             json,
             'assignments',
           ).map(DailyWorkPlanAssignmentModel.fromJson).toList(),
+      submitBlockers:
+          json['submit_blockers'] == null
+              ? const []
+              : _requiredList(
+                json,
+                'submit_blockers',
+              ).map(DailyWorkPlanSubmitBlockerModel.fromJson).toList(),
+    );
+  }
+}
+
+class DailyWorkPlanSubmitBlockerModel {
+  const DailyWorkPlanSubmitBlockerModel({
+    required this.code,
+    required this.message,
+  });
+
+  final String code;
+  final String message;
+
+  factory DailyWorkPlanSubmitBlockerModel.fromJson(Map<String, dynamic> json) {
+    return DailyWorkPlanSubmitBlockerModel(
+      code: _requiredString(json, 'code'),
+      message: _requiredCleanLabel(json, 'message'),
     );
   }
 }
@@ -404,6 +430,7 @@ class DailyWorkPlanAssignmentModel {
     this.journalEntryId,
     this.failureReason,
     this.factComment,
+    this.measurementUnit,
   });
 
   final int id;
@@ -420,6 +447,7 @@ class DailyWorkPlanAssignmentModel {
   final double? actualWorkHours;
   final String? failureReason;
   final String? factComment;
+  final String? measurementUnit;
   final String scheduleTaskName;
   final List<DailyWorkConstraintModel> constraints;
   final List<DailyWorkLinkedEntityModel> linkedBlockingEntities;
@@ -446,6 +474,7 @@ class DailyWorkPlanAssignmentModel {
       actualWorkHours: _asNullableDouble(json['actual_work_hours']),
       failureReason: _asNullableString(json['failure_reason']),
       factComment: _asNullableString(json['fact_comment']),
+      measurementUnit: _asNullableString(json['measurement_unit']),
       scheduleTaskName: _requiredString(scheduleTask, 'name'),
       constraints:
           _requiredList(

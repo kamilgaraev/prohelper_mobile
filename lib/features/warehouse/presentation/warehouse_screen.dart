@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/error/user_message.dart';
+import '../../../core/providers/module_provider.dart';
+import '../../../core/services/permission_service.dart';
 import '../../../core/sync/sync_queue_service.dart';
+import '../../../core/utils/quantity_format.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/design/pro_status.dart';
 import '../../../core/theme/app_typography.dart';
@@ -15,7 +18,6 @@ import '../../../core/widgets/pro_action_tile.dart';
 import '../../../core/widgets/pro_metric_grid.dart';
 import '../../../core/widgets/pro_metric_tile.dart';
 import '../../../core/widgets/pro_status_banner.dart';
-import '../../auth/domain/auth_provider.dart';
 import '../../projects/domain/projects_provider.dart';
 import '../data/warehouse_media_picker.dart';
 import '../data/warehouse_repository.dart';
@@ -79,6 +81,19 @@ class _WarehouseScreenState extends ConsumerState<WarehouseScreen> {
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(warehouseProvider);
+    final permissions = ref.watch(permissionServiceProvider);
+    final canReceiveMaterials =
+        permissions.canAccessModule(AppModule.basicWarehouse) &&
+        permissions.hasAnyPermission(const [
+          'warehouse.receipts',
+          'warehouse.manage_stock',
+        ]);
+    final canViewCustody =
+        permissions.canAccessModule(AppModule.basicWarehouse) &&
+        permissions.hasAnyPermission(const [
+          'warehouse.view_custody',
+          'warehouse.manage_stock',
+        ]);
     final selectedProject = ref.watch(projectsProvider).selectedProject;
     final data = state.data;
     final filteredMovements =
@@ -152,14 +167,15 @@ class _WarehouseScreenState extends ConsumerState<WarehouseScreen> {
                   child: _OperationalHighlights(summary: data.summary),
                 ),
               ),
-              SliverPadding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                sliver: SliverToBoxAdapter(
-                  child: _ReceiptEntryCard(
-                    onTap: () => _openReceiptSheet(context, data),
+              if (canReceiveMaterials)
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                  sliver: SliverToBoxAdapter(
+                    child: _ReceiptEntryCard(
+                      onTap: () => _openReceiptSheet(context, data),
+                    ),
                   ),
                 ),
-              ),
               SliverPadding(
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
                 sliver: SliverToBoxAdapter(
@@ -182,21 +198,22 @@ class _WarehouseScreenState extends ConsumerState<WarehouseScreen> {
                   ),
                 ),
               ),
-              SliverPadding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                sliver: SliverToBoxAdapter(
-                  child: _ProjectDeliveriesEntryCard(
-                    onTap: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder:
-                              (_) => const ProjectMaterialDeliveriesScreen(),
-                        ),
-                      );
-                    },
+              if (canReceiveMaterials)
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                  sliver: SliverToBoxAdapter(
+                    child: _ProjectDeliveriesEntryCard(
+                      onTap: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder:
+                                (_) => const ProjectMaterialDeliveriesScreen(),
+                          ),
+                        );
+                      },
+                    ),
                   ),
                 ),
-              ),
               if (selectedProject != null)
                 SliverPadding(
                   padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
@@ -217,20 +234,21 @@ class _WarehouseScreenState extends ConsumerState<WarehouseScreen> {
                     ),
                   ),
                 ),
-              SliverPadding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                sliver: SliverToBoxAdapter(
-                  child: _CustodyEntryCard(
-                    onTap: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => const WarehouseCustodyScreen(),
-                        ),
-                      );
-                    },
+              if (canViewCustody)
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                  sliver: SliverToBoxAdapter(
+                    child: _CustodyEntryCard(
+                      onTap: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => const WarehouseCustodyScreen(),
+                          ),
+                        );
+                      },
+                    ),
                   ),
                 ),
-              ),
               SliverPadding(
                 padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
                 sliver: SliverToBoxAdapter(
@@ -268,11 +286,13 @@ class _WarehouseScreenState extends ConsumerState<WarehouseScreen> {
                           onOpenBalances:
                               () => _openBalancesSheet(context, warehouse),
                           onOpenReceipt:
-                              () => _openReceiptSheet(
-                                context,
-                                data,
-                                initialWarehouseId: warehouse.id,
-                              ),
+                              canReceiveMaterials
+                                  ? () => _openReceiptSheet(
+                                    context,
+                                    data,
+                                    initialWarehouseId: warehouse.id,
+                                  )
+                                  : null,
                           onOpenTasks:
                               () => _openTasksScreen(
                                 context,
@@ -389,6 +409,7 @@ class _WarehouseScreenState extends ConsumerState<WarehouseScreen> {
       builder:
           (_) => _WarehouseBalancesSheet(
             warehouse: warehouse,
+            canReceiveMaterials: _canReceiveMaterials(),
             onReceiptRequested: () async {
               Navigator.of(context).pop();
               final summary = ref.read(warehouseProvider).data;
@@ -402,6 +423,15 @@ class _WarehouseScreenState extends ConsumerState<WarehouseScreen> {
             },
           ),
     );
+  }
+
+  bool _canReceiveMaterials() {
+    final permissions = ref.read(permissionServiceProvider);
+    return permissions.canAccessModule(AppModule.basicWarehouse) &&
+        permissions.hasAnyPermission(const [
+          'warehouse.receipts',
+          'warehouse.manage_stock',
+        ]);
   }
 
   Future<void> _openReceiptSheet(
@@ -772,7 +802,7 @@ class _WarehouseCard extends StatelessWidget {
 
   final WarehouseCardModel warehouse;
   final VoidCallback onOpenBalances;
-  final VoidCallback onOpenReceipt;
+  final VoidCallback? onOpenReceipt;
   final VoidCallback onOpenTasks;
 
   @override
@@ -857,11 +887,14 @@ class _WarehouseCard extends StatelessWidget {
                 icon: const Icon(Icons.photo_library_outlined),
                 label: const Text('Остатки'),
               );
-              final receiptButton = FilledButton.icon(
-                onPressed: onOpenReceipt,
-                icon: const Icon(Icons.camera_alt_outlined),
-                label: const Text('Приход'),
-              );
+              final receiptButton =
+                  onOpenReceipt == null
+                      ? null
+                      : FilledButton.icon(
+                        onPressed: onOpenReceipt,
+                        icon: const Icon(Icons.camera_alt_outlined),
+                        label: const Text('Приход'),
+                      );
 
               if (constraints.maxWidth < 320 ||
                   MediaQuery.textScalerOf(context).scale(14) > 16.1) {
@@ -869,10 +902,16 @@ class _WarehouseCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     balancesButton,
-                    const SizedBox(height: 8),
-                    receiptButton,
+                    if (receiptButton != null) ...[
+                      const SizedBox(height: 8),
+                      receiptButton,
+                    ],
                   ],
                 );
+              }
+
+              if (receiptButton == null) {
+                return balancesButton;
               }
 
               return Row(
@@ -1051,7 +1090,7 @@ class _MovementCard extends StatelessWidget {
   }
 
   String _formatQuantity(double value) {
-    return value.toStringAsFixed(value.truncateToDouble() == value ? 0 : 2);
+    return formatQuantity(value, maxFractionDigits: 3);
   }
 
   String _formatCurrency(double value) {
@@ -1285,10 +1324,12 @@ class _WarehouseWriteOffResult {
 class _WarehouseBalancesSheet extends ConsumerStatefulWidget {
   const _WarehouseBalancesSheet({
     required this.warehouse,
+    required this.canReceiveMaterials,
     required this.onReceiptRequested,
   });
 
   final WarehouseCardModel warehouse;
+  final bool canReceiveMaterials;
   final Future<void> Function() onReceiptRequested;
 
   @override
@@ -1372,13 +1413,13 @@ class _WarehouseBalancesSheetState
 
   @override
   Widget build(BuildContext context) {
+    final permissions = ref.watch(permissionServiceProvider);
     final canWriteOff =
-        ref
-            .watch(authProvider)
-            .user
-            ?.grantedPermissions
-            .contains('warehouse.manage_stock') ??
-        false;
+        permissions.canAccessModule(AppModule.basicWarehouse) &&
+        permissions.hasAnyPermission(const [
+          'warehouse.write_offs',
+          'warehouse.manage_stock',
+        ]);
     return FractionallySizedBox(
       heightFactor: 0.92,
       child: Padding(
@@ -1404,14 +1445,17 @@ class _WarehouseBalancesSheetState
                     label: const Text('Обновить'),
                   ),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: FilledButton.icon(
-                    onPressed: _isWritingOff ? null : widget.onReceiptRequested,
-                    icon: const Icon(Icons.add_a_photo_outlined),
-                    label: const Text('Приход'),
+                if (widget.canReceiveMaterials) ...[
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: FilledButton.icon(
+                      onPressed:
+                          _isWritingOff ? null : widget.onReceiptRequested,
+                      icon: const Icon(Icons.add_a_photo_outlined),
+                      label: const Text('Приход'),
+                    ),
                   ),
-                ),
+                ],
               ],
             ),
             const SizedBox(height: 12),
@@ -1464,6 +1508,7 @@ class _WarehouseBalancesSheetState
                             canWriteOff && !_isWritingOff
                                 ? () => _writeOff(balance)
                                 : null,
+                        showWriteOff: canWriteOff,
                         onOpenGallery: () async {
                           await showModalBottomSheet<void>(
                             context: context,
@@ -1515,11 +1560,13 @@ class _BalanceCard extends StatelessWidget {
     required this.balance,
     required this.onOpenGallery,
     required this.onWriteOff,
+    required this.showWriteOff,
   });
 
   final WarehouseBalanceModel balance;
   final VoidCallback onOpenGallery;
   final VoidCallback? onWriteOff;
+  final bool showWriteOff;
 
   @override
   Widget build(BuildContext context) {
@@ -1625,12 +1672,13 @@ class _BalanceCard extends StatelessWidget {
                       : 'Галерея (${balance.effectivePhotoGallery.length})',
                 ),
               ),
-              OutlinedButton.icon(
-                key: const ValueKey('warehouse-balance-write-off'),
-                onPressed: balance.availableQuantity > 0 ? onWriteOff : null,
-                icon: const Icon(Icons.remove_circle_outline_rounded),
-                label: const Text('Списать'),
-              ),
+              if (showWriteOff)
+                OutlinedButton.icon(
+                  key: const ValueKey('warehouse-balance-write-off'),
+                  onPressed: balance.availableQuantity > 0 ? onWriteOff : null,
+                  icon: const Icon(Icons.remove_circle_outline_rounded),
+                  label: const Text('Списать'),
+                ),
             ],
           ),
         ],
@@ -1639,7 +1687,7 @@ class _BalanceCard extends StatelessWidget {
   }
 
   String _formatQuantity(double value) {
-    return value.toStringAsFixed(value.truncateToDouble() == value ? 0 : 2);
+    return formatQuantity(value, maxFractionDigits: 3);
   }
 
   String _formatCurrency(double value) {

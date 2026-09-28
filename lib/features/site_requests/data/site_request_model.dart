@@ -315,6 +315,7 @@ class SiteRequestModel {
   String? projectName;
   String? userName;
   String? assignedUserName;
+  int? assignedUserId;
   int? siteRequestGroupId;
   String? groupTitle;
   String? groupStatus;
@@ -475,6 +476,9 @@ class SiteRequestModel {
       ..userName = user is Map ? user['name']?.toString() : null
       ..assignedUserName =
           assignedUser is Map ? assignedUser['name']?.toString() : null
+      ..assignedUserId =
+          _asNullableInt(json['assigned_to']) ??
+          _asNullableInt(assignedUser is Map ? assignedUser['id'] : null)
       ..siteRequestGroupId = _asNullableInt(json['site_request_group_id'])
       ..groupTitle = groupPayload?['title']?.toString()
       ..groupStatus = groupPayload?['status']?.toString()

@@ -114,42 +114,45 @@ class _AppErrorNoticeContentState extends State<_AppErrorNoticeContent> {
           alignment: Alignment.bottomCenter,
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 560),
-            child: Semantics(
-              container: true,
-              liveRegion: true,
-              label: 'Ошибка: ${widget.message}',
-              child: Material(
-                key: const Key('app-error-notice'),
-                color: theme.colorScheme.errorContainer,
-                elevation: 12,
-                borderRadius: BorderRadius.circular(16),
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.error_outline_rounded,
-                        color: theme.colorScheme.onErrorContainer,
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          widget.message,
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            color: theme.colorScheme.onErrorContainer,
-                            fontWeight: FontWeight.w600,
+            child: Material(
+              key: const Key('app-error-notice'),
+              color: theme.colorScheme.errorContainer,
+              elevation: 12,
+              borderRadius: BorderRadius.circular(16),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.error_outline_rounded,
+                      color: theme.colorScheme.onErrorContainer,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Semantics(
+                        key: const Key('app-error-notice-message'),
+                        container: true,
+                        liveRegion: true,
+                        label: 'Ошибка: ${widget.message}',
+                        child: ExcludeSemantics(
+                          child: Text(
+                            widget.message,
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: theme.colorScheme.onErrorContainer,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                         ),
                       ),
-                      IconButton(
-                        tooltip: 'Закрыть сообщение',
-                        onPressed: widget.onDismiss,
-                        icon: const Icon(Icons.close_rounded),
-                        color: theme.colorScheme.onErrorContainer,
-                      ),
-                    ],
-                  ),
+                    ),
+                    IconButton(
+                      tooltip: 'Закрыть сообщение',
+                      onPressed: widget.onDismiss,
+                      icon: const Icon(Icons.close_rounded),
+                      color: theme.colorScheme.onErrorContainer,
+                    ),
+                  ],
                 ),
               ),
             ),

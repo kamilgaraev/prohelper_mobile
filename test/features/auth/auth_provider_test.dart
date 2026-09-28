@@ -14,9 +14,11 @@ class _FakeAuthRepository extends AuthRepository {
 
   final Object? getMeError;
   final Object? loginError;
+  int getMeCalls = 0;
 
   @override
   Future<User> getMe({String? token}) async {
+    getMeCalls++;
     final error = getMeError;
     if (error != null) {
       throw error;
@@ -151,6 +153,24 @@ class _BlockingClearStorage extends _MemoryStorage {
 }
 
 void main() {
+  Map<String, dynamic> offlineAuthRecord(DateTime confirmedAt) => {
+    'token': 'token-1',
+    'session_id': 'session-1',
+    'user_id': 7,
+    'organization_id': 12,
+    'confirmed_at': confirmedAt.toIso8601String(),
+    'user': {
+      'server_id': 7,
+      'email': 'offline@example.test',
+      'name': 'Офлайн',
+      'organization_id': 12,
+      'organization_name': 'МОСТ',
+      'organizations_json': '[]',
+      'roles': <String>['foreman'],
+      'permissions_json': '{}',
+    },
+  };
+
   test('checkAuth can be delayed until after the first app frame', () async {
     final storage = _MemoryStorage();
     final notifier = AuthNotifier(
@@ -263,30 +283,17 @@ void main() {
   test('offline restore is bound to token and is unverified', () async {
     final storage = _MemoryStorage();
     final confirmedAt = DateTime.now().toUtc();
-    storage.offlineAuth = {
-      'token': 'token-1',
-      'session_id': 'session-1',
-      'user_id': 7,
-      'organization_id': 12,
-      'confirmed_at': confirmedAt.toIso8601String(),
-      'user': {
-        'server_id': 7,
-        'email': 'offline@example.test',
-        'name': 'Офлайн',
-        'organization_id': 12,
-        'organization_name': 'МОСТ',
-        'organizations_json': '[]',
-        'roles': <String>['foreman'],
-        'permissions_json': '{}',
-      },
-    };
+    storage.offlineAuth = offlineAuthRecord(confirmedAt);
+    final repository = _FakeAuthRepository();
     final notifier = AuthNotifier(
-      _FakeAuthRepository(getMeError: const ApiException('Нет сети.')),
+      repository,
       storage,
+      autoCheckAuth: false,
+      isDefinitelyOffline: () async => true,
     );
     addTearDown(notifier.dispose);
 
-    await pumpEventQueue();
+    await notifier.checkAuth();
 
     final auth = notifier.state as AuthAuthenticated;
     expect(auth.user.email, 'offline@example.test');
@@ -294,7 +301,165 @@ void main() {
     expect(auth.sessionIdentity?.userId, 7);
     expect(auth.sessionIdentity?.organizationId, 12);
     expect(auth.sessionIdentity?.sessionId, 'session-1');
+    expect(repository.getMeCalls, 0);
   });
+
+  test(
+    'known offline without a valid cached user remains unauthenticated',
+    () async {
+      final storage = _MemoryStorage();
+      final repository = _FakeAuthRepository();
+      final notifier = AuthNotifier(
+        repository,
+        storage,
+        autoCheckAuth: false,
+        isDefinitelyOffline: () async => true,
+      );
+      addTearDown(notifier.dispose);
+
+      await notifier.checkAuth();
+
+      expect(notifier.state, isA<AuthUnauthenticated>());
+      expect(storage.token, 'token-1');
+      expect(storage.clearCalls, 0);
+      expect(repository.getMeCalls, 0);
+    },
+  );
+
+  test(
+    'missing token stays unauthenticated without checking network',
+    () async {
+      final storage = _MemoryStorage()..token = null;
+      final repository = _FakeAuthRepository();
+      var connectivityChecks = 0;
+      final notifier = AuthNotifier(
+        repository,
+        storage,
+        autoCheckAuth: false,
+        isDefinitelyOffline: () async {
+          connectivityChecks++;
+          return true;
+        },
+      );
+      addTearDown(notifier.dispose);
+
+      await notifier.checkAuth();
+
+      expect(notifier.state, isA<AuthUnauthenticated>());
+      expect(connectivityChecks, 0);
+      expect(repository.getMeCalls, 0);
+    },
+  );
+
+  for (final statusCode in [401, 403]) {
+    test('online $statusCode rejection cannot use cached login', () async {
+      final storage =
+          _MemoryStorage()
+            ..offlineAuth = offlineAuthRecord(DateTime.now().toUtc());
+      final repository = _FakeAuthRepository(
+        getMeError: ApiException('Доступ отклонён.', statusCode: statusCode),
+      );
+      final notifier = AuthNotifier(
+        repository,
+        storage,
+        autoCheckAuth: false,
+        isDefinitelyOffline: () async => false,
+      );
+      addTearDown(notifier.dispose);
+
+      await notifier.checkAuth();
+
+      expect(notifier.state, isA<AuthUnauthenticated>());
+      expect(repository.getMeCalls, 1);
+      expect(storage.token, isNull);
+      expect(storage.offlineAuth, isNull);
+      expect(storage.clearCalls, 1);
+    });
+  }
+
+  test('connectivity check error preserves online server rejection', () async {
+    final storage =
+        _MemoryStorage()
+          ..offlineAuth = offlineAuthRecord(DateTime.now().toUtc());
+    final repository = _FakeAuthRepository(
+      getMeError: const ApiException('Сессия отклонена.', statusCode: 401),
+    );
+    final notifier = AuthNotifier(
+      repository,
+      storage,
+      autoCheckAuth: false,
+      isDefinitelyOffline: () async => throw StateError('unknown'),
+    );
+    addTearDown(notifier.dispose);
+
+    await notifier.checkAuth();
+
+    expect(notifier.state, isA<AuthUnauthenticated>());
+    expect(repository.getMeCalls, 1);
+    expect(storage.token, isNull);
+    expect(storage.offlineAuth, isNull);
+  });
+
+  test(
+    'pending connectivity check falls back to server after timeout',
+    () async {
+      final storage =
+          _MemoryStorage()
+            ..offlineAuth = offlineAuthRecord(DateTime.now().toUtc());
+      final repository = _FakeAuthRepository(
+        getMeError: const ApiException('Сессия отклонена.', statusCode: 401),
+      );
+      final notifier = AuthNotifier(
+        repository,
+        storage,
+        autoCheckAuth: false,
+        isDefinitelyOffline: () => Completer<bool>().future,
+      );
+      addTearDown(notifier.dispose);
+
+      await notifier.checkAuth();
+
+      expect(notifier.state, isA<AuthUnauthenticated>());
+      expect(repository.getMeCalls, 1);
+      expect(storage.token, isNull);
+      expect(storage.offlineAuth, isNull);
+    },
+  );
+
+  for (final failChecker in [false, true]) {
+    test(
+      'stale connectivity ${failChecker ? 'error' : 'result'} after logout does not call server',
+      () async {
+        final storage = _MemoryStorage();
+        final repository = _LogoutCheckingRepository(storage);
+        final checker = Completer<bool>();
+        final checkerStarted = Completer<void>();
+        final notifier = AuthNotifier(
+          repository,
+          storage,
+          autoCheckAuth: false,
+          isDefinitelyOffline: () {
+            checkerStarted.complete();
+            return checker.future;
+          },
+        );
+        addTearDown(notifier.dispose);
+
+        final checkAuth = notifier.checkAuth();
+        await checkerStarted.future;
+        await notifier.logout();
+        if (failChecker) {
+          checker.completeError(StateError('unknown'));
+        } else {
+          checker.complete(false);
+        }
+        await checkAuth;
+
+        expect(repository.getMeCalls, 0);
+        expect(notifier.state, isA<AuthUnauthenticated>());
+      },
+    );
+  }
 
   for (final scenario in [
     (

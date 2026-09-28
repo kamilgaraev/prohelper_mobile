@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:prohelpers_mobile/core/network/api_exception.dart';
+import 'package:prohelpers_mobile/core/widgets/pro_card.dart';
 import 'package:prohelpers_mobile/features/knowledge_hub/data/knowledge_hub_repository.dart';
 import 'package:prohelpers_mobile/features/knowledge_hub/domain/knowledge_hub_provider.dart';
 import 'package:prohelpers_mobile/features/projects/data/project_model.dart';
@@ -14,6 +15,7 @@ import 'package:prohelpers_mobile/features/site_requests/data/site_request_model
 import 'package:prohelpers_mobile/features/site_requests/data/site_requests_repository.dart';
 import 'package:prohelpers_mobile/features/site_requests/domain/site_requests_provider.dart';
 import 'package:prohelpers_mobile/features/site_requests/domain/site_requests_scope.dart';
+import 'package:prohelpers_mobile/features/site_requests/presentation/screens/site_request_form_screen.dart';
 import 'package:prohelpers_mobile/features/site_requests/presentation/screens/site_requests_screen.dart';
 
 class _FakeProjectsRepository extends ProjectsRepository {
@@ -260,7 +262,10 @@ void main() {
     );
   }
 
-  Widget createSearchFlowWidget(_SearchFlowSiteRequestsRepository repository) {
+  Widget createSearchFlowWidget(
+    _SearchFlowSiteRequestsRepository repository, {
+    bool tickersEnabled = false,
+  }) {
     return ProviderScope(
       overrides: [
         projectsProvider.overrideWith(
@@ -278,13 +283,44 @@ void main() {
         ),
       ],
       child: TickerMode(
-        enabled: false,
+        enabled: tickersEnabled,
         child: MaterialApp(
           home: SiteRequestsScreen(scope: SiteRequestsScope.all),
         ),
       ),
     );
   }
+
+  testWidgets(
+    'request details area and create action have separate hit targets',
+    (tester) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(360, 800);
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await tester.pumpWidget(createWidget());
+      await tester.pumpAndSettle();
+
+      expect(find.byType(FloatingActionButton), findsNothing);
+      final createAction = find.byTooltip('Новая заявка');
+      expect(createAction, findsOneWidget);
+      final card =
+          find
+              .ancestor(
+                of: find.text('Срочно нужен бетон'),
+                matching: find.byType(ProCard),
+              )
+              .first;
+      final cardRect = tester.getRect(card);
+      expect(cardRect.overlaps(tester.getRect(createAction)), isFalse);
+      final formerlyCoveredPoint = const Offset(316, 756);
+      expect(cardRect.contains(formerlyCoveredPoint), isTrue);
+
+      await tester.tapAt(formerlyCoveredPoint);
+      await tester.pump();
+      expect(find.byType(SiteRequestFormScreen), findsNothing);
+    },
+  );
 
   testWidgets('показывает заявки и фильтрует их по срочности и поиску', (
     tester,
@@ -408,6 +444,61 @@ void main() {
 
     expect(find.byType(TextField), findsOneWidget);
     expect(find.byTooltip('Очистить поиск'), findsOneWidget);
+  });
+
+  testWidgets('поиск и создание остаются доступны над клавиатурой', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(360, 800);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetViewInsets);
+
+    final repository = _SearchFlowSiteRequestsRepository(_requests);
+    await tester.pumpWidget(
+      createSearchFlowWidget(repository, tickersEnabled: true),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    await tester.enterText(find.byType(TextField).first, 'бетон');
+    tester.view.viewInsets = FakeViewPadding(bottom: 300);
+    await tester.pumpAndSettle();
+
+    expect(
+      MediaQuery.viewInsetsOf(
+        tester.element(find.byType(SiteRequestsScreen)),
+      ).bottom,
+      300,
+    );
+    expect(find.byType(FloatingActionButton), findsNothing);
+    expect(find.byTooltip('Новая заявка'), findsOneWidget);
+    expect(find.byTooltip('Очистить поиск'), findsOneWidget);
+    expect(
+      tester
+          .getRect(find.byTooltip('Новая заявка'))
+          .overlaps(tester.getRect(find.byTooltip('Очистить поиск'))),
+      isFalse,
+    );
+
+    await tester.tap(find.byTooltip('Очистить поиск'));
+    await tester.pump();
+
+    expect(
+      tester.widget<TextField>(find.byType(TextField)).controller!.text,
+      '',
+    );
+    expect(find.text('Новая заявка'), findsNothing);
+    expect(find.text('Заявки'), findsOneWidget);
+    expect(find.byTooltip('Очистить поиск'), findsNothing);
+    await tester.pump(const Duration(milliseconds: 350));
+    await tester.pumpAndSettle();
+    expect(repository.searches, [null, null]);
+
+    tester.view.resetViewInsets();
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('Новая заявка'), findsOneWidget);
   });
 
   testWidgets('без сети поиск и очистка сохраняют строки текущего объекта', (
@@ -801,6 +892,7 @@ void main() {
       findsOneWidget,
     );
     expect(find.byType(FloatingActionButton), findsNothing);
+    expect(find.byTooltip('Новая заявка'), findsNothing);
   });
 
   testWidgets('не показывает создание заявки, пока объект не выбран', (
@@ -813,6 +905,7 @@ void main() {
 
     expect(find.text('Объект не выбран'), findsOneWidget);
     expect(find.byType(FloatingActionButton), findsNothing);
+    expect(find.byTooltip('Новая заявка'), findsNothing);
   });
 }
 

@@ -228,6 +228,20 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('shows remaining production quantity below one tenth', (
+    tester,
+  ) async {
+    final repository =
+        _RecordingProductionLaborRepository()..acceptedQuantity = 10.4999;
+
+    await tester.pumpWidget(buildScreen(repository));
+    await pumpUi(tester);
+
+    expect(find.text('Осталось 0.0001 м2'), findsOneWidget);
+    expect(find.textContaining('Принято 10.4999 из 10.5 м2'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('requires quantity before submitting production actual', (
     tester,
   ) async {

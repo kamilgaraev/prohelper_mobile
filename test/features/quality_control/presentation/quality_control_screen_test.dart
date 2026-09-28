@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -14,15 +16,23 @@ import 'package:prohelpers_mobile/features/quality_control/domain/quality_contro
 import 'package:prohelpers_mobile/features/quality_control/presentation/quality_control_screen.dart';
 
 class _RecordingQualityRepository extends QualityControlRepository {
-  _RecordingQualityRepository({this.listDefect = _defect}) : super(Dio());
+  _RecordingQualityRepository({
+    this.listDefect = _defect,
+    this.detailDefectOverride = _detailDefect,
+    this.returnNoDefects = false,
+  }) : super(Dio());
 
   final QualityDefectModel listDefect;
+  final QualityDefectModel detailDefectOverride;
+  final bool returnNoDefects;
 
   int? loadedProjectId;
   String? loadedStatus;
   String? loadedSeverity;
   bool? loadedOverdueOnly;
   int? fetchedDefectId;
+  int fetchedDefectCount = 0;
+  Completer<QualityDefectModel>? detailLoadCompleter;
   int? startedDefectId;
   int? resolvedDefectId;
   int? verifiedDefectId;
@@ -47,13 +57,18 @@ class _RecordingQualityRepository extends QualityControlRepository {
     loadedSeverity = severity;
     loadedOverdueOnly = overdueOnly;
 
-    return [listDefect];
+    return returnNoDefects ? const [] : [listDefect];
   }
 
   @override
   Future<QualityDefectModel> fetchDefect(int id) async {
     fetchedDefectId = id;
-    return _detailDefect;
+    fetchedDefectCount++;
+    final completer = detailLoadCompleter;
+    if (completer != null) {
+      return completer.future;
+    }
+    return detailDefectOverride;
   }
 
   @override
@@ -225,9 +240,26 @@ const _detailDefect = QualityDefectModel(
       fromStatus: 'in_progress',
       toStatus: 'ready_for_review',
       comment: 'Исправлено',
-      changedAt: '2026-05-22T11:00:00Z',
+      changedAt: '2026-05-22T11:00:00',
     ),
   ],
+);
+
+const _optionalEvidenceDefect = QualityDefectModel(
+  id: 3,
+  defectNumber: 'QD-3',
+  title: 'Скол плитки',
+  severity: 'major',
+  severityLabel: 'Существенный',
+  status: 'in_progress',
+  statusLabel: 'В работе',
+  availableActions: ['resolve'],
+  inspectionRequired: false,
+  workflowSummary: QualityDefectWorkflowSummary(
+    status: 'in_progress',
+    availableActions: ['resolve'],
+    problemFlags: [],
+  ),
 );
 
 class _TestProjectsRepository extends ProjectsRepository {
@@ -343,10 +375,7 @@ void main() {
     await pumpUi(tester);
 
     expect(find.byType(FloatingActionButton), findsNothing);
-    expect(
-      find.widgetWithText(FilledButton, 'Новое замечание'),
-      findsOneWidget,
-    );
+    expect(find.byTooltip('Новое замечание'), findsOneWidget);
     final metrics = find.byType(ProMetricTile);
     expect(metrics, findsNWidgets(3));
     expect(
@@ -368,10 +397,106 @@ void main() {
       buildScreen(_RecordingQualityRepository(), textScale: 1.3),
     );
     await pumpUi(tester);
-    await tester.tap(find.widgetWithText(FilledButton, 'Новое замечание'));
+    await tester.tap(find.byTooltip('Новое замечание'));
     await pumpUi(tester);
 
     expect(find.byType(DropdownButtonFormField<String>), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('quality detail action remains tappable at 360dp', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(360, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final repository = _RecordingQualityRepository();
+    await tester.pumpWidget(buildScreen(repository));
+    await pumpUi(tester);
+    await tester.ensureVisible(find.text('Подробнее').first);
+    await tester.pump();
+
+    final details = find.text('Подробнее').first;
+    final detailsRect = tester.getRect(details);
+    final createRect = tester.getRect(find.byTooltip('Новое замечание'));
+    expect(detailsRect.overlaps(createRect), isFalse);
+
+    await tester.tapAt(detailsRect.center);
+    await pumpUi(tester);
+
+    expect(repository.fetchedDefectId, 3);
+    expect(find.text('Замечание качества'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('quality detail keeps one pending load across modal rebuilds', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(360, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetViewInsets);
+
+    final repository =
+        _RecordingQualityRepository()
+          ..detailLoadCompleter = Completer<QualityDefectModel>();
+    await tester.pumpWidget(buildScreen(repository));
+    await pumpUi(tester);
+    await tester.ensureVisible(find.text('Подробнее').first);
+    await tester.pump();
+    await tester.tap(find.text('Подробнее').first);
+    await pumpUi(tester);
+
+    expect(find.text('Загружаем замечание'), findsOneWidget);
+    tester.view.viewInsets = FakeViewPadding(bottom: 300);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+
+    expect(repository.fetchedDefectCount, 1);
+
+    repository.detailLoadCompleter!.complete(_detailDefect);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+
+    expect(find.text('Замечание качества'), findsOneWidget);
+    expect(repository.fetchedDefectCount, 1);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('quality detail can retry after a failed load', (tester) async {
+    tester.view.physicalSize = const Size(360, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final repository =
+        _RecordingQualityRepository()
+          ..detailLoadCompleter = Completer<QualityDefectModel>();
+    await tester.pumpWidget(buildScreen(repository));
+    await pumpUi(tester);
+    await tester.ensureVisible(find.text('Подробнее').first);
+    await tester.pump();
+    await tester.tap(find.text('Подробнее').first);
+    await pumpUi(tester);
+
+    repository.detailLoadCompleter!.completeError(StateError('offline'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.text('Не удалось загрузить замечание'), findsOneWidget);
+
+    repository.detailLoadCompleter = Completer<QualityDefectModel>();
+    await tester.tap(find.text('Повторить'));
+    await tester.pump();
+    expect(repository.fetchedDefectCount, 2);
+
+    repository.detailLoadCompleter!.complete(_detailDefect);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.text('Замечание качества'), findsOneWidget);
+    expect(repository.fetchedDefectCount, 2);
     expect(tester.takeException(), isNull);
   });
 
@@ -419,7 +544,7 @@ void main() {
     await tester.pumpWidget(buildScreen(repository));
     await pumpUi(tester);
 
-    await tester.tap(find.byType(FloatingActionButton));
+    await tester.tap(find.byTooltip('Новое замечание'));
     await pumpUi(tester);
     await tester.enterText(find.byType(TextField).first, 'Скол плитки');
     await tester.tap(find.byType(DropdownButtonFormField<String>));
@@ -428,7 +553,7 @@ void main() {
     await pumpUi(tester);
     await tester.tap(find.byType(DropdownButtonFormField<bool>));
     await pumpUi(tester);
-    await tester.tap(find.text('Не требуется').last);
+    await tester.tap(find.text('Не обязательны').last);
     await pumpUi(tester);
     await tester.ensureVisible(find.byType(FilledButton).last);
     await tester.pump();
@@ -451,7 +576,7 @@ void main() {
     await tester.pumpWidget(buildScreen(repository));
     await pumpUi(tester);
 
-    await tester.tap(find.byType(FloatingActionButton));
+    await tester.tap(find.byTooltip('Новое замечание'));
     await pumpUi(tester);
     await tester.enterText(find.byType(TextField).first, 'Скол плитки');
     await tester.tap(find.byType(DropdownButtonFormField<String>));
@@ -460,7 +585,7 @@ void main() {
     await pumpUi(tester);
     await tester.tap(find.byType(DropdownButtonFormField<bool>));
     await pumpUi(tester);
-    await tester.tap(find.text('Не требуется').last);
+    await tester.tap(find.text('Не обязательны').last);
     await pumpUi(tester);
     await tester.ensureVisible(find.byType(FilledButton).last);
     await tester.pump();
@@ -492,7 +617,7 @@ void main() {
     );
     await pumpUi(tester);
 
-    await tester.tap(find.byType(FloatingActionButton));
+    await tester.tap(find.byTooltip('Новое замечание'));
     await pumpUi(tester);
     await tester.enterText(find.byType(TextField).first, 'Скол плитки');
     await tester.tap(find.byType(DropdownButtonFormField<String>));
@@ -501,7 +626,7 @@ void main() {
     await pumpUi(tester);
     await tester.tap(find.byType(DropdownButtonFormField<bool>));
     await pumpUi(tester);
-    await tester.tap(find.text('Не требуется').last);
+    await tester.tap(find.text('Не обязательны').last);
     await pumpUi(tester);
     await tester.ensureVisible(find.text('Добавить фото до исправления'));
     await tester.pump();
@@ -587,6 +712,40 @@ void main() {
     expect(repository.loadedOverdueOnly, isTrue);
   });
 
+  testWidgets('distinguishes empty quality list from empty filtered results', (
+    tester,
+  ) async {
+    final repository = _RecordingQualityRepository(returnNoDefects: true);
+
+    await tester.pumpWidget(buildScreen(repository));
+    await pumpUi(tester);
+
+    expect(find.text('Замечаний по качеству нет'), findsOneWidget);
+    expect(
+      find.text(
+        'Создайте замечание, когда нужно зафиксировать дефект на объекте.',
+      ),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Проверка'));
+    await pumpUi(tester);
+
+    expect(repository.loadedStatus, 'ready_for_review');
+    expect(find.text('Нет замечаний по выбранным фильтрам'), findsOneWidget);
+    expect(
+      find.text('Измените фильтры, чтобы увидеть другие замечания.'),
+      findsOneWidget,
+    );
+    expect(
+      find.text(
+        'Создайте замечание, когда нужно зафиксировать дефект на объекте.',
+      ),
+      findsNothing,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('opens quality defect detail with photos and history', (
     tester,
   ) async {
@@ -602,9 +761,33 @@ void main() {
 
     expect(repository.fetchedDefectId, 3);
     expect(find.text('Замечание качества'), findsOneWidget);
+    expect(find.text('Фото или комментарий: обязательны'), findsOneWidget);
     expect(find.text('Фото результата'), findsOneWidget);
     expect(find.byType(Image), findsOneWidget);
     expect(find.text('Исправлено'), findsOneWidget);
+    expect(find.text('22.05.2026 11:00'), findsOneWidget);
+  });
+
+  testWidgets('shows optional result evidence while keeping review action', (
+    tester,
+  ) async {
+    final repository = _RecordingQualityRepository(
+      listDefect: _optionalEvidenceDefect,
+      detailDefectOverride: _optionalEvidenceDefect,
+    );
+
+    await tester.pumpWidget(buildScreen(repository));
+    await pumpUi(tester);
+
+    expect(find.text('На проверку'), findsOneWidget);
+    await tester.ensureVisible(find.text('Подробнее').first);
+    await tester.pump();
+    await tester.tap(find.text('Подробнее').first);
+    await pumpUi(tester);
+
+    expect(find.text('Фото или комментарий: не обязательны'), findsOneWidget);
+    expect(find.text('Проверка не требуется'), findsNothing);
+    expect(find.text('На проверку'), findsOneWidget);
   });
 
   testWidgets('verifies and rejects quality review with visible decision', (

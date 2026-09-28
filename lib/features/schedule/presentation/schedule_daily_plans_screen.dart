@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/error/user_message.dart';
+import '../../../core/sync/sync_queue_service.dart';
 import '../../../core/design/pro_status.dart';
 import '../../../core/theme/app_typography.dart';
+import '../../../core/utils/quantity_format.dart';
 import '../../../core/widgets/app_empty_state.dart';
 import '../../../core/widgets/app_error_notice.dart';
 import '../../../core/widgets/app_error_state.dart';
@@ -217,47 +219,75 @@ class _DailyPlanCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return IndustrialCard(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        plan.scheduleName,
-                        style: AppTypography.bodyLarge(context),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                plan.scheduleName,
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+                semanticsLabel: plan.scheduleName,
+                style: AppTypography.bodyLarge(context),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                '${_formatDate(plan.workDate)} · ${plan.statusLabel}',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+              if (plan.submitBlockers.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                ...plan.submitBlockers.map(
+                  (blocker) => Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.errorContainer.withValues(alpha: 0.55),
+                        borderRadius: BorderRadius.circular(12),
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        '${_formatDate(plan.workDate)} · ${plan.statusLabel}',
-                        style: Theme.of(context).textTheme.bodySmall,
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(
+                            Icons.info_outline_rounded,
+                            size: 20,
+                            color: Theme.of(context).colorScheme.error,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(child: Text(blocker.message)),
+                        ],
                       ),
-                    ],
+                    ),
                   ),
                 ),
-                if (plan.hasAction(ScheduleActionKeys.submit))
-                  OutlinedButton.icon(
+              ],
+              if (plan.hasAction(ScheduleActionKeys.submit)) ...[
+                const SizedBox(height: 8),
+                Align(
+                  alignment: AlignmentDirectional.centerEnd,
+                  child: OutlinedButton.icon(
                     onPressed: () => _showSubmitSheet(context, ref),
                     icon: const Icon(Icons.send_rounded),
                     label: const Text('На приемку'),
                   ),
+                ),
               ],
+            ],
+          ),
+          const SizedBox(height: 12),
+          ...plan.assignments.map(
+            (assignment) => _DailyAssignmentTile(
+              assignment: assignment,
+              canRecordFact: plan.hasAction(ScheduleActionKeys.recordFact),
             ),
-            const SizedBox(height: 12),
-            ...plan.assignments.map(
-              (assignment) => _DailyAssignmentTile(
-                assignment: assignment,
-                canRecordFact: plan.hasAction(ScheduleActionKeys.recordFact),
-              ),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -319,11 +349,14 @@ class _DailyAssignmentTile extends ConsumerWidget {
             children: [
               Text(
                 assignment.scheduleTaskName,
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+                semanticsLabel: assignment.scheduleTaskName,
                 style: Theme.of(context).textTheme.titleMedium,
               ),
               const SizedBox(height: 6),
               Text(
-                'План: ${_formatNumber(assignment.plannedQuantity)} ед., ${_formatNumber(assignment.plannedWorkHours)} ч. · Факт: ${_formatNumber(assignment.completedQuantity)} ед.',
+                'План: ${_formatNullableQuantity(assignment.plannedQuantity)} ${assignment.measurementUnit ?? 'ед.'}, ${_formatNumber(assignment.plannedWorkHours)} ч. · Факт: ${_formatNullableQuantity(assignment.completedQuantity)} ${assignment.measurementUnit ?? 'ед.'}',
                 style: Theme.of(context).textTheme.bodySmall,
               ),
               if (hardConstraints.isNotEmpty) ...[
@@ -348,27 +381,89 @@ class _DailyAssignmentTile extends ConsumerWidget {
               ],
               if (canRecordFact) ...[
                 const SizedBox(height: 10),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    FilledButton.icon(
-                      onPressed: () => _showFactSheet(context, ref),
-                      icon: const Icon(Icons.fact_check_outlined),
-                      label: const Text('Факт выполнен'),
-                    ),
-                    if (actionableHardConstraints.isNotEmpty)
-                      OutlinedButton.icon(
-                        onPressed:
-                            () => _createLinkedAction(
-                              context,
-                              ref,
-                              actionableHardConstraints.first,
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final isNarrow = constraints.maxWidth < 320;
+                    final factButton =
+                        isNarrow
+                            ? FilledButton(
+                              style: FilledButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 0,
+                                  vertical: 10,
+                                ),
+                              ),
+                              onPressed: () => _showFactSheet(context, ref),
+                              child: const Text('Внести факт'),
+                            )
+                            : FilledButton.icon(
+                              onPressed: () => _showFactSheet(context, ref),
+                              icon: const Icon(Icons.fact_check_outlined),
+                              label: const Text('Внести факт'),
+                            );
+                    final obstacleButton =
+                        actionableHardConstraints.isEmpty
+                            ? null
+                            : isNarrow
+                            ? OutlinedButton(
+                              style: OutlinedButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 0,
+                                  vertical: 10,
+                                ),
+                              ),
+                              onPressed:
+                                  () => _createLinkedAction(
+                                    context,
+                                    ref,
+                                    actionableHardConstraints.first,
+                                  ),
+                              child: const Text(
+                                'Зафиксировать',
+                                semanticsLabel: 'Зафиксировать препятствие',
+                              ),
+                            )
+                            : OutlinedButton.icon(
+                              onPressed:
+                                  () => _createLinkedAction(
+                                    context,
+                                    ref,
+                                    actionableHardConstraints.first,
+                                  ),
+                              icon: const Icon(Icons.report_problem_outlined),
+                              label: const Text('Зафиксировать препятствие'),
+                            );
+
+                    if (isNarrow) {
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          SizedBox(
+                            key: const ValueKey('daily-fact-action'),
+                            width: double.infinity,
+                            child: factButton,
+                          ),
+                          if (obstacleButton != null) ...[
+                            const SizedBox(height: 8),
+                            SizedBox(
+                              key: const ValueKey('daily-obstacle-action'),
+                              width: double.infinity,
+                              child: obstacleButton,
                             ),
-                        icon: const Icon(Icons.report_problem_outlined),
-                        label: const Text('Зафиксировать препятствие'),
-                      ),
-                  ],
+                          ],
+                        ],
+                      );
+                    }
+
+                    return Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        factButton,
+                        if (obstacleButton != null) obstacleButton,
+                      ],
+                    );
+                  },
                 ),
               ],
             ],
@@ -607,7 +702,7 @@ class _DailyFactSheetState extends State<_DailyFactSheet> {
                   hintText:
                       widget.assignment.plannedQuantity == null
                           ? null
-                          : 'План: ${_formatNumber(widget.assignment.plannedQuantity)}',
+                          : 'План: ${formatQuantity(widget.assignment.plannedQuantity!)} ${widget.assignment.measurementUnit ?? 'ед.'}',
                   border: const OutlineInputBorder(),
                 ),
                 validator: (value) => _validateQuantity(value, isNotDone),
@@ -734,7 +829,13 @@ class _DailyFactSheetState extends State<_DailyFactSheet> {
       );
     } catch (error) {
       if (mounted) {
-        AppErrorNotice.show(context, error);
+        if (error is SyncQueuedException && !error.requiresReview) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text(error.message)));
+        } else {
+          AppErrorNotice.show(context, error);
+        }
       }
     } finally {
       if (mounted) {
@@ -765,6 +866,10 @@ String _formatNumber(double? value) {
   }
 
   return value % 1 == 0 ? value.toInt().toString() : value.toStringAsFixed(2);
+}
+
+String _formatNullableQuantity(double? value) {
+  return value == null ? 'Не указано' : formatQuantity(value);
 }
 
 double? _parseNonNegativeNumber(String? value) {

@@ -1,4 +1,4 @@
-﻿import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_test/flutter_test.dart';
 import 'package:prohelpers_mobile/features/quality_control/data/quality_defect_model.dart';
 
 void main() {
@@ -38,11 +38,32 @@ void main() {
       ],
       'status_history': [
         {
-          'id': 5,
+          'id': 12,
           'from_status': 'in_progress',
           'to_status': 'ready_for_review',
-          'comment': 'Fixed',
+          'comment': 'QA_RESOLVE_CI37',
+          'changed_at': '2026-05-22T12:00:00Z',
+        },
+        {
+          'id': 10,
+          'from_status': null,
+          'to_status': 'open',
+          'comment': 'Создано',
+          'changed_at': '2026-05-22T10:00:00Z',
+        },
+        {
+          'id': 11,
+          'from_status': 'open',
+          'to_status': 'in_progress',
+          'comment': 'QA_START_CI37',
           'changed_at': '2026-05-22T11:00:00Z',
+        },
+        {
+          'id': 14,
+          'from_status': 'ready_for_review',
+          'to_status': 'resolved',
+          'comment': 'QA_REVIEW_CI37',
+          'changed_at': '2026-05-22T13:00:00Z',
         },
       ],
       'problem_flags': [
@@ -74,7 +95,40 @@ void main() {
       defect.photos.single.displayUrl,
       'https://cdn.example.test/qc-after.jpg',
     );
-    expect(defect.statusHistory.single.comment, 'Fixed');
+    expect(defect.statusHistory.map((entry) => entry.id), [10, 11, 12, 14]);
+    expect(defect.statusHistory.map((entry) => entry.comment), [
+      'Создано',
+      'QA_START_CI37',
+      'QA_RESOLVE_CI37',
+      'QA_REVIEW_CI37',
+    ]);
+  });
+
+  test('orders equal or invalid history timestamps deterministically', () {
+    final defect = QualityDefectModel.fromJson({
+      'id': 8,
+      'defect_number': 'QD-202605-0008',
+      'title': 'History order',
+      'severity': 'minor',
+      'status': 'open',
+      'available_actions': [],
+      'inspection_required': false,
+      'photos': [],
+      'problem_flags': [],
+      'workflow_summary': {
+        'status': 'open',
+        'available_actions': [],
+        'problem_flags': [],
+      },
+      'status_history': [
+        {'id': 9, 'to_status': 'open', 'changed_at': 'not-a-date'},
+        {'id': 4, 'to_status': 'open', 'changed_at': '2026-05-22T10:00:00Z'},
+        {'id': 3, 'to_status': 'open', 'changed_at': '2026-05-22T10:00:00Z'},
+        {'id': 7, 'to_status': 'open', 'changed_at': null},
+      ],
+    });
+
+    expect(defect.statusHistory.map((entry) => entry.id), [3, 4, 7, 9]);
   });
 
   test('rejects defect payload without explicit severity', () {

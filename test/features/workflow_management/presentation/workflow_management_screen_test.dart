@@ -20,6 +20,7 @@ class _RecordingWorkflowRepository extends WorkflowRepository {
   bool? loadedAssignedToMe;
   String? loadedSearch;
   int? fetchedTaskId;
+  WorkflowTaskModel? detailOverride;
   int? approvedTaskId;
   int? changesTaskId;
   String? approvedComment;
@@ -63,7 +64,7 @@ class _RecordingWorkflowRepository extends WorkflowRepository {
   @override
   Future<WorkflowTaskModel> fetchTask(int id) async {
     fetchedTaskId = id;
-    return _detailTask;
+    return detailOverride ?? _detailTask;
   }
 
   @override
@@ -193,6 +194,32 @@ const _detailTask = WorkflowTaskModel(
   updatedAt: '2026-05-22T10:00:00Z',
 );
 
+const _smallQuantityTask = WorkflowTaskModel(
+  id: 18,
+  organizationId: 4,
+  projectId: 9,
+  workName: 'Проверка объема',
+  description: 'Объем малой позиции',
+  notes: 'Основание указано отдельно',
+  quantity: 0.001,
+  completedQuantity: 0.001,
+  measurementUnitLabel: 'шт',
+  totalAmount: 0,
+  status: 'pending',
+  statusLabel: 'Ожидает согласования',
+  availableActions: [],
+  workflowSummary: WorkflowSummaryModel(
+    status: 'pending',
+    stage: 'pending',
+    stageLabel: 'Ожидает согласования',
+    availableActions: [],
+  ),
+  comments: [],
+  statusHistory: [],
+  createdAt: '2026-05-22T08:00:00Z',
+  updatedAt: '2026-05-22T10:00:00Z',
+);
+
 void main() {
   Project project() {
     return Project()
@@ -258,7 +285,9 @@ void main() {
     expect(find.text('Бетонирование'), findsOneWidget);
     expect(find.text('Проверить опалубку'), findsOneWidget);
 
-    await tester.tap(find.widgetWithText(ChoiceChip, 'Доработка'));
+    expect(find.text('На проверке'), findsNWidgets(2));
+
+    await tester.tap(find.widgetWithText(ChoiceChip, 'На проверке'));
     await pumpUi(tester);
     expect(repository.loadedStatus, 'in_review');
 
@@ -325,7 +354,7 @@ void main() {
         'Мне',
         'Все',
         'Ожидают',
-        'Доработка',
+        'На проверке',
         'Согласовано',
         'Отклонено',
       };
@@ -489,6 +518,28 @@ void main() {
       find.bySemanticsLabel('Добавить комментарий: Бетонирование, задача 17'),
       findsOneWidget,
     );
+  });
+
+  testWidgets('preserves small quantities without changing currency display', (
+    tester,
+  ) async {
+    final repository =
+        _RecordingWorkflowRepository()..detailOverride = _smallQuantityTask;
+
+    await tester.pumpWidget(
+      buildApp(WorkflowTaskDetailScreen(taskId: 18), repository),
+    );
+    await pumpUi(tester);
+
+    expect(find.text('0.001 шт'), findsNWidgets(2));
+    expect(find.text('Проверка объема'), findsOneWidget);
+    expect(find.text('Описание'), findsOneWidget);
+    expect(find.text('Объем малой позиции'), findsOneWidget);
+    expect(find.text('Примечание'), findsOneWidget);
+    expect(find.text('Основание указано отдельно'), findsOneWidget);
+    expect(find.text('0.00 ₽'), findsOneWidget);
+    expect(find.text('0.00 шт'), findsNothing);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('submits approve and request changes actions', (tester) async {

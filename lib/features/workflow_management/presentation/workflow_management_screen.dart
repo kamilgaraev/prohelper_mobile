@@ -480,7 +480,7 @@ class _WorkflowSummaryStrip extends StatelessWidget {
       children: [
         Expanded(child: _SummaryTile(label: 'Ожидают', value: '$pending')),
         const SizedBox(width: 8),
-        Expanded(child: _SummaryTile(label: 'Доработка', value: '$inReview')),
+        Expanded(child: _SummaryTile(label: 'На проверке', value: '$inReview')),
         const SizedBox(width: 8),
         Expanded(child: _SummaryTile(label: 'Готово', value: '$confirmed')),
       ],
@@ -892,6 +892,12 @@ class _WorkflowTaskDetail extends StatelessWidget {
             _DetailLine(label: 'Договор', value: task.contractLabel!),
           if (task.contractorLabel != null)
             _DetailLine(label: 'Подрядчик', value: task.contractorLabel!),
+          if (_distinctDescription(task) case final description?) ...[
+            const SizedBox(height: 8),
+            Text('Описание', style: AppTypography.caption(context)),
+            const SizedBox(height: 4),
+            Text(description, style: AppTypography.bodyMedium(context)),
+          ],
           if (task.assignedUserLabel != null)
             _DetailLine(label: 'Ответственный', value: task.assignedUserLabel!),
           if (task.scheduleTaskLabel != null)
@@ -1197,8 +1203,19 @@ String _formatDate(String value) {
 }
 
 String _quantityText(double value, String? unit) {
-  final text = value.toStringAsFixed(value.truncateToDouble() == value ? 0 : 2);
+  final text = value.toStringAsFixed(3).replaceFirst(RegExp(r'\.?0+$'), '');
   return unit == null ? text : '$text $unit';
+}
+
+String? _distinctDescription(WorkflowTaskModel task) {
+  final description = task.description?.trim();
+  if (description == null ||
+      description.isEmpty ||
+      description == task.notes?.trim()) {
+    return null;
+  }
+
+  return description;
 }
 
 String _moneyText(double value) {
@@ -1271,7 +1288,7 @@ class _WorkflowFilterOption {
 const _workflowStatusFilters = [
   _WorkflowFilterOption(null, 'Все'),
   _WorkflowFilterOption('pending', 'Ожидают'),
-  _WorkflowFilterOption('in_review', 'Доработка'),
+  _WorkflowFilterOption('in_review', 'На проверке'),
   _WorkflowFilterOption('confirmed', 'Согласовано'),
   _WorkflowFilterOption('rejected', 'Отклонено'),
 ];

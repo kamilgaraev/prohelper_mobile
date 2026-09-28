@@ -49,9 +49,6 @@ class _QualityControlScreenState extends ConsumerState<QualityControlScreen> {
   Widget build(BuildContext context) {
     final state = ref.watch(qualityControlProvider);
     final selectedProject = ref.watch(projectsProvider).selectedProject;
-    final compactAction =
-        MediaQuery.sizeOf(context).width < 400 &&
-        MediaQuery.textScalerOf(context).scale(1) > 1.15;
     final canAssignDefects =
         ref
             .watch(authProvider)
@@ -77,6 +74,14 @@ class _QualityControlScreenState extends ConsumerState<QualityControlScreen> {
           title: const Text('Контроль качества'),
           actions: [
             IconButton(
+              tooltip: 'Новое замечание',
+              onPressed:
+                  selectedProject == null
+                      ? null
+                      : () => _showCreateSheet(context),
+              icon: const Icon(Icons.add_rounded),
+            ),
+            IconButton(
               tooltip: 'Обновить',
               onPressed:
                   () => ref.read(qualityControlProvider.notifier).loadDefects(),
@@ -84,17 +89,6 @@ class _QualityControlScreenState extends ConsumerState<QualityControlScreen> {
             ),
           ],
         ),
-        floatingActionButton:
-            compactAction
-                ? null
-                : FloatingActionButton.extended(
-                  onPressed:
-                      selectedProject == null
-                          ? null
-                          : () => _showCreateSheet(context),
-                  icon: const Icon(Icons.add_rounded),
-                  label: const Text('Замечание'),
-                ),
         body:
             state.isLoading && state.defects.isEmpty
                 ? const AppLoadingState(message: 'Загружаем замечания')
@@ -137,17 +131,6 @@ class _QualityControlScreenState extends ConsumerState<QualityControlScreen> {
                         ),
                       if (state.fromCache || state.hasDirtyLocal)
                         const SizedBox(height: 12),
-                      if (compactAction) ...[
-                        FilledButton.icon(
-                          onPressed:
-                              selectedProject == null
-                                  ? null
-                                  : () => _showCreateSheet(context),
-                          icon: const Icon(Icons.add_rounded),
-                          label: const Text('Новое замечание'),
-                        ),
-                        const SizedBox(height: 12),
-                      ],
                       _SummaryStrip(defects: state.defects),
                       const SizedBox(height: 12),
                       _QualityFilterBar(
@@ -158,11 +141,20 @@ class _QualityControlScreenState extends ConsumerState<QualityControlScreen> {
                       ),
                       const SizedBox(height: 12),
                       if (state.defects.isEmpty)
-                        const AppEmptyState(
+                        AppEmptyState(
                           icon: Icons.fact_check_outlined,
-                          title: 'Замечаний по качеству нет',
+                          title:
+                              state.statusFilter != null ||
+                                      state.severityFilter != null ||
+                                      state.overdueOnly
+                                  ? 'Нет замечаний по выбранным фильтрам'
+                                  : 'Замечаний по качеству нет',
                           description:
-                              'Создайте замечание, когда нужно зафиксировать дефект на объекте.',
+                              state.statusFilter != null ||
+                                      state.severityFilter != null ||
+                                      state.overdueOnly
+                                  ? 'Измените фильтры, чтобы увидеть другие замечания.'
+                                  : 'Создайте замечание, когда нужно зафиксировать дефект на объекте.',
                         )
                       else
                         ...state.defects.map(
@@ -385,17 +377,17 @@ class _QualityControlScreenState extends ConsumerState<QualityControlScreen> {
                         isExpanded: true,
                         value: inspectionRequired,
                         decoration: const InputDecoration(
-                          labelText: 'Проверка результата',
+                          labelText: 'Фото или комментарий',
                         ),
                         hint: const Text('Выберите решение'),
                         items: const [
                           DropdownMenuItem(
                             value: true,
-                            child: Text('Требуется'),
+                            child: Text('Обязательны'),
                           ),
                           DropdownMenuItem(
                             value: false,
-                            child: Text('Не требуется'),
+                            child: Text('Не обязательны'),
                           ),
                         ],
                         onChanged:
@@ -557,70 +549,82 @@ class _QualityControlScreenState extends ConsumerState<QualityControlScreen> {
     BuildContext context,
     QualityDefectModel defect,
   ) async {
+    final notifier = ref.read(qualityControlProvider.notifier);
+    var detailFuture = notifier.loadDefectSnapshot(defect.id);
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       builder:
-          (sheetContext) => FutureBuilder<SnapshotRead<QualityDefectModel>>(
-            future: ref
-                .read(qualityControlProvider.notifier)
-                .loadDefectSnapshot(defect.id),
-            builder: (context, snapshot) {
-              if (snapshot.connectionState != ConnectionState.done) {
-                return const _QualitySheetFrame(
-                  child: AppLoadingState(
-                    message: 'Загружаем замечание',
-                    minHeight: 260,
-                  ),
-                );
-              }
+          (sheetContext) => StatefulBuilder(
+            builder:
+                (
+                  context,
+                  setSheetState,
+                ) => FutureBuilder<SnapshotRead<QualityDefectModel>>(
+                  future: detailFuture,
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState != ConnectionState.done) {
+                      return const _QualitySheetFrame(
+                        child: AppLoadingState(
+                          message: 'Загружаем замечание',
+                          minHeight: 260,
+                        ),
+                      );
+                    }
 
-              final read = snapshot.data;
-              if (snapshot.hasError ||
-                  read == null ||
-                  read.presence == SnapshotPresence.permissionDenied ||
-                  read.data == null) {
-                return _QualitySheetFrame(
-                  child: AppErrorState(
-                    title: 'Не удалось загрузить замечание',
-                    description:
-                        snapshot.error == null
-                            ? read?.error
-                            : UserMessage.fromError(snapshot.error!),
-                    minHeight: 260,
-                  ),
-                );
-              }
+                    final read = snapshot.data;
+                    if (snapshot.hasError ||
+                        read == null ||
+                        read.presence == SnapshotPresence.permissionDenied ||
+                        read.data == null) {
+                      return _QualitySheetFrame(
+                        child: AppErrorState(
+                          title: 'Не удалось загрузить замечание',
+                          description:
+                              snapshot.error == null
+                                  ? read?.error
+                                  : UserMessage.fromError(snapshot.error!),
+                          onRetry:
+                              () => setSheetState(() {
+                                detailFuture = notifier.loadDefectSnapshot(
+                                  defect.id,
+                                );
+                              }),
+                          minHeight: 260,
+                        ),
+                      );
+                    }
 
-              final detail = read.data!;
+                    final detail = read.data!;
 
-              return _QualitySheetFrame(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    if (read.fromCache || read.hasDirtyLocal)
-                      ProStatusBanner(
-                        title:
-                            read.hasDirtyLocal
-                                ? 'Есть локальные изменения'
-                                : 'Показаны сохранённые данные',
-                        description:
-                            read.error ??
-                            'Актуальность данных не подтверждена сетью.',
-                        tone:
-                            read.hasDirtyLocal
-                                ? ProStatusTone.warning
-                                : ProStatusTone.info,
-                        fullText: true,
+                    return _QualitySheetFrame(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          if (read.fromCache || read.hasDirtyLocal)
+                            ProStatusBanner(
+                              title:
+                                  read.hasDirtyLocal
+                                      ? 'Есть локальные изменения'
+                                      : 'Показаны сохранённые данные',
+                              description:
+                                  read.error ??
+                                  'Актуальность данных не подтверждена сетью.',
+                              tone:
+                                  read.hasDirtyLocal
+                                      ? ProStatusTone.warning
+                                      : ProStatusTone.info,
+                              fullText: true,
+                            ),
+                          if (read.fromCache || read.hasDirtyLocal)
+                            const SizedBox(height: 12),
+                          QualityDefectDetailView(defect: detail),
+                        ],
                       ),
-                    if (read.fromCache || read.hasDirtyLocal)
-                      const SizedBox(height: 12),
-                    QualityDefectDetailView(defect: detail),
-                  ],
+                    );
+                  },
                 ),
-              );
-            },
           ),
     );
   }
@@ -747,7 +751,7 @@ class _QualityControlScreenState extends ConsumerState<QualityControlScreen> {
                                     ScaffoldMessenger.of(context).showSnackBar(
                                       const SnackBar(
                                         content: Text(
-                                          'Добавьте комментарий или фото результата',
+                                          'Чтобы отправить на проверку, добавьте фото или комментарий результата',
                                         ),
                                       ),
                                     );
@@ -1081,8 +1085,8 @@ class QualityDefectDetailView extends StatelessWidget {
               icon: Icons.fact_check_outlined,
               label:
                   defect.inspectionRequired
-                      ? 'Проверка требуется'
-                      : 'Проверка не требуется',
+                      ? 'Фото или комментарий: обязательны'
+                      : 'Фото или комментарий: не обязательны',
             ),
           ],
         ),
@@ -1265,7 +1269,7 @@ class _QualityHistoryRow extends StatelessWidget {
                   Text(entry.comment!, style: AppTypography.caption(context)),
                 if (entry.changedAt != null)
                   Text(
-                    _formatQualityDate(entry.changedAt!),
+                    _formatQualityHistoryDate(entry.changedAt!),
                     style: AppTypography.caption(context),
                   ),
               ],
@@ -1501,6 +1505,15 @@ String _formatQualityDate(String value) {
   }
 
   return '${parsed.day.toString().padLeft(2, '0')}.${parsed.month.toString().padLeft(2, '0')}.${parsed.year}';
+}
+
+String _formatQualityHistoryDate(String value) {
+  final parsed = DateTime.tryParse(value);
+  if (parsed == null) {
+    return value;
+  }
+
+  return '${parsed.day.toString().padLeft(2, '0')}.${parsed.month.toString().padLeft(2, '0')}.${parsed.year} ${parsed.hour.toString().padLeft(2, '0')}:${parsed.minute.toString().padLeft(2, '0')}';
 }
 
 bool _isNetworkUrl(String value) {

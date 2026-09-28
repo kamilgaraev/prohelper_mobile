@@ -88,6 +88,54 @@ void main() {
     expect(afterRevocation.data, isNull);
   });
 
+  test('401 дневного плана запрещает показ старого кеша офлайн', () async {
+    final store = MemoryEntitySnapshotStore();
+    const owner = EntitySnapshotOwner(userId: 7, orgId: 10);
+    final repository = _ScheduleRepository();
+    final adapter = ScheduleSnapshotAdapter(
+      repository: repository,
+      snapshots: Future.value(
+        EntitySnapshotService(store: store, resolveOwner: () => owner),
+      ),
+      now: () => DateTime(2026, 9, 26, 12),
+    );
+    final initial = await adapter.loadDailyPlans(online: true, projectId: 15);
+    repository.dailyErrorStatusCode = 401;
+
+    final denied = await adapter.loadDailyPlans(online: true, projectId: 15);
+    final afterRevocation = await adapter.loadDailyPlans(
+      online: false,
+      projectId: 15,
+    );
+
+    expect(initial.data, hasLength(1));
+    expect(denied.presence, SnapshotPresence.permissionDenied);
+    expect(denied.data, isNull);
+    expect(afterRevocation.presence, SnapshotPresence.permissionDenied);
+    expect(afterRevocation.data, isNull);
+  });
+
+  test('503 без кеша не подменяется данными и помечает retention', () async {
+    final repository = _ScheduleRepository()..dailyErrorStatusCode = 503;
+    final adapter = ScheduleSnapshotAdapter(
+      repository: repository,
+      snapshots: Future.value(
+        EntitySnapshotService(
+          store: MemoryEntitySnapshotStore(),
+          resolveOwner: () => const EntitySnapshotOwner(userId: 7, orgId: 10),
+        ),
+      ),
+      now: () => DateTime(2026, 9, 26, 12),
+    );
+
+    final result = await adapter.loadDailyPlans(online: true, projectId: 15);
+
+    expect(result.presence, SnapshotPresence.missing);
+    expect(result.data, isNull);
+    expect(result.retainCurrentData, isTrue);
+    expect(result.error, 'HTTP 503');
+  });
+
   test('422 дневного плана не превращается в успех со старым кешем', () async {
     final store = MemoryEntitySnapshotStore();
     const owner = EntitySnapshotOwner(userId: 7, orgId: 10);

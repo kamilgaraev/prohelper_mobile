@@ -1033,9 +1033,9 @@ void main() {
       await service.enqueue(
         const SyncQueueDraft(
           moduleSlug: 'quality_control',
-          operationType: 'resolve_defect',
+          operationType: 'verify_defect',
           method: 'POST',
-          endpoint: '/quality-control/defects/7/resolve',
+          endpoint: '/quality-control/defects/7/verify',
           payload: {'idempotency_key': 'unconfirmed-key'},
         ),
       );

@@ -118,6 +118,138 @@ void main() {
     },
   );
 
+  test(
+    'ambiguous defect resolution keeps its header key through queue replay',
+    () async {
+      final store = _PersistedSyncQueueStore();
+      var now = DateTime(2026, 9, 28, 10);
+      final firstAdapter = _TypedErrorAdapter(DioExceptionType.receiveTimeout);
+      final firstDio = Dio(BaseOptions(baseUrl: 'https://api.example.test'))
+        ..httpClientAdapter = firstAdapter;
+      final repository = QualityControlRepository(
+        firstDio,
+        syncQueueServiceFuture: Future.value(
+          SyncQueueService(store: store, dio: firstDio, now: () => now),
+        ),
+      );
+
+      await expectLater(
+        repository.resolveDefect(7, comment: 'Устранено'),
+        throwsA(
+          isA<SyncQueuedException>().having(
+            (error) => error.requiresReview,
+            'requiresReview',
+            isFalse,
+          ),
+        ),
+      );
+
+      final queued = (await store.all()).single;
+      final key = queued.payload['idempotency_key'] as String;
+      expect(queued.operationType, 'resolve_defect');
+      expect(queued.endpoint, '/quality-control/defects/7/resolve');
+      expect(key, matches(RegExp(r'^[a-f0-9]{32}$')));
+      expect(firstAdapter.lastRequest?.headers['Idempotency-Key'], key);
+      expect(firstAdapter.lastRequest?.data, {'comment': 'Устранено'});
+
+      now = now.add(const Duration(minutes: 2));
+      final replayAdapter = _CaptureSuccessAdapter();
+      final replayDio = Dio(BaseOptions(baseUrl: 'https://api.example.test'))
+        ..httpClientAdapter = replayAdapter;
+      final result =
+          await SyncQueueService(
+            store: store,
+            dio: replayDio,
+            now: () => now,
+            verifyOnline: () async => true,
+          ).retryDueOperations();
+
+      expect(result.successCount, 1);
+      expect(result.retryCount, 0);
+      expect(
+        replayAdapter.lastRequest?.path,
+        '/quality-control/defects/7/resolve',
+      );
+      expect(replayAdapter.lastRequest?.headers['Idempotency-Key'], key);
+      expect(replayAdapter.lastRequest?.data, {'comment': 'Устранено'});
+      expect(await store.all(), isEmpty);
+    },
+  );
+
+  test(
+    'queued resolve photo replays with the same key, comment and file bytes',
+    () async {
+      final photos = await _createTempPhotos('quality-resolve-replay', 1);
+      final photo = photos.single;
+      final store = _PersistedSyncQueueStore();
+      var now = DateTime(2026, 9, 28, 10);
+      final firstAdapter = _TypedErrorAdapter(DioExceptionType.receiveTimeout);
+      final firstDio = Dio(BaseOptions(baseUrl: 'https://api.example.test'))
+        ..httpClientAdapter = firstAdapter;
+      final repository = QualityControlRepository(
+        firstDio,
+        syncQueueServiceFuture: Future.value(
+          SyncQueueService(store: store, dio: firstDio, now: () => now),
+        ),
+      );
+
+      await expectLater(
+        repository.resolveDefect(
+          7,
+          comment: '  Фото после устранения  ',
+          photoPaths: [photo.path],
+        ),
+        throwsA(
+          isA<SyncQueuedException>().having(
+            (error) => error.requiresReview,
+            'requiresReview',
+            isFalse,
+          ),
+        ),
+      );
+
+      final queued = (await store.all()).single;
+      final key = queued.payload['idempotency_key'] as String;
+      expect(queued.operationType, 'resolve_defect');
+      expect(queued.localAttachments, [photo.path]);
+      expect(queued.attachments.single.path, photo.path);
+      expect(queued.attachments.single.field, 'photos[0][file]');
+      expect(firstAdapter.lastRequest?.headers['Idempotency-Key'], key);
+      expect(firstAdapter.lastRequest?.data, isA<FormData>());
+
+      now = now.add(const Duration(minutes: 2));
+      final replayAdapter = _CaptureSuccessAdapter();
+      final result =
+          await SyncQueueService(
+            store: store,
+            dio: Dio(BaseOptions(baseUrl: 'https://api.example.test'))
+              ..httpClientAdapter = replayAdapter,
+            now: () => now,
+            verifyOnline: () async => true,
+          ).retryDueOperations();
+
+      expect(result.successCount, 1);
+      expect(
+        replayAdapter.lastRequest?.path,
+        '/quality-control/defects/7/resolve',
+      );
+      expect(replayAdapter.lastRequest?.headers['Idempotency-Key'], key);
+      expect(replayAdapter.lastRequest?.data, isA<FormData>());
+      final formData = replayAdapter.lastRequest!.data as FormData;
+      expect(_field(formData, 'idempotency_key'), isNull);
+      expect(_field(formData, 'comment'), 'Фото после устранения');
+      expect(_field(formData, 'photos[0][type]'), 'after');
+      expect(formData.files.single.key, 'photos[0][file]');
+      expect(formData.files.single.value.filename, photo.uri.pathSegments.last);
+      expect(
+        latin1.decode(replayAdapter.bodyBytes!),
+        contains(photo.uri.pathSegments.last),
+      );
+      expect(replayAdapter.bodyBytes, containsBytes([0, 1, 2, 3]));
+      expect(await store.all(), isEmpty);
+    },
+  );
+
   test('loads assignment candidates and assigns a defect', () async {
     final queue =
         TestDioResponseQueue()
@@ -203,6 +335,7 @@ void main() {
 
       final formData = request.data as FormData;
       expect(_field(formData, 'comment'), 'Исправлено');
+      expect(_field(formData, 'idempotency_key'), isNull);
       expect(_field(formData, 'photos[0][type]'), 'after');
       expect(_field(formData, 'photos[1][type]'), 'after');
       expect(formData.files[0].key, 'photos[0][file]');
@@ -297,6 +430,23 @@ String? _field(FormData formData, String key) {
   return null;
 }
 
+Matcher containsBytes(List<int> expected) => predicate<Uint8List?>((actual) {
+  if (actual == null || expected.isEmpty || actual.length < expected.length) {
+    return false;
+  }
+  for (var start = 0; start <= actual.length - expected.length; start++) {
+    var matches = true;
+    for (var index = 0; index < expected.length; index++) {
+      if (actual[start + index] != expected[index]) {
+        matches = false;
+        break;
+      }
+    }
+    if (matches) return true;
+  }
+  return false;
+}, 'contains bytes $expected');
+
 class _TypedErrorAdapter implements HttpClientAdapter {
   _TypedErrorAdapter(this.type);
 
@@ -319,6 +469,7 @@ class _TypedErrorAdapter implements HttpClientAdapter {
 
 class _CaptureSuccessAdapter implements HttpClientAdapter {
   RequestOptions? lastRequest;
+  Uint8List? bodyBytes;
 
   @override
   void close({bool force = false}) {}
@@ -330,6 +481,13 @@ class _CaptureSuccessAdapter implements HttpClientAdapter {
     Future<void>? cancelFuture,
   ) async {
     lastRequest = options;
+    final bytes = BytesBuilder(copy: false);
+    if (requestStream != null) {
+      await for (final chunk in requestStream) {
+        bytes.add(chunk);
+      }
+    }
+    bodyBytes = bytes.takeBytes();
     return ResponseBody.fromString(
       '{"success":true}',
       200,
