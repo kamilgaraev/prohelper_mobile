@@ -769,7 +769,7 @@ class _RequestsOperationalBanner extends StatelessWidget {
             ? (hasAttention
                 ? 'Ждут решения'
                 : 'Очередь согласования под контролем')
-            : (hasAttention ? 'Ждут решения' : 'Поток заявок под контролем');
+            : (hasAttention ? 'Ждут решения' : 'Заявки объекта');
 
     final description =
         scope == SiteRequestsScope.approvals
