@@ -32,6 +32,7 @@ class _ProjectParticipantsScreenState
   String? _query;
   String? _error;
   String? _staleError;
+  int? _contextProjectId;
   int? _loadedProjectId;
   int _version = 0;
   bool _loading = false;
@@ -46,7 +47,7 @@ class _ProjectParticipantsScreenState
   @override
   void initState() {
     super.initState();
-    _loadedProjectId = ref.read(projectsProvider).selectedProject?.serverId;
+    _contextProjectId = ref.read(projectsProvider).selectedProject?.serverId;
     final auth = ref.read(authProvider);
     _contextIdentity = auth is AuthAuthenticated ? auth.sessionIdentity : null;
     Future.microtask(_load);
@@ -80,8 +81,8 @@ class _ProjectParticipantsScreenState
       projectsProvider.select((state) => state.selectedProject),
     );
     final projectId = project?.serverId;
-    if (projectId != _loadedProjectId) {
-      _loadedProjectId = projectId;
+    if (projectId != _contextProjectId) {
+      _contextProjectId = projectId;
       Future.microtask(_load);
     }
     final canView = ref

@@ -58,6 +58,44 @@ void main() {
     },
   );
 
+  test('keeps package status code and reads the server status label', () {
+    final package = DesignPackageModel.fromJson({
+      'id': 42,
+      'title': 'Рабочая документация',
+      'status': 'draft',
+      'status_label': 'Черновик сервера',
+    });
+
+    expect(package.status, 'draft');
+    expect(package.statusLabel, 'Черновик сервера');
+  });
+
+  test('uses backend Russian labels when package status label is empty', () {
+    const statusLabels = <String, String>{
+      'draft': 'Черновик',
+      'in_work': 'В работе',
+      'ready_for_norm_control': 'Готов к нормоконтролю',
+      'under_norm_control': 'На нормоконтроле',
+      'returned': 'Возвращен в работу',
+      'under_customer_review': 'На проверке заказчика',
+      'approved': 'Согласован',
+      'issued': 'Выпущен',
+      'archived': 'В архиве',
+    };
+
+    for (final entry in statusLabels.entries) {
+      final package = DesignPackageModel.fromJson({
+        'id': 42,
+        'title': 'Рабочая документация',
+        'status': entry.key,
+        'status_label': '  ',
+      });
+
+      expect(package.status, entry.key);
+      expect(package.statusLabel, entry.value, reason: entry.key);
+    }
+  });
+
   test(
     'uses selected-project pagination and confirmed package routes',
     () async {

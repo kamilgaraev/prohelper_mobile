@@ -40,6 +40,7 @@ class _FakeDesignPackageNotifier extends DesignPackageNotifier {
   _FakeDesignPackageNotifier({
     String title = 'Рабочая документация',
     String? status,
+    String? statusLabel,
   }) : super(_FakeDesignPackageRepository()) {
     state = DesignPackageState(
       projectId: 9,
@@ -50,6 +51,7 @@ class _FakeDesignPackageNotifier extends DesignPackageNotifier {
             projectId: 9,
             title: title,
             status: status,
+            statusLabel: statusLabel,
           ),
         ],
         currentPage: 1,
@@ -121,6 +123,27 @@ void main() {
     expect(find.text(title), findsOneWidget);
     expect(find.text(status), findsOneWidget);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('package card shows localized status label', (tester) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          projectsProvider.overrideWith((ref) => _FakeProjectsNotifier()),
+          designPackageProvider.overrideWith(
+            (ref) => _FakeDesignPackageNotifier(
+              status: 'draft',
+              statusLabel: 'Черновик',
+            ),
+          ),
+        ],
+        child: const MaterialApp(home: DesignManagementScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Черновик'), findsOneWidget);
+    expect(find.text('draft'), findsNothing);
   });
 
   testWidgets('shows selected project packages and runs an allowed action', (
