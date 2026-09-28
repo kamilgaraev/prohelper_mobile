@@ -23,11 +23,127 @@ class PaymentDocumentPage {
   final bool canCreate;
 }
 
+class PaymentPartyOption {
+  const PaymentPartyOption({
+    required this.id,
+    required this.name,
+    required this.type,
+    this.inn,
+  });
+
+  final int id;
+  final String name;
+  final String type;
+  final String? inn;
+
+  factory PaymentPartyOption.fromJson(Map<String, dynamic> json, String type) {
+    final rawId = json['id'];
+    final id = rawId is int ? rawId : int.tryParse('$rawId');
+    if (id == null || id <= 0) {
+      throw const FormatException('Некорректный ID участника платежа');
+    }
+    return PaymentPartyOption(
+      id: id,
+      name: '${json['name'] ?? ''}'.trim(),
+      type: type,
+      inn: json['inn']?.toString(),
+    );
+  }
+
+  String get key => '$type:$id';
+  String get label => inn == null || inn!.isEmpty ? name : '$name · ИНН $inn';
+}
+
+class PaymentContractorPage {
+  const PaymentContractorPage({
+    required this.items,
+    required this.currentPage,
+    required this.lastPage,
+    required this.total,
+  });
+
+  final List<PaymentPartyOption> items;
+  final int currentPage;
+  final int lastPage;
+  final int total;
+}
+
+class PaymentFormOptions {
+  const PaymentFormOptions({
+    required this.currentOrganization,
+    required this.contractors,
+  });
+
+  final PaymentPartyOption currentOrganization;
+  final PaymentContractorPage contractors;
+}
+
 class PaymentsRepository {
   PaymentsRepository(this._dio);
   final Dio _dio;
 
   static const _base = '/payments/documents';
+
+  Future<PaymentFormOptions> formOptions({
+    int? projectId,
+    String? search,
+    int page = 1,
+    int perPage = 20,
+  }) async {
+    try {
+      final response = await _dio.get(
+        '$_base/options',
+        queryParameters: {
+          if (projectId != null) 'project_id': projectId,
+          if (search != null && search.trim().isNotEmpty)
+            'search': search.trim(),
+          'page': page,
+          'per_page': perPage,
+        },
+      );
+      final data = MobileApiResponse.dataMap(response.data);
+      final rawOrg = data['current_organization'];
+      if (rawOrg is! Map) {
+        throw const FormatException('Не получена текущая организация');
+      }
+      final currentOrganization = PaymentPartyOption.fromJson(
+        Map<String, dynamic>.from(rawOrg),
+        'organization',
+      );
+      final rawContractors = data['contractors'];
+      final contractors =
+          rawContractors is Map
+              ? Map<String, dynamic>.from(rawContractors)
+              : const <String, dynamic>{};
+      final rows =
+          contractors['items'] is List
+              ? contractors['items'] as List
+              : const <dynamic>[];
+      final meta =
+          contractors['meta'] is Map
+              ? Map<String, dynamic>.from(contractors['meta'] as Map)
+              : const <String, dynamic>{};
+      return PaymentFormOptions(
+        currentOrganization: currentOrganization,
+        contractors: PaymentContractorPage(
+          items: rows
+              .whereType<Map>()
+              .map(
+                (row) => PaymentPartyOption.fromJson(
+                  Map<String, dynamic>.from(row),
+                  'contractor',
+                ),
+              )
+              .toList(growable: false),
+          currentPage: _int(meta['current_page'], page),
+          lastPage: _int(meta['last_page'], page),
+          total: _int(meta['total'], rows.length),
+        ),
+      );
+    } on DioException catch (error) {
+      throw ApiException.fromDio(error);
+    }
+  }
 
   Future<PaymentDocumentPage> list({
     required int projectId,

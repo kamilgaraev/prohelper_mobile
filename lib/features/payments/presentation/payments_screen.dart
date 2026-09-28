@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/network/api_exception.dart';
@@ -315,7 +317,9 @@ class _PaymentDocumentDetailScreenState
                             ),
                             const SizedBox(height: 12),
                             TextField(
+                              key: const ValueKey('payment-register-amount'),
                               controller: _amount,
+                              enabled: !_busy,
                               keyboardType:
                                   const TextInputType.numberWithOptions(
                                     decimal: true,
@@ -355,11 +359,16 @@ class _PaymentDocumentDetailScreenState
                                   child: Text('Другое'),
                                 ),
                               ],
-                              onChanged: (value) {
-                                if (value != null) {
-                                  setState(() => _paymentMethod = value);
-                                }
-                              },
+                              onChanged:
+                                  _busy
+                                      ? null
+                                      : (value) {
+                                        if (value != null) {
+                                          setState(
+                                            () => _paymentMethod = value,
+                                          );
+                                        }
+                                      },
                             ),
                             ListTile(
                               contentPadding: EdgeInsets.zero,
@@ -372,18 +381,21 @@ class _PaymentDocumentDetailScreenState
                             ),
                             TextField(
                               controller: _reference,
+                              enabled: !_busy,
                               decoration: const InputDecoration(
                                 labelText: 'Номер подтверждения',
                               ),
                             ),
                             TextField(
                               controller: _notes,
+                              enabled: !_busy,
                               decoration: const InputDecoration(
                                 labelText: 'Комментарий',
                               ),
                             ),
                             const SizedBox(height: 12),
                             FilledButton(
+                              key: const ValueKey('payment-register-submit'),
                               onPressed: _busy ? null : _registerPayment,
                               child: const Text('Сохранить оплату'),
                             ),
@@ -402,12 +414,19 @@ class _PaymentDocumentDetailScreenState
   }
 
   Future<void> _submit() async {
-    if (!await _hasNetwork()) {
-      setState(() => _error = 'Для отправки подключитесь к интернету.');
-      return;
-    }
+    if (_busy) return;
     setState(() => _busy = true);
     try {
+      if (!await _hasNetwork()) {
+        if (mounted) {
+          setState(() {
+            _busy = false;
+            _error = 'Для отправки подключитесь к интернету.';
+          });
+        }
+        return;
+      }
+      if (!mounted) return;
       await ref.read(paymentsRepositoryProvider).submit(widget.id);
       if (mounted) Navigator.pop(context, true);
     } catch (e) {
@@ -421,73 +440,43 @@ class _PaymentDocumentDetailScreenState
   }
 
   Future<void> _decide(bool approve) async {
-    var draft = '';
-    final comment = await showDialog<String>(
+    if (_busy) return;
+    final confirmed = await showDialog<bool>(
       context: context,
       builder:
-          (dialogContext) => AlertDialog(
-            title: Text(
-              approve ? 'Согласовать документ' : 'Отклонить документ',
-            ),
-            content: TextField(
-              onChanged: (value) => draft = value,
-              maxLines: 3,
-              decoration: InputDecoration(
-                labelText: approve ? 'Комментарий' : 'Причина отклонения',
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(dialogContext),
-                child: const Text('Отмена'),
-              ),
-              FilledButton(
-                onPressed: () => Navigator.pop(dialogContext, draft.trim()),
-                child: Text(approve ? 'Согласовать' : 'Отклонить'),
-              ),
-            ],
+          (_) => _PaymentDecisionDialog(
+            approve: approve,
+            onSubmit: (comment) async {
+              if (_busy) return 'Дождитесь завершения операции.';
+              setState(() {
+                _busy = true;
+                _error = null;
+              });
+              try {
+                if (!await _hasNetwork()) {
+                  return 'Для решения подключитесь к интернету.';
+                }
+                if (!mounted) return 'Экран документа закрыт.';
+                await ref
+                    .read(paymentsRepositoryProvider)
+                    .decide(widget.id, approve: approve, comment: comment);
+                return null;
+              } catch (exception) {
+                return _message(exception);
+              } finally {
+                if (mounted) setState(() => _busy = false);
+              }
+            },
           ),
     );
-    if (!mounted || comment == null) {
-      return;
-    }
-    if (!approve && comment.length < 3) {
-      setState(() => _error = 'Укажите причину отклонения');
-      return;
-    }
-    if (!await _hasNetwork()) {
-      if (mounted) {
-        setState(() => _error = 'Для решения подключитесь к интернету.');
-      }
-      return;
-    }
-    setState(() {
-      _busy = true;
-      _error = null;
-    });
-    try {
-      await ref
-          .read(paymentsRepositoryProvider)
-          .decide(widget.id, approve: approve, comment: comment);
-      if (mounted) Navigator.pop(context, true);
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _busy = false;
-          _error = _message(e);
-        });
-      }
-    }
+    if (confirmed == true && mounted) Navigator.pop(context, true);
   }
 
   Future<void> _registerPayment() async {
+    if (_busy) return;
     final amount = double.tryParse(_amount.text.replaceAll(',', '.'));
     if (amount == null || amount <= 0) {
       setState(() => _error = 'Укажите сумму больше нуля');
-      return;
-    }
-    if (!await _hasNetwork()) {
-      setState(() => _error = 'Для фиксации оплаты подключитесь к интернету.');
       return;
     }
     final payload = {
@@ -507,6 +496,16 @@ class _PaymentDocumentDetailScreenState
       _error = null;
     });
     try {
+      if (!await _hasNetwork()) {
+        if (mounted) {
+          setState(() {
+            _busy = false;
+            _error = 'Для фиксации оплаты подключитесь к интернету.';
+          });
+        }
+        return;
+      }
+      if (!mounted) return;
       final storage = ref.read(secureStorageProvider);
       final paymentKey = await storage.getOrCreateOperationKey(
         namespace: 'payment-document-register-payment',
@@ -515,10 +514,12 @@ class _PaymentDocumentDetailScreenState
       await ref
           .read(paymentsRepositoryProvider)
           .registerPayment(widget.id, payload, idempotencyKey: paymentKey);
-      await storage.clearOperationKey(
-        namespace: 'payment-document-register-payment',
-        fingerprint: fingerprint,
-      );
+      try {
+        await storage.clearOperationKey(
+          namespace: 'payment-document-register-payment',
+          fingerprint: fingerprint,
+        );
+      } catch (_) {}
       if (mounted) Navigator.pop(context, true);
     } catch (e) {
       if (mounted) {
@@ -583,15 +584,110 @@ class _PaymentDocumentFormScreenState
   late final _description = TextEditingController(
     text: '${widget.document?.values['description'] ?? ''}',
   );
+  late final _bankAccount = TextEditingController(
+    text: '${_bankDetails['account'] ?? ''}',
+  );
+  late final _bankBik = TextEditingController(
+    text: '${_bankDetails['bik'] ?? ''}',
+  );
+  final _partySearch = TextEditingController();
+  List<PaymentPartyOption> _contractors = [];
+  PaymentPartyOption? _currentOrganization;
+  PaymentPartyOption? _payer;
+  PaymentPartyOption? _payee;
+  int _contractorPage = 1;
+  int _contractorLastPage = 1;
+  int _searchRequest = 0;
+  Timer? _searchDebounce;
+  bool _optionsLoading = true;
+  bool _optionsLoadingMore = false;
+  String? _optionsError;
   bool _busy = false;
   String? _error;
-  DateTime _documentDate = DateTime.now();
+  late DateTime _documentDate =
+      DateTime.tryParse('${widget.document?.values['document_date'] ?? ''}') ??
+      DateTime.now();
+
+  Map<String, dynamic> get _bankDetails {
+    final raw = widget.document?.values['bank_details'];
+    return raw is Map ? Map<String, dynamic>.from(raw) : const {};
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _loadOptions();
+  }
+
   @override
   void dispose() {
+    _searchDebounce?.cancel();
     _purpose.dispose();
     _amount.dispose();
     _description.dispose();
+    _bankAccount.dispose();
+    _bankBik.dispose();
+    _partySearch.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadOptions({int page = 1, bool append = false}) async {
+    final request = ++_searchRequest;
+    if (mounted) {
+      setState(() {
+        _optionsLoading = !append;
+        _optionsLoadingMore = append;
+        _optionsError = null;
+      });
+    }
+    try {
+      final options = await ref
+          .read(paymentsRepositoryProvider)
+          .formOptions(
+            projectId: widget.projectId,
+            search: _partySearch.text,
+            page: page,
+          );
+      if (!mounted || request != _searchRequest) return;
+      setState(() {
+        _currentOrganization = options.currentOrganization;
+        _contractors =
+            append
+                ? [..._contractors, ...options.contractors.items]
+                : options.contractors.items;
+        _contractorPage = options.contractors.currentPage;
+        _contractorLastPage = options.contractors.lastPage;
+        _optionsLoading = false;
+        _optionsLoadingMore = false;
+      });
+    } catch (error) {
+      if (!mounted || request != _searchRequest) return;
+      setState(() {
+        _optionsLoading = false;
+        _optionsLoadingMore = false;
+        _optionsError = _message(error);
+      });
+    }
+  }
+
+  void _searchParties(String value) {
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(
+      const Duration(milliseconds: 350),
+      () => _loadOptions(),
+    );
+  }
+
+  List<PaymentPartyOption> _partyChoices(PaymentPartyOption? selected) {
+    final choices = <PaymentPartyOption>[
+      if (_currentOrganization != null) _currentOrganization!,
+      ..._contractors,
+    ];
+    if (selected != null) {
+      choices.removeWhere((item) => item.key == selected.key);
+      choices.add(selected);
+    }
+    return choices;
   }
 
   @override
@@ -601,79 +697,286 @@ class _PaymentDocumentFormScreenState
         widget.document == null ? 'Новый документ' : 'Изменить документ',
       ),
     ),
-    body: Form(
-      key: _formKey,
-      child: ListView(
+    body: SingleChildScrollView(
+      child: Padding(
         padding: const EdgeInsets.all(16),
-        children: [
-          TextFormField(
-            controller: _purpose,
-            decoration: const InputDecoration(labelText: 'Назначение'),
-            validator:
-                (v) =>
-                    v == null || v.trim().isEmpty
-                        ? 'Заполните назначение'
-                        : null,
-          ),
-          TextFormField(
-            controller: _amount,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            decoration: const InputDecoration(labelText: 'Сумма'),
-            validator:
-                (v) =>
-                    double.tryParse((v ?? '').replaceAll(',', '.')) == null
-                        ? 'Укажите сумму'
-                        : null,
-          ),
-          TextFormField(
-            controller: _description,
-            decoration: const InputDecoration(labelText: 'Комментарий'),
-            maxLines: 3,
-          ),
-          ListTile(
-            contentPadding: EdgeInsets.zero,
-            title: const Text('Дата документа'),
-            subtitle: Text(_dateLabel(_documentDate)),
-            trailing: const Icon(Icons.calendar_month_outlined),
-            onTap: _busy ? null : _pickDocumentDate,
-          ),
-          if (_error != null)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              child: Text(
-                _error!,
-                style: TextStyle(color: Theme.of(context).colorScheme.error),
+        child: Form(
+          key: _formKey,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              TextFormField(
+                key: const ValueKey('payment-purpose'),
+                controller: _purpose,
+                enabled: !_busy,
+                decoration: const InputDecoration(labelText: 'Назначение'),
+                validator:
+                    (v) =>
+                        v == null || v.trim().isEmpty
+                            ? 'Заполните назначение'
+                            : null,
               ),
-            ),
-          const SizedBox(height: 12),
-          FilledButton(
-            onPressed: _busy ? null : _save,
-            child: Text(_busy ? 'Сохраняем…' : 'Сохранить'),
+              TextFormField(
+                key: const ValueKey('payment-amount'),
+                controller: _amount,
+                enabled: !_busy,
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                decoration: const InputDecoration(labelText: 'Сумма'),
+                validator:
+                    (v) =>
+                        (double.tryParse((v ?? '').replaceAll(',', '.')) ??
+                                    0) <=
+                                0
+                            ? 'Укажите сумму больше нуля'
+                            : null,
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'Стороны платежа',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              if (widget.document != null) ...[
+                Text(
+                  'Сохранённый плательщик: ${widget.document!.values['payer_name'] ?? 'не указан'}',
+                ),
+                Text(
+                  'Сохранённый получатель: ${widget.document!.values['payee_name'] ?? 'не указан'}',
+                ),
+                const Text(
+                  'Если сторону не менять, она останется как в документе.',
+                ),
+              ],
+              if (_optionsLoading)
+                const LinearProgressIndicator()
+              else if (_optionsError != null) ...[
+                Text(
+                  _optionsError!,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
+                TextButton.icon(
+                  onPressed: _busy ? null : () => _loadOptions(),
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('Повторить загрузку сторон'),
+                ),
+              ] else ...[
+                _partyDropdown(
+                  key: const ValueKey('payment-payer'),
+                  label: 'Плательщик',
+                  selected: _payer,
+                  choices: _partyChoices(_payer),
+                  existingName:
+                      '${widget.document?.values['payer_name'] ?? ''}',
+                  onChanged: (value) => setState(() => _payer = value),
+                ),
+                _partyDropdown(
+                  key: const ValueKey('payment-payee'),
+                  label: 'Получатель',
+                  selected: _payee,
+                  choices: _partyChoices(_payee),
+                  existingName:
+                      '${widget.document?.values['payee_name'] ?? ''}',
+                  onChanged: (value) => setState(() => _payee = value),
+                ),
+                TextField(
+                  key: const ValueKey('payment-party-search'),
+                  controller: _partySearch,
+                  enabled: !_busy,
+                  onChanged: _searchParties,
+                  decoration: const InputDecoration(
+                    labelText: 'Найти контрагента',
+                    prefixIcon: Icon(Icons.search),
+                  ),
+                ),
+                if (_contractorPage < _contractorLastPage)
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton.icon(
+                      onPressed:
+                          _optionsLoadingMore || _busy
+                              ? null
+                              : () => _loadOptions(
+                                page: _contractorPage + 1,
+                                append: true,
+                              ),
+                      icon: const Icon(Icons.expand_more),
+                      label: Text(
+                        _optionsLoadingMore ? 'Загрузка…' : 'Ещё контрагенты',
+                      ),
+                    ),
+                  ),
+              ],
+              const SizedBox(height: 8),
+              Text(
+                'Банковские реквизиты',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              TextFormField(
+                key: const ValueKey('payment-bank-account'),
+                controller: _bankAccount,
+                enabled: !_busy,
+                keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                maxLength: 20,
+                decoration: const InputDecoration(
+                  labelText: 'Расчётный счёт (20 цифр)',
+                ),
+                validator:
+                    (value) =>
+                        RegExp(r'^\d{20}$').hasMatch(value ?? '')
+                            ? null
+                            : 'Введите 20 цифр расчётного счёта',
+              ),
+              TextFormField(
+                key: const ValueKey('payment-bank-bik'),
+                controller: _bankBik,
+                enabled: !_busy,
+                keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                maxLength: 9,
+                decoration: const InputDecoration(labelText: 'БИК (9 цифр)'),
+                validator:
+                    (value) =>
+                        RegExp(r'^\d{9}$').hasMatch(value ?? '')
+                            ? null
+                            : 'Введите 9 цифр БИК',
+              ),
+              TextFormField(
+                controller: _description,
+                enabled: !_busy,
+                decoration: const InputDecoration(labelText: 'Комментарий'),
+                maxLines: 3,
+              ),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Дата документа'),
+                subtitle: Text(_dateLabel(_documentDate)),
+                trailing: const Icon(Icons.calendar_month_outlined),
+                onTap: _busy ? null : _pickDocumentDate,
+              ),
+              if (_error != null)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  child: Text(
+                    _error!,
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                  ),
+                ),
+              const SizedBox(height: 12),
+              FilledButton(
+                key: const ValueKey('payment-document-save'),
+                onPressed: _busy ? null : _save,
+                child: Text(_busy ? 'Сохраняем…' : 'Сохранить'),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     ),
   );
+
+  Widget _partyDropdown({
+    required Key key,
+    required String label,
+    required PaymentPartyOption? selected,
+    required List<PaymentPartyOption> choices,
+    required String existingName,
+    required ValueChanged<PaymentPartyOption?> onChanged,
+  }) => DropdownButtonFormField<PaymentPartyOption>(
+    key: key,
+    initialValue: selected,
+    isExpanded: true,
+    decoration: InputDecoration(
+      labelText: label,
+      helperText:
+          widget.document == null
+              ? 'Выберите организацию или контрагента'
+              : 'Без выбора сохранится: ${existingName.isEmpty ? 'текущее значение' : existingName}',
+    ),
+    items:
+        choices
+            .map(
+              (party) => DropdownMenuItem(
+                value: party,
+                child: Text(
+                  '${party.type == 'organization' ? 'Организация' : 'Контрагент'}: ${party.label}',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            )
+            .toList(),
+    validator:
+        widget.document == null && selected == null
+            ? (_) => 'Выберите $label в списке'
+            : null,
+    onChanged: _busy ? null : onChanged,
+  );
   Future<void> _save() async {
+    if (_busy) return;
     if (!_formKey.currentState!.validate()) return;
-    if (!await _hasNetwork()) {
-      setState(() => _error = 'Для сохранения подключитесь к интернету.');
+    if (widget.document == null &&
+        (_optionsLoading ||
+            _optionsError != null ||
+            _currentOrganization == null)) {
+      setState(
+        () => _error = 'Загрузите список сторон и повторите сохранение.',
+      );
       return;
     }
     setState(() {
       _busy = true;
       _error = null;
     });
-    final values = {
-      'project_id': widget.projectId,
-      'document_type':
-          widget.document?.values['document_type'] ?? 'payment_order',
-      'amount': double.parse(_amount.text.replaceAll(',', '.')),
-      'payment_purpose': _purpose.text.trim(),
-      'description': _description.text.trim(),
-      'document_date': _dateKey(_documentDate),
-    };
     try {
+      if (!await _hasNetwork()) {
+        if (mounted) {
+          setState(() {
+            _busy = false;
+            _error = 'Для сохранения подключитесь к интернету.';
+          });
+        }
+        return;
+      }
+      if (!mounted) return;
+      final values = {
+        'project_id': widget.projectId,
+        'document_type':
+            widget.document?.values['document_type'] ?? 'payment_order',
+        'amount': double.parse(_amount.text.replaceAll(',', '.')),
+        'payment_purpose': _purpose.text.trim(),
+        'description': _description.text.trim(),
+        'document_date': _dateKey(_documentDate),
+        'bank_account': _bankAccount.text.trim(),
+        'bank_bik': _bankBik.text.trim(),
+      };
+      if (_payer != null) {
+        final organizationKey =
+            _payer!.type == 'organization'
+                ? 'payer_organization_id'
+                : 'payer_contractor_id';
+        final contractorKey =
+            organizationKey == 'payer_organization_id'
+                ? 'payer_contractor_id'
+                : 'payer_organization_id';
+        values[organizationKey] = _payer!.id;
+        values[contractorKey] = null;
+      }
+      if (_payee != null) {
+        final organizationKey =
+            _payee!.type == 'organization'
+                ? 'payee_organization_id'
+                : 'payee_contractor_id';
+        final contractorKey =
+            organizationKey == 'payee_organization_id'
+                ? 'payee_contractor_id'
+                : 'payee_organization_id';
+        values[organizationKey] = _payee!.id;
+        values[contractorKey] = null;
+      }
       final repo = ref.read(paymentsRepositoryProvider);
       if (widget.document == null) {
         final fingerprint = jsonEncode({
@@ -686,10 +989,12 @@ class _PaymentDocumentFormScreenState
           fingerprint: fingerprint,
         );
         await repo.create(values, idempotencyKey: key);
-        await storage.clearOperationKey(
-          namespace: 'payment-document-create',
-          fingerprint: fingerprint,
-        );
+        try {
+          await storage.clearOperationKey(
+            namespace: 'payment-document-create',
+            fingerprint: fingerprint,
+          );
+        } catch (_) {}
       } else {
         await repo.update(widget.document!.id, values);
       }
@@ -713,6 +1018,105 @@ class _PaymentDocumentFormScreenState
     );
     if (selected != null && mounted) {
       setState(() => _documentDate = selected);
+    }
+  }
+}
+
+class _PaymentDecisionDialog extends StatefulWidget {
+  const _PaymentDecisionDialog({required this.approve, required this.onSubmit});
+
+  final bool approve;
+  final Future<String?> Function(String comment) onSubmit;
+
+  @override
+  State<_PaymentDecisionDialog> createState() => _PaymentDecisionDialogState();
+}
+
+class _PaymentDecisionDialogState extends State<_PaymentDecisionDialog> {
+  final _comment = TextEditingController();
+  String? _error;
+  bool _saving = false;
+
+  @override
+  void dispose() {
+    _comment.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => PopScope(
+    canPop: !_saving,
+    child: AlertDialog(
+      scrollable: true,
+      title: Text(
+        widget.approve ? 'Согласовать документ' : 'Отклонить документ',
+      ),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          TextField(
+            key: const ValueKey('payment-decision-comment'),
+            controller: _comment,
+            maxLines: 3,
+            enabled: !_saving,
+            decoration: InputDecoration(
+              labelText: widget.approve ? 'Комментарий' : 'Причина отклонения',
+            ),
+          ),
+          if (_error != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              _error!,
+              style: TextStyle(color: Theme.of(context).colorScheme.error),
+            ),
+          ],
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: _saving ? null : () => Navigator.pop(context, false),
+          child: const Text('Отмена'),
+        ),
+        FilledButton(
+          onPressed: _saving ? null : _submit,
+          child: Text(widget.approve ? 'Согласовать' : 'Отклонить'),
+        ),
+      ],
+    ),
+  );
+
+  Future<void> _submit() async {
+    if (_saving) return;
+    final comment = _comment.text.trim();
+    if (!widget.approve && comment.length < 3) {
+      setState(
+        () => _error = 'Укажите причину отклонения не короче 3 символов.',
+      );
+      return;
+    }
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+    try {
+      final error = await widget.onSubmit(comment);
+      if (!mounted) return;
+      if (error != null) {
+        setState(() {
+          _saving = false;
+          _error = error;
+        });
+      } else {
+        Navigator.pop(context, true);
+      }
+    } catch (error) {
+      if (mounted) {
+        setState(() {
+          _saving = false;
+          _error = _message(error);
+        });
+      }
     }
   }
 }

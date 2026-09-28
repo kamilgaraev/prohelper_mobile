@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:prohelpers_mobile/core/network/api_exception.dart';
 import 'package:prohelpers_mobile/core/theme/pro_theme.dart';
 import 'package:prohelpers_mobile/features/warehouse/data/warehouse_media_picker.dart';
 import 'package:prohelpers_mobile/features/warehouse/data/warehouse_repository.dart';
@@ -22,6 +25,9 @@ class _FakeWarehouseRepository extends WarehouseRepository {
   WarehouseReceiptPayload? createdReceipt;
   Object? createReceiptError;
   WarehouseWriteOffCategory? writtenOffCategory;
+  Object? writeOffError;
+  Completer<void>? writeOffCompleter;
+  final List<_WriteOffAttempt> writeOffAttempts = [];
 
   @override
   Future<WarehouseSummaryModel> fetchWarehouseSummary() async => summary;
@@ -83,8 +89,45 @@ class _FakeWarehouseRepository extends WarehouseRepository {
     required String reason,
     required WarehouseWriteOffCategory operationCategory,
   }) async {
+    writeOffAttempts.add(
+      _WriteOffAttempt(
+        warehouseId: warehouseId,
+        materialId: materialId,
+        quantity: quantity,
+        documentNumber: documentNumber,
+        reason: reason,
+        operationCategory: operationCategory,
+      ),
+    );
+    final completer = writeOffCompleter;
+    if (completer != null) {
+      await completer.future;
+    }
+    final error = writeOffError;
+    if (error != null) {
+      writeOffError = null;
+      throw error;
+    }
     writtenOffCategory = operationCategory;
   }
+}
+
+class _WriteOffAttempt {
+  const _WriteOffAttempt({
+    required this.warehouseId,
+    required this.materialId,
+    required this.quantity,
+    required this.documentNumber,
+    required this.reason,
+    required this.operationCategory,
+  });
+
+  final int warehouseId;
+  final int materialId;
+  final double quantity;
+  final String? documentNumber;
+  final String reason;
+  final WarehouseWriteOffCategory operationCategory;
 }
 
 class _FakeWarehouseNotifier extends WarehouseNotifier {
@@ -174,6 +217,28 @@ const _longWarehouseSummary = WarehouseSummaryModel(
       uniqueItemsCount: 31,
       totalValue: 98000,
       address: 'Казань, Лесная улица, 15',
+      warehouseType: 'central',
+    ),
+  ],
+  recentMovements: [],
+);
+
+const _narrowWarehouseSummary = WarehouseSummaryModel(
+  summary: WarehouseSummaryData(
+    warehouseCount: 1,
+    uniqueItemsCount: 1,
+    lowStockCount: 0,
+    reservedItemsCount: 0,
+    recentMovementsCount: 0,
+    totalValue: 0,
+  ),
+  warehouses: [
+    WarehouseCardModel(
+      id: 1,
+      name: 'Склад',
+      isMain: true,
+      uniqueItemsCount: 1,
+      totalValue: 0,
       warehouseType: 'central',
     ),
   ],
@@ -291,6 +356,168 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(repository.writtenOffCategory, WarehouseWriteOffCategory.damage);
+  });
+
+  testWidgets('write-off keeps values on 422 and retries the same request', (
+    tester,
+  ) async {
+    final repository =
+        _FakeWarehouseRepository()
+          ..writeOffError = const ApiException(
+            'Количество превышает остаток',
+            statusCode: 422,
+          );
+    await _pumpWarehouseScreen(
+      tester,
+      repository: repository,
+      mediaPicker: _FakeMediaPicker(),
+      canWriteOff: true,
+    );
+    await _openWriteOffDialog(tester);
+
+    await tester.tap(find.byKey(const ValueKey('warehouse-write-off-submit')));
+    await tester.pumpAndSettle();
+    expect(find.text('Укажите количество больше нуля'), findsOneWidget);
+    expect(find.text('Укажите основание списания'), findsOneWidget);
+    expect(repository.writeOffAttempts, isEmpty);
+
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Количество'),
+      '4',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Основание'),
+      'Повреждено при перевозке',
+    );
+    await tester.tap(find.byKey(const ValueKey('warehouse-write-off-submit')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Количество превышает остаток'), findsOneWidget);
+    expect(
+      tester
+          .widget<TextFormField>(
+            find.widgetWithText(TextFormField, 'Количество'),
+          )
+          .controller
+          ?.text,
+      '4',
+    );
+    expect(
+      tester
+          .widget<TextFormField>(
+            find.widgetWithText(TextFormField, 'Основание'),
+          )
+          .controller
+          ?.text,
+      'Повреждено при перевозке',
+    );
+    expect(repository.writeOffAttempts, hasLength(1));
+
+    await tester.tap(find.byKey(const ValueKey('warehouse-write-off-submit')));
+    await tester.pumpAndSettle();
+
+    expect(repository.writeOffAttempts, hasLength(2));
+    expect(
+      repository.writeOffAttempts[0].quantity,
+      repository.writeOffAttempts[1].quantity,
+    );
+    expect(
+      repository.writeOffAttempts[0].reason,
+      repository.writeOffAttempts[1].reason,
+    );
+    expect(repository.writeOffAttempts[1].quantity, 4);
+    expect(repository.writeOffAttempts[1].reason, 'Повреждено при перевозке');
+    expect(find.text('Списание · Цемент М500'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('write-off blocks a second tap while the request is pending', (
+    tester,
+  ) async {
+    final repository =
+        _FakeWarehouseRepository()..writeOffCompleter = Completer<void>();
+    await _pumpWarehouseScreen(
+      tester,
+      repository: repository,
+      mediaPicker: _FakeMediaPicker(),
+      canWriteOff: true,
+    );
+    await _openWriteOffDialog(tester);
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Количество'),
+      '2',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Основание'),
+      'Контроль двойного нажатия',
+    );
+
+    await tester.tap(find.byKey(const ValueKey('warehouse-write-off-submit')));
+    await tester.pump();
+    expect(repository.writeOffAttempts, hasLength(1));
+    expect(
+      tester
+          .widget<FilledButton>(
+            find.byKey(const ValueKey('warehouse-write-off-submit')),
+          )
+          .onPressed,
+      isNull,
+    );
+    expect(
+      tester
+          .widget<OutlinedButton>(
+            find.byKey(const ValueKey('warehouse-balance-write-off')),
+          )
+          .onPressed,
+      isNull,
+    );
+
+    await tester.tapAt(const Offset(1, 1));
+    await tester.pump();
+    expect(find.text('Списание · Цемент М500'), findsOneWidget);
+    await tester.binding.handlePopRoute();
+    await tester.pump();
+    expect(find.text('Списание · Цемент М500'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('warehouse-write-off-submit')));
+    repository.writeOffCompleter!.complete();
+    await tester.pumpAndSettle();
+
+    expect(repository.writeOffAttempts, hasLength(1));
+    expect(find.text('Списание · Цемент М500'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('write-off dialog fits 240dp at 1.3 text scale and disposes', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(240, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final repository = _FakeWarehouseRepository(
+      summary: _narrowWarehouseSummary,
+    );
+    await _pumpWarehouseScreen(
+      tester,
+      repository: repository,
+      mediaPicker: _FakeMediaPicker(),
+      canWriteOff: true,
+      textScale: 1.3,
+    );
+    await _openWriteOffDialog(tester);
+    final submitCenter = tester.getCenter(
+      find.byKey(const ValueKey('warehouse-write-off-submit')),
+    );
+    expect(submitCenter.dy, lessThan(900));
+    expect(tester.takeException(), isNull);
+
+    await tester.tapAt(const Offset(1, 1));
+    await tester.pumpAndSettle();
+    expect(repository.writeOffAttempts, isEmpty);
+    expect(find.text('Списание · Цемент М500'), findsNothing);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('показывает предупреждение поверх сохранённых данных', (
@@ -546,6 +773,30 @@ Future<void> _pumpReceiptSheet(
     ),
   );
 
+  await tester.pumpAndSettle();
+}
+
+Future<void> _openWriteOffDialog(WidgetTester tester) async {
+  await tester.scrollUntilVisible(
+    find.widgetWithText(OutlinedButton, 'Остатки'),
+    300,
+    scrollable:
+        find
+            .descendant(
+              of: find.byType(RefreshIndicator),
+              matching: find.byType(Scrollable),
+            )
+            .first,
+  );
+  await tester.ensureVisible(
+    find.widgetWithText(OutlinedButton, 'Остатки').last,
+  );
+  await tester.pumpAndSettle();
+  await tester.tap(find.widgetWithText(OutlinedButton, 'Остатки').last);
+  await tester.pumpAndSettle();
+  await tester.ensureVisible(find.text('Списать').first);
+  await tester.pumpAndSettle();
+  await tester.tap(find.text('Списать').first);
   await tester.pumpAndSettle();
 }
 

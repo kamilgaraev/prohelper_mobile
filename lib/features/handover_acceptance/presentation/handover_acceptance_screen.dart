@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
+import '../../../core/error/user_message.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../core/sync/sync_queue_service.dart';
@@ -888,131 +889,44 @@ class _HandoverAcceptanceScreenState
     AcceptanceChecklistItemModel item, {
     required String status,
   }) async {
-    final review = await _showChecklistReviewSheet(
+    await _showChecklistReviewSheet(
       context,
       item,
       status: status,
-    );
-    if (review == null) {
-      return;
-    }
-
-    try {
-      await ref
-          .read(handoverAcceptanceProvider.notifier)
-          .reviewChecklistItem(
-            item.id,
-            status: status,
-            comment: review.$1,
-            photoPaths: review.$2 == null ? const [] : [review.$2!],
+      onSubmit: (comment, photoPath) async {
+        await ref
+            .read(handoverAcceptanceProvider.notifier)
+            .reviewChecklistItem(
+              item.id,
+              status: status,
+              comment: comment,
+              photoPaths: photoPath == null ? const [] : [photoPath],
+            );
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Пункт чек-листа обновлен')),
           );
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Пункт чек-листа обновлен')),
-        );
-      }
-    } catch (error) {
-      if (context.mounted) {
-        AppErrorNotice.show(context, error);
-      }
-    }
+        }
+      },
+    );
   }
 
-  Future<(String?, String?)?> _showChecklistReviewSheet(
+  Future<void> _showChecklistReviewSheet(
     BuildContext context,
     AcceptanceChecklistItemModel item, {
     required String status,
+    required Future<void> Function(String? comment, String? photoPath) onSubmit,
   }) async {
-    final commentController = TextEditingController();
-    var submitting = false;
-    String? photoPath;
-    final isReject = status == 'rejected';
-
-    return showModalBottomSheet<(String?, String?)>(
+    await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
+      isDismissible: false,
+      enableDrag: false,
       builder:
-          (sheetContext) => StatefulBuilder(
-            builder:
-                (context, setSheetState) => Padding(
-                  padding: EdgeInsets.only(
-                    left: 16,
-                    right: 16,
-                    top: 20,
-                    bottom: MediaQuery.of(context).viewInsets.bottom + 20,
-                  ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        isReject
-                            ? 'Отклонить пункт чек-листа'
-                            : 'Принять пункт чек-листа',
-                        style: AppTypography.h2(context),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        item.title,
-                        style: AppTypography.bodyMedium(context),
-                      ),
-                      const SizedBox(height: 12),
-                      TextField(
-                        controller: commentController,
-                        minLines: 3,
-                        maxLines: 5,
-                        decoration: InputDecoration(
-                          labelText:
-                              isReject ? 'Причина отклонения' : 'Комментарий',
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      HandoverEvidencePhotoField(
-                        path: photoPath,
-                        onChanged:
-                            (path) => setSheetState(() => photoPath = path),
-                        label: 'Добавить фото пункта',
-                      ),
-                      const SizedBox(height: 16),
-                      SizedBox(
-                        width: double.infinity,
-                        child: FilledButton(
-                          onPressed:
-                              submitting
-                                  ? null
-                                  : () {
-                                    final comment =
-                                        commentController.text.trim();
-                                    if (isReject && comment.isEmpty) {
-                                      ScaffoldMessenger.of(
-                                        context,
-                                      ).showSnackBar(
-                                        const SnackBar(
-                                          content: Text(
-                                            'Укажите причину отклонения',
-                                          ),
-                                        ),
-                                      );
-                                      return;
-                                    }
-                                    setSheetState(() => submitting = true);
-                                    Navigator.pop(sheetContext, (
-                                      comment.isEmpty ? null : comment,
-                                      photoPath,
-                                    ));
-                                  },
-                          child: Text(
-                            submitting
-                                ? 'Сохранение...'
-                                : isReject
-                                ? 'Отклонить'
-                                : 'Принять',
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+          (_) => _ChecklistReviewSheet(
+            item: item,
+            status: status,
+            onSubmit: onSubmit,
           ),
     );
   }
@@ -1625,14 +1539,13 @@ class _ScopeCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
+          Wrap(
+            spacing: 8,
+            runSpacing: 4,
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              Expanded(
-                child: Text(
-                  scope.title,
-                  style: AppTypography.bodyLarge(context),
-                ),
-              ),
+              Text(scope.title, style: AppTypography.bodyLarge(context)),
               _StatusChip(status: scope.status),
             ],
           ),
@@ -1726,6 +1639,150 @@ class _ScopeCard extends StatelessWidget {
             ],
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _ChecklistReviewSheet extends StatefulWidget {
+  const _ChecklistReviewSheet({
+    required this.item,
+    required this.status,
+    required this.onSubmit,
+  });
+
+  final AcceptanceChecklistItemModel item;
+  final String status;
+  final Future<void> Function(String? comment, String? photoPath) onSubmit;
+
+  @override
+  State<_ChecklistReviewSheet> createState() => _ChecklistReviewSheetState();
+}
+
+class _ChecklistReviewSheetState extends State<_ChecklistReviewSheet> {
+  final _commentController = TextEditingController();
+  String? _photoPath;
+  String? _error;
+  var _isSubmitting = false;
+
+  bool get _isReject => widget.status == 'rejected';
+
+  @override
+  void dispose() {
+    _commentController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    if (_isSubmitting) return;
+    final comment = _commentController.text.trim();
+    if (_isReject && comment.isEmpty) {
+      setState(() => _error = 'Укажите причину отклонения.');
+      return;
+    }
+
+    setState(() {
+      _isSubmitting = true;
+      _error = null;
+    });
+    try {
+      await widget.onSubmit(comment.isEmpty ? null : comment, _photoPath);
+      if (mounted) Navigator.of(context).pop();
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _isSubmitting = false;
+        _error = UserMessage.fromError(error);
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+    return PopScope(
+      canPop: !_isSubmitting,
+      child: SafeArea(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.sizeOf(context).height * 0.92,
+          ),
+          child: SingleChildScrollView(
+            padding: EdgeInsets.fromLTRB(16, 20, 16, bottomInset + 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _isReject
+                      ? 'Отклонить пункт чек-листа'
+                      : 'Принять пункт чек-листа',
+                  style: AppTypography.h2(context),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  widget.item.title,
+                  style: AppTypography.bodyMedium(context),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _commentController,
+                  minLines: 3,
+                  maxLines: 5,
+                  onChanged: (_) {
+                    if (_error != null) setState(() => _error = null);
+                  },
+                  decoration: InputDecoration(
+                    labelText: _isReject ? 'Причина отклонения' : 'Комментарий',
+                  ),
+                ),
+                const SizedBox(height: 8),
+                HandoverEvidencePhotoField(
+                  path: _photoPath,
+                  onChanged: (path) => setState(() => _photoPath = path),
+                  label: 'Добавить фото пункта',
+                ),
+                if (_error != null) ...[
+                  const SizedBox(height: 8),
+                  Semantics(
+                    liveRegion: true,
+                    child: Text(
+                      _error!,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton(
+                    onPressed: _isSubmitting ? null : _submit,
+                    child: Text(
+                      _isSubmitting
+                          ? 'Сохранение...'
+                          : _isReject
+                          ? 'Отклонить'
+                          : 'Принять',
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton(
+                    onPressed:
+                        _isSubmitting
+                            ? null
+                            : () => Navigator.of(context).pop(),
+                    child: const Text('Отмена'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

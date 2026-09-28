@@ -86,6 +86,7 @@ class ForemanMachineryScreen extends ConsumerWidget {
 
                 return Card(
                   child: ListTile(
+                    key: Key('shift-report-review-${shift.id}'),
                     minTileHeight: 64,
                     leading: const Icon(Icons.fact_check_outlined),
                     title: Text(shift.assetName ?? 'Техника №${shift.assetId}'),
@@ -155,41 +156,28 @@ Future<void> _reviewShiftReport(
   final decision = await showDialog<_ShiftReviewDecision>(
     context: context,
     builder:
-        (_) => _ShiftReviewDialog(canApprove: canApprove, canReject: canReject),
+        (_) => _ShiftReviewDialog(
+          canApprove: canApprove,
+          canReject: canReject,
+          onSubmit: (decision) async {
+            final notifier = ref.read(machineryOperationsProvider.notifier);
+            if (decision.approve) {
+              await notifier.approveShiftReport(shiftReportId);
+            } else {
+              await notifier.rejectShiftReport(shiftReportId, decision.reason!);
+            }
+          },
+        ),
   );
   if (decision == null || !context.mounted) return;
 
-  try {
-    final notifier = ref.read(machineryOperationsProvider.notifier);
-    if (decision.approve) {
-      await notifier.approveShiftReport(shiftReportId);
-    } else {
-      await notifier.rejectShiftReport(shiftReportId, decision.reason!);
-    }
-    if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          decision.approve ? 'Рапорт подтвержден' : 'Рапорт отклонен',
-        ),
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(
+      content: Text(
+        decision.approve ? 'Рапорт подтвержден' : 'Рапорт отклонен',
       ),
-    );
-  } catch (error) {
-    if (!context.mounted) return;
-    final errorMessage = UserMessage.fromError(error);
-    final refreshGuidance =
-        errorMessage.contains('Обновите очередь проверки')
-            ? ''
-            : ' Обновите очередь проверки перед повтором.';
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          '$errorMessage$refreshGuidance Если рапорт остается на проверке, повторите действие.',
-        ),
-        duration: const Duration(seconds: 6),
-      ),
-    );
-  }
+    ),
+  );
 }
 
 class _ShiftReviewDecision {
@@ -201,10 +189,15 @@ class _ShiftReviewDecision {
 }
 
 class _ShiftReviewDialog extends StatefulWidget {
-  const _ShiftReviewDialog({required this.canApprove, required this.canReject});
+  const _ShiftReviewDialog({
+    required this.canApprove,
+    required this.canReject,
+    required this.onSubmit,
+  });
 
   final bool canApprove;
   final bool canReject;
+  final Future<void> Function(_ShiftReviewDecision decision) onSubmit;
 
   @override
   State<_ShiftReviewDialog> createState() => _ShiftReviewDialogState();
@@ -213,6 +206,8 @@ class _ShiftReviewDialog extends StatefulWidget {
 class _ShiftReviewDialogState extends State<_ShiftReviewDialog> {
   final _reasonController = TextEditingController();
   String? _validationError;
+  String? _submitError;
+  bool _isSubmitting = false;
 
   @override
   void dispose() {
@@ -220,63 +215,105 @@ class _ShiftReviewDialogState extends State<_ShiftReviewDialog> {
     super.dispose();
   }
 
+  Future<void> _submit(_ShiftReviewDecision decision) async {
+    if (_isSubmitting) return;
+    setState(() {
+      _isSubmitting = true;
+      _submitError = null;
+    });
+
+    try {
+      await widget.onSubmit(decision);
+      if (!mounted) return;
+      Navigator.of(context).pop(decision);
+    } catch (error) {
+      if (!mounted) return;
+      final errorMessage = UserMessage.fromError(error);
+      final refreshGuidance =
+          errorMessage.contains('Обновите очередь проверки')
+              ? ''
+              : ' Обновите очередь проверки перед повтором.';
+      setState(() {
+        _isSubmitting = false;
+        _submitError =
+            '$errorMessage$refreshGuidance Если рапорт остается на проверке, повторите действие.';
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      scrollable: true,
-      title: const Text('Проверка сменного рапорта'),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            widget.canApprove && widget.canReject
-                ? 'Подтвердить рапорт или отклонить с указанием причины.'
-                : widget.canApprove
-                ? 'Подтвердить этот сменный рапорт.'
-                : 'Отклонить рапорт с указанием причины.',
-          ),
-          if (widget.canReject) ...[
-            const SizedBox(height: 16),
-            TextField(
-              controller: _reasonController,
-              minLines: 2,
-              maxLines: 4,
-              decoration: InputDecoration(
-                labelText: 'Причина отклонения',
-                errorText: _validationError,
-                border: const OutlineInputBorder(),
-              ),
+    return PopScope(
+      canPop: !_isSubmitting,
+      child: AlertDialog(
+        scrollable: true,
+        title: const Text('Проверка сменного рапорта'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              widget.canApprove && widget.canReject
+                  ? 'Подтвердить рапорт или отклонить с указанием причины.'
+                  : widget.canApprove
+                  ? 'Подтвердить этот сменный рапорт.'
+                  : 'Отклонить рапорт с указанием причины.',
             ),
+            if (_submitError != null) ...[
+              const SizedBox(height: 12),
+              Text(
+                _submitError!,
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
+            ],
+            if (widget.canReject) ...[
+              const SizedBox(height: 16),
+              TextField(
+                key: const Key('shift-review-reason'),
+                controller: _reasonController,
+                enabled: !_isSubmitting,
+                minLines: 2,
+                maxLines: 4,
+                decoration: InputDecoration(
+                  labelText: 'Причина отклонения',
+                  errorText: _validationError,
+                  border: const OutlineInputBorder(),
+                ),
+              ),
+            ],
           ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: _isSubmitting ? null : () => Navigator.of(context).pop(),
+            child: const Text('Отмена'),
+          ),
+          if (widget.canReject)
+            TextButton(
+              onPressed:
+                  _isSubmitting
+                      ? null
+                      : () {
+                        final reason = _reasonController.text.trim();
+                        if (reason.isEmpty) {
+                          setState(() => _validationError = 'Укажите причину');
+                          return;
+                        }
+                        setState(() => _validationError = null);
+                        _submit(_ShiftReviewDecision.reject(reason));
+                      },
+              child: const Text('Отклонить'),
+            ),
+          if (widget.canApprove)
+            FilledButton(
+              onPressed:
+                  _isSubmitting
+                      ? null
+                      : () => _submit(const _ShiftReviewDecision.approve()),
+              child: const Text('Подтвердить'),
+            ),
         ],
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Отмена'),
-        ),
-        if (widget.canReject)
-          TextButton(
-            onPressed: () {
-              final reason = _reasonController.text.trim();
-              if (reason.isEmpty) {
-                setState(() => _validationError = 'Укажите причину');
-                return;
-              }
-              Navigator.of(context).pop(_ShiftReviewDecision.reject(reason));
-            },
-            child: const Text('Отклонить'),
-          ),
-        if (widget.canApprove)
-          FilledButton(
-            onPressed:
-                () => Navigator.of(
-                  context,
-                ).pop(const _ShiftReviewDecision.approve()),
-            child: const Text('Подтвердить'),
-          ),
-      ],
     );
   }
 }

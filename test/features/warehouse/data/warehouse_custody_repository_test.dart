@@ -13,6 +13,66 @@ import 'package:prohelpers_mobile/features/warehouse/data/warehouse_scan_model.d
 import 'package:prohelpers_mobile/features/warehouse/data/warehouse_summary_model.dart';
 
 void main() {
+  test('loads project custody balances using server resource projection', () async {
+    late RequestOptions request;
+    final dio = Dio(BaseOptions(baseUrl: 'https://api.example.test'))
+      ..httpClientAdapter = _JsonAdapter((options) {
+        request = options;
+        return {
+          'success': true,
+          'message': null,
+          'data': [
+            {
+              'id': 91,
+              'project_id': 52,
+              'project': {'id': 52, 'name': 'Тестовый'},
+              'custody_warehouse_id': 24,
+              'custody_warehouse': {'id': 24, 'name': 'У прораба'},
+              'responsible_user_id': 39,
+              'responsible_user': {
+                'id': 39,
+                'name': 'Кладовщик проекта',
+                'email': 'worker@example.test',
+              },
+              'material_id': 44,
+              'material': {
+                'id': 44,
+                'name': 'Цемент М500',
+                'code': 'CEM-500',
+                'measurement_unit': {
+                  'id': 2,
+                  'name': 'мешок',
+                  'short_name': 'меш.',
+                },
+              },
+              'available_quantity': 7.0,
+              'reserved_quantity': 1.0,
+              'incoming_quantity': 0.0,
+              'total_quantity': 8.0,
+              'unit_price': 510.0,
+              'last_movement_at': '2026-09-28 09:15:00',
+            },
+          ],
+        };
+      });
+
+    final balances = await WarehouseRepository(dio).fetchCustodyBalances(
+      projectId: 52,
+      responsibleUserId: 39,
+    );
+
+    expect(balances.single.projectName, 'Тестовый');
+    expect(balances.single.responsibleUserName, 'Кладовщик проекта');
+    expect(balances.single.materialName, 'Цемент М500');
+    expect(balances.single.availableQuantity, 7);
+    expect(balances.single.unit, 'меш.');
+    expect(request.path, '/warehouse/custody/balances');
+    expect(request.queryParameters, {
+      'project_id': 52,
+      'responsible_user_id': 39,
+    });
+  });
+
   test(
     'write-off sends backend operation categories and idempotency key',
     () async {

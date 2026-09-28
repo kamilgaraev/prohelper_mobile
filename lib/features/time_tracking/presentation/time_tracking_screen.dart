@@ -238,6 +238,7 @@ class _PendingTimeEntryApprovals extends ConsumerStatefulWidget {
 class _PendingTimeEntryApprovalsState
     extends ConsumerState<_PendingTimeEntryApprovals> {
   late Future<List<TimeEntryModel>> _future;
+  final Set<int> _decidingEntryIds = <int>{};
 
   @override
   void initState() {
@@ -258,46 +259,29 @@ class _PendingTimeEntryApprovalsState
       .fetchPendingApprovals(projectId: widget.projectId);
 
   Future<void> _decide(TimeEntryModel entry, String action) async {
-    String? reason;
-    if (action == 'reject') {
-      reason = await showDialog<String>(
-        context: context,
-        builder: (context) {
-          final controller = TextEditingController();
-          return AlertDialog(
-            title: const Text('Отклонить трудозатраты'),
-            content: TextField(
-              controller: controller,
-              autofocus: true,
-              maxLength: 500,
-              decoration: const InputDecoration(labelText: 'Причина'),
-              minLines: 2,
-              maxLines: 4,
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Отмена'),
-              ),
-              FilledButton(
-                onPressed: () {
-                  final value = controller.text.trim();
-                  if (value.isNotEmpty) Navigator.pop(context, value);
-                },
-                child: const Text('Отклонить'),
-              ),
-            ],
-          );
-        },
-      );
-      if (reason == null) return;
-    }
+    if (!_decidingEntryIds.add(entry.id)) return;
+    if (mounted) setState(() {});
 
     try {
-      await ref
-          .read(timeTrackingRepositoryProvider)
-          .decideApproval(id: entry.id, action: action, reason: reason);
-      if (!mounted) return;
+      final result =
+          action == 'reject'
+              ? await showDialog<bool>(
+                context: context,
+                barrierDismissible: false,
+                builder:
+                    (_) => _RejectTimeEntryDialog(
+                      onSubmit:
+                          (reason) => ref
+                              .read(timeTrackingRepositoryProvider)
+                              .decideApproval(
+                                id: entry.id,
+                                action: action,
+                                reason: reason,
+                              ),
+                    ),
+              )
+              : await _submitApproval(entry, action);
+      if (result != true || !mounted) return;
       setState(() => _future = _load());
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -313,7 +297,17 @@ class _PendingTimeEntryApprovalsState
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text(UserMessage.fromError(error))));
+    } finally {
+      _decidingEntryIds.remove(entry.id);
+      if (mounted) setState(() {});
     }
+  }
+
+  Future<bool> _submitApproval(TimeEntryModel entry, String action) async {
+    await ref
+        .read(timeTrackingRepositoryProvider)
+        .decideApproval(id: entry.id, action: action);
+    return true;
   }
 
   @override
@@ -374,12 +368,18 @@ class _PendingTimeEntryApprovalsState
                         children: [
                           if (entry.canApprove)
                             FilledButton.tonal(
-                              onPressed: () => _decide(entry, 'approve'),
+                              onPressed:
+                                  _decidingEntryIds.contains(entry.id)
+                                      ? null
+                                      : () => _decide(entry, 'approve'),
                               child: const Text('Подтвердить'),
                             ),
                           if (entry.canReject)
                             OutlinedButton(
-                              onPressed: () => _decide(entry, 'reject'),
+                              onPressed:
+                                  _decidingEntryIds.contains(entry.id)
+                                      ? null
+                                      : () => _decide(entry, 'reject'),
                               child: const Text('Отклонить'),
                             ),
                         ],
@@ -393,6 +393,110 @@ class _PendingTimeEntryApprovalsState
           ),
         );
       },
+    );
+  }
+}
+
+class _RejectTimeEntryDialog extends StatefulWidget {
+  const _RejectTimeEntryDialog({required this.onSubmit});
+
+  final Future<void> Function(String reason) onSubmit;
+
+  @override
+  State<_RejectTimeEntryDialog> createState() => _RejectTimeEntryDialogState();
+}
+
+class _RejectTimeEntryDialogState extends State<_RejectTimeEntryDialog> {
+  final _reasonController = TextEditingController();
+  String? _error;
+  var _isSubmitting = false;
+
+  @override
+  void dispose() {
+    _reasonController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    if (_isSubmitting) return;
+    final reason = _reasonController.text.trim();
+    if (reason.isEmpty) {
+      setState(() => _error = 'Укажите причину отклонения.');
+      return;
+    }
+
+    setState(() {
+      _isSubmitting = true;
+      _error = null;
+    });
+    try {
+      await widget.onSubmit(reason);
+      if (mounted) Navigator.of(context).pop(true);
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _isSubmitting = false;
+        _error = UserMessage.fromError(error);
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return PopScope(
+      canPop: !_isSubmitting,
+      child: AlertDialog(
+        scrollable: true,
+        title: const Text('Отклонить трудозатраты'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            TextField(
+              controller: _reasonController,
+              autofocus: true,
+              maxLength: 500,
+              minLines: 2,
+              maxLines: 4,
+              onChanged: (_) {
+                if (_error != null) setState(() => _error = null);
+              },
+              decoration: const InputDecoration(
+                labelText: 'Причина',
+                counterText: '',
+              ),
+            ),
+            if (_error != null) ...[
+              const SizedBox(height: 8),
+              Semantics(
+                liveRegion: true,
+                child: Text(
+                  _error!,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
+              ),
+            ],
+          ],
+        ),
+        actions: [
+          Wrap(
+            spacing: 8,
+            runSpacing: 4,
+            alignment: WrapAlignment.end,
+            children: [
+              TextButton(
+                onPressed:
+                    _isSubmitting ? null : () => Navigator.of(context).pop(),
+                child: const Text('Отмена'),
+              ),
+              FilledButton(
+                onPressed: _isSubmitting ? null : _submit,
+                child: Text(_isSubmitting ? 'Отправка...' : 'Отклонить'),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }
@@ -684,16 +788,17 @@ class _TimeEntryCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          Wrap(
+            spacing: 8,
+            runSpacing: 4,
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              Expanded(
-                child: Text(
-                  entry.title,
-                  style: AppTypography.bodyLarge(
-                    context,
-                  ).copyWith(fontWeight: FontWeight.w800),
-                ),
+              Text(
+                entry.title,
+                style: AppTypography.bodyLarge(
+                  context,
+                ).copyWith(fontWeight: FontWeight.w800),
               ),
               _StatusBadge(status: entry.status, label: entry.statusLabel),
             ],

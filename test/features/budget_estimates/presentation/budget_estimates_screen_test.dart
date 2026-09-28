@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:prohelpers_mobile/core/network/api_exception.dart';
 import 'package:prohelpers_mobile/features/budget_estimates/data/budget_estimate_model.dart';
 import 'package:prohelpers_mobile/features/budget_estimates/data/budget_estimates_repository.dart';
 import 'package:prohelpers_mobile/features/budget_estimates/domain/budget_estimates_provider.dart';
@@ -24,6 +27,11 @@ class _RecordingBudgetRepository extends BudgetEstimatesRepository {
   String? loadedSearch;
   String? loadedStatus;
   int? loadedPage;
+  int estimateFetchCalls = 0;
+  int approvalCalls = 0;
+  final approvalComments = <String?>[];
+  Object? nextApprovalError;
+  Completer<void>? approvalGate;
 
   @override
   Future<BudgetEstimatePage> fetchEstimates({
@@ -32,6 +40,7 @@ class _RecordingBudgetRepository extends BudgetEstimatesRepository {
     String? status,
     String? search,
   }) async {
+    estimateFetchCalls++;
     loadedProjectId = projectId;
     loadedSearch = search;
     loadedStatus = status;
@@ -83,8 +92,17 @@ class _RecordingBudgetRepository extends BudgetEstimatesRepository {
     required int id,
     String? comment,
   }) async {
+    approvalCalls++;
     approvedEstimateId = id;
     approvedComment = comment;
+    approvalComments.add(comment);
+    final gate = approvalGate;
+    if (gate != null) await gate.future;
+    final error = nextApprovalError;
+    if (error != null) {
+      nextApprovalError = null;
+      throw error;
+    }
     return _approvedEstimate;
   }
 
@@ -329,6 +347,126 @@ void main() {
     expect(repository.returnComment, 'Уточнить объем');
   });
 
+  testWidgets(
+    'approval keeps comment in the sheet after 422 and retries once',
+    (tester) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(240, 1400);
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final repository =
+          _RecordingBudgetRepository()
+            ..approvalGate = Completer<void>()
+            ..nextApprovalError = const ApiException(
+              'Комментарий не принят сервером',
+              statusCode: 422,
+            );
+
+      await tester.pumpWidget(
+        buildApp(
+          const BudgetEstimatesScreen(),
+          repository,
+          selectedProject: project(),
+          textScaler: const TextScaler.linear(1.3),
+        ),
+      );
+      await pumpUi(tester);
+      final approvalButton = find.text('Согласовать').first;
+      await tester.scrollUntilVisible(
+        approvalButton,
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.tap(approvalButton);
+      await tester.pumpAndSettle();
+      final commentField = find.byType(TextField).last;
+      await tester.ensureVisible(commentField);
+      await tester.enterText(commentField, 'Проверить стоимость арматуры');
+      final submit = find.text('Отправить');
+      await tester.ensureVisible(submit);
+      await tester.tap(submit);
+      await tester.pump();
+
+      expect(repository.approvalCalls, 1);
+      expect(
+        tester
+            .widget<FilledButton>(
+              find.ancestor(
+                of: find.text('Отправка…'),
+                matching: find.byType(FilledButton),
+              ),
+            )
+            .onPressed,
+        isNull,
+      );
+      repository.approvalGate!.complete();
+      repository.approvalGate = null;
+      await tester.pumpAndSettle();
+
+      expect(find.text('Комментарий не принят сервером'), findsOneWidget);
+      expect(find.text('Проверить стоимость арматуры'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await tester.tap(find.text('Отправить'));
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pumpAndSettle();
+
+      expect(repository.approvalCalls, 2);
+      expect(repository.approvalComments, [
+        'Проверить стоимость арматуры',
+        'Проверить стоимость арматуры',
+      ]);
+      expect(find.text('Согласовать смету'), findsNothing);
+      expect(tester.takeException(), isNull);
+
+      await tester.scrollUntilVisible(
+        find.text('Согласовать').first,
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.tap(find.text('Согласовать').first);
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byType(TextField).last,
+        'Комментарий отменён без отправки',
+      );
+      await tester.tap(find.text('Отмена'));
+      await tester.pumpAndSettle();
+      expect(repository.approvalCalls, 2);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'approval response after sheet disposal does not update dead UI',
+    (tester) async {
+      final repository =
+          _RecordingBudgetRepository()..approvalGate = Completer<void>();
+      useLargeSurface(tester);
+      await tester.pumpWidget(
+        buildApp(
+          const BudgetEstimatesScreen(),
+          repository,
+          selectedProject: project(),
+        ),
+      );
+      await pumpUi(tester);
+      await tester.tap(find.text('Согласовать').first);
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).last, 'Проверено');
+      await tester.tap(find.text('Отправить'));
+      await tester.pump();
+      expect(repository.approvalCalls, 1);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      repository.approvalGate!.complete();
+      repository.approvalGate = null;
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets('opens detail with estimate lines and linked changes', (
     tester,
   ) async {
@@ -349,6 +487,44 @@ void main() {
     expect(find.text('Бетон М300'), findsOneWidget);
     expect(find.text('Уточнение марки бетона'), findsOneWidget);
   });
+
+  testWidgets(
+    'pending approval cannot dismiss before ACK and refreshes after',
+    (tester) async {
+      final repository =
+          _RecordingBudgetRepository()..approvalGate = Completer<void>();
+      useLargeSurface(tester);
+      await tester.pumpWidget(
+        buildApp(
+          const BudgetEstimatesScreen(),
+          repository,
+          selectedProject: project(),
+        ),
+      );
+      await pumpUi(tester);
+      await tester.tap(find.text('Согласовать').first);
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).last, 'Проверено');
+      await tester.tap(find.text('Отправить'));
+      await tester.pump();
+      expect(repository.approvalCalls, 1);
+
+      await tester.tapAt(const Offset(10, 100));
+      await tester.drag(find.byType(BottomSheet), const Offset(0, 300));
+      await tester.pumpAndSettle();
+      expect(find.text('Согласовать смету'), findsOneWidget);
+      expect(repository.approvalCalls, 1);
+
+      repository.approvalGate!.complete();
+      repository.approvalGate = null;
+      await tester.pumpAndSettle();
+      expect(find.text('Согласовать смету'), findsNothing);
+      expect(find.text('Смета согласована'), findsOneWidget);
+      expect(repository.approvalCalls, 1);
+      expect(repository.estimateFetchCalls, 2);
+      expect(tester.takeException(), isNull);
+    },
+  );
 }
 
 const _project = BudgetProjectModel(

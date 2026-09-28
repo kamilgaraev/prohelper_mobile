@@ -36,6 +36,72 @@ void main() {
     expect(list.module.slug, 'change-management');
   });
 
+  test('parses nonempty lists for each companion server projection', () async {
+    const projections = <String, ({String title, String primary, String secondary})>{
+      'contract-management': (title: 'Договор C-001', primary: 'Сумма', secondary: 'Акты'),
+      'executive-documentation': (title: 'Комплект ИД', primary: 'Документы', secondary: 'Зона'),
+      'project-management': (title: 'Объект A', primary: 'Бюджет', secondary: 'Договоры'),
+      'catalog-management': (title: 'Цемент М500', primary: 'Код', secondary: 'Единица'),
+      'brigades': (title: 'Бригада бетонщиков', primary: 'Состав', secondary: 'Назначения'),
+      'video-monitoring': (title: 'Камера входа', primary: 'Зона', secondary: 'В сети с'),
+    };
+
+    for (final projection in projections.entries) {
+      late RequestOptions request;
+      final dio = Dio(BaseOptions(baseUrl: 'https://api.example.test'));
+      dio.httpClientAdapter = _JsonAdapter((options) {
+        request = options;
+        return _responseData({
+          'module': {
+            'slug': projection.key,
+            'title': projection.key,
+            'description': 'Список модуля',
+            'icon': projection.key,
+            'route': projection.key,
+          },
+          'items': [
+            {
+              'id': 52,
+              'title': projection.value.title,
+              'subtitle': 'Объект A',
+              'status': 'active',
+              'status_label': 'Активно',
+              'status_tone': 'success',
+              'project_name': 'Объект A',
+              'primary_label': projection.value.primary,
+              'primary_value': '12',
+              'secondary_label': projection.value.secondary,
+              'secondary_value': '3',
+              'updated_at': '2026-09-25T10:00:00+03:00',
+              'available_actions': [],
+            },
+          ],
+          'filters': {'statuses': [{'value': 'active', 'label': 'Активно'}]},
+          'empty_state': {'title': 'Нет записей', 'description': 'Записи не найдены'},
+          'permission_state': {'title': 'Нет доступа', 'description': 'Раздел недоступен'},
+          'meta': {'current_page': 2, 'per_page': 20, 'total': 21, 'last_page': 2},
+        });
+      });
+
+      final page = await CompanionModuleRepository(dio).fetchList(
+        moduleSlug: projection.key,
+        projectId: 52,
+        page: 2,
+      );
+
+      expect(request.path, '/companions/${projection.key}');
+      expect(request.queryParameters, {'project_id': 52, 'page': 2, 'per_page': 20});
+      expect(page.module.slug, projection.key);
+      expect(page.items.single.id, 52);
+      expect(page.items.single.title, projection.value.title);
+      expect(page.items.single.primaryLabel, projection.value.primary);
+      expect(page.items.single.secondaryValue, '3');
+      expect(page.meta.currentPage, 2);
+      expect(page.meta.lastPage, 2);
+      expect(page.meta.total, 21);
+    }
+  });
+
   test('fetches detail and executes action', () async {
     final requests = <RequestOptions>[];
     final dio = Dio(BaseOptions(baseUrl: 'https://api.example.test'));

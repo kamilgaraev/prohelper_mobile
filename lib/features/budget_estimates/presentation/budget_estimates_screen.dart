@@ -7,7 +7,6 @@ import '../../../core/error/user_message.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../core/widgets/app_empty_state.dart';
-import '../../../core/widgets/app_error_notice.dart';
 import '../../../core/widgets/app_error_state.dart';
 import '../../../core/widgets/app_loading_state.dart';
 import '../../../core/widgets/mesh_background.dart';
@@ -365,37 +364,22 @@ class _BudgetEstimatesScreenState extends ConsumerState<BudgetEstimatesScreen> {
     BudgetEstimateModel estimate, {
     required bool approve,
   }) async {
-    final comment = await _showCommentSheet(
+    final submitted = await _showCommentSheet(
       context,
       title: approve ? 'Согласовать смету' : 'Вернуть на доработку',
       requiredComment: !approve,
+      onSubmit: (comment) async {
+        final notifier = ref.read(budgetEstimatesProvider.notifier);
+        if (approve) {
+          await notifier.approveEstimate(id: estimate.id, comment: comment);
+        } else {
+          await notifier.requestChanges(id: estimate.id, comment: comment);
+        }
+      },
     );
-
-    if (!context.mounted || comment == null) {
-      return;
-    }
-
-    try {
-      final notifier = ref.read(budgetEstimatesProvider.notifier);
-      if (approve) {
-        await notifier.approveEstimate(id: estimate.id, comment: comment);
-      } else {
-        await notifier.requestChanges(id: estimate.id, comment: comment);
-      }
-
-      if (!context.mounted) {
-        return;
-      }
-
-      _message(context, approve ? 'Смета согласована' : 'Смета возвращена');
-      await _refresh();
-    } catch (error) {
-      if (!context.mounted) {
-        return;
-      }
-
-      AppErrorNotice.showMessage(context, _actionErrorMessage(error));
-    }
+    if (!context.mounted || !submitted) return;
+    _message(context, approve ? 'Смета согласована' : 'Смета возвращена');
+    await _refresh();
   }
 }
 
@@ -537,31 +521,20 @@ class _BudgetEstimateDetailScreenState
     BudgetEstimateModel estimate, {
     required bool approve,
   }) async {
-    final comment = await _showCommentSheet(
+    final submitted = await _showCommentSheet(
       context,
       title: approve ? 'Согласовать смету' : 'Вернуть на доработку',
       requiredComment: !approve,
+      onSubmit: (comment) async {
+        final notifier = ref.read(budgetEstimatesProvider.notifier);
+        if (approve) {
+          await notifier.approveEstimate(id: estimate.id, comment: comment);
+        } else {
+          await notifier.requestChanges(id: estimate.id, comment: comment);
+        }
+      },
     );
-
-    if (!mounted || comment == null) {
-      return;
-    }
-
-    try {
-      final notifier = ref.read(budgetEstimatesProvider.notifier);
-      if (approve) {
-        await notifier.approveEstimate(id: estimate.id, comment: comment);
-      } else {
-        await notifier.requestChanges(id: estimate.id, comment: comment);
-      }
-      _reload();
-    } catch (error) {
-      if (!mounted) {
-        return;
-      }
-
-      AppErrorNotice.showMessage(context, _actionErrorMessage(error));
-    }
+    if (mounted && submitted) _reload();
   }
 }
 
@@ -1195,24 +1168,37 @@ class _SectionTitle extends StatelessWidget {
   }
 }
 
-Future<String?> _showCommentSheet(
+Future<bool> _showCommentSheet(
   BuildContext context, {
   required String title,
   required bool requiredComment,
+  required Future<void> Function(String comment) onSubmit,
 }) async {
-  return showModalBottomSheet<String>(
-    context: context,
-    isScrollControlled: true,
-    builder:
-        (_) => _CommentSheet(title: title, requiredComment: requiredComment),
-  );
+  return (await showModalBottomSheet<bool>(
+        context: context,
+        isScrollControlled: true,
+        isDismissible: false,
+        enableDrag: false,
+        builder:
+            (_) => _CommentSheet(
+              title: title,
+              requiredComment: requiredComment,
+              onSubmit: onSubmit,
+            ),
+      )) ??
+      false;
 }
 
 class _CommentSheet extends StatefulWidget {
-  const _CommentSheet({required this.title, required this.requiredComment});
+  const _CommentSheet({
+    required this.title,
+    required this.requiredComment,
+    required this.onSubmit,
+  });
 
   final String title;
   final bool requiredComment;
+  final Future<void> Function(String comment) onSubmit;
 
   @override
   State<_CommentSheet> createState() => _CommentSheetState();
@@ -1221,6 +1207,7 @@ class _CommentSheet extends StatefulWidget {
 class _CommentSheetState extends State<_CommentSheet> {
   final _controller = TextEditingController();
   String? _validationMessage;
+  bool _isSubmitting = false;
 
   @override
   void dispose() {
@@ -1232,41 +1219,53 @@ class _CommentSheetState extends State<_CommentSheet> {
   Widget build(BuildContext context) {
     final bottom = MediaQuery.viewInsetsOf(context).bottom;
 
-    return SingleChildScrollView(
-      padding: EdgeInsets.fromLTRB(20, 20, 20, bottom + 20),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(widget.title, style: AppTypography.h2(context)),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _controller,
-            minLines: 3,
-            maxLines: 5,
-            decoration: InputDecoration(
-              labelText:
-                  widget.requiredComment
-                      ? 'Комментарий'
-                      : 'Комментарий при необходимости',
-              border: const OutlineInputBorder(),
-              errorText: _validationMessage,
+    return PopScope(
+      canPop: !_isSubmitting,
+      child: SingleChildScrollView(
+        padding: EdgeInsets.fromLTRB(20, 20, 20, bottom + 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(widget.title, style: AppTypography.h2(context)),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _controller,
+              minLines: 3,
+              maxLines: 5,
+              maxLength: 2000,
+              decoration: InputDecoration(
+                labelText:
+                    widget.requiredComment
+                        ? 'Комментарий'
+                        : 'Комментарий при необходимости',
+                border: const OutlineInputBorder(),
+                errorText: _validationMessage,
+              ),
             ),
-          ),
-          const SizedBox(height: 16),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton(
-              onPressed: _submit,
-              child: const Text('Отправить'),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton(
+                onPressed: _isSubmitting ? null : _submit,
+                child: Text(_isSubmitting ? 'Отправка…' : 'Отправить'),
+              ),
             ),
-          ),
-        ],
+            if (!_isSubmitting)
+              Center(
+                child: TextButton(
+                  onPressed: () => Navigator.of(context).pop(false),
+                  child: const Text('Отмена'),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
 
-  void _submit() {
+  Future<void> _submit() async {
+    if (_isSubmitting) return;
     final text = _controller.text.trim();
     if (widget.requiredComment && text.isEmpty) {
       setState(() {
@@ -1274,8 +1273,31 @@ class _CommentSheetState extends State<_CommentSheet> {
       });
       return;
     }
+    if (text.length > 2000) {
+      setState(
+        () =>
+            _validationMessage =
+                'Комментарий не должен превышать 2000 символов',
+      );
+      return;
+    }
 
-    Navigator.of(context).pop(text);
+    setState(() {
+      _isSubmitting = true;
+      _validationMessage = null;
+    });
+    try {
+      await widget.onSubmit(text);
+      if (mounted) Navigator.of(context).pop(true);
+    } catch (error) {
+      if (mounted) {
+        setState(() {
+          _validationMessage = _actionErrorMessage(error);
+        });
+      }
+    } finally {
+      if (mounted) setState(() => _isSubmitting = false);
+    }
   }
 }
 

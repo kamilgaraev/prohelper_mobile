@@ -296,20 +296,27 @@ void main() {
     expect(auth.sessionIdentity?.sessionId, 'session-1');
   });
 
-  test(
-    'offline restore rejects another token and expired confirmation',
-    () async {
-      final storage = _MemoryStorage()..token = 'different-token';
+  for (final scenario in [
+    (
+      name: 'offline restore rejects another token with a recent profile',
+      token: 'different-token',
+      age: const Duration(days: 1),
+    ),
+    (
+      name: 'offline restore rejects an expired profile with the same token',
+      token: 'token-1',
+      age: const Duration(days: 15),
+    ),
+  ]) {
+    test(scenario.name, () async {
+      final storage = _MemoryStorage()..token = scenario.token;
       storage.offlineAuth = {
         'token': 'token-1',
         'session_id': 'session-1',
         'user_id': 7,
         'organization_id': 12,
         'confirmed_at':
-            DateTime.now()
-                .toUtc()
-                .subtract(const Duration(days: 15))
-                .toIso8601String(),
+            DateTime.now().toUtc().subtract(scenario.age).toIso8601String(),
         'user': {
           'server_id': 7,
           'email': 'stale@example.test',
@@ -329,8 +336,8 @@ void main() {
       await pumpEventQueue();
 
       expect(notifier.state, isA<AuthError>());
-    },
-  );
+    });
+  }
 
   test(
     'logout sends the saved bearer before cleaning local auth cache',

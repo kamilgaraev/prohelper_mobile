@@ -265,11 +265,13 @@ class SiteRequestsRepository extends SyncQueueAwareRepository {
   }
 
   Future<SiteRequestModel> submitSiteRequest(int id) async {
+    return SiteRequestModel.fromJson(await submitSiteRequestPayload(id));
+  }
+
+  Future<Map<String, dynamic>> submitSiteRequestPayload(int id) async {
     try {
       final response = await _dio.post('/site-requests/$id/submit');
-      return SiteRequestModel.fromJson(
-        MobileApiResponse.dataMap(response.data),
-      );
+      return MobileApiResponse.dataMap(response.data);
     } on DioException catch (error) {
       throw ApiException.fromDio(
         error,
@@ -279,14 +281,21 @@ class SiteRequestsRepository extends SyncQueueAwareRepository {
   }
 
   Future<SiteRequestModel> cancelSiteRequest(int id, {String? notes}) async {
+    return SiteRequestModel.fromJson(
+      await cancelSiteRequestPayload(id, notes: notes),
+    );
+  }
+
+  Future<Map<String, dynamic>> cancelSiteRequestPayload(
+    int id, {
+    String? notes,
+  }) async {
     try {
       final response = await _dio.post(
         '/site-requests/$id/cancel',
         data: {if (notes != null) 'notes': notes},
       );
-      return SiteRequestModel.fromJson(
-        MobileApiResponse.dataMap(response.data),
-      );
+      return MobileApiResponse.dataMap(response.data);
     } on DioException catch (error) {
       throw ApiException.fromDio(
         error,
@@ -296,14 +305,21 @@ class SiteRequestsRepository extends SyncQueueAwareRepository {
   }
 
   Future<SiteRequestModel> completeSiteRequest(int id, {String? notes}) async {
+    return SiteRequestModel.fromJson(
+      await completeSiteRequestPayload(id, notes: notes),
+    );
+  }
+
+  Future<Map<String, dynamic>> completeSiteRequestPayload(
+    int id, {
+    String? notes,
+  }) async {
     try {
       final response = await _dio.post(
         '/site-requests/$id/complete',
         data: {if (notes != null) 'notes': notes},
       );
-      return SiteRequestModel.fromJson(
-        MobileApiResponse.dataMap(response.data),
-      );
+      return MobileApiResponse.dataMap(response.data);
     } on DioException catch (error) {
       throw ApiException.fromDio(
         error,
@@ -317,6 +333,16 @@ class SiteRequestsRepository extends SyncQueueAwareRepository {
     String status, {
     String? notes,
   }) async {
+    return SiteRequestModel.fromJson(
+      await changeSiteRequestStatusPayload(id, status, notes: notes),
+    );
+  }
+
+  Future<Map<String, dynamic>> changeSiteRequestStatusPayload(
+    int id,
+    String status, {
+    String? notes,
+  }) async {
     try {
       final response = await _dio.post(
         '/site-requests/$id/status',
@@ -325,9 +351,7 @@ class SiteRequestsRepository extends SyncQueueAwareRepository {
           if (notes != null && notes.trim().isNotEmpty) 'notes': notes.trim(),
         },
       );
-      return SiteRequestModel.fromJson(
-        MobileApiResponse.dataMap(response.data),
-      );
+      return MobileApiResponse.dataMap(response.data);
     } on DioException catch (error) {
       throw ApiException.fromDio(
         error,

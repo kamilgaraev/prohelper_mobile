@@ -6,6 +6,7 @@ import '../../../core/storage/cached_entity.dart';
 import '../../../core/storage/cached_entity_codec.dart';
 import '../../../core/storage/entity_snapshot_service.dart';
 import '../../../core/storage/entity_snapshot_store.dart';
+import '../../../core/storage/list_snapshot.dart';
 import '../../../core/storage/snapshot_load.dart';
 import '../../../core/storage/snapshot_read.dart';
 import '../domain/site_requests_scope.dart';
@@ -26,6 +27,184 @@ class SiteRequestsSnapshotAdapter {
   final Future<void> Function()? _flushQueue;
 
   static const detailType = 'site_request_detail';
+
+  Future<EntitySnapshotOwner?> currentOwner() async =>
+      (await _snapshots).currentOwner;
+
+  Future<bool> isCurrentOwner(EntitySnapshotOwner? expectedOwner) async {
+    try {
+      return (await _snapshots).currentOwner == expectedOwner;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<void> saveAcknowledgedDetail({
+    required Map<String, dynamic> payload,
+    required int requestId,
+    required int? projectId,
+    required EntitySnapshotOwner? expectedOwner,
+  }) async {
+    if (expectedOwner == null) return;
+    final service = await _snapshots;
+    if (service.currentOwner != expectedOwner) {
+      throw const SnapshotOwnerChangedException();
+    }
+    await service.pullAndMerge(
+      detailType,
+      () async => [
+        cachedEntityFromPayload(
+          type: detailType,
+          remoteId: '$requestId',
+          payload: payload,
+          projectId: projectId ?? snapshotProjectIdOf(payload),
+        ),
+      ],
+      expectedOwner: expectedOwner,
+    );
+    if (service.currentOwner != expectedOwner) {
+      throw const SnapshotOwnerChangedException();
+    }
+  }
+
+  Future<void> updateExistingListAliasesFromAcknowledgedDetail({
+    required Map<String, dynamic> payload,
+    required int requestId,
+    required int? projectId,
+    required EntitySnapshotOwner? expectedOwner,
+  }) async {
+    if (expectedOwner == null) return;
+    final service = await _snapshots;
+    final scopedProjectId = projectId ?? snapshotProjectIdOf(payload);
+    if (service.currentOwner != expectedOwner) {
+      throw const SnapshotOwnerChangedException();
+    }
+    final updatedAt = DateTime.now().toUtc();
+    for (final type in const [
+      'site_request_all',
+      'site_request',
+      'site_request_approvals',
+    ]) {
+      final marker = await service.getOne(
+        type,
+        snapshotCollectionRemoteId,
+        projectId: scopedProjectId,
+      );
+      final local = await service.getOne(
+        type,
+        '$requestId',
+        projectId: scopedProjectId,
+      );
+      if (service.currentOwner != expectedOwner) {
+        throw const SnapshotOwnerChangedException();
+      }
+
+      if (local != null && !local.dirty) {
+        try {
+          final mergedPayload = {
+            ...decodeSnapshotPayload(local),
+            ...payload,
+          };
+          await service.putSnapshot(
+            cachedEntityFromPayload(
+              type: type,
+              remoteId: '$requestId',
+              payload: mergedPayload,
+              projectId: scopedProjectId,
+              updatedAt: updatedAt,
+              pulledAt: updatedAt,
+            ),
+            expectedOwner: expectedOwner,
+          );
+        } catch (_) {
+          if (marker != null) {
+            await _markListStale(
+              service: service,
+              marker: marker,
+              projectId: scopedProjectId,
+              type: type,
+              expectedOwner: expectedOwner,
+              at: updatedAt,
+            );
+          }
+          rethrow;
+        }
+      }
+
+      if (marker == null) continue;
+      final markerPayload = decodeSnapshotPayload(marker);
+      final queryStatus = markerPayload['query_status'];
+      final queryScope = markerPayload['query_scope'];
+      if (!markerPayload.containsKey('query_status') ||
+          queryStatus != null ||
+          queryScope == SiteRequestsScope.approvals.value) {
+        await _markListStale(
+          service: service,
+          marker: marker,
+          projectId: scopedProjectId,
+          type: type,
+          expectedOwner: expectedOwner,
+          at: updatedAt,
+        );
+      }
+    }
+    if (service.currentOwner != expectedOwner) {
+      throw const SnapshotOwnerChangedException();
+    }
+  }
+
+  Future<void> _markListStale({
+    required EntitySnapshotService service,
+    required CachedEntity marker,
+    required int? projectId,
+    required String type,
+    required EntitySnapshotOwner expectedOwner,
+    required DateTime at,
+  }) async {
+    if (service.currentOwner != expectedOwner) {
+      throw const SnapshotOwnerChangedException();
+    }
+    await service.putSnapshot(
+      snapshotCollectionMarker(
+        type: type,
+        projectId: projectId,
+        at: at,
+        extra: {
+          ...decodeSnapshotPayload(marker),
+          'stale_after_mutation': true,
+        },
+      ),
+      expectedOwner: expectedOwner,
+    );
+  }
+
+  Future<void> invalidateCleanDetail({
+    required int requestId,
+    required int? projectId,
+    required Map<String, dynamic> payload,
+    required EntitySnapshotOwner expectedOwner,
+  }) async {
+    final service = await _snapshots;
+    if (service.currentOwner != expectedOwner) {
+      throw const SnapshotOwnerChangedException();
+    }
+    final scopedProjectId = projectId ?? snapshotProjectIdOf(payload);
+    final current = await service.getList(detailType, scopedProjectId);
+    if (service.currentOwner != expectedOwner) {
+      throw const SnapshotOwnerChangedException();
+    }
+    final keepRemoteIds = {
+      snapshotCollectionRemoteId,
+      for (final entity in current)
+        if (entity.remoteId != '$requestId') entity.remoteId,
+    };
+    await service.replaceFullList(
+      type: detailType,
+      projectId: scopedProjectId,
+      remoteIds: keepRemoteIds,
+      expectedOwner: expectedOwner,
+    );
+  }
 
   static String typeFor(SiteRequestsScope scope) {
     return switch (scope) {
@@ -181,6 +360,8 @@ class SiteRequestsSnapshotAdapter {
             'query_hash': queryHash,
             'item_ids': previousIds.toList()..sort(),
             'has_more': payloads.length >= perPage,
+            'query_status': status,
+            'query_scope': scope.value,
           },
         ),
         expectedOwner: expectedOwner,
@@ -311,6 +492,12 @@ class SiteRequestsSnapshotAdapter {
         error: SnapshotUserMessages.conflict,
         fromCache: !fromNetwork,
         hasDirtyLocal: true,
+      );
+    }
+    if (extra['stale_after_mutation'] == true) {
+      return const SnapshotRead(
+        presence: SnapshotPresence.missing,
+        error: SnapshotUserMessages.openSiteRequestsOnce,
       );
     }
     return SnapshotRead(

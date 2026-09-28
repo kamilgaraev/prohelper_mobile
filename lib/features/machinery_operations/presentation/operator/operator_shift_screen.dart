@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
+import '../../../../core/error/user_message.dart';
 import '../../data/machinery_operations_model.dart';
 import '../../domain/machinery_action.dart';
 import '../../domain/machinery_operations_provider.dart';
@@ -250,112 +251,210 @@ class _ActiveShiftCard extends ConsumerWidget {
   }
 
   Future<void> _showFinishDialog(BuildContext context, WidgetRef ref) async {
-    final meter = TextEditingController();
-    final hours = TextEditingController(text: '8');
-    final fuel = TextEditingController(text: '0');
-    final inspectionNotes = TextEditingController();
-    var inspectionResult = 'serviceable';
     final accepted = await showDialog<bool>(
       context: context,
       builder:
-          (context) => StatefulBuilder(
-            builder:
-                (context, setDialogState) => AlertDialog(
-                  title: const Text('Завершение смены'),
-                  content: SingleChildScrollView(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        TextField(
-                          controller: meter,
-                          decoration: const InputDecoration(
-                            labelText: 'Конечный счётчик',
-                          ),
-                        ),
-                        TextField(
-                          controller: hours,
-                          decoration: const InputDecoration(
-                            labelText: 'Фактические часы',
-                          ),
-                        ),
-                        TextField(
-                          controller: fuel,
-                          decoration: const InputDecoration(
-                            labelText: 'Расход топлива',
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        DropdownButtonFormField<String>(
-                          initialValue: inspectionResult,
-                          decoration: const InputDecoration(
-                            labelText: 'Результат послесменного осмотра',
-                          ),
-                          items: const [
-                            DropdownMenuItem(
-                              value: 'serviceable',
-                              child: Text('Исправна'),
-                            ),
-                            DropdownMenuItem(
-                              value: 'restricted',
-                              child: Text('С ограничениями'),
-                            ),
-                            DropdownMenuItem(
-                              value: 'unavailable',
-                              child: Text('Эксплуатация запрещена'),
-                            ),
-                          ],
-                          onChanged:
-                              (value) => setDialogState(
-                                () => inspectionResult = value ?? 'serviceable',
-                              ),
-                        ),
-                        TextField(
-                          controller: inspectionNotes,
-                          decoration: const InputDecoration(
-                            labelText: 'Комментарий к осмотру',
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  actions: [
-                    TextButton(
-                      onPressed: () => Navigator.pop(context, false),
-                      child: const Text('Отмена'),
-                    ),
-                    FilledButton(
-                      onPressed: () => Navigator.pop(context, true),
-                      child: const Text('Завершить'),
-                    ),
-                  ],
-                ),
+          (_) => _FinishShiftDialog(
+            assetId: asset.id,
+            shiftId: shift.id,
+            onSubmit:
+                (action) => ref
+                    .read(machineryOperationsProvider.notifier)
+                    .execute(action),
           ),
     );
-    if (accepted == true) {
-      await ref
-          .read(machineryOperationsProvider.notifier)
-          .execute(
-            FinishShiftAction(
-              asset.id,
-              shiftId: shift.id,
-              actualHours:
-                  double.tryParse(hours.text.replaceAll(',', '.')) ?? 0,
-              fuelConsumed:
-                  double.tryParse(fuel.text.replaceAll(',', '.')) ?? 0,
-              meterEnd: double.tryParse(meter.text.replaceAll(',', '.')) ?? 0,
-              postShiftInspection: <String, dynamic>{
-                'result': inspectionResult,
-                if (inspectionNotes.text.trim().isNotEmpty)
-                  'notes': inspectionNotes.text.trim(),
-                'defects': const <Map<String, dynamic>>[],
-              },
-            ),
-          );
+    if (accepted == true && context.mounted) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Смена завершена')));
     }
-    meter.dispose();
-    hours.dispose();
-    fuel.dispose();
-    inspectionNotes.dispose();
+  }
+}
+
+class _FinishShiftDialog extends StatefulWidget {
+  const _FinishShiftDialog({
+    required this.assetId,
+    required this.shiftId,
+    required this.onSubmit,
+  });
+
+  final int assetId;
+  final int shiftId;
+  final Future<void> Function(FinishShiftAction action) onSubmit;
+
+  @override
+  State<_FinishShiftDialog> createState() => _FinishShiftDialogState();
+}
+
+class _FinishShiftDialogState extends State<_FinishShiftDialog> {
+  final _meter = TextEditingController();
+  final _hours = TextEditingController(text: '8');
+  final _fuel = TextEditingController(text: '0');
+  final _inspectionNotes = TextEditingController();
+  String _inspectionResult = 'serviceable';
+  String? _submitError;
+  bool _isSubmitting = false;
+
+  @override
+  void dispose() {
+    _meter.dispose();
+    _hours.dispose();
+    _fuel.dispose();
+    _inspectionNotes.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    if (_isSubmitting) return;
+    setState(() {
+      _isSubmitting = true;
+      _submitError = null;
+    });
+
+    try {
+      await widget.onSubmit(
+        FinishShiftAction(
+          widget.assetId,
+          shiftId: widget.shiftId,
+          actualHours: double.tryParse(_hours.text.replaceAll(',', '.')) ?? 0,
+          fuelConsumed: double.tryParse(_fuel.text.replaceAll(',', '.')) ?? 0,
+          meterEnd: double.tryParse(_meter.text.replaceAll(',', '.')) ?? 0,
+          postShiftInspection: <String, dynamic>{
+            'result': _inspectionResult,
+            if (_inspectionNotes.text.trim().isNotEmpty)
+              'notes': _inspectionNotes.text.trim(),
+            'defects': const <Map<String, dynamic>>[],
+          },
+        ),
+      );
+      if (!mounted) return;
+      Navigator.of(context).pop(true);
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _isSubmitting = false;
+        _submitError = UserMessage.fromError(error);
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return PopScope(
+      canPop: !_isSubmitting,
+      child: AlertDialog(
+        scrollable: true,
+        title: const Text('Завершение смены'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              key: const Key('finish-meter-field'),
+              controller: _meter,
+              enabled: !_isSubmitting,
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
+              decoration: const InputDecoration(labelText: 'Конечный счётчик'),
+            ),
+            TextField(
+              key: const Key('finish-hours-field'),
+              controller: _hours,
+              enabled: !_isSubmitting,
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
+              decoration: const InputDecoration(labelText: 'Фактические часы'),
+            ),
+            TextField(
+              key: const Key('finish-fuel-field'),
+              controller: _fuel,
+              enabled: !_isSubmitting,
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
+              decoration: const InputDecoration(labelText: 'Расход топлива'),
+            ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              isExpanded: true,
+              initialValue: _inspectionResult,
+              selectedItemBuilder:
+                  (context) =>
+                      const [
+                            'Исправна',
+                            'С ограничениями',
+                            'Эксплуатация запрещена',
+                          ]
+                          .map(
+                            (label) => Align(
+                              alignment: Alignment.centerLeft,
+                              child: Text(
+                                label,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          )
+                          .toList(),
+              decoration: const InputDecoration(
+                labelText: 'Результат послесменного осмотра',
+              ),
+              items: const [
+                DropdownMenuItem(value: 'serviceable', child: Text('Исправна')),
+                DropdownMenuItem(
+                  value: 'restricted',
+                  child: Text('С ограничениями'),
+                ),
+                DropdownMenuItem(
+                  value: 'unavailable',
+                  child: Text('Эксплуатация запрещена'),
+                ),
+              ],
+              onChanged:
+                  _isSubmitting
+                      ? null
+                      : (value) => setState(
+                        () => _inspectionResult = value ?? 'serviceable',
+                      ),
+            ),
+            TextField(
+              key: const Key('finish-inspection-notes-field'),
+              controller: _inspectionNotes,
+              enabled: !_isSubmitting,
+              decoration: const InputDecoration(
+                labelText: 'Комментарий к осмотру',
+              ),
+            ),
+            if (_submitError != null) ...[
+              const SizedBox(height: 12),
+              Text(
+                _submitError!,
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
+            ],
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: _isSubmitting ? null : () => Navigator.pop(context),
+            child: const Text('Отмена'),
+          ),
+          FilledButton(
+            key: const Key('finish-dialog-submit'),
+            onPressed: _isSubmitting ? null : _submit,
+            child:
+                _isSubmitting
+                    ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                    : const Text('Завершить'),
+          ),
+        ],
+      ),
+    );
   }
 }
 

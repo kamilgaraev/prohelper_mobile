@@ -27,6 +27,52 @@ void main() {
     },
   );
 
+  test(
+    'fetches and parses filtered project estimates from paginated data',
+    () async {
+      late RequestOptions request;
+      final dio = Dio(BaseOptions(baseUrl: 'https://api.example.test'));
+      dio.httpClientAdapter = _JsonAdapter((options) {
+        request = options;
+        return _responseData({
+          'items': [_estimateJson()],
+          'meta': {
+            'current_page': 2,
+            'per_page': 20,
+            'total': 41,
+            'last_page': 3,
+          },
+          'summary': {'estimates_count': 41},
+        });
+      });
+
+      final page = await BudgetEstimatesRepository(dio).fetchEstimates(
+        projectId: 9,
+        page: 2,
+        status: 'in_review',
+        search: 'Каркас',
+      );
+
+      expect(request.method, 'GET');
+      expect(request.path, '/budget-estimates/estimates');
+      expect(request.queryParameters, {
+        'project_id': 9,
+        'page': 2,
+        'per_page': 20,
+        'status': 'in_review',
+        'search': 'Каркас',
+      });
+      expect(page.items, hasLength(1));
+      expect(page.items.single.id, 17);
+      expect(page.items.single.projectId, 9);
+      expect(page.items.single.status, 'in_review');
+      expect(page.items.single.name, 'Каркас секции А');
+      expect(page.currentPage, 2);
+      expect(page.lastPage, 3);
+      expect(page.total, 41);
+    },
+  );
+
   test('fetches estimate detail and linked changes', () async {
     late RequestOptions request;
     final dio = Dio(BaseOptions(baseUrl: 'https://api.example.test'));

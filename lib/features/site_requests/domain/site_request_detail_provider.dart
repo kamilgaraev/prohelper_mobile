@@ -1,6 +1,7 @@
-﻿import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/network/api_exception.dart';
+import '../../../core/storage/entity_snapshot_store.dart';
 import '../../../core/storage/snapshot_read.dart';
 import '../../projects/domain/projects_provider.dart';
 import '../data/site_request_model.dart';
@@ -131,42 +132,131 @@ class SiteRequestDetailNotifier extends StateNotifier<SiteRequestDetailState> {
   }
 
   Future<void> submit() async {
-    await _performAction(() => _repository.submitSiteRequest(_id));
+    await _performAction(() => _repository.submitSiteRequestPayload(_id));
   }
 
   Future<void> cancel({String? notes}) async {
     await _performAction(
-      () => _repository.cancelSiteRequest(_id, notes: notes),
+      () => _repository.cancelSiteRequestPayload(_id, notes: notes),
     );
   }
 
   Future<void> complete({String? notes}) async {
     await _performAction(
-      () => _repository.completeSiteRequest(_id, notes: notes),
+      () => _repository.completeSiteRequestPayload(_id, notes: notes),
     );
   }
 
   Future<void> changeStatus(String status, {String? notes}) async {
     await _performAction(
-      () => _repository.changeSiteRequestStatus(_id, status, notes: notes),
+      () =>
+          _repository.changeSiteRequestStatusPayload(_id, status, notes: notes),
     );
   }
 
   Future<void> _performAction(
-    Future<SiteRequestModel> Function() action,
+    Future<Map<String, dynamic>> Function() action,
   ) async {
+    if (!mounted) return;
+    final adapter = _snapshotAdapter;
+    final requestsNotifier = _ref.read(siteRequestsProvider.notifier);
+    EntitySnapshotOwner? expectedOwner;
+    if (adapter != null) {
+      try {
+        expectedOwner = await adapter.currentOwner();
+      } catch (_) {}
+    }
+    if (!mounted) return;
     state = state.copyWith(
       isActionLoading: true,
       permissionDenied: false,
       error: null,
     );
     try {
-      final updatedRequest = await action();
-      state = state.copyWith(isActionLoading: false, request: updatedRequest);
-      await _ref
-          .read(siteRequestsProvider.notifier)
-          .loadRequests(refresh: true);
+      final payload = await action();
+      final updatedRequest = SiteRequestModel.fromJson(payload);
+      var snapshotSaveFailed = false;
+
+      if (adapter != null) {
+        try {
+          await adapter.saveAcknowledgedDetail(
+            payload: payload,
+            requestId: _id,
+            projectId: _projectId,
+            expectedOwner: expectedOwner,
+          );
+        } catch (_) {
+          if (await adapter.isCurrentOwner(expectedOwner) &&
+              expectedOwner != null) {
+            snapshotSaveFailed = true;
+            try {
+              await adapter.invalidateCleanDetail(
+                requestId: _id,
+                projectId: _projectId,
+                payload: payload,
+                expectedOwner: expectedOwner,
+              );
+            } catch (_) {}
+          }
+        }
+        try {
+          await adapter.updateExistingListAliasesFromAcknowledgedDetail(
+            payload: payload,
+            requestId: _id,
+            projectId: _projectId,
+            expectedOwner: expectedOwner,
+          );
+        } catch (_) {
+          snapshotSaveFailed = true;
+        }
+      }
+
+      if (!mounted) return;
+      if (adapter != null) {
+        if (!await adapter.isCurrentOwner(expectedOwner)) {
+          if (mounted) {
+            state = state.copyWith(
+              isActionLoading: false,
+              request: null,
+              permissionDenied: true,
+              fromCache: false,
+              hasDirtyLocal: false,
+              error: null,
+            );
+          }
+          return;
+        }
+      }
+
+      state = state.copyWith(
+        isActionLoading: false,
+        request: updatedRequest,
+        fromCache: false,
+        hasDirtyLocal: false,
+        error:
+            snapshotSaveFailed
+                ? 'Статус изменён на сервере, но локальная копия не обновлена.'
+                : null,
+      );
+      if (!mounted) return;
+      if (!requestsNotifier.mounted) return;
+      if (adapter != null && !await adapter.isCurrentOwner(expectedOwner)) {
+        return;
+      }
+      await requestsNotifier.loadRequests(refresh: true);
     } catch (error) {
+      if (!mounted) return;
+      if (adapter != null && !await adapter.isCurrentOwner(expectedOwner)) {
+        state = state.copyWith(
+          isActionLoading: false,
+          request: null,
+          permissionDenied: true,
+          fromCache: false,
+          hasDirtyLocal: false,
+          error: null,
+        );
+        return;
+      }
       state = state.copyWith(
         isActionLoading: false,
         permissionDenied: _isPermissionDenied(error),
