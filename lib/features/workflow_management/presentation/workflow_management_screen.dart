@@ -335,6 +335,7 @@ Future<void> _showWorkflowActionSheet({
 }) async {
   final controller = TextEditingController();
   var submitting = false;
+  String? actionError;
 
   await showModalBottomSheet<void>(
     context: context,
@@ -368,6 +369,15 @@ Future<void> _showWorkflowActionSheet({
                         labelText: _inputLabel(action),
                       ),
                     ),
+                    if (actionError != null) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        actionError!,
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.error,
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 16),
                     FilledButton.icon(
                       onPressed:
@@ -386,7 +396,10 @@ Future<void> _showWorkflowActionSheet({
                                   return;
                                 }
 
-                                setSheetState(() => submitting = true);
+                                setSheetState(() {
+                                  submitting = true;
+                                  actionError = null;
+                                });
                                 try {
                                   final notifier = ref.read(
                                     workflowProvider.notifier,
@@ -418,6 +431,15 @@ Future<void> _showWorkflowActionSheet({
                                   onDone?.call();
                                   if (sheetContext.mounted) {
                                     Navigator.pop(sheetContext);
+                                  }
+                                } catch (error) {
+                                  if (context.mounted) {
+                                    setSheetState(
+                                      () =>
+                                          actionError = UserMessage.fromError(
+                                            error,
+                                          ),
+                                    );
                                   }
                                 } finally {
                                   if (context.mounted) {

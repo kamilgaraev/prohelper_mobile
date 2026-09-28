@@ -568,7 +568,8 @@ class _DailyFactSheetState extends State<_DailyFactSheet> {
               ),
               const SizedBox(height: 16),
               DropdownButtonFormField<String>(
-                value: _status,
+                isExpanded: true,
+                initialValue: _status,
                 decoration: const InputDecoration(
                   labelText: 'Результат',
                   border: OutlineInputBorder(),
@@ -578,7 +579,7 @@ class _DailyFactSheetState extends State<_DailyFactSheet> {
                         .map(
                           (option) => DropdownMenuItem<String>(
                             value: option.status,
-                            child: Text(option.label),
+                            child: Text(option.label, softWrap: true),
                           ),
                         )
                         .toList(),

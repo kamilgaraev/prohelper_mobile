@@ -11,7 +11,9 @@ import 'package:prohelpers_mobile/features/projects/data/projects_repository.dar
 import 'package:prohelpers_mobile/features/projects/domain/projects_provider.dart';
 
 class _RecordingBudgetRepository extends BudgetEstimatesRepository {
-  _RecordingBudgetRepository() : super(Dio());
+  _RecordingBudgetRepository({this.includeApprovals = true}) : super(Dio());
+
+  final bool includeApprovals;
 
   int? loadedProjectId;
   int? fetchedEstimateId;
@@ -56,7 +58,15 @@ class _RecordingBudgetRepository extends BudgetEstimatesRepository {
     required int projectId,
   }) async {
     loadedProjectId = projectId;
-    return _summary;
+    if (includeApprovals) return _summary;
+    return BudgetEstimateSummaryModel(
+      project: _summary.project,
+      totals: _summary.totals,
+      budget: _summary.budget,
+      estimates: _summary.estimates,
+      linkedChangeRequests: _summary.linkedChangeRequests,
+      assignedApprovals: const [],
+    );
   }
 
   @override
@@ -201,6 +211,50 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+
+  for (final width in [240.0, 360.0]) {
+    testWidgets(
+      'keeps estimate and change titles readable at ${width.toInt()}dp',
+      (tester) async {
+        tester.view.devicePixelRatio = 1;
+        tester.view.physicalSize = Size(width, 900);
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        await tester.pumpWidget(
+          buildApp(
+            const BudgetEstimatesScreen(),
+            _RecordingBudgetRepository(includeApprovals: false),
+            selectedProject: project(),
+            textScaler: const TextScaler.linear(1.3),
+          ),
+        );
+        await pumpUi(tester);
+
+        await tester.scrollUntilVisible(
+          find.text('Каркас секции А'),
+          280,
+          scrollable: find.byType(Scrollable).first,
+        );
+        final estimateTitle = tester.getSize(
+          find.text('Каркас секции А').first,
+        );
+        await tester.scrollUntilVisible(
+          find.text('Уточнение марки бетона'),
+          280,
+          scrollable: find.byType(Scrollable).first,
+        );
+        final changeTitle = tester.getSize(
+          find.text('Уточнение марки бетона').first,
+        );
+        expect(estimateTitle.width, greaterThan(110));
+        expect(changeTitle.width, greaterThan(110));
+        expect(find.text('На согласовании'), findsWidgets);
+        expect(find.text('На рассмотрении'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
 
   testWidgets('filters estimates by search and status', (tester) async {
     final repository = _RecordingBudgetRepository();

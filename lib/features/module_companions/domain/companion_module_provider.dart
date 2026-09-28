@@ -180,14 +180,14 @@ class CompanionModuleNotifier extends StateNotifier<CompanionModuleState> {
     return detail;
   }
 
-  Future<CompanionModuleDetailModel> executeExecutiveDocumentAction({
+  Future<void> executeExecutiveDocumentAction({
     required int documentId,
     required String action,
     String? comment,
     int? versionId,
     String? severity,
   }) async {
-    final detail = await _repository.executeExecutiveDocumentAction(
+    await _repository.executeExecutiveDocumentAction(
       documentId: documentId,
       action: action,
       comment: comment,
@@ -195,7 +195,6 @@ class CompanionModuleNotifier extends StateNotifier<CompanionModuleState> {
       severity: severity,
     );
     await load();
-    return detail;
   }
 }
 

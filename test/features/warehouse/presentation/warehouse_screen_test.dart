@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:prohelpers_mobile/core/theme/pro_theme.dart';
@@ -9,6 +10,9 @@ import 'package:prohelpers_mobile/features/warehouse/data/warehouse_summary_mode
 import 'package:prohelpers_mobile/features/warehouse/domain/warehouse_provider.dart';
 import 'package:prohelpers_mobile/features/warehouse/presentation/warehouse_receipt_sheet.dart';
 import 'package:prohelpers_mobile/features/warehouse/presentation/warehouse_screen.dart';
+import 'package:prohelpers_mobile/features/auth/data/user_model.dart';
+import 'package:prohelpers_mobile/features/auth/domain/auth_provider.dart';
+import '../../../helpers/mobile_integration_test_helpers.dart';
 
 class _FakeWarehouseRepository extends WarehouseRepository {
   _FakeWarehouseRepository({this.summary = _summary}) : super(Dio());
@@ -17,6 +21,7 @@ class _FakeWarehouseRepository extends WarehouseRepository {
 
   WarehouseReceiptPayload? createdReceipt;
   Object? createReceiptError;
+  WarehouseWriteOffCategory? writtenOffCategory;
 
   @override
   Future<WarehouseSummaryModel> fetchWarehouseSummary() async => summary;
@@ -67,6 +72,18 @@ class _FakeWarehouseRepository extends WarehouseRepository {
     if (error != null) {
       throw error;
     }
+  }
+
+  @override
+  Future<void> writeOff({
+    required int warehouseId,
+    required int materialId,
+    required double quantity,
+    String? documentNumber,
+    required String reason,
+    required WarehouseWriteOffCategory operationCategory,
+  }) async {
+    writtenOffCategory = operationCategory;
   }
 }
 
@@ -188,6 +205,92 @@ void main() {
     );
     expect(find.text('Основной'), findsOneWidget);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('warehouse card actions fit 240dp with large text', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(240, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await _pumpWarehouseScreen(
+      tester,
+      repository: _FakeWarehouseRepository(),
+      mediaPicker: _FakeMediaPicker(),
+      textScale: 1.3,
+    );
+
+    await tester.scrollUntilVisible(
+      find.widgetWithText(OutlinedButton, 'Остатки'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(find.widgetWithText(OutlinedButton, 'Остатки'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, 'Приход'), findsOneWidget);
+    final balanceLabel = tester.renderObject<RenderParagraph>(
+      find.descendant(
+        of: find.widgetWithText(OutlinedButton, 'Остатки'),
+        matching: find.text('Остатки'),
+      ),
+    );
+    expect(
+      balanceLabel.size.height,
+      lessThanOrEqualTo(balanceLabel.preferredLineHeight * 2.1),
+    );
+    final receiptLabel = tester.renderObject<RenderParagraph>(
+      find.descendant(
+        of: find.widgetWithText(FilledButton, 'Приход'),
+        matching: find.text('Приход'),
+      ),
+    );
+    expect(receiptLabel.didExceedMaxLines, isFalse);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('write-off form submits the selected category', (tester) async {
+    final repository = _FakeWarehouseRepository();
+    await _pumpWarehouseScreen(
+      tester,
+      repository: repository,
+      mediaPicker: _FakeMediaPicker(),
+      canWriteOff: true,
+    );
+    await _ensureVisible(
+      tester,
+      find.widgetWithText(OutlinedButton, 'Остатки'),
+    );
+    await tester.tap(find.widgetWithText(OutlinedButton, 'Остатки').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Списать').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Отмена'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Категория списания'), findsNothing);
+    expect(tester.takeException(), isNull);
+
+    await tester.tap(find.text('Списать').first);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Категория списания'), findsOneWidget);
+    await tester.tap(find.text('Потеря').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Повреждение').last);
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Количество'),
+      '1',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Основание'),
+      'Повреждено',
+    );
+    await tester.tap(find.widgetWithText(FilledButton, 'Списать').last);
+    await tester.pumpAndSettle();
+
+    expect(repository.writtenOffCategory, WarehouseWriteOffCategory.damage);
   });
 
   testWidgets('показывает предупреждение поверх сохранённых данных', (
@@ -373,7 +476,18 @@ Future<void> _pumpWarehouseScreen(
   required _FakeWarehouseRepository repository,
   required _FakeMediaPicker mediaPicker,
   double textScale = 1,
+  bool canWriteOff = false,
 }) async {
+  final user =
+      User()
+        ..serverId = 1
+        ..email = 'warehouse@test.local'
+        ..name = 'Пользователь'
+        ..organizationName = 'МОСТ'
+        ..organizationsJson = '[]'
+        ..roles = const []
+        ..permissionsJson =
+            canWriteOff ? '{"warehouse":["manage_stock"]}' : '{}';
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
@@ -382,6 +496,14 @@ Future<void> _pumpWarehouseScreen(
         warehouseProvider.overrideWith(
           (ref) => _FakeWarehouseNotifier(repository),
         ),
+        if (canWriteOff)
+          authProvider.overrideWith(
+            (ref) => TestAuthNotifier(
+              user: user,
+              storage: MemorySecureStorageService(),
+              authenticated: true,
+            ),
+          ),
       ],
       child: MaterialApp(
         theme: MostTheme.lightTheme,

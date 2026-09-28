@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:prohelpers_mobile/core/network/api_exception.dart';
 import 'package:prohelpers_mobile/features/projects/data/project_model.dart';
 import 'package:prohelpers_mobile/features/projects/data/projects_repository.dart';
 import 'package:prohelpers_mobile/features/projects/domain/projects_provider.dart';
@@ -23,6 +24,8 @@ class _RecordingWorkflowRepository extends WorkflowRepository {
   int? changesTaskId;
   String? approvedComment;
   String? changesComment;
+  bool failRequestChanges = false;
+  int fetchTasksCount = 0;
 
   @override
   Future<WorkflowTaskListResult> fetchTasks({
@@ -33,6 +36,7 @@ class _RecordingWorkflowRepository extends WorkflowRepository {
     required bool assignedToMe,
     String? search,
   }) async {
+    fetchTasksCount++;
     loadedProjectId = projectId;
     loadedStatus = status;
     loadedAssignedToMe = assignedToMe;
@@ -76,6 +80,16 @@ class _RecordingWorkflowRepository extends WorkflowRepository {
   }) async {
     changesTaskId = id;
     changesComment = comment;
+    if (failRequestChanges) {
+      throw ApiException.fromDio(
+        DioException(
+          requestOptions: RequestOptions(
+            path: '/workflow-management/tasks/$id/request-changes',
+          ),
+          type: DioExceptionType.connectionError,
+        ),
+      );
+    }
     return _task;
   }
 }
@@ -505,6 +519,57 @@ void main() {
 
     expect(repository.changesTaskId, 17);
     expect(repository.changesComment, 'Уточнить объем');
+  });
+
+  testWidgets('keeps workflow action retryable after Dio connection failure', (
+    tester,
+  ) async {
+    final repository =
+        _RecordingWorkflowRepository()..failRequestChanges = true;
+    useLargeSurface(tester);
+
+    await tester.pumpWidget(
+      buildApp(const WorkflowManagementScreen(), repository),
+    );
+    await pumpUi(tester);
+
+    await tester.tap(find.text('Ещё'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Запросить изменения'));
+    await tester.pumpAndSettle();
+    final commentField = find.byType(TextField).last;
+    await tester.enterText(commentField, 'Уточнить объём работ');
+    await tester.tap(find.text('Отправить').last);
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('Нет соединения с сервером. Проверьте интернет.'),
+      findsOneWidget,
+    );
+    expect(find.text('Запросить изменения'), findsOneWidget);
+    expect(
+      tester.widget<TextField>(commentField).controller!.text,
+      'Уточнить объём работ',
+    );
+    expect(
+      tester
+          .widget<FilledButton>(
+            find.widgetWithText(FilledButton, 'Отправить').last,
+          )
+          .onPressed,
+      isNotNull,
+    );
+    expect(tester.takeException(), isNull);
+
+    final fetchCountBeforeRetry = repository.fetchTasksCount;
+    repository.failRequestChanges = false;
+    await tester.tap(find.text('Отправить').last);
+    await pumpUi(tester);
+
+    expect(repository.changesComment, 'Уточнить объём работ');
+    expect(repository.fetchTasksCount, greaterThan(fetchCountBeforeRetry));
+    expect(find.text('Отправить'), findsNothing);
+    expect(tester.takeException(), isNull);
   });
 }
 

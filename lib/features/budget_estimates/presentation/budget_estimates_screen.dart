@@ -697,28 +697,41 @@ class _BudgetEstimateCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final color = _statusColor(estimate.status, theme);
+    final compact =
+        MediaQuery.sizeOf(context).width < 390 ||
+        MediaQuery.textScalerOf(context).scale(1) > 1.15;
 
     return ProCard(
       onTap: onTap,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  estimate.name,
-                  style: AppTypography.bodyLarge(
-                    context,
-                  ).copyWith(fontWeight: FontWeight.w900),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
+          if (compact) ...[
+            Text(
+              estimate.name,
+              style: AppTypography.bodyLarge(
+                context,
+              ).copyWith(fontWeight: FontWeight.w900),
+            ),
+            const SizedBox(height: 8),
+            _StatusPill(label: estimate.statusLabel, color: color),
+          ] else
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    estimate.name,
+                    style: AppTypography.bodyLarge(
+                      context,
+                    ).copyWith(fontWeight: FontWeight.w900),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
-              ),
-              const SizedBox(width: 10),
-              _StatusPill(label: estimate.statusLabel, color: color),
-            ],
-          ),
+                const SizedBox(width: 10),
+                _StatusPill(label: estimate.statusLabel, color: color),
+              ],
+            ),
           const SizedBox(height: 8),
           Text(
             estimate.number,
@@ -967,28 +980,44 @@ class _BudgetChangeCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final compact =
+        MediaQuery.sizeOf(context).width < 390 ||
+        MediaQuery.textScalerOf(context).scale(1) > 1.15;
 
     return ProCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  change.title,
-                  style: AppTypography.bodyLarge(
-                    context,
-                  ).copyWith(fontWeight: FontWeight.w900),
+          if (compact) ...[
+            Text(
+              change.title,
+              style: AppTypography.bodyLarge(
+                context,
+              ).copyWith(fontWeight: FontWeight.w900),
+            ),
+            const SizedBox(height: 8),
+            _StatusPill(
+              label: change.statusLabel,
+              color: _changeColor(change.status, theme),
+            ),
+          ] else
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    change.title,
+                    style: AppTypography.bodyLarge(
+                      context,
+                    ).copyWith(fontWeight: FontWeight.w900),
+                  ),
                 ),
-              ),
-              const SizedBox(width: 10),
-              _StatusPill(
-                label: change.statusLabel,
-                color: _changeColor(change.status, theme),
-              ),
-            ],
-          ),
+                const SizedBox(width: 10),
+                _StatusPill(
+                  label: change.statusLabel,
+                  color: _changeColor(change.status, theme),
+                ),
+              ],
+            ),
           const SizedBox(height: 8),
           Text(
             change.changeNumber,

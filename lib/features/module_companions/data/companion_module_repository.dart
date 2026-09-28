@@ -86,7 +86,7 @@ class CompanionModuleRepository {
     }
   }
 
-  Future<CompanionModuleDetailModel> executeExecutiveDocumentAction({
+  Future<void> executeExecutiveDocumentAction({
     required int documentId,
     required String action,
     String? comment,
@@ -108,9 +108,18 @@ class CompanionModuleRepository {
             'severity': severity.trim(),
         },
       );
-      return CompanionModuleDetailModel.fromJson(
-        MobileApiResponse.dataMap(response.data),
-      );
+      final envelope = MobileApiResponse.map(response.data);
+      if (!envelope.success) {
+        throw ApiException(
+          envelope.message ?? 'Не удалось выполнить действие с документом.',
+        );
+      }
+      final returnedId = envelope.data['id'];
+      if (returnedId is! num || returnedId.toInt() != documentId) {
+        throw const FormatException(
+          'mobile_pto_document_action_invalid_response',
+        );
+      }
     } on DioException catch (error) {
       throw ApiException.fromDio(error);
     }
