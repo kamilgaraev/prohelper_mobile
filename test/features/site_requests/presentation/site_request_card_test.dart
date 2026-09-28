@@ -4,6 +4,39 @@ import 'package:prohelpers_mobile/features/site_requests/data/site_request_model
 import 'package:prohelpers_mobile/features/site_requests/presentation/widgets/site_request_card.dart';
 
 void main() {
+  testWidgets('карточка не округляет малое количество до нуля', (tester) async {
+    final request =
+        SiteRequestModel()
+          ..serverId = 3
+          ..title = 'Тестовая заявка'
+          ..status = 'draft'
+          ..statusLabel = 'Черновик'
+          ..priority = 'medium'
+          ..priorityLabel = 'Средний'
+          ..requestType = 'material_request'
+          ..requestTypeLabel = 'Материалы'
+          ..materialName = 'Кабель'
+          ..materialQuantity = 0.001
+          ..materialUnit = 'м';
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(body: SiteRequestCard(request: request, onTap: () {})),
+      ),
+    );
+
+    expect(find.text('Кабель • 0.001 м'), findsOneWidget);
+
+    request.materialQuantity = 1.230;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(body: SiteRequestCard(request: request, onTap: () {})),
+      ),
+    );
+
+    expect(find.text('Кабель • 1.23 м'), findsOneWidget);
+  });
+
   testWidgets('карточка сохраняет длинные данные на узком экране', (
     tester,
   ) async {

@@ -158,6 +158,32 @@ void main() {
     expect(find.text('Подтвердить время поставки до 14:00.'), findsOneWidget);
   });
 
+  testWidgets('детали заявки показывают сохранённые три знака количества', (
+    tester,
+  ) async {
+    final request =
+        SiteRequestModel()
+          ..serverId = 1003
+          ..title = 'Кабель для участка'
+          ..status = 'draft'
+          ..statusLabel = 'Черновик'
+          ..priority = 'medium'
+          ..priorityLabel = 'Средний'
+          ..requestType = 'material_request'
+          ..requestTypeLabel = 'Материалы'
+          ..materialName = 'Кабель'
+          ..materialQuantity = 0.001
+          ..materialUnit = 'м'
+          ..projectId = 15
+          ..projectName = 'Тестовый';
+
+    await tester.pumpWidget(createWidget(request: request));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    expect(find.text('0.001 м'), findsOneWidget);
+  });
+
   testWidgets('не показывает действия, если backend не прислал переходы', (
     tester,
   ) async {

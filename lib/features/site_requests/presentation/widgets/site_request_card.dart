@@ -265,7 +265,7 @@ class SiteRequestCard extends StatelessWidget {
   }
 
   String _formatQuantity(double value) {
-    return value.toStringAsFixed(value.truncateToDouble() == value ? 0 : 2);
+    return value.toStringAsFixed(3).replaceFirst(RegExp(r'\.?0+$'), '');
   }
 
   String _formatDate(DateTime date) {
