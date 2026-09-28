@@ -42,12 +42,15 @@ class AuthRepository {
 
       throw ApiException.fromDio(
         error,
-        fallbackMessage: 'Не удалось выполнить вход.',
+        fallbackMessage:
+            'Попробуйте войти ещё раз. Если ошибка повторится, обратитесь к администратору организации.',
       );
     } on ApiException {
       rethrow;
     } catch (_) {
-      throw const ApiException('Не удалось выполнить вход.');
+      throw const ApiException(
+        'Попробуйте войти ещё раз. Если ошибка повторится, обратитесь к администратору организации.',
+      );
     }
   }
 

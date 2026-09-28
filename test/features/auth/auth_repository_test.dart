@@ -59,6 +59,51 @@ void main() {
     );
   });
 
+  test(
+    'login uses actionable fallback for Dio error without a message',
+    () async {
+      final adapter =
+          _AuthHttpAdapter()
+            ..responses.add(_AdapterResponse(statusCode: 502, body: '{}'));
+      final repository = AuthRepository(_dio(adapter), _MemorySecureStorage());
+
+      await expectLater(
+        repository.login('foreman@example.test', 'secret'),
+        throwsA(
+          isA<ApiException>().having(
+            (error) => error.message,
+            'message',
+            'Попробуйте войти ещё раз. Если ошибка повторится, обратитесь к администратору организации.',
+          ),
+        ),
+      );
+    },
+  );
+
+  test('login uses actionable fallback for an unexpected error', () async {
+    final adapter =
+        _AuthHttpAdapter()
+          ..responses.add(
+            _AdapterResponse(
+              statusCode: 200,
+              body: '{"data":{"token":"token-1"}}',
+            ),
+          );
+    final repository = AuthRepository(_dio(adapter), _ThrowingSecureStorage());
+
+    await expectLater(
+      repository.login('foreman@example.test', 'secret'),
+      throwsA(
+        isA<ApiException>().having(
+          (error) => error.message,
+          'message',
+          'Попробуйте войти ещё раз. Если ошибка повторится, обратитесь к администратору организации.',
+        ),
+      ),
+    );
+    expect(adapter.requests.single.path, '/auth/login');
+  });
+
   test('invalid credentials do not store token', () async {
     final adapter =
         _AuthHttpAdapter()
@@ -292,6 +337,13 @@ class _MemorySecureStorage extends SecureStorageService {
   @override
   Future<void> clearToken() async {
     token = null;
+  }
+}
+
+class _ThrowingSecureStorage extends _MemorySecureStorage {
+  @override
+  Future<void> saveToken(String token) async {
+    throw StateError('storage unavailable');
   }
 }
 
