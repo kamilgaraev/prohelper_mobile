@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:prohelpers_mobile/core/network/api_exception.dart';
 import 'package:prohelpers_mobile/core/theme/app_colors.dart';
 import 'package:prohelpers_mobile/core/design/pro_status.dart';
 import 'package:prohelpers_mobile/core/theme/app_typography.dart';
@@ -41,7 +42,7 @@ class SiteRequestDetailScreen extends ConsumerWidget {
             ),
             onPressed: () => Navigator.of(context).pop(),
           ),
-          title: Text('Детали заявки', style: AppTypography.h2(context)),
+          title: Text('Заявка', style: AppTypography.h2(context)),
         ),
         body:
             state.isLoading && state.request == null
@@ -61,20 +62,11 @@ class SiteRequestDetailScreen extends ConsumerWidget {
                 )
                 : Column(
                   children: [
-                    if (state.fromCache)
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-                        child: ProStatusBanner(
-                          title: 'Сохранённая заявка',
-                          description:
-                              state.error ??
-                              'Показаны данные с устройства. Они могут быть неактуальны.',
-                          tone: ProStatusTone.info,
-                        ),
-                      ),
                     Expanded(
                       child: _SiteRequestDetailContent(
                         request: state.request!,
+                        fromCache: state.fromCache,
+                        cacheError: state.error,
                         onEdit:
                             state.request!.canBeEdited
                                 ? () async {
@@ -127,7 +119,7 @@ class SiteRequestDetailScreen extends ConsumerWidget {
     SiteRequestTransition transition,
   ) async {
     if (_statusRequiresReason(transition.status)) {
-      _showTransitionDialog(context, ref, transition);
+      await _showTransitionDialog(context, transition);
       return;
     }
 
@@ -144,71 +136,138 @@ class SiteRequestDetailScreen extends ConsumerWidget {
     }
   }
 
-  void _showTransitionDialog(
+  Future<void> _showTransitionDialog(
     BuildContext context,
-    WidgetRef ref,
     SiteRequestTransition transition,
-  ) {
+  ) => showDialog<void>(
+    context: context,
+    builder:
+        (_) => _SiteRequestTransitionDialog(id: id, transition: transition),
+  );
+}
+
+class _SiteRequestTransitionDialog extends ConsumerStatefulWidget {
+  const _SiteRequestTransitionDialog({
+    required this.id,
+    required this.transition,
+  });
+
+  final int id;
+  final SiteRequestTransition transition;
+
+  @override
+  ConsumerState<_SiteRequestTransitionDialog> createState() =>
+      _SiteRequestTransitionDialogState();
+}
+
+class _SiteRequestTransitionDialogState
+    extends ConsumerState<_SiteRequestTransitionDialog> {
+  late final TextEditingController _controller;
+  var _isSubmitting = false;
+  String? _errorMessage;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    if (_isSubmitting) return;
+    final notes = _controller.text;
+    setState(() {
+      _isSubmitting = true;
+      _errorMessage = null;
+    });
+
+    try {
+      await ref
+          .read(siteRequestDetailProvider(widget.id).notifier)
+          .changeStatus(widget.transition.status, notes: notes);
+      if (!mounted) return;
+      Navigator.of(context).pop();
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _isSubmitting = false;
+        _errorMessage = _transitionErrorMessage(error);
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final controller = TextEditingController();
 
-    showDialog(
-      context: context,
-      builder:
-          (dialogContext) => AlertDialog(
-            backgroundColor: theme.colorScheme.surface,
-            title: Text(
-              _transitionActionLabel(transition),
-              style: AppTypography.h2(context),
+    return AlertDialog(
+      backgroundColor: theme.colorScheme.surface,
+      title: Text(
+        _transitionActionLabel(widget.transition),
+        style: AppTypography.h2(context),
+      ),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          TextField(
+            controller: _controller,
+            maxLines: 3,
+            style: AppTypography.bodyMedium(context),
+            decoration: InputDecoration(
+              hintText: 'Комментарий к решению',
+              hintStyle: TextStyle(color: theme.colorScheme.onSurfaceVariant),
             ),
-            content: TextField(
-              controller: controller,
-              maxLines: 3,
-              style: AppTypography.bodyMedium(context),
-              decoration: InputDecoration(
-                hintText: 'Комментарий к решению',
-                hintStyle: TextStyle(color: theme.colorScheme.onSurfaceVariant),
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(dialogContext),
-                child: const Text('Назад'),
-              ),
-              TextButton(
-                onPressed: () async {
-                  Navigator.pop(dialogContext);
-
-                  try {
-                    await ref
-                        .read(siteRequestDetailProvider(id).notifier)
-                        .changeStatus(
-                          transition.status,
-                          notes: controller.text,
-                        );
-                  } catch (error) {
-                    if (!context.mounted) {
-                      return;
-                    }
-
-                    AppErrorNotice.show(context, error);
-                  }
-                },
-                child: Text(
-                  _transitionActionLabel(transition),
-                  style: TextStyle(color: _transitionColor(transition.status)),
+          ),
+          if (_errorMessage != null) ...[
+            const SizedBox(height: 12),
+            Semantics(
+              liveRegion: true,
+              child: Text(
+                _errorMessage!,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: theme.colorScheme.error,
                 ),
               ),
-            ],
+            ),
+          ],
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: _isSubmitting ? null : () => Navigator.of(context).pop(),
+          child: const Text('Назад'),
+        ),
+        TextButton(
+          onPressed: _isSubmitting ? null : _submit,
+          child: Text(
+            _isSubmitting
+                ? 'Сохраняем...'
+                : _transitionActionLabel(widget.transition),
+            style: TextStyle(color: _transitionColor(widget.transition.status)),
           ),
+        ),
+      ],
     );
   }
 }
 
 class _SiteRequestDetailContent extends ConsumerWidget {
-  const _SiteRequestDetailContent({required this.request, this.onEdit});
+  const _SiteRequestDetailContent({
+    required this.request,
+    required this.fromCache,
+    this.cacheError,
+    this.onEdit,
+  });
 
   final SiteRequestModel request;
+  final bool fromCache;
+  final String? cacheError;
   final Future<void> Function()? onEdit;
 
   @override
@@ -218,6 +277,17 @@ class _SiteRequestDetailContent extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (fromCache) ...[
+            ProStatusBanner(
+              title: 'Сохранённая заявка',
+              description:
+                  cacheError ??
+                  'Показаны данные с устройства. Они могут быть неактуальны.',
+              tone: ProStatusTone.info,
+              fullText: true,
+            ),
+            const SizedBox(height: 16),
+          ],
           _RequestHeroCard(request: request),
           const SizedBox(height: 16),
           _RequestAttentionBanner(request: request),
@@ -1593,6 +1663,19 @@ bool _statusRequiresReason(String status) {
   return normalized == 'cancelled' || normalized == 'rejected';
 }
 
+String _transitionErrorMessage(Object error) {
+  if (error is ApiException) {
+    if (error.statusCode == 403) {
+      return 'Недостаточно прав для изменения статуса заявки.';
+    }
+    if (error.message.trim().isNotEmpty) {
+      return error.message.trim();
+    }
+  }
+
+  return 'Не удалось изменить статус заявки. Проверьте подключение и повторите попытку.';
+}
+
 int _compareTransitions(
   SiteRequestTransition left,
   SiteRequestTransition right,
@@ -1811,7 +1894,7 @@ bool _isUrgent(String priority) {
 }
 
 String _formatQuantity(double value) {
-  return value.toStringAsFixed(value.truncateToDouble() == value ? 0 : 2);
+  return value.toStringAsFixed(3).replaceFirst(RegExp(r'\.?0+$'), '');
 }
 
 String _formatOptionalQuantity(double? value, String? unit) {

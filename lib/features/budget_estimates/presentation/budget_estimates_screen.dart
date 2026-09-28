@@ -4,15 +4,17 @@ import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/error/user_message.dart';
+import '../../../core/storage/cached_entity_codec.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../core/widgets/app_empty_state.dart';
-import '../../../core/widgets/app_error_notice.dart';
 import '../../../core/widgets/app_error_state.dart';
 import '../../../core/widgets/app_loading_state.dart';
 import '../../../core/widgets/mesh_background.dart';
 import '../../../core/widgets/pro_card.dart';
 import '../../projects/domain/projects_provider.dart';
+import '../../auth/data/auth_session_identity.dart';
+import '../../auth/domain/auth_provider.dart';
 import '../data/budget_estimate_model.dart';
 import '../data/budget_estimates_repository.dart';
 import '../domain/budget_estimates_provider.dart';
@@ -32,10 +34,16 @@ class _BudgetEstimatesScreenState extends ConsumerState<BudgetEstimatesScreen> {
   Timer? _searchTimer;
   int? _listProjectId;
   int _listRequest = 0;
+  AuthSessionIdentity? _listRequestIdentity;
   BudgetEstimatePage? _estimatePage;
   bool _listLoading = false;
   bool _moreLoading = false;
   String? _listError;
+  String? _staleListError;
+  AuthSessionIdentity? _loadedListIdentity;
+  int? _loadedListProjectId;
+  String? _loadedListSearch;
+  String? _loadedListStatus;
 
   @override
   void dispose() {
@@ -58,6 +66,11 @@ class _BudgetEstimatesScreenState extends ConsumerState<BudgetEstimatesScreen> {
   Widget build(BuildContext context) {
     final state = ref.watch(budgetEstimatesProvider);
     final selectedProject = ref.watch(projectsProvider).selectedProject;
+    final identity = ref.watch(
+      authProvider.select(
+        (state) => state is AuthAuthenticated ? state.sessionIdentity : null,
+      ),
+    );
     final projectId = selectedProject?.serverId;
     final compactTitle =
         MediaQuery.sizeOf(context).width < 390 ||
@@ -84,7 +97,7 @@ class _BudgetEstimatesScreenState extends ConsumerState<BudgetEstimatesScreen> {
             ),
           ],
         ),
-        body: _buildBody(context, state, projectId),
+        body: _buildBody(context, state, projectId, identity),
       ),
     );
   }
@@ -93,6 +106,7 @@ class _BudgetEstimatesScreenState extends ConsumerState<BudgetEstimatesScreen> {
     BuildContext context,
     BudgetEstimatesState state,
     int? projectId,
+    AuthSessionIdentity? identity,
   ) {
     if (projectId == null) {
       return const AppEmptyState(
@@ -119,6 +133,11 @@ class _BudgetEstimatesScreenState extends ConsumerState<BudgetEstimatesScreen> {
     if (summary == null) {
       return const AppLoadingState(message: 'Загружаем сметы');
     }
+    final hasMatchingListOwner =
+        identity != null &&
+        identity == _loadedListIdentity &&
+        projectId == _loadedListProjectId;
+    final estimatePage = hasMatchingListOwner ? _estimatePage : null;
 
     return RefreshIndicator(
       onRefresh: _refresh,
@@ -128,6 +147,14 @@ class _BudgetEstimatesScreenState extends ConsumerState<BudgetEstimatesScreen> {
           _BudgetHeader(summary: summary),
           const SizedBox(height: 12),
           _BudgetSummaryStrip(summary: summary),
+          if (state.error != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Text(
+                'Не удалось обновить сводку. Показаны данные последней успешной загрузки.',
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
+            ),
           const SizedBox(height: 12),
           if (summary.assignedApprovals.isNotEmpty) ...[
             _SectionTitle(
@@ -183,18 +210,34 @@ class _BudgetEstimatesScreenState extends ConsumerState<BudgetEstimatesScreen> {
           const SizedBox(height: 8),
           Builder(
             builder: (context) {
-              final estimates = _estimatePage?.items ?? <BudgetEstimateModel>[];
+              final estimates = estimatePage?.items ?? <BudgetEstimateModel>[];
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   _SectionTitle(
                     title: 'Сметы объекта',
-                    count: _estimatePage?.total ?? 0,
+                    count: estimatePage?.total ?? 0,
                   ),
                   const SizedBox(height: 8),
-                  if (_listLoading && _estimatePage == null)
+                  if ((_loadedListSearch != _searchQuery ||
+                          _loadedListStatus != _statusFilter ||
+                          _staleListError != null) &&
+                      estimatePage != null)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Text(
+                        _loadedListSearch != _searchQuery ||
+                                _loadedListStatus != _statusFilter
+                            ? 'Показан последний успешно загруженный список. Он может не учитывать текущие фильтры.'
+                            : 'Не удалось обновить список. Показаны данные последней успешной загрузки.',
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.error,
+                        ),
+                      ),
+                    ),
+                  if (_listLoading && estimatePage == null)
                     const AppLoadingState(message: 'Загружаем сметы')
-                  else if (_listError != null && _estimatePage == null)
+                  else if (_listError != null && estimatePage == null)
                     AppErrorState(
                       title: 'Список смет не загружен',
                       description: _listError,
@@ -222,13 +265,15 @@ class _BudgetEstimatesScreenState extends ConsumerState<BudgetEstimatesScreen> {
                         ),
                       ),
                     ),
-                  if (_listError != null && _estimatePage != null)
+                  if (_listError != null && estimatePage != null)
                     Padding(
                       padding: const EdgeInsets.only(bottom: 8),
                       child: Text(_listError!),
                     ),
-                  if (_estimatePage != null &&
-                      _estimatePage!.currentPage < _estimatePage!.lastPage)
+                  if (estimatePage != null &&
+                      _loadedListSearch == _searchQuery &&
+                      _loadedListStatus == _statusFilter &&
+                      estimatePage.currentPage < estimatePage.lastPage)
                     Center(
                       child: TextButton(
                         onPressed:
@@ -277,20 +322,29 @@ class _BudgetEstimatesScreenState extends ConsumerState<BudgetEstimatesScreen> {
 
   void _syncAndLoad() {
     final selectedProject = ref.read(projectsProvider).selectedProject;
+    final auth = ref.read(authProvider);
+    final identity = auth is AuthAuthenticated ? auth.sessionIdentity : null;
     final notifier = ref.read(budgetEstimatesProvider.notifier);
     notifier.syncProject(selectedProject?.serverId);
 
     if (selectedProject?.serverId != null) {
       notifier.loadSummary();
-      if (_listProjectId != selectedProject!.serverId) {
+      if (_listProjectId != selectedProject!.serverId ||
+          _listRequestIdentity != identity) {
         _loadEstimates(selectedProject.serverId);
       }
     } else {
       _listRequest++;
       setState(() {
         _listProjectId = null;
+        _listRequestIdentity = null;
         _estimatePage = null;
         _listError = null;
+        _staleListError = null;
+        _loadedListIdentity = null;
+        _loadedListProjectId = null;
+        _loadedListSearch = null;
+        _loadedListStatus = null;
       });
     }
   }
@@ -307,14 +361,31 @@ class _BudgetEstimatesScreenState extends ConsumerState<BudgetEstimatesScreen> {
   Future<void> _loadEstimates(int projectId, {bool more = false}) async {
     if (more && (_estimatePage == null || _moreLoading)) return;
     final request = ++_listRequest;
+    final auth = ref.read(authProvider);
+    final requestIdentity =
+        auth is AuthAuthenticated ? auth.sessionIdentity : null;
+    _listRequestIdentity = requestIdentity;
+    final requestSearch = _searchQuery;
+    final requestStatus = _statusFilter;
+    final sameOwner =
+        requestIdentity != null &&
+        requestIdentity == _loadedListIdentity &&
+        projectId == _loadedListProjectId;
     final nextPage = more ? _estimatePage!.currentPage + 1 : 1;
     setState(() {
       _listProjectId = projectId;
       _listError = null;
+      _staleListError = null;
       if (more) {
         _moreLoading = true;
       } else {
-        _estimatePage = null;
+        if (!sameOwner) {
+          _estimatePage = null;
+          _loadedListIdentity = null;
+          _loadedListProjectId = null;
+          _loadedListSearch = null;
+          _loadedListStatus = null;
+        }
         _listLoading = true;
       }
     });
@@ -324,10 +395,16 @@ class _BudgetEstimatesScreenState extends ConsumerState<BudgetEstimatesScreen> {
           .fetchEstimates(
             projectId: projectId,
             page: nextPage,
-            status: _statusFilter,
-            search: _searchQuery,
+            status: requestStatus,
+            search: requestSearch,
           );
       if (!mounted || request != _listRequest) return;
+      final currentAuth = ref.read(authProvider);
+      if (currentAuth is! AuthAuthenticated ||
+          currentAuth.sessionIdentity != requestIdentity ||
+          ref.read(projectsProvider).selectedProject?.serverId != projectId) {
+        return;
+      }
       setState(() {
         _estimatePage =
             more
@@ -338,9 +415,37 @@ class _BudgetEstimatesScreenState extends ConsumerState<BudgetEstimatesScreen> {
                   total: page.total,
                 )
                 : page;
+        if (!more) {
+          _loadedListIdentity = requestIdentity;
+          _loadedListProjectId = projectId;
+          _loadedListSearch = requestSearch;
+          _loadedListStatus = requestStatus;
+        }
+        _staleListError = null;
       });
     } catch (error) {
       if (!mounted || request != _listRequest) return;
+      if (!mounted || request != _listRequest) return;
+      final currentAuth = ref.read(authProvider);
+      final requestOwnerStillCurrent =
+          currentAuth is AuthAuthenticated &&
+          currentAuth.sessionIdentity == requestIdentity &&
+          ref.read(projectsProvider).selectedProject?.serverId == projectId;
+      if (isSnapshotOffline(error) &&
+          sameOwner &&
+          requestOwnerStillCurrent &&
+          _estimatePage != null) {
+        setState(() => _staleListError = UserMessage.fromError(error));
+        return;
+      }
+      setState(() {
+        _estimatePage = null;
+        _loadedListIdentity = null;
+        _loadedListProjectId = null;
+        _loadedListSearch = null;
+        _loadedListStatus = null;
+        _staleListError = null;
+      });
       setState(() => _listError = UserMessage.fromError(error));
     } finally {
       if (mounted && request == _listRequest) {
@@ -365,37 +470,22 @@ class _BudgetEstimatesScreenState extends ConsumerState<BudgetEstimatesScreen> {
     BudgetEstimateModel estimate, {
     required bool approve,
   }) async {
-    final comment = await _showCommentSheet(
+    final submitted = await _showCommentSheet(
       context,
       title: approve ? 'Согласовать смету' : 'Вернуть на доработку',
       requiredComment: !approve,
+      onSubmit: (comment) async {
+        final notifier = ref.read(budgetEstimatesProvider.notifier);
+        if (approve) {
+          await notifier.approveEstimate(id: estimate.id, comment: comment);
+        } else {
+          await notifier.requestChanges(id: estimate.id, comment: comment);
+        }
+      },
     );
-
-    if (!context.mounted || comment == null) {
-      return;
-    }
-
-    try {
-      final notifier = ref.read(budgetEstimatesProvider.notifier);
-      if (approve) {
-        await notifier.approveEstimate(id: estimate.id, comment: comment);
-      } else {
-        await notifier.requestChanges(id: estimate.id, comment: comment);
-      }
-
-      if (!context.mounted) {
-        return;
-      }
-
-      _message(context, approve ? 'Смета согласована' : 'Смета возвращена');
-      await _refresh();
-    } catch (error) {
-      if (!context.mounted) {
-        return;
-      }
-
-      AppErrorNotice.showMessage(context, _actionErrorMessage(error));
-    }
+    if (!context.mounted || !submitted) return;
+    _message(context, approve ? 'Смета согласована' : 'Смета возвращена');
+    await _refresh();
   }
 }
 
@@ -537,31 +627,20 @@ class _BudgetEstimateDetailScreenState
     BudgetEstimateModel estimate, {
     required bool approve,
   }) async {
-    final comment = await _showCommentSheet(
+    final submitted = await _showCommentSheet(
       context,
       title: approve ? 'Согласовать смету' : 'Вернуть на доработку',
       requiredComment: !approve,
+      onSubmit: (comment) async {
+        final notifier = ref.read(budgetEstimatesProvider.notifier);
+        if (approve) {
+          await notifier.approveEstimate(id: estimate.id, comment: comment);
+        } else {
+          await notifier.requestChanges(id: estimate.id, comment: comment);
+        }
+      },
     );
-
-    if (!mounted || comment == null) {
-      return;
-    }
-
-    try {
-      final notifier = ref.read(budgetEstimatesProvider.notifier);
-      if (approve) {
-        await notifier.approveEstimate(id: estimate.id, comment: comment);
-      } else {
-        await notifier.requestChanges(id: estimate.id, comment: comment);
-      }
-      _reload();
-    } catch (error) {
-      if (!mounted) {
-        return;
-      }
-
-      AppErrorNotice.showMessage(context, _actionErrorMessage(error));
-    }
+    if (mounted && submitted) _reload();
   }
 }
 
@@ -1195,24 +1274,37 @@ class _SectionTitle extends StatelessWidget {
   }
 }
 
-Future<String?> _showCommentSheet(
+Future<bool> _showCommentSheet(
   BuildContext context, {
   required String title,
   required bool requiredComment,
+  required Future<void> Function(String comment) onSubmit,
 }) async {
-  return showModalBottomSheet<String>(
-    context: context,
-    isScrollControlled: true,
-    builder:
-        (_) => _CommentSheet(title: title, requiredComment: requiredComment),
-  );
+  return (await showModalBottomSheet<bool>(
+        context: context,
+        isScrollControlled: true,
+        isDismissible: false,
+        enableDrag: false,
+        builder:
+            (_) => _CommentSheet(
+              title: title,
+              requiredComment: requiredComment,
+              onSubmit: onSubmit,
+            ),
+      )) ??
+      false;
 }
 
 class _CommentSheet extends StatefulWidget {
-  const _CommentSheet({required this.title, required this.requiredComment});
+  const _CommentSheet({
+    required this.title,
+    required this.requiredComment,
+    required this.onSubmit,
+  });
 
   final String title;
   final bool requiredComment;
+  final Future<void> Function(String comment) onSubmit;
 
   @override
   State<_CommentSheet> createState() => _CommentSheetState();
@@ -1221,6 +1313,7 @@ class _CommentSheet extends StatefulWidget {
 class _CommentSheetState extends State<_CommentSheet> {
   final _controller = TextEditingController();
   String? _validationMessage;
+  bool _isSubmitting = false;
 
   @override
   void dispose() {
@@ -1232,41 +1325,53 @@ class _CommentSheetState extends State<_CommentSheet> {
   Widget build(BuildContext context) {
     final bottom = MediaQuery.viewInsetsOf(context).bottom;
 
-    return SingleChildScrollView(
-      padding: EdgeInsets.fromLTRB(20, 20, 20, bottom + 20),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(widget.title, style: AppTypography.h2(context)),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _controller,
-            minLines: 3,
-            maxLines: 5,
-            decoration: InputDecoration(
-              labelText:
-                  widget.requiredComment
-                      ? 'Комментарий'
-                      : 'Комментарий при необходимости',
-              border: const OutlineInputBorder(),
-              errorText: _validationMessage,
+    return PopScope(
+      canPop: !_isSubmitting,
+      child: SingleChildScrollView(
+        padding: EdgeInsets.fromLTRB(20, 20, 20, bottom + 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(widget.title, style: AppTypography.h2(context)),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _controller,
+              minLines: 3,
+              maxLines: 5,
+              maxLength: 2000,
+              decoration: InputDecoration(
+                labelText:
+                    widget.requiredComment
+                        ? 'Комментарий'
+                        : 'Комментарий при необходимости',
+                border: const OutlineInputBorder(),
+                errorText: _validationMessage,
+              ),
             ),
-          ),
-          const SizedBox(height: 16),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton(
-              onPressed: _submit,
-              child: const Text('Отправить'),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton(
+                onPressed: _isSubmitting ? null : _submit,
+                child: Text(_isSubmitting ? 'Отправка…' : 'Отправить'),
+              ),
             ),
-          ),
-        ],
+            if (!_isSubmitting)
+              Center(
+                child: TextButton(
+                  onPressed: () => Navigator.of(context).pop(false),
+                  child: const Text('Отмена'),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
 
-  void _submit() {
+  Future<void> _submit() async {
+    if (_isSubmitting) return;
     final text = _controller.text.trim();
     if (widget.requiredComment && text.isEmpty) {
       setState(() {
@@ -1274,8 +1379,31 @@ class _CommentSheetState extends State<_CommentSheet> {
       });
       return;
     }
+    if (text.length > 2000) {
+      setState(
+        () =>
+            _validationMessage =
+                'Комментарий не должен превышать 2000 символов',
+      );
+      return;
+    }
 
-    Navigator.of(context).pop(text);
+    setState(() {
+      _isSubmitting = true;
+      _validationMessage = null;
+    });
+    try {
+      await widget.onSubmit(text);
+      if (mounted) Navigator.of(context).pop(true);
+    } catch (error) {
+      if (mounted) {
+        setState(() {
+          _validationMessage = _actionErrorMessage(error);
+        });
+      }
+    } finally {
+      if (mounted) setState(() => _isSubmitting = false);
+    }
   }
 }
 

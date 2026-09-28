@@ -12,6 +12,7 @@ import '../../../core/widgets/app_error_state.dart';
 import '../../../core/widgets/app_loading_state.dart';
 import '../../../core/widgets/industrial_card.dart';
 import '../../../core/widgets/pro_action_tile.dart';
+import '../../../core/widgets/pro_metric_grid.dart';
 import '../../../core/widgets/pro_metric_tile.dart';
 import '../../../core/widgets/pro_status_banner.dart';
 import '../../auth/domain/auth_provider.dart';
@@ -636,46 +637,33 @@ class _SummarySection extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        Row(
+        ProMetricGrid(
+          spacing: 12,
+          runSpacing: 12,
           children: [
-            Expanded(
-              child: _SummaryCard(
-                title: 'Складов',
-                value: summary.warehouseCount.toString(),
-                icon: Icons.warehouse_outlined,
-                color: Theme.of(context).colorScheme.primary,
-              ),
+            _SummaryCard(
+              title: 'Складов',
+              value: summary.warehouseCount.toString(),
+              icon: Icons.warehouse_outlined,
+              color: Theme.of(context).colorScheme.primary,
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _SummaryCard(
-                title: 'Позиций',
-                value: summary.uniqueItemsCount.toString(),
-                icon: Icons.inventory_2_outlined,
-                color: AppColors.secondary,
-              ),
+            _SummaryCard(
+              title: 'Позиций',
+              value: summary.uniqueItemsCount.toString(),
+              icon: Icons.inventory_2_outlined,
+              color: AppColors.secondary,
             ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-              child: _SummaryCard(
-                title: 'Низкий остаток',
-                value: summary.lowStockCount.toString(),
-                icon: Icons.warning_amber_rounded,
-                color: AppColors.warning,
-              ),
+            _SummaryCard(
+              title: 'Низкий остаток',
+              value: summary.lowStockCount.toString(),
+              icon: Icons.warning_amber_rounded,
+              color: AppColors.warning,
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _SummaryCard(
-                title: 'Резерв',
-                value: summary.reservedItemsCount.toString(),
-                icon: Icons.inventory_outlined,
-                color: AppColors.success,
-              ),
+            _SummaryCard(
+              title: 'Резерв',
+              value: summary.reservedItemsCount.toString(),
+              icon: Icons.inventory_outlined,
+              color: AppColors.success,
             ),
           ],
         ),
@@ -1075,9 +1063,13 @@ class _MovementCard extends StatelessWidget {
 }
 
 class _WarehouseWriteOffDialog extends StatefulWidget {
-  const _WarehouseWriteOffDialog({required this.balance});
+  const _WarehouseWriteOffDialog({
+    required this.balance,
+    required this.onSubmit,
+  });
 
   final WarehouseBalanceModel balance;
+  final Future<void> Function(_WarehouseWriteOffValues values) onSubmit;
 
   @override
   State<_WarehouseWriteOffDialog> createState() =>
@@ -1090,6 +1082,50 @@ class _WarehouseWriteOffDialogState extends State<_WarehouseWriteOffDialog> {
   final _reason = TextEditingController();
   final _formKey = GlobalKey<FormState>();
   var _operationCategory = WarehouseWriteOffCategory.loss;
+  var _isSubmitting = false;
+  String? _errorMessage;
+
+  Future<void> _submit() async {
+    if (_isSubmitting || !_formKey.currentState!.validate()) {
+      return;
+    }
+
+    final values = _WarehouseWriteOffValues(
+      quantity: double.parse(_quantity.text.replaceAll(',', '.')),
+      document: _document.text.trim(),
+      reason: _reason.text.trim(),
+      operationCategory: _operationCategory,
+    );
+    setState(() {
+      _isSubmitting = true;
+      _errorMessage = null;
+    });
+
+    try {
+      await widget.onSubmit(values);
+      if (mounted) {
+        Navigator.pop(context, const _WarehouseWriteOffResult.completed());
+      }
+    } on SyncQueuedException catch (error) {
+      if (mounted) {
+        Navigator.pop(context, _WarehouseWriteOffResult.queued(error.message));
+      }
+    } catch (error) {
+      if (mounted) {
+        setState(() => _errorMessage = UserMessage.fromError(error));
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isSubmitting = false);
+      }
+    }
+  }
+
+  void _clearError() {
+    if (_errorMessage != null) {
+      setState(() => _errorMessage = null);
+    }
+  }
 
   @override
   void dispose() {
@@ -1102,104 +1138,148 @@ class _WarehouseWriteOffDialogState extends State<_WarehouseWriteOffDialog> {
   @override
   Widget build(BuildContext context) {
     final balance = widget.balance;
-    return AlertDialog(
-      title: Text('Списание · ${balance.materialName}'),
-      content: Form(
-        key: _formKey,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              'Доступно: ${balance.availableQuantity} ${balance.measurementUnit ?? ''}',
-            ),
-            DropdownButtonFormField<WarehouseWriteOffCategory>(
-              initialValue: _operationCategory,
-              decoration: const InputDecoration(
-                labelText: 'Категория списания',
-              ),
-              items: const [
-                DropdownMenuItem(
-                  value: WarehouseWriteOffCategory.loss,
-                  child: Text('Потеря'),
+    return PopScope(
+      canPop: !_isSubmitting,
+      child: AlertDialog(
+        scrollable: true,
+        title: Text('Списание · ${balance.materialName}'),
+        content: AbsorbPointer(
+          absorbing: _isSubmitting,
+          child: Form(
+            key: _formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Доступно: ${balance.availableQuantity} ${balance.measurementUnit ?? ''}',
                 ),
-                DropdownMenuItem(
-                  value: WarehouseWriteOffCategory.damage,
-                  child: Text('Повреждение'),
+                DropdownButtonFormField<WarehouseWriteOffCategory>(
+                  initialValue: _operationCategory,
+                  isExpanded: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Категория списания',
+                  ),
+                  items: const [
+                    DropdownMenuItem(
+                      value: WarehouseWriteOffCategory.loss,
+                      child: Text('Потеря'),
+                    ),
+                    DropdownMenuItem(
+                      value: WarehouseWriteOffCategory.damage,
+                      child: Text('Повреждение'),
+                    ),
+                    DropdownMenuItem(
+                      value: WarehouseWriteOffCategory.disposal,
+                      child: Text('Утилизация'),
+                    ),
+                    DropdownMenuItem(
+                      value: WarehouseWriteOffCategory.inventoryAdjustment,
+                      child: Text('Инвентаризационная корректировка'),
+                    ),
+                  ],
+                  onChanged: (value) {
+                    if (value != null) {
+                      setState(() => _operationCategory = value);
+                    }
+                  },
                 ),
-                DropdownMenuItem(
-                  value: WarehouseWriteOffCategory.disposal,
-                  child: Text('Утилизация'),
+                TextFormField(
+                  controller: _quantity,
+                  onChanged: (_) => _clearError(),
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  decoration: const InputDecoration(labelText: 'Количество'),
+                  validator: (value) {
+                    final amount = double.tryParse(
+                      (value ?? '').replaceAll(',', '.'),
+                    );
+                    if (amount == null || amount <= 0) {
+                      return 'Укажите количество больше нуля';
+                    }
+                    if (amount > balance.availableQuantity) {
+                      return 'Количество превышает остаток';
+                    }
+                    return null;
+                  },
                 ),
-                DropdownMenuItem(
-                  value: WarehouseWriteOffCategory.inventoryAdjustment,
-                  child: Text('Инвентаризационная корректировка'),
+                TextFormField(
+                  controller: _document,
+                  onChanged: (_) => _clearError(),
+                  decoration: const InputDecoration(
+                    labelText: 'Номер документа (необязательно)',
+                  ),
+                  maxLength: 100,
                 ),
+                TextFormField(
+                  controller: _reason,
+                  onChanged: (_) => _clearError(),
+                  decoration: const InputDecoration(labelText: 'Основание'),
+                  maxLines: 2,
+                  maxLength: 255,
+                  validator:
+                      (value) =>
+                          value == null || value.trim().isEmpty
+                              ? 'Укажите основание списания'
+                              : null,
+                ),
+                if (_errorMessage != null) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    _errorMessage!,
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                  ),
+                ],
               ],
-              onChanged: (value) {
-                if (value != null) {
-                  setState(() => _operationCategory = value);
-                }
-              },
             ),
-            TextFormField(
-              controller: _quantity,
-              keyboardType: const TextInputType.numberWithOptions(
-                decimal: true,
-              ),
-              decoration: const InputDecoration(labelText: 'Количество'),
-              validator: (value) {
-                final amount = double.tryParse(
-                  (value ?? '').replaceAll(',', '.'),
-                );
-                if (amount == null || amount <= 0) {
-                  return 'Укажите количество больше нуля';
-                }
-                if (amount > balance.availableQuantity) {
-                  return 'Количество превышает остаток';
-                }
-                return null;
-              },
-            ),
-            TextFormField(
-              controller: _document,
-              decoration: const InputDecoration(
-                labelText: 'Номер документа (необязательно)',
-              ),
-            ),
-            TextFormField(
-              controller: _reason,
-              decoration: const InputDecoration(labelText: 'Основание'),
-              maxLines: 2,
-              validator:
-                  (value) =>
-                      value == null || value.trim().isEmpty
-                          ? 'Укажите основание списания'
-                          : null,
-            ),
-          ],
+          ),
         ),
+        actionsOverflowDirection: VerticalDirection.down,
+        actionsOverflowAlignment: OverflowBarAlignment.end,
+        actions: [
+          TextButton(
+            onPressed: _isSubmitting ? null : () => Navigator.pop(context),
+            child: const Text('Отмена'),
+          ),
+          FilledButton(
+            key: const ValueKey('warehouse-write-off-submit'),
+            onPressed: _isSubmitting ? null : _submit,
+            child:
+                _isSubmitting
+                    ? const SizedBox.square(
+                      dimension: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                    : const Text('Списать'),
+          ),
+        ],
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Отмена'),
-        ),
-        FilledButton(
-          onPressed: () {
-            if (_formKey.currentState!.validate()) {
-              Navigator.pop(context, {
-                'quantity': double.parse(_quantity.text.replaceAll(',', '.')),
-                'document': _document.text.trim(),
-                'reason': _reason.text.trim(),
-                'operationCategory': _operationCategory,
-              });
-            }
-          },
-          child: const Text('Списать'),
-        ),
-      ],
     );
   }
+}
+
+class _WarehouseWriteOffValues {
+  const _WarehouseWriteOffValues({
+    required this.quantity,
+    required this.document,
+    required this.reason,
+    required this.operationCategory,
+  });
+
+  final double quantity;
+  final String document;
+  final String reason;
+  final WarehouseWriteOffCategory operationCategory;
+}
+
+class _WarehouseWriteOffResult {
+  const _WarehouseWriteOffResult.completed() : queuedMessage = null;
+
+  const _WarehouseWriteOffResult.queued(this.queuedMessage);
+
+  final String? queuedMessage;
 }
 
 class _WarehouseBalancesSheet extends ConsumerStatefulWidget {
@@ -1219,6 +1299,7 @@ class _WarehouseBalancesSheet extends ConsumerStatefulWidget {
 class _WarehouseBalancesSheetState
     extends ConsumerState<_WarehouseBalancesSheet> {
   late Future<List<WarehouseBalanceModel>> _balancesFuture;
+  var _isWritingOff = false;
 
   @override
   void initState() {
@@ -1239,43 +1320,52 @@ class _WarehouseBalancesSheetState
   }
 
   Future<void> _writeOff(WarehouseBalanceModel balance) async {
-    final values = await showDialog<Map<String, dynamic>>(
-      context: context,
-      builder: (_) => _WarehouseWriteOffDialog(balance: balance),
-    );
-    if (values == null || !mounted) {
+    if (_isWritingOff || !mounted) {
       return;
     }
+
+    setState(() => _isWritingOff = true);
     try {
-      await ref
-          .read(warehouseRepositoryProvider)
-          .writeOff(
-            warehouseId: balance.warehouseId,
-            materialId: balance.materialId,
-            quantity: values['quantity'] as double,
-            documentNumber: values['document'] as String,
-            reason: values['reason'] as String,
-            operationCategory:
-                values['operationCategory'] as WarehouseWriteOffCategory,
-          );
-      await _refreshBalances();
-      await ref.read(warehouseProvider.notifier).load();
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Списание проведено.')));
+      final result = await showDialog<_WarehouseWriteOffResult>(
+        context: context,
+        barrierDismissible: true,
+        builder:
+            (_) => _WarehouseWriteOffDialog(
+              balance: balance,
+              onSubmit: (values) {
+                return ref
+                    .read(warehouseRepositoryProvider)
+                    .writeOff(
+                      warehouseId: balance.warehouseId,
+                      materialId: balance.materialId,
+                      quantity: values.quantity,
+                      documentNumber: values.document,
+                      reason: values.reason,
+                      operationCategory: values.operationCategory,
+                    );
+              },
+            ),
+      );
+      if (!mounted || result == null) {
+        return;
       }
-    } on SyncQueuedException catch (error) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(error.message)));
+
+      final queuedMessage = result.queuedMessage;
+      if (queuedMessage == null) {
+        await _refreshBalances();
+        if (!mounted) {
+          return;
+        }
+        await ref.read(warehouseProvider.notifier).load();
       }
-    } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(UserMessage.fromError(error))));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(queuedMessage ?? 'Списание проведено.')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isWritingOff = false);
       }
     }
   }
@@ -1309,7 +1399,7 @@ class _WarehouseBalancesSheetState
               children: [
                 Expanded(
                   child: OutlinedButton.icon(
-                    onPressed: _refreshBalances,
+                    onPressed: _isWritingOff ? null : _refreshBalances,
                     icon: const Icon(Icons.refresh_rounded),
                     label: const Text('Обновить'),
                   ),
@@ -1317,7 +1407,7 @@ class _WarehouseBalancesSheetState
                 const SizedBox(width: 12),
                 Expanded(
                   child: FilledButton.icon(
-                    onPressed: widget.onReceiptRequested,
+                    onPressed: _isWritingOff ? null : widget.onReceiptRequested,
                     icon: const Icon(Icons.add_a_photo_outlined),
                     label: const Text('Приход'),
                   ),
@@ -1371,7 +1461,9 @@ class _WarehouseBalancesSheetState
                       return _BalanceCard(
                         balance: balance,
                         onWriteOff:
-                            canWriteOff ? () => _writeOff(balance) : null,
+                            canWriteOff && !_isWritingOff
+                                ? () => _writeOff(balance)
+                                : null,
                         onOpenGallery: () async {
                           await showModalBottomSheet<void>(
                             context: context,
@@ -1534,6 +1626,7 @@ class _BalanceCard extends StatelessWidget {
                 ),
               ),
               OutlinedButton.icon(
+                key: const ValueKey('warehouse-balance-write-off'),
                 onPressed: balance.availableQuantity > 0 ? onWriteOff : null,
                 icon: const Icon(Icons.remove_circle_outline_rounded),
                 label: const Text('Списать'),

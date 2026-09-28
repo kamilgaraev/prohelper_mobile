@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:prohelpers_mobile/core/network/api_exception.dart';
 import 'package:prohelpers_mobile/features/projects/data/project_model.dart';
 import 'package:prohelpers_mobile/features/projects/data/projects_repository.dart';
 import 'package:prohelpers_mobile/features/projects/domain/projects_provider.dart';
@@ -25,6 +28,28 @@ class _RecordingTimeTrackingRepository extends TimeTrackingRepository {
   String? correctionReason;
   Object? startTimerError;
   final List<String> startIdempotencyKeys = [];
+  final List<String?> approvalReasons = [];
+  Object? approvalError;
+  Completer<void>? approvalCompleter;
+
+  @override
+  Future<List<TimeEntryModel>> fetchPendingApprovals({
+    required int projectId,
+  }) async => [_pendingApprovalEntry];
+
+  @override
+  Future<TimeEntryModel> decideApproval({
+    required int id,
+    required String action,
+    String? reason,
+  }) async {
+    approvalReasons.add(reason);
+    await approvalCompleter?.future;
+    final error = approvalError;
+    approvalError = null;
+    if (error != null) throw error;
+    return _pendingApprovalEntry;
+  }
 
   @override
   Future<DailyTimeSummaryModel> fetchDailySummary({
@@ -203,6 +228,29 @@ const _rejectedEntry = TimeEntryModel(
   updatedAt: '2026-05-22T15:00:00Z',
 );
 
+const _pendingApprovalEntry = TimeEntryModel(
+  id: 24,
+  organizationId: 4,
+  userId: 15,
+  projectId: 9,
+  projectLabel: 'Башня',
+  workDate: '2026-05-22',
+  startTime: '09:00',
+  endTime: '11:00',
+  hoursWorked: 2,
+  breakTime: 0,
+  title: 'Сверка арматуры',
+  status: 'submitted',
+  statusLabel: 'На проверке',
+  isActiveTimer: false,
+  isBillable: true,
+  corrections: [],
+  availableActions: ['approve', 'reject'],
+  approvalSummary: _approval,
+  createdAt: '2026-05-22T11:00:00Z',
+  updatedAt: '2026-05-22T11:00:00Z',
+);
+
 void main() {
   Project project() {
     return Project()
@@ -217,6 +265,7 @@ void main() {
         projectsProvider.overrideWith(
           (ref) => _TestProjectsNotifier(project()),
         ),
+        timeTrackingRepositoryProvider.overrideWithValue(repository),
         timeTrackingProvider.overrideWith(
           (ref) => TimeTrackingNotifier(repository),
         ),
@@ -249,6 +298,138 @@ void main() {
     expect(find.text('Монтаж опалубки'), findsOneWidget);
     expect(find.text('Проверка геометрии'), findsOneWidget);
     expect(find.text('5.50 ч'), findsOneWidget);
+  });
+
+  testWidgets(
+    'keeps rejection reason for retry and prevents duplicate submit on narrow screen',
+    (tester) async {
+      tester.view.physicalSize = const Size(240, 1280);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final repository =
+          _RecordingTimeTrackingRepository()
+            ..approvalError = const ApiException(
+              'Не удалось проверить причину. Повторите попытку.',
+              statusCode: 422,
+            );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            projectsProvider.overrideWith(
+              (ref) => _TestProjectsNotifier(project()),
+            ),
+            timeTrackingRepositoryProvider.overrideWithValue(repository),
+            timeTrackingProvider.overrideWith(
+              (ref) => TimeTrackingNotifier(repository),
+            ),
+          ],
+          child: MaterialApp(
+            builder:
+                (context, child) => MediaQuery(
+                  data: MediaQuery.of(
+                    context,
+                  ).copyWith(textScaler: const TextScaler.linear(1.3)),
+                  child: child!,
+                ),
+            home: const TimeTrackingScreen(),
+          ),
+        ),
+      );
+      await pumpUi(tester);
+      final initialLayoutError = tester.takeException();
+      expect(
+        initialLayoutError,
+        isNull,
+        reason: initialLayoutError?.toString(),
+      );
+
+      await tester.ensureVisible(find.text('Отклонить').first);
+      await tester.tap(find.text('Отклонить').first);
+      await tester.pumpAndSettle();
+      const reason =
+          'Проверить журнал монтажа, сверить фактические часы и подтвердить запись у ответственного мастера. ';
+      final longReason = List.filled(4, reason).join();
+      final submittedReason = longReason.trim();
+      await tester.enterText(find.byType(TextField).last, longReason);
+      await tester.ensureVisible(
+        find.widgetWithText(FilledButton, 'Отклонить'),
+      );
+      await tester.tap(find.widgetWithText(FilledButton, 'Отклонить'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('Не удалось проверить причину. Повторите попытку.'),
+        findsOneWidget,
+      );
+      expect(find.text(longReason), findsOneWidget);
+      final layoutError = tester.takeException();
+      expect(layoutError, isNull, reason: layoutError?.toString());
+
+      repository.approvalCompleter = Completer<void>();
+      await tester.ensureVisible(
+        find.widgetWithText(FilledButton, 'Отклонить'),
+      );
+      await tester.tap(find.widgetWithText(FilledButton, 'Отклонить'));
+      await tester.pump();
+      final submit = find.widgetWithText(FilledButton, 'Отправка...');
+      expect(submit, findsOneWidget);
+      await tester.tap(submit);
+      await tester.pump();
+      expect(repository.approvalReasons, [submittedReason, submittedReason]);
+      await tester.tapAt(const Offset(5, 5));
+      await tester.pump();
+      await tester.binding.handlePopRoute();
+      await tester.pump();
+      expect(find.text('Отправка...'), findsOneWidget);
+      expect(repository.approvalReasons, hasLength(2));
+
+      repository.approvalCompleter!.complete();
+      await tester.pumpAndSettle();
+      expect(find.text('Отклонить трудозатраты'), findsNothing);
+      expect(repository.approvalReasons, hasLength(2));
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('canceling rejection does not send a decision', (tester) async {
+    final repository = _RecordingTimeTrackingRepository();
+    useLargeSurface(tester);
+
+    await tester.pumpWidget(buildApp(const TimeTrackingScreen(), repository));
+    await pumpUi(tester);
+    await tester.tap(find.text('Отклонить').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Отмена'));
+    await tester.pumpAndSettle();
+
+    expect(repository.approvalReasons, isEmpty);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('pending rejection completes safely after screen disposal', (
+    tester,
+  ) async {
+    final repository =
+        _RecordingTimeTrackingRepository()
+          ..approvalCompleter = Completer<void>();
+    useLargeSurface(tester);
+
+    await tester.pumpWidget(buildApp(const TimeTrackingScreen(), repository));
+    await pumpUi(tester);
+    await tester.tap(find.text('Отклонить').first);
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).last, 'Повторно проверить');
+    await tester.tap(find.widgetWithText(FilledButton, 'Отклонить'));
+    await tester.pump();
+    expect(repository.approvalReasons, ['Повторно проверить']);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    repository.approvalCompleter!.complete();
+    await tester.pump();
+
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('keeps summary labels readable on compact screen', (

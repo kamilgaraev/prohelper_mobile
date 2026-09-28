@@ -1,5 +1,6 @@
 ﻿import 'package:flutter/material.dart';
 
+import 'package:prohelpers_mobile/core/widgets/pro_metric_grid.dart';
 import 'package:prohelpers_mobile/core/widgets/pro_metric_tile.dart';
 
 class ProSummaryMetric {
@@ -28,13 +29,8 @@ class ProOperationalSummaryGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GridView.count(
-      crossAxisCount: crossAxisCount,
-      crossAxisSpacing: 12,
-      mainAxisSpacing: 12,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      childAspectRatio: 1.45,
+    return ProMetricGrid(
+      maxColumns: crossAxisCount,
       children: [
         for (final metric in metrics)
           ProMetricTile(

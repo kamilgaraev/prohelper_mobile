@@ -476,9 +476,24 @@ void main() {
       return {
         'success': true,
         'data': [
-          {'row_key': 'row-1', 'currency': 'RUB', 'bac_minor': 250000},
+          {
+            'row_key': 'row-1',
+            'wbs_code': '1.2.3',
+            'task_id': 42,
+            'currency': 'RUB',
+            'bac_minor': 250000,
+            'pv_minor': 125000,
+            'ev_minor': 118750,
+            'sv_minor': -6250,
+            'spi': '0.95',
+          },
         ],
-        'meta': {'page': 2, 'per_page': 20, 'total': 21, 'last_page': 2},
+        'meta': {
+          'current_page': 2,
+          'per_page': 20,
+          'total': 21,
+          'last_page': 2,
+        },
       };
     });
     final repository = MobileBudgetingRepository(dio);
@@ -490,9 +505,16 @@ void main() {
     expect(summary['project']['name'], 'Объект A');
     expect(calls[1].path, '/budgeting/projects/31/execution-cards');
     expect(calls[1].queryParameters['page'], 2);
+    expect(calls[1].queryParameters['per_page'], 20);
     expect(page.currentPage, 2);
     expect(page.total, 21);
     expect(page.items.single['row_key'], 'row-1');
+    expect(page.items.single['wbs_code'], '1.2.3');
+    expect(page.items.single['task_id'], 42);
+    expect(page.items.single['pv_minor'], 125000);
+    expect(page.items.single['ev_minor'], 118750);
+    expect(page.items.single['sv_minor'], -6250);
+    expect(page.items.single['spi'], '0.95');
   });
 
   test(
@@ -528,6 +550,9 @@ void main() {
       expect(calls[0].path, '/team-expansion/contractors');
       expect(calls[0].queryParameters['search'], 'монтаж');
       expect(page.items.single.title, 'Монтажная бригада');
+      expect(page.currentPage, 1);
+      expect(page.lastPage, 1);
+      expect(page.total, 1);
       expect(calls[1].method, 'POST');
       expect(calls[1].path, '/team-expansion/brigade-invitations');
       expect(
@@ -536,6 +561,265 @@ void main() {
       );
     },
   );
+
+  test('loads nonempty brigades from their paginated marketplace projection', () async {
+    late RequestOptions request;
+    final dio = Dio(BaseOptions(baseUrl: 'https://api.example.test'));
+    dio.httpClientAdapter = _JsonAdapter((options) {
+      request = options;
+      return {
+        'success': true,
+        'data': [
+          {
+            'id': 8,
+            'name': 'Бригада бетонщиков',
+            'team_size': 6,
+            'specializations': ['Бетонные работы'],
+            'regions': ['Москва'],
+            'availability_status': 'available',
+            'verification_status': 'approved',
+            'rating': 4.8,
+            'completed_projects_count': 3,
+          },
+        ],
+        'meta': {'current_page': 2, 'last_page': 4, 'total': 71},
+      };
+    });
+
+    final page = await TeamExpansionRepository(dio).fetchPage(
+      path: '/team-expansion/brigades',
+      filters: const {'search': 'бетон'},
+      page: 2,
+      perPage: 20,
+    );
+
+    expect(request.path, '/team-expansion/brigades');
+    expect(request.queryParameters, {
+      'search': 'бетон',
+      'page': 2,
+      'per_page': 20,
+    });
+    expect(page.items.single.title, 'Бригада бетонщиков');
+    expect(page.currentPage, 2);
+    expect(page.lastPage, 4);
+    expect(page.total, 71);
+  });
+
+  test('reads project participants and available users with project scope', () async {
+    final requests = <RequestOptions>[];
+    final dio = Dio(BaseOptions(baseUrl: 'https://api.example.test'));
+    dio.httpClientAdapter = _JsonAdapter((options) {
+      requests.add(options);
+      return {
+        'success': true,
+        'data': [
+          {
+            'id': 14,
+            'name': 'Иван Иванов',
+            'email': 'ivan@example.test',
+            if (options.path.endsWith('/available-users'))
+              'already_assigned': false
+            else
+              'project_role': 'engineer',
+          },
+        ],
+        'meta': {'current_page': 2, 'last_page': 3, 'total': 41},
+      };
+    });
+    final repository = ProjectParticipantsRepository(dio);
+
+    final members = await repository.fetchPage(
+      projectId: 52,
+      query: ' Иван ',
+      page: 2,
+    );
+    final available = await repository.fetchPage(
+      projectId: 52,
+      query: 'Иван',
+      availableUsers: true,
+      page: 2,
+    );
+
+    expect(requests[0].path, '/field-admin/team/projects/52/participants');
+    expect(requests[0].queryParameters, {'q': 'Иван', 'page': 2, 'per_page': 20});
+    expect(members.items.single.projectRole, 'engineer');
+    expect(members.currentPage, 2);
+    expect(members.lastPage, 3);
+    expect(requests[1].path, '/field-admin/team/projects/52/participants/available-users');
+    expect(available.items.single.alreadyAssigned, isFalse);
+    expect(available.total, 41);
+  });
+
+  test('loads nonempty tender and template catalogs with server pagination', () async {
+    final requests = <RequestOptions>[];
+    final dio = Dio(BaseOptions(baseUrl: 'https://api.example.test'));
+    dio.httpClientAdapter = _JsonAdapter((options) {
+      requests.add(options);
+      if (options.path == '/catalog/tenders') {
+        return {
+          'success': true,
+          'data': [
+            {'id': 51, 'number': 'T-51', 'title': 'Ремонт кровли', 'status': 'published'},
+          ],
+          'meta': {'current_page': 2, 'last_page': 5, 'total': 88},
+        };
+      }
+      return {
+        'success': true,
+        'data': [
+          {'id': 27, 'name': 'Ежедневный отчёт', 'report_type': 'daily', 'is_default': true},
+        ],
+        'meta': {'current_page': 2, 'last_page': 2, 'total': 22},
+      };
+    });
+    final repository = FieldCatalogRepository(dio);
+
+    final tenders = await repository.fetchPage(catalog: 'tenders', query: 'кровли', page: 2);
+    final templates = await repository.fetchPage(catalog: 'templates', query: 'ежедневный', page: 2);
+
+    expect(requests[0].path, '/catalog/tenders');
+    expect(requests[0].queryParameters, {'q': 'кровли', 'page': 2, 'per_page': 20});
+    expect(tenders.items.single.title, 'Ремонт кровли');
+    expect(tenders.lastPage, 5);
+    expect(requests[1].path, '/catalog/templates');
+    expect(templates.items.single.title, 'Ежедневный отчёт');
+    expect(templates.total, 22);
+  });
+
+  test('parses nonempty CRM contact, lead, deal and activity resources', () async {
+    const cases = <({
+      String entity,
+      String id,
+      int? projectId,
+      Map<String, dynamic> item,
+      String expectedTitle,
+    })>[
+      (
+        entity: 'contacts',
+        id: 'contact-52',
+        projectId: null,
+        item: {
+          'id': 'contact-52',
+          'organization_id': 38,
+          'company_id': 'company-5',
+          'company': {'id': 'company-5', 'name': 'ООО Мост', 'status': 'active'},
+          'full_name': 'Анна Петрова',
+          'position': 'Снабженец',
+          'phone': '+79990000000',
+          'email': 'anna@example.test',
+          'messengers': [],
+          'is_primary': true,
+          'status': 'active',
+          'is_archived': false,
+          'is_merged': false,
+          'contact_points': [],
+          'identities': [],
+        },
+        expectedTitle: 'Анна Петрова',
+      ),
+      (
+        entity: 'leads',
+        id: 'lead-52',
+        projectId: null,
+        item: {
+          'id': 'lead-52',
+          'organization_id': 38,
+          'company_id': 'company-5',
+          'contact_id': 'contact-52',
+          'company': {'id': 'company-5', 'name': 'ООО Мост', 'status': 'active'},
+          'contact': {'id': 'contact-52', 'full_name': 'Анна Петрова'},
+          'title': 'Поставка арматуры',
+          'status': 'new',
+          'priority': 'high',
+          'amount_visible': false,
+          'estimated_amount': null,
+          'utm': {},
+          'is_archived': false,
+          'activities': [],
+        },
+        expectedTitle: 'Поставка арматуры',
+      ),
+      (
+        entity: 'deals',
+        id: 'deal-52',
+        projectId: 52,
+        item: {
+          'id': 'deal-52',
+          'organization_id': 38,
+          'project_id': 52,
+          'company': {'id': 'company-5', 'name': 'ООО Мост', 'status': 'active'},
+          'primary_contact': {'id': 'contact-52', 'full_name': 'Анна Петрова'},
+          'title': 'Арматура для объекта',
+          'status': 'in_progress',
+          'amount': null,
+          'currency': 'RUB',
+          'amount_visible': false,
+          'probability': 0.6,
+          'custom_fields': {},
+          'is_archived': false,
+          'activities': [],
+        },
+        expectedTitle: 'Арматура для объекта',
+      ),
+      (
+        entity: 'activities',
+        id: 'activity-52',
+        projectId: null,
+        item: {
+          'id': 'activity-52',
+          'organization_id': 38,
+          'company_id': 'company-5',
+          'contact_id': 'contact-52',
+          'company': {'id': 'company-5', 'name': 'ООО Мост'},
+          'contact': {'id': 'contact-52', 'full_name': 'Анна Петрова'},
+          'type': 'call',
+          'direction': 'outbound',
+          'status': 'planned',
+          'subject': 'Согласовать сроки поставки',
+          'body': 'Позвонить до конца недели',
+          'is_archived': false,
+        },
+        expectedTitle: 'Согласовать сроки поставки',
+      ),
+    ];
+
+    for (final testCase in cases) {
+      late RequestOptions request;
+      final dio = Dio(BaseOptions(baseUrl: 'https://api.example.test'));
+      dio.httpClientAdapter = _JsonAdapter((options) {
+        request = options;
+        return {
+          'success': true,
+          'data': [testCase.item],
+          'meta': {'current_page': 2, 'last_page': 4, 'total': 61},
+        };
+      });
+
+      final page = await FieldCatalogRepository(dio).fetchPage(
+        catalog: 'crm',
+        entity: testCase.entity,
+        query: ' Acme ',
+        projectId: testCase.projectId,
+        page: 2,
+      );
+
+      expect(request.path, '/catalog/crm/${testCase.entity}');
+      expect(request.queryParameters['q'], 'Acme');
+      expect(request.queryParameters['page'], 2);
+      expect(request.queryParameters['per_page'], 20);
+      if (testCase.projectId case final projectId?) {
+        expect(request.queryParameters['project_id'], projectId);
+      }
+      expect(page.items.single.uuid, testCase.id);
+      expect(page.items.single.title, testCase.expectedTitle);
+      expect(page.currentPage, 2);
+      expect(page.lastPage, 4);
+      expect(page.total, 61);
+      if (testCase.entity == 'activities') {
+        expect(page.items.single.fields['subject'], 'Согласовать сроки поставки');
+      }
+    }
+  });
 }
 
 class _JsonAdapter implements HttpClientAdapter {

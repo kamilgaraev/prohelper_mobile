@@ -86,6 +86,35 @@ void main() {
     expect(await storage.getToken(), isNull);
   });
 
+  test(
+    'first login without a connection does not create a local session',
+    () async {
+      final adapter =
+          _AuthHttpAdapter()
+            ..onFetch = (options) async {
+              throw DioException(
+                requestOptions: options,
+                type: DioExceptionType.connectionError,
+              );
+            };
+      final storage = _MemorySecureStorage();
+      final repository = AuthRepository(_dio(adapter), storage);
+
+      await expectLater(
+        repository.login('foreman@example.test', 'secret'),
+        throwsA(isA<ApiException>()),
+      );
+
+      expect(await storage.getToken(), isNull);
+      expect(adapter.requests.single.path, '/auth/login');
+      expect(adapter.requests.single.method, 'POST');
+      expect(adapter.requests.single.data, {
+        'email': 'foreman@example.test',
+        'password': 'secret',
+      });
+    },
+  );
+
   test('login preserves profile loading error after token is issued', () async {
     final adapter =
         _AuthHttpAdapter()

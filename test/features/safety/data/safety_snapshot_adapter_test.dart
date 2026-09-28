@@ -121,6 +121,28 @@ void main() {
     expect(result.presence, SnapshotPresence.conflict);
     expect(result.error, SnapshotUserMessages.conflict);
   });
+
+  test('404 охраны труда не возвращает старый снимок как успех', () async {
+    final repository = _FakeSafetyRepository();
+    final adapter = SafetySnapshotAdapter(
+      repository: repository,
+      snapshots: Future.value(
+        EntitySnapshotService(
+          store: MemoryEntitySnapshotStore(),
+          resolveOwner: () => owner,
+        ),
+      ),
+      flushQueue: () async {},
+    );
+    await adapter.load(online: true, projectId: 7);
+
+    repository.errorStatusCode = 404;
+    final result = await adapter.load(online: true, projectId: 7);
+
+    expect(result.presence, SnapshotPresence.error);
+    expect(result.data, isNull);
+    expect(result.error, 'HTTP 404');
+  });
 }
 
 Map<String, dynamic> _permitPayload({String title = 'Высотные работы'}) {
@@ -165,6 +187,7 @@ class _FakeSafetyRepository extends SafetyRepository {
 
   final bool permissionDenied;
   final bool conflict;
+  int? errorStatusCode;
   int fetchCount = 0;
   int flushCount = 0;
 
@@ -181,6 +204,9 @@ class _FakeSafetyRepository extends SafetyRepository {
         'Конфликт версии охраны труда.',
         statusCode: 409,
       );
+    }
+    if (errorStatusCode != null) {
+      throw ApiException('HTTP $errorStatusCode', statusCode: errorStatusCode);
     }
   }
 

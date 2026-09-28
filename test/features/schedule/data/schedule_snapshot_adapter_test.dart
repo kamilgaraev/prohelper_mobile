@@ -87,6 +87,27 @@ void main() {
     expect(afterRevocation.presence, SnapshotPresence.permissionDenied);
     expect(afterRevocation.data, isNull);
   });
+
+  test('422 дневного плана не превращается в успех со старым кешем', () async {
+    final store = MemoryEntitySnapshotStore();
+    const owner = EntitySnapshotOwner(userId: 7, orgId: 10);
+    final repository = _ScheduleRepository();
+    final adapter = ScheduleSnapshotAdapter(
+      repository: repository,
+      snapshots: Future.value(
+        EntitySnapshotService(store: store, resolveOwner: () => owner),
+      ),
+      now: () => DateTime(2026, 9, 26, 12),
+    );
+    await adapter.loadDailyPlans(online: true, projectId: 15);
+
+    repository.dailyErrorStatusCode = 422;
+    final result = await adapter.loadDailyPlans(online: true, projectId: 15);
+
+    expect(result.presence, SnapshotPresence.error);
+    expect(result.data, isNull);
+    expect(result.error, 'HTTP 422');
+  });
 }
 
 class _ScheduleRepository extends ScheduleRepository {
@@ -96,6 +117,7 @@ class _ScheduleRepository extends ScheduleRepository {
   var detailFetchCount = 0;
   var dailyFetchCount = 0;
   var dailyPermissionDenied = false;
+  int? dailyErrorStatusCode;
 
   @override
   Future<Map<String, dynamic>> fetchSchedulesPayload({
@@ -121,6 +143,12 @@ class _ScheduleRepository extends ScheduleRepository {
     dailyFetchCount++;
     if (dailyPermissionDenied) {
       throw const ApiException('Нет доступа.', statusCode: 403);
+    }
+    if (dailyErrorStatusCode != null) {
+      throw ApiException(
+        'HTTP $dailyErrorStatusCode',
+        statusCode: dailyErrorStatusCode,
+      );
     }
     return [_dailyPlan];
   }

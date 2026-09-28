@@ -75,9 +75,6 @@ class WarehouseSnapshotAdapter {
         }
         return cached;
       }
-      if (cached.hasData) {
-        return cached;
-      }
       return SnapshotRead(
         presence: SnapshotPresence.error,
         error: snapshotErrorMessage(

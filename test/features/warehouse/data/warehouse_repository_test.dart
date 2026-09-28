@@ -7,6 +7,96 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:prohelpers_mobile/features/warehouse/data/warehouse_repository.dart';
 
 void main() {
+  test('loads nonempty balance and project-delivery mobile resources', () async {
+    final requests = <RequestOptions>[];
+    final dio = Dio(BaseOptions(baseUrl: 'https://api.prohelper.test'))
+      ..httpClientAdapter = _JsonAdapter((options) {
+        requests.add(options);
+        if (options.path.endsWith('/balances')) {
+          return {
+            'success': true,
+            'message': null,
+            'data': [
+              {
+                'warehouse_id': 8,
+                'warehouse_name': 'Центральный склад',
+                'material_id': 44,
+                'material_name': 'Цемент М500',
+                'material_code': 'CEM-500',
+                'measurement_unit': 'меш.',
+                'available_quantity': 18.0,
+                'reserved_quantity': 2.0,
+                'total_quantity': 20.0,
+                'average_price': 510.0,
+                'total_value': 10200.0,
+                'is_low_stock': false,
+                'photo_gallery': [],
+                'asset_photo_gallery': [],
+              },
+            ],
+          };
+        }
+        return {
+          'success': true,
+          'message': null,
+          'data': {
+            'items': [
+              {
+                'id': 73,
+                'source_type': 'purchase_order',
+                'status': 'in_transit',
+                'status_label': 'В пути',
+                'status_color': '#336699',
+                'requested_quantity': 10.0,
+                'reserved_quantity': 10.0,
+                'shipped_quantity': 6.0,
+                'accepted_quantity': 0.0,
+                'used_quantity': 0.0,
+                'available_quantity': 0.0,
+                'remaining_to_ship': 4.0,
+                'remaining_to_accept': 6.0,
+                'can_receive': true,
+                'metadata': {},
+                'project': {'id': 52, 'name': 'Тестовый'},
+                'material': {
+                  'id': 44,
+                  'name': 'Цемент М500',
+                  'code': 'CEM-500',
+                  'measurement_unit': {
+                    'id': 2,
+                    'name': 'мешок',
+                    'short_name': 'меш.',
+                  },
+                },
+                'warehouse': {'id': 8, 'name': 'Центральный склад'},
+                'project_warehouse': {'id': 21, 'name': 'Склад объекта'},
+                'linked_entities': {'allocation_id': 9},
+                'events': [],
+              },
+            ],
+          },
+        };
+      });
+    final repository = WarehouseRepository(dio);
+
+    final balances = await repository.fetchBalances(8);
+    final deliveries = await repository.fetchProjectMaterialDeliveries(
+      projectId: 52,
+    );
+
+    expect(balances.single.materialName, 'Цемент М500');
+    expect(balances.single.availableQuantity, 18);
+    expect(deliveries.single.id, 73);
+    expect(deliveries.single.projectName, 'Тестовый');
+    expect(deliveries.single.materialUnit, 'меш.');
+    expect(requests.map((request) => request.path), [
+      '/warehouse/warehouses/8/balances',
+      '/warehouse/project-material-deliveries',
+    ]);
+    expect(requests.last.queryParameters['project_id'], 52);
+    // These MobileResponse resources are arrays/items and do not expose page meta.
+  });
+
   test('fetchTaskPage parses paginated mobile response', () async {
     late RequestOptions request;
     final dio = Dio(BaseOptions(baseUrl: 'https://api.prohelper.test'))

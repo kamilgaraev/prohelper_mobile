@@ -7,6 +7,60 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:prohelpers_mobile/features/ai_assistant/data/ai_assistant_repository.dart';
 
 void main() {
+  test('loads usage and nonempty mobile conversations list', () async {
+    final requests = <RequestOptions>[];
+    final dio = Dio(BaseOptions(baseUrl: 'https://api.example.test'));
+    dio.httpClientAdapter = _JsonAdapter((options) {
+      requests.add(options);
+      if (options.path == '/ai-assistant/usage') {
+        return _responseData({
+          'monthly_limit': 5000,
+          'used': 125,
+          'remaining': 4875,
+          'percentage_used': 2.5,
+          'tokens_used': 8400,
+          'cost_rub': 12.5,
+        });
+      }
+      if (options.path == '/ai-assistant/conversations') {
+        return {
+          'success': true,
+          'message': null,
+          'data': [
+            {
+              'id': 12,
+              'title': 'Риски по объекту',
+              'created_at': '2026-09-25T10:00:00.000000Z',
+              'updated_at': '2026-09-26T14:30:00.000000Z',
+              'last_message_preview': 'Проверьте график поставок',
+              'last_message_at': '2026-09-26T14:30:00.000000Z',
+              'messages_count': 4,
+            },
+          ],
+        };
+      }
+      throw StateError('Unexpected endpoint: ${options.path}');
+    });
+
+    final home = await AiAssistantRepository(dio).fetchHome();
+
+    expect(requests.map((request) => request.method).toSet(), {'GET'});
+    expect(requests.map((request) => request.path).toSet(), {
+      '/ai-assistant/usage',
+      '/ai-assistant/conversations',
+    });
+    expect(home.usage.monthlyLimit, 5000);
+    expect(home.usage.used, 125);
+    expect(home.conversations, hasLength(1));
+    expect(home.conversations.single.id, 12);
+    expect(home.conversations.single.title, 'Риски по объекту');
+    expect(
+      home.conversations.single.lastMessagePreview,
+      'Проверьте график поставок',
+    );
+    expect(home.conversations.single.messagesCount, 4);
+  });
+
   test(
     'sends selected project and mobile UI context to chat endpoint',
     () async {

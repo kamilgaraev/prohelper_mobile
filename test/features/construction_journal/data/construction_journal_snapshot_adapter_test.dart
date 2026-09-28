@@ -167,6 +167,27 @@ void main() {
     expect(result.error, SnapshotUserMessages.conflict);
   });
 
+  test('422 обновления списка не возвращает старый журнал как успех', () async {
+    final service = EntitySnapshotService(
+      store: MemoryEntitySnapshotStore(),
+      resolveOwner: () => owner,
+    );
+    await ConstructionJournalSnapshotAdapter(
+      repository: _FakeJournalRepository(),
+      snapshots: Future.value(service),
+    ).load(online: true, projectId: 15);
+
+    final adapter = ConstructionJournalSnapshotAdapter(
+      repository: _FakeJournalRepository(errorStatusCode: 422),
+      snapshots: Future.value(service),
+    );
+    final result = await adapter.load(online: true, projectId: 15);
+
+    expect(result.presence, SnapshotPresence.error);
+    expect(result.data, isNull);
+    expect(result.error, 'HTTP 422');
+  });
+
   test('офлайн читает карточку журнала через getOne без сети', () async {
     final service = EntitySnapshotService(
       store: MemoryEntitySnapshotStore(),
@@ -430,6 +451,7 @@ class _FakeJournalRepository extends ConstructionJournalRepository {
     this.permissionDenied = false,
     this.conflict = false,
     this.networkError = false,
+    this.errorStatusCode,
   }) : super(Dio());
 
   final Map<String, dynamic>? payload;
@@ -437,6 +459,7 @@ class _FakeJournalRepository extends ConstructionJournalRepository {
   final bool permissionDenied;
   final bool conflict;
   final bool networkError;
+  final int? errorStatusCode;
   int fetchCount = 0;
   int detailFetchCount = 0;
   int entryFetchCount = 0;
@@ -465,6 +488,9 @@ class _FakeJournalRepository extends ConstructionJournalRepository {
     }
     if (networkError) {
       throw const ApiException('Нет связи с сервером.', statusCode: 500);
+    }
+    if (errorStatusCode != null) {
+      throw ApiException('HTTP $errorStatusCode', statusCode: errorStatusCode);
     }
   }
 

@@ -142,6 +142,19 @@ class _CompanionModuleScreenState extends ConsumerState<CompanionModuleScreen> {
                       (status) => ref.read(provider.notifier).setStatus(status),
                 ),
                 const SizedBox(height: 16),
+                if (state.showingStaleList && list != null)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: Text(
+                      state.listQuery != state.query ||
+                              state.listStatus != state.status
+                          ? 'Показан последний успешно загруженный список. Он может не учитывать текущие фильтры.'
+                          : 'Не удалось обновить список. Показаны данные последней успешной загрузки.',
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                    ),
+                  ),
                 if (state.isLoading && list == null)
                   const AppLoadingState(message: 'Загружаем раздел')
                 else if (state.permissionDenied)
@@ -179,7 +192,10 @@ class _CompanionModuleScreenState extends ConsumerState<CompanionModuleScreen> {
                     ),
                     const SizedBox(height: 12),
                   ],
-                  if (list.meta.currentPage < list.meta.lastPage)
+                  if (!state.showingStaleList &&
+                      state.listQuery == state.query &&
+                      state.listStatus == state.status &&
+                      list.meta.currentPage < list.meta.lastPage)
                     OutlinedButton.icon(
                       onPressed:
                           state.isLoadingMore
@@ -198,7 +214,9 @@ class _CompanionModuleScreenState extends ConsumerState<CompanionModuleScreen> {
                         state.isLoadingMore ? 'Загружаем' : 'Загрузить ещё',
                       ),
                     ),
-                  if (state.error != null && list.items.isNotEmpty)
+                  if (state.error != null &&
+                      list.items.isNotEmpty &&
+                      !state.showingStaleList)
                     Padding(
                       padding: const EdgeInsets.only(top: 8),
                       child: Text(
@@ -405,51 +423,35 @@ class _CompanionModuleDetailScreenState
 
   Future<void> _runAction(CompanionAction action) async {
     if (!_projectContextCurrent) return;
-    final comment = await showModalBottomSheet<String>(
+    final completed = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
+      enableDrag: false,
       builder:
           (_) => _ActionBottomSheet(
             action: action,
             requiresComment: action.requiresComment,
+            onExecute: (comment) async {
+              if (!mounted || !_projectContextCurrent) return false;
+              await ref
+                  .read(companionModuleProvider(widget.moduleSlug).notifier)
+                  .executeAction(
+                    id: widget.itemId,
+                    action: action.key,
+                    comment: comment,
+                  );
+              return true;
+            },
           ),
     );
 
-    if (!mounted) {
-      return;
-    }
-    if (!_projectContextCurrent) return;
-
-    if (comment == null && action.requiresComment) {
-      return;
-    }
-
-    try {
-      await ref
-          .read(companionModuleProvider(widget.moduleSlug).notifier)
-          .executeAction(
-            id: widget.itemId,
-            action: action.key,
-            comment: comment,
-          );
-
-      if (!mounted) {
-        return;
-      }
-
-      setState(() {
-        _future = _load();
-      });
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Действие выполнено')));
-    } catch (error) {
-      if (!mounted) {
-        return;
-      }
-
-      AppErrorNotice.show(context, error);
-    }
+    if (!mounted || completed != true || !_projectContextCurrent) return;
+    setState(() {
+      _future = _load();
+    });
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Действие выполнено')));
   }
 
   Future<void> _runRelatedAction(
@@ -460,33 +462,34 @@ class _CompanionModuleDetailScreenState
         !_projectContextCurrent) {
       return;
     }
-    final comment = await showModalBottomSheet<String>(
+    final completed = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
+      enableDrag: false,
       builder:
           (_) => _ActionBottomSheet(
             action: action,
             requiresComment: action.requiresComment,
+            onExecute: (comment) async {
+              if (!mounted || !_projectContextCurrent) return false;
+              await ref
+                  .read(companionModuleProvider(widget.moduleSlug).notifier)
+                  .executeExecutiveDocumentAction(
+                    documentId: item.id,
+                    action: action.key,
+                    comment: comment,
+                  );
+              return true;
+            },
           ),
     );
-    if (!mounted || (comment == null && action.requiresComment)) return;
-    if (!_projectContextCurrent) return;
-    try {
-      await ref
-          .read(companionModuleProvider(widget.moduleSlug).notifier)
-          .executeExecutiveDocumentAction(
-            documentId: item.id,
-            action: action.key,
-            comment: comment,
-          );
-      if (!mounted) return;
-      setState(() => _future = _load());
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Действие выполнено')));
-    } catch (error) {
-      if (mounted) AppErrorNotice.show(context, error);
-    }
+    if (!mounted || completed != true || !_projectContextCurrent) return;
+    setState(() {
+      _future = _load();
+    });
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Действие выполнено')));
   }
 
   Future<void> _openFile(CompanionFile file, String purpose) async {
@@ -1139,10 +1142,12 @@ class _ActionBottomSheet extends StatefulWidget {
   const _ActionBottomSheet({
     required this.action,
     required this.requiresComment,
+    required this.onExecute,
   });
 
   final CompanionAction action;
   final bool requiresComment;
+  final Future<bool> Function(String? comment) onExecute;
 
   @override
   State<_ActionBottomSheet> createState() => _ActionBottomSheetState();
@@ -1150,6 +1155,11 @@ class _ActionBottomSheet extends StatefulWidget {
 
 class _ActionBottomSheetState extends State<_ActionBottomSheet> {
   final TextEditingController _controller = TextEditingController();
+  bool _isSubmitting = false;
+  bool _isComplete = false;
+  bool _allowPopAfterAcknowledgement = false;
+  String? _error;
+  String? _commentError;
 
   @override
   void dispose() {
@@ -1160,58 +1170,151 @@ class _ActionBottomSheetState extends State<_ActionBottomSheet> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final viewInsets = MediaQuery.viewInsetsOf(context);
 
-    return Padding(
-      padding: EdgeInsets.only(
-        left: 16,
-        right: 16,
-        bottom: MediaQuery.of(context).viewInsets.bottom + 16,
-      ),
-      child: Container(
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: theme.colorScheme.surface,
-          borderRadius: BorderRadius.circular(24),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              widget.action.title,
-              style: AppTypography.h2(context).copyWith(
-                color: theme.colorScheme.onSurface,
-                fontWeight: FontWeight.w900,
+    return PopScope<bool>(
+      canPop: (!_isSubmitting && !_isComplete) || _allowPopAfterAcknowledgement,
+      child: SafeArea(
+        child: AnimatedPadding(
+          duration: const Duration(milliseconds: 180),
+          padding: EdgeInsets.only(bottom: viewInsets.bottom),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surface,
+                borderRadius: BorderRadius.circular(24),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    widget.action.title,
+                    style: AppTypography.h2(context).copyWith(
+                      color: theme.colorScheme.onSurface,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    key: const Key('companion-action-comment'),
+                    controller: _controller,
+                    enabled: !_isSubmitting && !_isComplete,
+                    minLines: 2,
+                    maxLines: 4,
+                    onChanged: (_) {
+                      if (_commentError != null) {
+                        setState(() => _commentError = null);
+                      }
+                    },
+                    decoration: InputDecoration(
+                      labelText:
+                          widget.requiresComment
+                              ? 'Комментарий'
+                              : 'Комментарий (необязательно)',
+                      errorText: _commentError,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  ),
+                  if (_error != null) ...[
+                    const SizedBox(height: 12),
+                    Text(
+                      _error!,
+                      key: const Key('companion-action-error'),
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: theme.colorScheme.error,
+                      ),
+                    ),
+                  ],
+                  if (_isComplete) ...[
+                    const SizedBox(height: 12),
+                    Text(
+                      'Действие выполнено.',
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: theme.colorScheme.primary,
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 12),
+                  AppPrimaryActionButton(
+                    label:
+                        _isComplete
+                            ? 'Готово'
+                            : _error == null
+                            ? 'Выполнить'
+                            : 'Повторить',
+                    onPressed:
+                        _isSubmitting
+                            ? null
+                            : _isComplete
+                            ? _acknowledge
+                            : _execute,
+                    isBusy: _isSubmitting,
+                    busyLabel: 'Выполняем',
+                  ),
+                  TextButton(
+                    onPressed:
+                        _isSubmitting || _isComplete
+                            ? null
+                            : () => Navigator.of(context).pop(false),
+                    child: const Text('Отмена'),
+                  ),
+                ],
               ),
             ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: _controller,
-              minLines: 3,
-              maxLines: 5,
-              decoration: InputDecoration(
-                labelText:
-                    widget.requiresComment ? 'Комментарий' : 'Комментарий',
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            AppPrimaryActionButton(
-              label: 'Выполнить',
-              onPressed: () {
-                final text = _controller.text.trim();
-                if (widget.requiresComment && text.isEmpty) {
-                  return;
-                }
-                Navigator.of(context).pop(text);
-              },
-            ),
-          ],
+          ),
         ),
       ),
     );
+  }
+
+  Future<void> _execute() async {
+    if (_isSubmitting || _isComplete) return;
+
+    final comment = _controller.text.trim();
+    if (widget.requiresComment && comment.isEmpty) {
+      setState(() => _commentError = 'Укажите комментарий к действию.');
+      return;
+    }
+
+    setState(() {
+      _isSubmitting = true;
+      _error = null;
+      _commentError = null;
+    });
+
+    try {
+      final completed = await widget.onExecute(
+        comment.isEmpty ? null : comment,
+      );
+      if (!mounted) return;
+      setState(() {
+        _isSubmitting = false;
+        _isComplete = completed;
+        _error =
+            completed
+                ? null
+                : 'Объект изменился. Закройте окно и откройте запись снова.';
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _isSubmitting = false;
+        _error = UserMessage.fromError(error);
+      });
+    }
+  }
+
+  void _acknowledge() {
+    setState(() => _allowPopAfterAcknowledgement = true);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) Navigator.of(context).pop(true);
+    });
   }
 }
 

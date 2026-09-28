@@ -13,6 +13,7 @@ import '../../../core/widgets/app_error_state.dart';
 import '../../../core/widgets/app_loading_state.dart';
 import '../../../core/widgets/mesh_background.dart';
 import '../../../core/widgets/pro_card.dart';
+import '../../../core/widgets/pro_metric_grid.dart';
 import '../../../core/widgets/pro_metric_tile.dart';
 import '../../../core/widgets/pro_status_banner.dart';
 import '../../auth/domain/auth_provider.dart';
@@ -928,44 +929,26 @@ class _SummaryStrip extends StatelessWidget {
     final critical =
         defects.where((defect) => defect.severity == 'critical').length;
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final compact =
-            constraints.maxWidth < 380 ||
-            MediaQuery.textScalerOf(context).scale(1) > 1.15;
-        final columns = compact ? 2 : 3;
-        final tileWidth = (constraints.maxWidth - 8 * (columns - 1)) / columns;
-        return Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            SizedBox(
-              width: tileWidth,
-              child: _SummaryTile(
-                label: 'Открыто',
-                value: open.toString(),
-                icon: Icons.fact_check_outlined,
-              ),
-            ),
-            SizedBox(
-              width: tileWidth,
-              child: _SummaryTile(
-                label: 'Проверка',
-                value: review.toString(),
-                icon: Icons.rule_folder_outlined,
-              ),
-            ),
-            SizedBox(
-              width: tileWidth,
-              child: _SummaryTile(
-                label: 'Критично',
-                value: critical.toString(),
-                icon: Icons.priority_high_rounded,
-              ),
-            ),
-          ],
-        );
-      },
+    return ProMetricGrid(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        _SummaryTile(
+          label: 'Открыто',
+          value: open.toString(),
+          icon: Icons.fact_check_outlined,
+        ),
+        _SummaryTile(
+          label: 'Проверка',
+          value: review.toString(),
+          icon: Icons.rule_folder_outlined,
+        ),
+        _SummaryTile(
+          label: 'Критично',
+          value: critical.toString(),
+          icon: Icons.priority_high_rounded,
+        ),
+      ],
     );
   }
 }

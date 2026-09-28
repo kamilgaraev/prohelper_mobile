@@ -208,7 +208,7 @@ class ScheduleSnapshotAdapter {
           hasDirtyLocal: true,
         );
       }
-      if (isSnapshotOffline(error) || cached.hasData) {
+      if (isSnapshotOffline(error)) {
         return SnapshotRead(
           presence: cached.presence,
           data: cached.data,

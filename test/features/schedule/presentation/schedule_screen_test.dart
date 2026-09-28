@@ -1,7 +1,9 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:prohelpers_mobile/core/widgets/pro_metric_tile.dart';
 import 'package:prohelpers_mobile/features/projects/data/project_model.dart';
 import 'package:prohelpers_mobile/features/projects/data/projects_repository.dart';
 import 'package:prohelpers_mobile/features/projects/domain/projects_provider.dart';
@@ -278,6 +280,50 @@ void main() {
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
     expect(tester.widget<Text>(dateFinder).maxLines, 2);
+  });
+
+  testWidgets(
+    'сводка адаптируется к узкому экрану и сохраняет короткую метку',
+    (tester) async {
+      tester.view.physicalSize = const Size(240, 1000);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      await tester.pumpWidget(createWidget(textScaleFactor: 1.3));
+      await tester.pumpAndSettle();
+
+      final completedLabel = find.text('Завершено').first;
+      await tester.ensureVisible(completedLabel);
+      await tester.pumpAndSettle();
+
+      final paragraph = tester.renderObject<RenderParagraph>(completedLabel);
+      expect(paragraph.size.height, lessThan(25));
+      expect(
+        tester.getSize(find.byType(ProMetricTile).first).width,
+        greaterThan(180),
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('сводка остаётся двухколоночной на ширине 360dp', (tester) async {
+    tester.view.physicalSize = const Size(360, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(createWidget());
+    await tester.pumpAndSettle();
+
+    final tiles = find.byType(ProMetricTile);
+    expect(tiles, findsNWidgets(4));
+    final first = tester.getTopLeft(tiles.at(0));
+    final second = tester.getTopLeft(tiles.at(1));
+    final third = tester.getTopLeft(tiles.at(2));
+    expect(second.dx, greaterThan(first.dx));
+    expect(third.dx, first.dx);
+    expect(tester.takeException(), isNull);
   });
 }
 

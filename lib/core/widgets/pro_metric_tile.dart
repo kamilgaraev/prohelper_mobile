@@ -26,30 +26,48 @@ class ProMetricTile extends StatelessWidget {
     return ProSurface(
       padding: const EdgeInsets.all(ProSpacing.sm),
       tone: ProSurfaceTone.subtle,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (icon != null) ...[
-            Icon(icon, color: accent, size: 20),
-            const SizedBox(height: ProSpacing.sm),
-          ],
-          Text(
-            value,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: AppTypography.h2(context).copyWith(
-              color: theme.colorScheme.onSurface,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-          const SizedBox(height: ProSpacing.xxs),
-          Text(
-            label,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: AppTypography.caption(context),
-          ),
-        ],
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final compact = constraints.maxWidth >= 180;
+          final textContent = Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                value,
+                style: AppTypography.h2(context).copyWith(
+                  color: theme.colorScheme.onSurface,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              const SizedBox(height: ProSpacing.xxs),
+              Text(label, style: AppTypography.caption(context)),
+            ],
+          );
+
+          if (compact) {
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                if (icon != null) ...[
+                  Icon(icon, color: accent, size: 20),
+                  const SizedBox(width: ProSpacing.sm),
+                ],
+                Expanded(child: textContent),
+              ],
+            );
+          }
+
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (icon != null) ...[
+                Icon(icon, color: accent, size: 20),
+                const SizedBox(height: ProSpacing.sm),
+              ],
+              textContent,
+            ],
+          );
+        },
       ),
     );
   }

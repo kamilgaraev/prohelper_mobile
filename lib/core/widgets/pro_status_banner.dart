@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 
 import 'package:prohelpers_mobile/core/design/pro_design_tokens.dart';
 import 'package:prohelpers_mobile/core/design/pro_status.dart';
@@ -28,83 +28,148 @@ class ProStatusBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final status = proStatusStyle(context, tone);
-    final iconExtent = compact ? 36.0 : 40.0;
-    final iconSize = compact ? 19.0 : 21.0;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth <= 280) {
+          return _buildNarrow(context, status);
+        }
 
-    return ProSurface(
-      tone: surfaceTone,
-      padding: EdgeInsets.all(compact ? ProSpacing.sm : ProSpacing.md),
-      borderRadius: ProRadius.sm,
-      bordered: true,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: iconExtent,
-            height: iconExtent,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: status.background,
-              borderRadius: BorderRadius.circular(ProRadius.sm),
-              border: Border.all(color: status.border),
-            ),
-            child: Icon(status.icon, color: status.foreground, size: iconSize),
-          ),
-          const SizedBox(width: ProSpacing.sm),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (compact && action != null)
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      Expanded(
-                        child: _StatusTitle(
-                          title: title,
-                          compact: true,
-                          fullText: fullText,
-                        ),
+        final iconExtent = compact ? 36.0 : 40.0;
+        final iconSize = compact ? 19.0 : 21.0;
+        return ProSurface(
+          tone: surfaceTone,
+          padding: EdgeInsets.all(compact ? ProSpacing.sm : ProSpacing.md),
+          borderRadius: ProRadius.sm,
+          bordered: true,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _StatusIcon(
+                extent: iconExtent,
+                iconSize: iconSize,
+                status: status,
+              ),
+              const SizedBox(width: ProSpacing.sm),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (compact && action != null)
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Expanded(
+                            child: _StatusTitle(
+                              title: title,
+                              compact: true,
+                              fullText: fullText,
+                            ),
+                          ),
+                          const SizedBox(width: ProSpacing.xs),
+                          Flexible(
+                            fit: FlexFit.loose,
+                            child: Align(
+                              alignment: Alignment.centerRight,
+                              child: action!,
+                            ),
+                          ),
+                        ],
+                      )
+                    else
+                      _StatusTitle(
+                        title: title,
+                        compact: compact,
+                        fullText: fullText,
                       ),
-                      const SizedBox(width: ProSpacing.xs),
-                      Flexible(
-                        fit: FlexFit.loose,
-                        child: Align(
-                          alignment: Alignment.centerRight,
-                          child: action!,
-                        ),
+                    if (description != null) ...[
+                      const SizedBox(height: ProSpacing.xxs),
+                      _StatusDescription(
+                        description: description!,
+                        compact: compact,
+                        fullText: fullText,
                       ),
                     ],
-                  )
-                else
-                  _StatusTitle(
-                    title: title,
-                    compact: compact,
-                    fullText: fullText,
-                  ),
-                if (description != null) ...[
-                  const SizedBox(height: ProSpacing.xxs),
-                  Text(
-                    description!,
-                    maxLines: fullText ? null : (compact ? 2 : 3),
-                    overflow:
-                        fullText ? TextOverflow.visible : TextOverflow.ellipsis,
-                    style: AppTypography.bodyMedium(context).copyWith(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                ],
-                if (!compact && action != null) ...[
-                  const SizedBox(height: ProSpacing.sm),
-                  action!,
-                ],
-              ],
-            ),
+                    if (!compact && action != null) ...[
+                      const SizedBox(height: ProSpacing.sm),
+                      action!,
+                    ],
+                  ],
+                ),
+              ),
+            ],
           ),
+        );
+      },
+    );
+  }
+
+  Widget _buildNarrow(BuildContext context, ProStatusStyle status) {
+    return ProSurface(
+      tone: surfaceTone,
+      padding: const EdgeInsets.all(ProSpacing.sm),
+      borderRadius: ProRadius.sm,
+      bordered: true,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _StatusIcon(extent: 24, iconSize: 16, status: status),
+              const SizedBox(width: ProSpacing.sm),
+              Expanded(
+                child: _StatusTitle(
+                  title: title,
+                  compact: true,
+                  fullText: true,
+                ),
+              ),
+            ],
+          ),
+          if (description != null) ...[
+            const SizedBox(height: ProSpacing.xxs),
+            _StatusDescription(
+              description: description!,
+              compact: true,
+              fullText: fullText,
+              narrow: true,
+            ),
+          ],
+          if (action != null) ...[
+            const SizedBox(height: ProSpacing.xs),
+            Align(alignment: Alignment.centerLeft, child: action!),
+          ],
         ],
       ),
     );
   }
+}
+
+class _StatusIcon extends StatelessWidget {
+  const _StatusIcon({
+    required this.extent,
+    required this.iconSize,
+    required this.status,
+  });
+
+  final double extent;
+  final double iconSize;
+  final ProStatusStyle status;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    key: const ValueKey('pro-status-banner-icon'),
+    width: extent,
+    height: extent,
+    alignment: Alignment.center,
+    decoration: BoxDecoration(
+      color: status.background,
+      borderRadius: BorderRadius.circular(ProRadius.sm),
+      border: Border.all(color: status.border),
+    ),
+    child: Icon(status.icon, color: status.foreground, size: iconSize),
+  );
 }
 
 class _StatusTitle extends StatelessWidget {
@@ -129,4 +194,29 @@ class _StatusTitle extends StatelessWidget {
       ).copyWith(fontWeight: FontWeight.w800, height: compact ? 1.12 : null),
     );
   }
+}
+
+class _StatusDescription extends StatelessWidget {
+  const _StatusDescription({
+    required this.description,
+    required this.compact,
+    required this.fullText,
+    this.narrow = false,
+  });
+
+  final String description;
+  final bool compact;
+  final bool fullText;
+  final bool narrow;
+
+  @override
+  Widget build(BuildContext context) => Text(
+    description,
+    maxLines: fullText ? null : (compact ? 2 : 3),
+    overflow: fullText ? TextOverflow.visible : TextOverflow.ellipsis,
+    style: (narrow
+            ? AppTypography.bodySmall(context)
+            : AppTypography.bodyMedium(context))
+        .copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
+  );
 }

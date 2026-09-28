@@ -7,6 +7,121 @@ import 'package:prohelpers_mobile/features/payments/data/payments_repository.dar
 
 void main() {
   test(
+    'loads scoped payment parties with search and contractor pagination',
+    () async {
+      late RequestOptions request;
+      final dio = Dio(BaseOptions(baseUrl: 'https://api.example.test'));
+      dio.httpClientAdapter = _JsonAdapter((options) {
+        request = options;
+        return {
+          'success': true,
+          'data': {
+            'current_organization': {
+              'id': 7,
+              'name': 'МОСТ',
+              'inn': '7701000000',
+            },
+            'contractors': {
+              'items': [
+                {
+                  'id': 31,
+                  'name': 'ООО Поставка',
+                  'inn': '7702000000',
+                  'contractor_type': 'organization',
+                },
+              ],
+              'meta': {
+                'current_page': 2,
+                'per_page': 20,
+                'total': 24,
+                'last_page': 2,
+              },
+            },
+          },
+        };
+      });
+
+      final options = await PaymentsRepository(
+        dio,
+      ).formOptions(projectId: 52, search: 'Поставка', page: 2);
+
+      expect(request.method, 'GET');
+      expect(request.path, '/payments/documents/options');
+      expect(request.queryParameters, {
+        'project_id': 52,
+        'search': 'Поставка',
+        'page': 2,
+        'per_page': 20,
+      });
+      expect(options.currentOrganization.key, 'organization:7');
+      expect(options.currentOrganization.name, 'МОСТ');
+      expect(options.contractors.items.single.key, 'contractor:31');
+      expect(
+        options.contractors.items.single.label,
+        'ООО Поставка · ИНН 7702000000',
+      );
+      expect(options.contractors.currentPage, 2);
+      expect(options.contractors.lastPage, 2);
+      expect(options.contractors.total, 24);
+    },
+  );
+
+  test(
+    'update sends only the supplied patch and preserves saved parties',
+    () async {
+      late RequestOptions request;
+      final dio = Dio(BaseOptions(baseUrl: 'https://api.example.test'));
+      dio.httpClientAdapter = _JsonAdapter((options) {
+        request = options;
+        return {
+          'success': true,
+          'data': {'id': 19, 'status': 'draft'},
+        };
+      });
+
+      await PaymentsRepository(dio).update(19, {
+        'payment_purpose': 'Обновлённое назначение',
+        'bank_account': '12345678901234567890',
+        'bank_bik': '123456789',
+      });
+
+      expect(request.method, 'PUT');
+      expect(request.path, '/payments/documents/19');
+      expect(request.data, {
+        'payment_purpose': 'Обновлённое назначение',
+        'bank_account': '12345678901234567890',
+        'bank_bik': '123456789',
+      });
+      expect(request.data, isNot(contains('payer_organization_id')));
+      expect(request.data, isNot(contains('payee_organization_id')));
+    },
+  );
+
+  test(
+    'update sends the selected party and explicit null to clear old party type',
+    () async {
+      late RequestOptions request;
+      final dio = Dio(BaseOptions(baseUrl: 'https://api.example.test'));
+      dio.httpClientAdapter = _JsonAdapter((options) {
+        request = options;
+        return {
+          'success': true,
+          'data': {'id': 19, 'status': 'draft'},
+        };
+      });
+
+      await PaymentsRepository(
+        dio,
+      ).update(19, {'payee_contractor_id': 31, 'payee_organization_id': null});
+
+      expect(request.data, {
+        'payee_contractor_id': 31,
+        'payee_organization_id': null,
+      });
+    },
+  );
+
+  test(
     'reuses caller idempotency key for payment registration request',
     () async {
       late RequestOptions request;

@@ -33,6 +33,21 @@ class _FakeSiteRequestsRepository extends SiteRequestsRepository {
   }
 }
 
+class _CachedSiteRequestDetailNotifier extends SiteRequestDetailNotifier {
+  _CachedSiteRequestDetailNotifier(super.repository, super.ref, super.id) {
+    state = SiteRequestDetailState(
+      request: _request,
+      fromCache: true,
+      error:
+          'Нет соединения с сервером. Показаны данные устройства; они могут '
+          'быть неактуальны до восстановления связи и синхронизации.',
+    );
+  }
+
+  @override
+  Future<void> loadDetails() async {}
+}
+
 final _request =
     SiteRequestModel()
       ..serverId = 1001
@@ -110,6 +125,7 @@ void main() {
     SiteRequestModel? request,
     _FakeSiteRequestsRepository? repository,
     double textScaleFactor = 1,
+    bool fromCache = false,
   }) {
     final fakeRepository =
         repository ?? _FakeSiteRequestsRepository(request ?? _request);
@@ -117,7 +133,10 @@ void main() {
       overrides: [
         siteRequestsRepositoryProvider.overrideWithValue(fakeRepository),
         siteRequestDetailProvider.overrideWith(
-          (ref, id) => SiteRequestDetailNotifier(fakeRepository, ref, id),
+          (ref, id) =>
+              fromCache
+                  ? _CachedSiteRequestDetailNotifier(fakeRepository, ref, id)
+                  : SiteRequestDetailNotifier(fakeRepository, ref, id),
         ),
       ],
       child: TickerMode(
@@ -156,6 +175,74 @@ void main() {
     expect(find.text('Дом 300м Царево'), findsOneWidget);
     expect(find.text('Иван Петров'), findsWidgets);
     expect(find.text('Подтвердить время поставки до 14:00.'), findsOneWidget);
+  });
+
+  testWidgets('узкая деталь заявки прокручивает полный кеш-статусный баннер', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(720, 1280);
+    tester.view.devicePixelRatio = 3;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    const cacheMessage =
+        'Нет соединения с сервером. Показаны данные устройства; они могут '
+        'быть неактуальны до восстановления связи и синхронизации.';
+    await tester.pumpWidget(
+      createWidget(textScaleFactor: 1.3, fromCache: true),
+    );
+    await tester.pump();
+
+    expect(find.text('Заявка'), findsOneWidget);
+    expect(find.text('Детали заявки'), findsNothing);
+    expect(find.text('Сохранённая заявка'), findsOneWidget);
+    expect(find.text(cacheMessage), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    final scrollable = find.byType(Scrollable).first;
+    await tester.scrollUntilVisible(
+      find.text('История обработки'),
+      160,
+      scrollable: scrollable,
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('История обработки'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    await tester.scrollUntilVisible(
+      find.text(cacheMessage),
+      160,
+      scrollable: scrollable,
+    );
+    await tester.pumpAndSettle();
+    expect(tester.widget<Text>(find.text(cacheMessage)).maxLines, isNull);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('детали заявки показывают сохранённые три знака количества', (
+    tester,
+  ) async {
+    final request =
+        SiteRequestModel()
+          ..serverId = 1003
+          ..title = 'Кабель для участка'
+          ..status = 'draft'
+          ..statusLabel = 'Черновик'
+          ..priority = 'medium'
+          ..priorityLabel = 'Средний'
+          ..requestType = 'material_request'
+          ..requestTypeLabel = 'Материалы'
+          ..materialName = 'Кабель'
+          ..materialQuantity = 0.001
+          ..materialUnit = 'м'
+          ..projectId = 15
+          ..projectName = 'Тестовый';
+
+    await tester.pumpWidget(createWidget(request: request));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    expect(find.text('0.001 м'), findsOneWidget);
   });
 
   testWidgets('не показывает действия, если backend не прислал переходы', (

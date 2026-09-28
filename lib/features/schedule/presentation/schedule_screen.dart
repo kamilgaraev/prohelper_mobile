@@ -8,6 +8,7 @@ import '../../../core/widgets/app_empty_state.dart';
 import '../../../core/widgets/app_error_state.dart';
 import '../../../core/widgets/app_loading_state.dart';
 import '../../../core/widgets/industrial_card.dart';
+import '../../../core/widgets/pro_metric_grid.dart';
 import '../../../core/widgets/pro_metric_tile.dart';
 import '../../../core/widgets/pro_search_filter_bar.dart';
 import '../../../core/widgets/pro_status_banner.dart';
@@ -365,50 +366,31 @@ class _ScheduleSummaryGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
+    return ProMetricGrid(
       children: [
-        Row(
-          children: [
-            Expanded(
-              child: _ScheduleSummaryCard(
-                title: 'Всего графиков',
-                value: summary.totalSchedules.toString(),
-                icon: Icons.timeline_outlined,
-                color: Theme.of(context).colorScheme.primary,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _ScheduleSummaryCard(
-                title: 'Активных',
-                value: summary.activeSchedules.toString(),
-                icon: Icons.play_circle_outline_rounded,
-                color: AppColors.success,
-              ),
-            ),
-          ],
+        _ScheduleSummaryCard(
+          title: 'Всего графиков',
+          value: summary.totalSchedules.toString(),
+          icon: Icons.timeline_outlined,
+          color: Theme.of(context).colorScheme.primary,
         ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-              child: _ScheduleSummaryCard(
-                title: 'Завершено',
-                value: summary.completedSchedules.toString(),
-                icon: Icons.check_circle_outline_rounded,
-                color: AppColors.secondary,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _ScheduleSummaryCard(
-                title: 'Средний прогресс',
-                value: '${summary.averageProgressPercent.toStringAsFixed(1)}%',
-                icon: Icons.bar_chart_rounded,
-                color: AppColors.warning,
-              ),
-            ),
-          ],
+        _ScheduleSummaryCard(
+          title: 'Активных',
+          value: summary.activeSchedules.toString(),
+          icon: Icons.play_circle_outline_rounded,
+          color: AppColors.success,
+        ),
+        _ScheduleSummaryCard(
+          title: 'Завершено',
+          value: summary.completedSchedules.toString(),
+          icon: Icons.check_circle_outline_rounded,
+          color: AppColors.secondary,
+        ),
+        _ScheduleSummaryCard(
+          title: 'Средний прогресс',
+          value: '${summary.averageProgressPercent.toStringAsFixed(1)}%',
+          icon: Icons.bar_chart_rounded,
+          color: AppColors.warning,
         ),
       ],
     );

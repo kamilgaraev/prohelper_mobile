@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:prohelpers_mobile/core/theme/pro_theme.dart';
+import 'package:prohelpers_mobile/core/network/api_exception.dart';
 import 'package:prohelpers_mobile/core/sync/sync_queue_service.dart';
 import 'package:prohelpers_mobile/features/handover_acceptance/data/handover_acceptance_model.dart';
 import 'package:prohelpers_mobile/features/handover_acceptance/data/handover_document_picker.dart';
@@ -22,6 +25,10 @@ class _RecordingHandoverRepository extends HandoverAcceptanceRepository {
   int? rejectedScopeId;
   int? loadedScopeId;
   int? reviewedChecklistItemId;
+  int reviewedChecklistCalls = 0;
+  String? reviewedChecklistComment;
+  Object? reviewChecklistError;
+  Completer<void>? reviewChecklistCompleter;
   int? uploadedDocumentId;
   String? uploadedDocumentPath;
   String? reviewedChecklistStatus;
@@ -129,9 +136,15 @@ class _RecordingHandoverRepository extends HandoverAcceptanceRepository {
     String? comment,
     List<String> photoPaths = const [],
   }) async {
+    reviewedChecklistCalls++;
     reviewedChecklistItemId = itemId;
     reviewedChecklistStatus = status;
+    reviewedChecklistComment = comment;
     reviewedChecklistPhotoPaths = photoPaths;
+    await reviewChecklistCompleter?.future;
+    final error = reviewChecklistError;
+    reviewChecklistError = null;
+    if (error != null) throw error;
     return scope.checklists.single;
   }
 
@@ -487,6 +500,126 @@ void main() {
     expect(repository.reviewedChecklistItemId, 31);
     expect(repository.reviewedChecklistStatus, 'accepted');
   });
+
+  testWidgets(
+    'preserves checklist rejection draft after error and retries once on compact sheet',
+    (tester) async {
+      tester.view.physicalSize = const Size(240, 1280);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final repository =
+          _RecordingHandoverRepository()
+            ..reviewChecklistError = const ApiException(
+              'Не удалось сохранить проверку. Повторите попытку.',
+              statusCode: 403,
+            );
+
+      await tester.pumpWidget(buildScreen(repository, textScale: 1.3));
+      await pumpUi(tester);
+      final details = find.text('Подробнее').first;
+      await tester.ensureVisible(details);
+      await tester.tap(details);
+      await pumpUi(tester);
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.ensureVisible(find.text('Окна проверены'));
+      await tester.tap(find.text('Отклонить').last);
+      await tester.pumpAndSettle();
+
+      const comment =
+          'Сначала проверить герметичность окон, заменить поврежденный уплотнитель и повторно подтвердить качество монтажа. ';
+      final longComment = List.filled(4, comment).join();
+      await tester.enterText(find.byType(TextField).last, longComment);
+      await tester.ensureVisible(
+        find.widgetWithText(FilledButton, 'Отклонить'),
+      );
+      await tester.tap(find.widgetWithText(FilledButton, 'Отклонить'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('Не удалось сохранить проверку. Повторите попытку.'),
+        findsOneWidget,
+      );
+      expect(find.text(longComment), findsOneWidget);
+      expect(tester.takeException(), isNull);
+
+      repository.reviewChecklistCompleter = Completer<void>();
+      await tester.ensureVisible(
+        find.widgetWithText(FilledButton, 'Отклонить'),
+      );
+      await tester.tap(find.widgetWithText(FilledButton, 'Отклонить'));
+      await tester.pump();
+      final submit = find.widgetWithText(FilledButton, 'Сохранение...');
+      expect(submit, findsOneWidget);
+      await tester.tap(submit);
+      await tester.pump();
+      expect(repository.reviewedChecklistCalls, 2);
+      expect(repository.reviewedChecklistComment, longComment.trim());
+      await tester.tapAt(const Offset(5, 5));
+      await tester.pump();
+      await tester.binding.handlePopRoute();
+      await tester.pump();
+      expect(find.text('Сохранение...'), findsOneWidget);
+      expect(repository.reviewedChecklistCalls, 2);
+
+      repository.reviewChecklistCompleter!.complete();
+      await tester.pumpAndSettle();
+      expect(find.text('Отклонить пункт чек-листа'), findsNothing);
+      expect(repository.reviewedChecklistCalls, 2);
+      expect(repository.reviewedChecklistComment, longComment.trim());
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('canceling checklist review does not send a mutation', (
+    tester,
+  ) async {
+    final repository = _RecordingHandoverRepository();
+    useLargeSurface(tester);
+
+    await tester.pumpWidget(buildScreen(repository));
+    await pumpUi(tester);
+    await tester.tap(find.text('Подробнее').first);
+    await pumpUi(tester);
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.ensureVisible(find.text('Окна проверены'));
+    await tester.tap(find.text('Отклонить').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Отмена'));
+    await tester.pumpAndSettle();
+
+    expect(repository.reviewedChecklistCalls, 0);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'pending checklist review completes safely after screen disposal',
+    (tester) async {
+      final repository =
+          _RecordingHandoverRepository()
+            ..reviewChecklistCompleter = Completer<void>();
+      useLargeSurface(tester);
+
+      await tester.pumpWidget(buildScreen(repository));
+      await pumpUi(tester);
+      await tester.tap(find.text('Подробнее').first);
+      await pumpUi(tester);
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.ensureVisible(find.text('Окна проверены'));
+      await tester.tap(find.text('Отклонить').last);
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).last, 'Проверить повторно');
+      await tester.tap(find.widgetWithText(FilledButton, 'Отклонить'));
+      await tester.pump();
+      expect(repository.reviewedChecklistCalls, 1);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      repository.reviewChecklistCompleter!.complete();
+      await tester.pump();
+
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets('finding row gives long title full width above status', (
     tester,

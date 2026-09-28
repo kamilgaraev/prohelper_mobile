@@ -109,6 +109,19 @@ void main() {
     expect(result.error, 'Недостаточно прав для просмотра склада.');
   });
 
+  test('401 не возвращает сохранённый склад как успешный результат', () async {
+    final repository = _FakeWarehouseRepository();
+    final adapter = adapterFor(repository);
+    await adapter.load(online: true);
+
+    repository.errorStatusCode = 401;
+    final result = await adapter.load(online: true);
+
+    expect(result.presence, SnapshotPresence.error);
+    expect(result.data, isNull);
+    expect(result.error, 'HTTP 401');
+  });
+
   test('грязный локальный снимок остаётся конфликтом после pull', () async {
     final store = _MemoryEntitySnapshotStore();
     final service = EntitySnapshotService(
@@ -238,6 +251,7 @@ class _FakeWarehouseRepository extends WarehouseRepository {
 
   Map<String, dynamic>? payload;
   final bool permissionDenied;
+  int? errorStatusCode;
   int fetchCount = 0;
   int flushCount = 0;
 
@@ -249,6 +263,9 @@ class _FakeWarehouseRepository extends WarehouseRepository {
         'Недостаточно прав для просмотра склада.',
         statusCode: 403,
       );
+    }
+    if (errorStatusCode != null) {
+      throw ApiException('HTTP $errorStatusCode', statusCode: errorStatusCode);
     }
     return payload ?? _warehousePayload(name: 'Сеть');
   }

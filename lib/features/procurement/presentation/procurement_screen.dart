@@ -118,6 +118,14 @@ class _ProcurementScreenState extends ConsumerState<ProcurementScreen> {
         children: [
           _ProcurementHeader(summary: summary, projectName: projectName),
           const SizedBox(height: 12),
+          if (state.error != null) ...[
+            _ListError(
+              message: state.error!,
+              onRetry:
+                  () => ref.read(procurementProvider.notifier).loadSummary(),
+            ),
+            const SizedBox(height: 8),
+          ],
           if (projectId != null && compactAction) ...[
             SizedBox(
               width: double.infinity,
@@ -198,6 +206,10 @@ class _ProcurementScreenState extends ConsumerState<ProcurementScreen> {
                       ),
             ),
             const SizedBox(height: 8),
+            if (state.ordersShowingPreviousQuery)
+              const _PreviousResultsNotice(),
+            if (state.loadingOrders && state.orders.items.isNotEmpty)
+              const LinearProgressIndicator(),
             if (state.ordersError != null)
               _ListError(
                 message: state.ordersError!,
@@ -217,9 +229,11 @@ class _ProcurementScreenState extends ConsumerState<ProcurementScreen> {
                 ),
               ),
             ),
-            if (state.orders.hasMore || state.loadingOrders)
+            if (state.orders.hasMore &&
+                !state.loadingOrders &&
+                !state.ordersShowingPreviousQuery)
               _LoadMoreButton(
-                loading: state.loadingOrders,
+                loading: false,
                 onPressed:
                     () =>
                         ref.read(procurementProvider.notifier).loadMoreOrders(),
@@ -256,6 +270,10 @@ class _ProcurementScreenState extends ConsumerState<ProcurementScreen> {
                       ),
             ),
             const SizedBox(height: 8),
+            if (state.requestsShowingPreviousQuery)
+              const _PreviousResultsNotice(),
+            if (state.loadingRequests && state.requests.items.isNotEmpty)
+              const LinearProgressIndicator(),
             if (state.requestsError != null)
               _ListError(
                 message: state.requestsError!,
@@ -276,9 +294,11 @@ class _ProcurementScreenState extends ConsumerState<ProcurementScreen> {
                 ),
               ),
             ),
-            if (state.requests.hasMore || state.loadingRequests)
+            if (state.requests.hasMore &&
+                !state.loadingRequests &&
+                !state.requestsShowingPreviousQuery)
               _LoadMoreButton(
-                loading: state.loadingRequests,
+                loading: false,
                 onPressed:
                     () =>
                         ref
@@ -2036,5 +2056,18 @@ class _FilteredListEmpty extends StatelessWidget {
   Widget build(BuildContext context) => const Padding(
     padding: EdgeInsets.symmetric(vertical: 12),
     child: Text('По выбранным фильтрам записей нет.'),
+  );
+}
+
+class _PreviousResultsNotice extends StatelessWidget {
+  const _PreviousResultsNotice();
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(bottom: 8),
+    child: Text(
+      'Показаны результаты предыдущего запроса.',
+      style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
+    ),
   );
 }

@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:prohelpers_mobile/core/network/api_exception.dart';
 import 'package:prohelpers_mobile/features/module_companions/data/companion_module_model.dart';
 import 'package:prohelpers_mobile/features/module_companions/data/companion_module_repository.dart';
 import 'package:prohelpers_mobile/features/module_companions/domain/companion_module_provider.dart';
@@ -45,10 +48,14 @@ class _FakeCompanionNotifier extends CompanionModuleNotifier {
     String? itemStatus,
     String? statusLabel,
     String? itemTitle,
+    bool requiresComment = false,
+    bool relatedRequiresComment = false,
   }) : _moduleSlug = moduleSlug,
        _itemStatus = itemStatus,
        _statusLabel = statusLabel,
        _itemTitle = itemTitle,
+       _requiresComment = requiresComment,
+       _relatedRequiresComment = relatedRequiresComment,
        super(_FakeCompanionRepository(), moduleSlug) {
     _setLoadedState(moduleSlug: moduleSlug);
   }
@@ -57,11 +64,20 @@ class _FakeCompanionNotifier extends CompanionModuleNotifier {
   final String? _itemStatus;
   final String? _statusLabel;
   final String? _itemTitle;
+  final bool _requiresComment;
+  final bool _relatedRequiresComment;
   String? query;
   String? status;
   String? action;
   String? executiveAction;
   int? executiveDocumentId;
+  int actionCalls = 0;
+  int executiveActionCalls = 0;
+  int detailCalls = 0;
+  final List<String?> actionComments = [];
+  final List<String?> executiveComments = [];
+  final List<Object> actionErrors = [];
+  Completer<void>? actionCompleter;
   int loadCalls = 0;
 
   @override
@@ -87,9 +103,16 @@ class _FakeCompanionNotifier extends CompanionModuleNotifier {
 
   @override
   Future<CompanionModuleDetailModel> fetchDetail(int id) async {
-    return CompanionModuleDetailModel.fromJson(
-      companionDetailJson(slug: _moduleSlug),
+    detailCalls++;
+    final detail = companionDetailJson(slug: _moduleSlug);
+    _setRequiresComment(
+      detail['item'] as Map<String, dynamic>,
+      _requiresComment,
     );
+    final relatedItems = detail['related_items'] as List<dynamic>;
+    final relatedItem = relatedItems.single as Map<String, dynamic>;
+    _setRequiresComment(relatedItem, _relatedRequiresComment);
+    return CompanionModuleDetailModel.fromJson(detail);
   }
 
   @override
@@ -98,6 +121,11 @@ class _FakeCompanionNotifier extends CompanionModuleNotifier {
     required String action,
     String? comment,
   }) async {
+    actionCalls++;
+    actionComments.add(comment);
+    final completer = actionCompleter;
+    if (completer != null) await completer.future;
+    if (actionErrors.isNotEmpty) throw actionErrors.removeAt(0);
     this.action = action;
     return CompanionModuleDetailModel.fromJson(companionDetailJson());
   }
@@ -110,6 +138,11 @@ class _FakeCompanionNotifier extends CompanionModuleNotifier {
     int? versionId,
     String? severity,
   }) async {
+    executiveActionCalls++;
+    executiveComments.add(comment);
+    final completer = actionCompleter;
+    if (completer != null) await completer.future;
+    if (actionErrors.isNotEmpty) throw actionErrors.removeAt(0);
     executiveAction = action;
     executiveDocumentId = documentId;
   }
@@ -126,11 +159,29 @@ class _FakeCompanionNotifier extends CompanionModuleNotifier {
     if (_itemTitle != null) {
       item['title'] = _itemTitle;
     }
+    _setRequiresComment(item as Map<String, dynamic>, _requiresComment);
     state = CompanionModuleState(
       isLoading: false,
       projectId: projectId,
       list: CompanionModuleListModel.fromJson(listJson),
     );
+  }
+
+  void showStaleListForQuery() {
+    final listJson = companionListJson(slug: _moduleSlug, lastPage: 2);
+    state = state.copyWith(
+      list: CompanionModuleListModel.fromJson(listJson),
+      query: 'new query',
+      showingStaleList: true,
+      error: 'Нет соединения',
+    );
+  }
+
+  void _setRequiresComment(Map<String, dynamic> item, bool requiresComment) {
+    final actions = item['available_actions'] as List<dynamic>?;
+    if (actions == null || actions.isEmpty) return;
+    (actions.first as Map<String, dynamic>)['requires_comment'] =
+        requiresComment;
   }
 }
 
@@ -234,6 +285,33 @@ void main() {
     expect(notifier.status, 'draft');
   });
 
+  testWidgets('labels previous companion list after offline search', (
+    tester,
+  ) async {
+    final notifier = _FakeCompanionNotifier();
+    await tester.pumpWidget(
+      buildApp(
+        const CompanionModuleScreen(
+          moduleSlug: 'contract-management',
+          title: 'Договоры',
+          icon: Icons.assignment_outlined,
+        ),
+        notifier,
+      ),
+    );
+    await tester.pump();
+
+    notifier.showStaleListForQuery();
+    await tester.pump();
+
+    expect(find.text('C-001'), findsOneWidget);
+    expect(
+      find.textContaining('может не учитывать текущие фильтры'),
+      findsOneWidget,
+    );
+    expect(find.text('Загрузить ещё'), findsNothing);
+  });
+
   testWidgets('requires a selected project for field workflow lists', (
     tester,
   ) async {
@@ -282,6 +360,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(notifier.action, 'submit');
+    await tester.tap(find.text('Готово'));
+    await tester.pumpAndSettle();
     await tester.scrollUntilVisible(
       find.text('Связанные записи'),
       250,
@@ -361,6 +441,293 @@ void main() {
 
     expect(notifier.executiveAction, 'approve');
     expect(notifier.executiveDocumentId, 7);
+    await tester.tap(find.text('Готово'));
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('cancelling optional action sends no request', (tester) async {
+    final notifier = _FakeCompanionNotifier();
+    await tester.pumpWidget(
+      buildApp(
+        const CompanionModuleDetailScreen(
+          moduleSlug: 'contract-management',
+          title: 'Договоры',
+          icon: Icons.assignment_outlined,
+          itemId: 42,
+        ),
+        notifier,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Отправить на оценку'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Отмена'));
+    await tester.pumpAndSettle();
+
+    expect(notifier.actionCalls, 0);
+  });
+
+  testWidgets('barrier dismissal of optional action sends no request', (
+    tester,
+  ) async {
+    final notifier = _FakeCompanionNotifier();
+    await tester.pumpWidget(
+      buildApp(
+        const CompanionModuleDetailScreen(
+          moduleSlug: 'contract-management',
+          title: 'Договоры',
+          icon: Icons.assignment_outlined,
+          itemId: 42,
+        ),
+        notifier,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Отправить на оценку'));
+    await tester.pumpAndSettle();
+    await tester.tapAt(const Offset(3, 3));
+    await tester.pumpAndSettle();
+
+    expect(notifier.actionCalls, 0);
+  });
+
+  testWidgets('dismissing required action sends no request', (tester) async {
+    final notifier = _FakeCompanionNotifier(requiresComment: true);
+    await tester.pumpWidget(
+      buildApp(
+        const CompanionModuleDetailScreen(
+          moduleSlug: 'contract-management',
+          title: 'Договоры',
+          icon: Icons.assignment_outlined,
+          itemId: 42,
+        ),
+        notifier,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Отправить на оценку'));
+    await tester.pumpAndSettle();
+    await tester.tapAt(const Offset(3, 3));
+    await tester.pumpAndSettle();
+
+    expect(notifier.actionCalls, 0);
+  });
+
+  testWidgets('cancelling required action sends no request', (tester) async {
+    final notifier = _FakeCompanionNotifier(requiresComment: true);
+    await tester.pumpWidget(
+      buildApp(
+        const CompanionModuleDetailScreen(
+          moduleSlug: 'contract-management',
+          title: 'Договоры',
+          icon: Icons.assignment_outlined,
+          itemId: 42,
+        ),
+        notifier,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Отправить на оценку'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Отмена'));
+    await tester.pumpAndSettle();
+
+    expect(notifier.actionCalls, 0);
+  });
+
+  testWidgets('dismissing optional related action sends no request', (
+    tester,
+  ) async {
+    final notifier = _FakeCompanionNotifier(
+      moduleSlug: 'executive-documentation',
+    );
+    await tester.pumpWidget(
+      buildApp(
+        const CompanionModuleDetailScreen(
+          moduleSlug: 'executive-documentation',
+          title: 'Исполнительная документация',
+          icon: Icons.description_outlined,
+          itemId: 42,
+        ),
+        notifier,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('Согласовать'),
+      250,
+      scrollable: find.byType(Scrollable).last,
+    );
+    await tester.ensureVisible(find.text('Согласовать'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Согласовать'));
+    await tester.pumpAndSettle();
+    await tester.tapAt(const Offset(3, 3));
+    await tester.pumpAndSettle();
+
+    expect(notifier.executiveActionCalls, 0);
+  });
+
+  testWidgets('422 keeps comment and retries same action', (tester) async {
+    final notifier = _FakeCompanionNotifier(requiresComment: true)
+      ..actionErrors.add(
+        const ApiException('Действие отклонено сервером.', statusCode: 422),
+      );
+    await tester.pumpWidget(
+      buildApp(
+        const CompanionModuleDetailScreen(
+          moduleSlug: 'contract-management',
+          title: 'Договоры',
+          icon: Icons.assignment_outlined,
+          itemId: 42,
+        ),
+        notifier,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Отправить на оценку'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Выполнить'));
+    await tester.pumpAndSettle();
+    expect(notifier.actionCalls, 0);
+    expect(find.text('Укажите комментарий к действию.'), findsOneWidget);
+
+    await tester.enterText(
+      find.byKey(const Key('companion-action-comment')),
+      'Подтверждаю корректировку',
+    );
+    await tester.ensureVisible(find.text('Выполнить'));
+    await tester.tap(find.text('Выполнить'));
+    await tester.pumpAndSettle();
+    expect(find.text('Действие отклонено сервером.'), findsOneWidget);
+    expect(
+      tester
+          .widget<TextField>(find.byKey(const Key('companion-action-comment')))
+          .controller!
+          .text,
+      'Подтверждаю корректировку',
+    );
+    await tester.tap(find.text('Повторить'));
+    await tester.pumpAndSettle();
+
+    expect(notifier.actionCalls, 2);
+    expect(notifier.actionComments, [
+      'Подтверждаю корректировку',
+      'Подтверждаю корректировку',
+    ]);
+    expect(find.text('Готово'), findsOneWidget);
+    await tester.tap(find.text('Готово'));
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('rapid taps while action is pending send one request', (
+    tester,
+  ) async {
+    final notifier =
+        _FakeCompanionNotifier()..actionCompleter = Completer<void>();
+    await tester.pumpWidget(
+      buildApp(
+        const CompanionModuleDetailScreen(
+          moduleSlug: 'contract-management',
+          title: 'Договоры',
+          icon: Icons.assignment_outlined,
+          itemId: 42,
+        ),
+        notifier,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Отправить на оценку'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Выполнить'));
+    await tester.pump();
+    await tester.tapAt(const Offset(3, 3));
+    await tester.binding.handlePopRoute();
+    await tester.pump();
+    expect(find.text('Выполняем'), findsOneWidget);
+    final sheetRect = tester.getRect(find.byType(BottomSheet).last);
+    await tester.dragFrom(
+      Offset(sheetRect.center.dx, sheetRect.top + 4),
+      const Offset(0, 500),
+    );
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.text('Выполняем'), findsOneWidget);
+    await tester.tap(find.text('Выполняем'), warnIfMissed: false);
+
+    expect(notifier.actionCalls, 1);
+    notifier.actionCompleter!.complete();
+    await tester.pumpAndSettle();
+    expect(find.text('Готово'), findsOneWidget);
+    final detailCallsBeforeAcknowledgement = notifier.detailCalls;
+    await tester.tapAt(const Offset(3, 3));
+    await tester.pumpAndSettle();
+    expect(find.text('Готово'), findsOneWidget);
+    await tester.tap(find.text('Готово'));
+    await tester.pumpAndSettle();
+    expect(notifier.detailCalls, greaterThan(detailCallsBeforeAcknowledgement));
+  });
+
+  testWidgets('action sheet controls fit narrow viewport at large text scale', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(240, 426);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final notifier = _FakeCompanionNotifier(requiresComment: true);
+    await tester.pumpWidget(
+      buildApp(
+        const CompanionModuleDetailScreen(
+          moduleSlug: 'contract-management',
+          title: 'Договоры',
+          icon: Icons.assignment_outlined,
+          itemId: 42,
+        ),
+        notifier,
+        textScale: 1.3,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Отправить на оценку'));
+    await tester.tap(find.text('Отправить на оценку'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Отмена'));
+    await tester.ensureVisible(find.text('Выполнить'));
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('Отмена'), findsOneWidget);
+    expect(find.text('Выполнить'), findsOneWidget);
+  });
+
+  testWidgets('late action completion after route disposal is safe', (
+    tester,
+  ) async {
+    final notifier =
+        _FakeCompanionNotifier()..actionCompleter = Completer<void>();
+    await tester.pumpWidget(
+      buildApp(
+        const CompanionModuleDetailScreen(
+          moduleSlug: 'contract-management',
+          title: 'Договоры',
+          icon: Icons.assignment_outlined,
+          itemId: 42,
+        ),
+        notifier,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Отправить на оценку'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Выполнить'));
+    await tester.pump();
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+    notifier.actionCompleter!.complete();
+    await tester.pump();
+
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('hides detail and actions after selected project changes', (

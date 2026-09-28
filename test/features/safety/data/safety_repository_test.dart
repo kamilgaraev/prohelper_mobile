@@ -14,6 +14,81 @@ import 'package:prohelpers_mobile/features/safety/data/safety_repository.dart';
 import '../../../helpers/mobile_integration_test_helpers.dart';
 
 void main() {
+  test('loads mobile briefing resource with project and status filters', () async {
+    final queue = TestDioResponseQueue()..respond(
+      'GET',
+      '/safety-management/briefings',
+      {
+        'success': true,
+        'message': null,
+        'data': [
+          {
+            'id': 14,
+            'project_id': 52,
+            'briefing_number': 'БР-14',
+            'title': 'Инструктаж перед бетонированием',
+            'briefing_type': 'targeted',
+            'status': 'in_progress',
+            'status_label': 'Проводится',
+            'conducted_at': '2026-09-28T08:00:00+03:00',
+            'signature_summary': {
+              'total': 3,
+              'pending': 2,
+              'signed': 1,
+              'refused': 0,
+              'absent': 0,
+              'resolved': 1,
+              'completion_percent': 33,
+              'all_resolved': false,
+            },
+            'available_actions': ['complete'],
+            'topics': ['Работа с насосом'],
+            'problem_flags': [],
+          },
+        ],
+      },
+    );
+    final repository = SafetyRepository(queue.buildDio());
+
+    final briefings = await repository.fetchBriefings(
+      projectId: 52,
+      status: 'in_progress',
+    );
+
+    expect(briefings.single.briefingNumber, 'БР-14');
+    expect(briefings.single.title, 'Инструктаж перед бетонированием');
+    expect(briefings.single.signatureSummary.total, 3);
+    expect(queue.requests.single.path, '/safety-management/briefings');
+    expect(queue.requests.single.queryParameters, {
+      'project_id': 52,
+      'status': 'in_progress',
+    });
+    // The current MobileResponse collection has no pagination meta.
+  });
+
+  test('loads nonempty inspection-finding resource and project filter', () async {
+    final requests = <RequestOptions>[];
+    final dio = Dio(
+      BaseOptions(baseUrl: 'https://mobile-api.test/api/v1/mobile'),
+    )..httpClientAdapter = _FindingResourceAdapter(requests);
+    final findings = await SafetyRepository(dio).fetchInspectionFindings(
+      projectId: 52,
+      status: 'open',
+    );
+
+    expect(findings.single.findingNumber, 'ЗН-27');
+    expect(findings.single.title, 'Ограждение проёма не закреплено');
+    expect(findings.single.projectId, 52);
+    expect(requests.map((request) => request.path).toSet(), {
+      '/safety-management/inspection-findings',
+    });
+    expect(requests.first.queryParameters['project_id'], 52);
+    expect(requests.first.queryParameters['status'], 'open');
+    expect(requests.first.queryParameters['per_page'], 100);
+    expect(requests.first.queryParameters['page'], 1);
+    // This MobileResponse collection omits paginator meta; client stops on empty page.
+  });
+
   test('loads all pages for the four safety registries', () async {
     final paths = [
       '/safety-management/incidents',
@@ -216,6 +291,54 @@ void main() {
       expect(await store.all(), isEmpty);
     },
   );
+}
+
+class _FindingResourceAdapter implements HttpClientAdapter {
+  _FindingResourceAdapter(this.requests);
+
+  final List<RequestOptions> requests;
+
+  @override
+  void close({bool force = false}) {}
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) async {
+    await requestStream?.drain<void>();
+    requests.add(options);
+    final page = int.tryParse(options.queryParameters['page'].toString()) ?? 1;
+    final rows = page == 1
+        ? [
+            {
+              'id': 27,
+              'organization_id': 38,
+              'project_id': 52,
+              'inspection_id': 11,
+              'inspection_item_id': 4,
+              'assigned_to_user_id': 39,
+              'created_by_user_id': 39,
+              'finding_number': 'ЗН-27',
+              'title': 'Ограждение проёма не закреплено',
+              'description': 'Требуется закрепить секцию.',
+              'severity': 'high',
+              'status': 'open',
+              'status_label': 'Открыто',
+              'due_date': '2026-09-30',
+              'evidence_files': [],
+              'problem_flags': [],
+              'metadata': {},
+            },
+          ]
+        : <Map<String, dynamic>>[];
+    return ResponseBody.fromString(
+      jsonEncode({'success': true, 'message': null, 'data': rows}),
+      200,
+      headers: {Headers.contentTypeHeader: [Headers.jsonContentType]},
+    );
+  }
 }
 
 class _SafetyPaginationAdapter implements HttpClientAdapter {

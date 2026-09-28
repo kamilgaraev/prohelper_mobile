@@ -289,6 +289,46 @@ void main() {
     await tester.pump(const Duration(milliseconds: 400));
   }
 
+  testWidgets('quality metric grid adapts to narrow and regular widths', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(240, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final repository = _RecordingQualityRepository();
+    await tester.pumpWidget(buildScreen(repository, textScale: 1.3));
+    await pumpUi(tester);
+
+    final tiles = find.byType(ProMetricTile);
+    expect(tiles, findsNWidgets(3));
+    for (final label in ['Открыто', 'Проверка', 'Критично']) {
+      expect(
+        find.descendant(of: tiles, matching: find.text(label)),
+        findsOneWidget,
+      );
+    }
+    expect(
+      tester.getTopLeft(tiles.at(1)).dy,
+      greaterThan(tester.getBottomLeft(tiles.first).dy),
+    );
+    expect(tester.takeException(), isNull);
+
+    tester.view.physicalSize = const Size(360, 900);
+    await tester.pumpWidget(buildScreen(repository));
+    await pumpUi(tester);
+    expect(
+      tester.getTopLeft(tiles.at(1)).dy,
+      closeTo(tester.getTopLeft(tiles.first).dy, 1),
+    );
+    expect(
+      tester.getTopLeft(tiles.at(2)).dy,
+      greaterThan(tester.getBottomLeft(tiles.first).dy),
+    );
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('keeps create action and metrics readable on compact screen', (
     tester,
   ) async {
@@ -555,6 +595,8 @@ void main() {
     await tester.pumpWidget(buildScreen(repository));
     await pumpUi(tester);
 
+    await tester.ensureVisible(find.text('Подробнее').first);
+    await tester.pump();
     await tester.tap(find.text('Подробнее').first);
     await pumpUi(tester);
 

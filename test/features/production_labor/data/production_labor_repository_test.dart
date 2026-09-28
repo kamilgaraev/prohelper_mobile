@@ -1,12 +1,212 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:isar/isar.dart';
+import 'package:prohelpers_mobile/core/network/api_exception.dart';
 import 'package:prohelpers_mobile/core/sync/queued_sync_operation.dart';
 import 'package:prohelpers_mobile/core/sync/sync_queue_service.dart';
 import 'package:prohelpers_mobile/core/sync/sync_queue_store.dart';
 import 'package:prohelpers_mobile/features/production_labor/data/production_labor_repository.dart';
 
 void main() {
+  test(
+    'создаёт табель по mobile HTTP-контракту и читает resource response',
+    () async {
+      final requests = <RequestOptions>[];
+      final dio = Dio(
+        BaseOptions(baseUrl: 'https://mobile-api.test/api/v1/mobile'),
+      );
+      dio.interceptors.add(
+        InterceptorsWrapper(
+          onRequest: (options, handler) {
+            requests.add(options);
+            handler.resolve(
+              Response<dynamic>(
+                requestOptions: options,
+                statusCode: 201,
+                data: {
+                  'success': true,
+                  'data': {
+                    'id': 501,
+                    'work_order_id': 42,
+                    'shift_date': '2026-09-28',
+                    'status_label': 'На проверке',
+                    'total_hours': 7.5,
+                  },
+                },
+              ),
+            );
+          },
+        ),
+      );
+
+      final result = await ProductionLaborRepository(dio).createTimesheet(
+        workOrderId: 42,
+        workOrderLineId: 7,
+        hours: 7.5,
+        shiftDate: '2026-09-28',
+        includeInPayroll: true,
+        employeeId: 19,
+        workerName: '  Иван Петров  ',
+        safetyPermitReference: '  WP-31  ',
+      );
+
+      expect(requests, hasLength(1));
+      expect(requests.single.method, 'POST');
+      expect(requests.single.path, '/production-labor/timesheets');
+      expect(requests.single.data, {
+        'work_order_id': 42,
+        'shift_date': '2026-09-28',
+        'entries': [
+          {
+            'work_order_line_id': 7,
+            'include_in_payroll': true,
+            'employee_id': 19,
+            'worker_name': 'Иван Петров',
+            'hours': 7.5,
+            'safety_permit_reference': 'WP-31',
+          },
+        ],
+      });
+      expect(result.id, 501);
+      expect(result.workOrderId, 42);
+      expect(result.shiftDate, '2026-09-28');
+      expect(result.totalHours, 7.5);
+    },
+  );
+
+  test(
+    'табель преобразует backend validation и permission ответы в ApiException',
+    () async {
+      for (final status in [422, 403]) {
+        final dio = Dio(
+          BaseOptions(baseUrl: 'https://mobile-api.test/api/v1/mobile'),
+        );
+        dio.interceptors.add(
+          InterceptorsWrapper(
+            onRequest: (options, handler) {
+              handler.reject(
+                DioException(
+                  requestOptions: options,
+                  type: DioExceptionType.badResponse,
+                  response: Response<dynamic>(
+                    requestOptions: options,
+                    statusCode: status,
+                    data: {
+                      'success': false,
+                      'message': 'Недостаточно прав или неверные данные.',
+                      if (status == 422)
+                        'errors': {
+                          'entries.0.hours': ['Поле обязательно.'],
+                        },
+                    },
+                  ),
+                ),
+              );
+            },
+          ),
+        );
+
+        await expectLater(
+          ProductionLaborRepository(dio).createTimesheet(
+            workOrderId: 42,
+            workOrderLineId: 7,
+            hours: 7.5,
+            shiftDate: '2026-09-28',
+            includeInPayroll: false,
+          ),
+          throwsA(
+            isA<ApiException>().having(
+              (error) => error.statusCode,
+              'status',
+              status,
+            ),
+          ),
+        );
+      }
+    },
+  );
+
+  test(
+    'передаёт output fact и разбирает ProductionLaborOutputEntryResource',
+    () async {
+      final requests = <RequestOptions>[];
+      final dio = Dio(
+        BaseOptions(baseUrl: 'https://mobile-api.test/api/v1/mobile'),
+      );
+      dio.interceptors.add(
+        InterceptorsWrapper(
+          onRequest: (options, handler) {
+            requests.add(options);
+            handler.resolve(
+              Response<dynamic>(
+                requestOptions: options,
+                statusCode: 201,
+                data: {
+                  'success': true,
+                  'data': {
+                    'id': 601,
+                    'work_order_id': 42,
+                    'work_order_line_id': 7,
+                    'project_id': 15,
+                    'schedule_task_id': null,
+                    'work_date': '2026-09-28',
+                    'quantity': 2,
+                    'hours': 4,
+                    'status': 'pending',
+                    'status_label': 'На проверке',
+                    'workflow_summary': {
+                      'stage': 'pending',
+                      'status': 'pending',
+                      'stage_label': 'На проверке',
+                      'available_actions': <String>[],
+                      'blockers': <String>[],
+                      'warnings': <String>[],
+                    },
+                    'problem_flags': <String>[],
+                    'available_actions': <String>[],
+                    'comment': 'Проверочный замер',
+                  },
+                },
+              ),
+            );
+          },
+        ),
+      );
+
+      final result = await ProductionLaborRepository(dio).recordOutput(
+        workOrderLineId: 7,
+        quantity: 2,
+        hours: 4,
+        workDate: '2026-09-28',
+        idempotencyKey: 'stable-output-contract-key-601',
+        comment: '  Проверочный замер  ',
+      );
+
+      expect(requests, hasLength(1));
+      expect(requests.single.method, 'POST');
+      expect(requests.single.path, '/production-labor/output-entries');
+      expect(
+        requests.single.headers['Idempotency-Key'],
+        'stable-output-contract-key-601',
+      );
+      expect(requests.single.data, {
+        'idempotency_key': 'stable-output-contract-key-601',
+        'work_order_line_id': 7,
+        'work_date': '2026-09-28',
+        'quantity': 2,
+        'hours': 4,
+        'comment': 'Проверочный замер',
+      });
+      expect(result.id, 601);
+      expect(result.workOrderId, 42);
+      expect(result.workOrderLineId, 7);
+      expect(result.workDate, '2026-09-28');
+      expect(result.quantity, 2);
+      expect(result.hours, 4);
+      expect(result.statusLabel, 'На проверке');
+    },
+  );
+
   test('загружает все страницы нарядов с project_id', () async {
     final requests = <RequestOptions>[];
     final dio = _workOrdersDio(requests, (page) {
@@ -96,6 +296,13 @@ void main() {
       final queued = (await store.all()).single;
       final idempotencyKey = queued.payload['idempotency_key'];
       expect(idempotencyKey, isA<String>());
+      expect(queued.payload, {
+        'idempotency_key': idempotencyKey,
+        'work_order_line_id': 7,
+        'work_date': '2026-09-27',
+        'quantity': 2,
+        'hours': 4,
+      });
       expect(failedRequests.single.headers['Idempotency-Key'], idempotencyKey);
 
       now = now.add(const Duration(minutes: 1));

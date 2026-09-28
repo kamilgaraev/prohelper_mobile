@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
@@ -14,6 +15,8 @@ class _RecordingCompanionRepository extends CompanionModuleRepository {
   _RecordingCompanionRepository({this.error}) : super(Dio());
 
   final Object? error;
+  final List<Object> nextErrors = [];
+  Completer<CompanionModuleListModel>? pendingList;
   String? loadedSlug;
   int? loadedProjectId;
   String? loadedStatus;
@@ -33,6 +36,9 @@ class _RecordingCompanionRepository extends CompanionModuleRepository {
     int page = 1,
     int perPage = 20,
   }) async {
+    if (nextErrors.isNotEmpty) {
+      throw nextErrors.removeAt(0);
+    }
     final currentError = error;
     if (currentError != null) {
       throw currentError;
@@ -44,6 +50,12 @@ class _RecordingCompanionRepository extends CompanionModuleRepository {
     loadedQuery = query;
     loadedPage = page;
     refreshCount++;
+
+    final pending = pendingList;
+    if (pending != null) {
+      pendingList = null;
+      return pending.future;
+    }
 
     return CompanionModuleListModel.fromJson(
       companionListJson(slug: moduleSlug, page: page, lastPage: 2),
@@ -167,6 +179,88 @@ void main() {
 
     expect(repository.loadedPage, 2);
     expect(notifier.state.list?.items.map((item) => item.id), [42]);
+  });
+
+  test(
+    'retains last list after offline search and marks its query stale',
+    () async {
+      final repository = _RecordingCompanionRepository();
+      final notifier = CompanionModuleNotifier(
+        repository,
+        'contract-management',
+      )..syncProject(9);
+      await notifier.load();
+
+      repository.nextErrors.add(const ApiException('Нет соединения'));
+      await notifier.setQuery('new query');
+
+      expect(notifier.state.list?.items.single.id, 42);
+      expect(notifier.state.listQuery, isNull);
+      expect(notifier.state.query, 'new query');
+      expect(notifier.state.showingStaleList, isTrue);
+      expect(notifier.state.error, 'Нет соединения');
+    },
+  );
+
+  test('clears stale companion list after permission denial', () async {
+    final repository = _RecordingCompanionRepository();
+    final notifier = CompanionModuleNotifier(repository, 'contract-management')
+      ..syncProject(9);
+    await notifier.load();
+
+    repository.nextErrors.add(
+      const ApiException('Нет доступа', statusCode: 403),
+    );
+    await notifier.setQuery('restricted');
+
+    expect(notifier.state.list, isNull);
+    expect(notifier.state.showingStaleList, isFalse);
+    expect(notifier.state.permissionDenied, isTrue);
+  });
+
+  test(
+    'does not append a page from a stale query after offline fallback',
+    () async {
+      final repository = _RecordingCompanionRepository();
+      final notifier = CompanionModuleNotifier(
+        repository,
+        'contract-management',
+      )..syncProject(9);
+      await notifier.load();
+      final pendingAppend = Completer<CompanionModuleListModel>();
+      repository.pendingList = pendingAppend;
+      final append = notifier.loadMore();
+
+      repository.nextErrors.add(const ApiException('Нет соединения'));
+      await notifier.setQuery('new query');
+      final nextJson = companionListJson(
+        slug: 'contract-management',
+        page: 2,
+        lastPage: 2,
+      );
+      (nextJson['items'] as List).single['id'] = 43;
+      pendingAppend.complete(CompanionModuleListModel.fromJson(nextJson));
+      await append;
+
+      expect(notifier.state.showingStaleList, isTrue);
+      expect(notifier.state.query, 'new query');
+      expect(notifier.state.list?.items.map((item) => item.id), [42]);
+    },
+  );
+
+  test('clears companion rows after hard failure loading next page', () async {
+    final repository = _RecordingCompanionRepository();
+    final notifier = CompanionModuleNotifier(repository, 'contract-management')
+      ..syncProject(9);
+    await notifier.load();
+    repository.nextErrors.add(
+      const ApiException('Нет доступа', statusCode: 403),
+    );
+
+    await notifier.loadMore();
+
+    expect(notifier.state.list, isNull);
+    expect(notifier.state.permissionDenied, isTrue);
   });
 
   test('marks permission and malformed states', () async {
