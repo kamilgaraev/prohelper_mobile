@@ -1197,10 +1197,10 @@ class _RequestFlowBanner extends StatelessWidget {
 
   String _bannerTitle(String requestType, String priority) {
     final requestLabel = switch (requestType) {
-      'material_request' => 'заявка на материалы',
-      'personnel_request' => 'заявка на персонал',
-      'equipment_request' => 'заявка на технику',
-      _ => 'заявка',
+      'material_request' => 'заявку на материалы',
+      'personnel_request' => 'заявку на персонал',
+      'equipment_request' => 'заявку на технику',
+      _ => 'заявку',
     };
 
     final priorityLabel = switch (priority) {
