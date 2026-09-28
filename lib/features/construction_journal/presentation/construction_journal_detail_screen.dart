@@ -10,6 +10,7 @@ import '../../../core/widgets/app_error_state.dart';
 import '../../../core/widgets/app_loading_state.dart';
 import '../../../core/widgets/industrial_card.dart';
 import '../../../core/widgets/pro_status_banner.dart';
+import '../../projects/domain/projects_provider.dart';
 import '../data/construction_journal_models.dart';
 import '../data/construction_journal_repository.dart';
 import '../domain/construction_journal_provider.dart';
@@ -29,12 +30,18 @@ class ConstructionJournalDetailScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final selectedProjectId = ref.watch(
+      projectsProvider.select((state) => state.selectedProject?.serverId),
+    );
     final scope = (journalId: journalId, projectId: projectId);
     final state = ref.watch(constructionJournalDetailProvider(scope));
     final notifier = ref.read(
       constructionJournalDetailProvider(scope).notifier,
     );
+    bool projectIsCurrent() =>
+        ref.read(projectsProvider).selectedProject?.serverId == projectId;
     Future<void> transition(String action) async {
+      if (!projectIsCurrent() || state.journal?.projectId != projectId) return;
       await ref
           .read(constructionJournalRepositoryProvider)
           .transitionJournal(journalId, action);
@@ -46,17 +53,30 @@ class ConstructionJournalDetailScreen extends ConsumerWidget {
         title: const Text('Карточка журнала'),
         actions: [
           IconButton(
-            onPressed: notifier.load,
+            onPressed: selectedProjectId == projectId ? notifier.load : null,
             icon: const Icon(Icons.refresh_rounded),
           ),
         ],
       ),
       body: RefreshIndicator(
-        onRefresh: notifier.load,
+        onRefresh: () async {
+          if (projectIsCurrent()) await notifier.load();
+        },
         child: CustomScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           slivers: [
-            if (state.isLoading && state.journal == null)
+            if (selectedProjectId != projectId ||
+                (state.journal != null &&
+                    state.journal!.projectId != projectId))
+              const SliverFillRemaining(
+                child: AppEmptyState(
+                  icon: Icons.apartment_outlined,
+                  title: 'Выбран другой объект',
+                  description:
+                      'Вернитесь к списку журналов выбранного объекта.',
+                ),
+              )
+            else if (state.isLoading && state.journal == null)
               const SliverFillRemaining(
                 child: AppLoadingState(message: 'Загружаем журнал'),
               )
@@ -151,6 +171,10 @@ class ConstructionJournalDetailScreen extends ConsumerWidget {
                             ))
                               ElevatedButton.icon(
                                 onPressed: () async {
+                                  if (!projectIsCurrent() ||
+                                      state.journal!.projectId != projectId) {
+                                    return;
+                                  }
                                   final created = await Navigator.of(
                                     context,
                                   ).push<bool>(
@@ -158,11 +182,12 @@ class ConstructionJournalDetailScreen extends ConsumerWidget {
                                       builder:
                                           (_) => JournalEntryFormScreen(
                                             journalId: journalId,
+                                            projectId: projectId,
                                           ),
                                     ),
                                   );
 
-                                  if (created == true) {
+                                  if (created == true && projectIsCurrent()) {
                                     await notifier.load();
                                   }
                                 },
@@ -174,6 +199,10 @@ class ConstructionJournalDetailScreen extends ConsumerWidget {
                             ))
                               OutlinedButton.icon(
                                 onPressed: () async {
+                                  if (!projectIsCurrent() ||
+                                      state.journal!.projectId != projectId) {
+                                    return;
+                                  }
                                   final updated = await Navigator.of(
                                     context,
                                   ).push<bool>(
@@ -185,7 +214,7 @@ class ConstructionJournalDetailScreen extends ConsumerWidget {
                                     ),
                                   );
 
-                                  if (updated == true) {
+                                  if (updated == true && projectIsCurrent()) {
                                     await notifier.load();
                                   }
                                 },
@@ -197,6 +226,10 @@ class ConstructionJournalDetailScreen extends ConsumerWidget {
                             ))
                               OutlinedButton.icon(
                                 onPressed: () async {
+                                  if (!projectIsCurrent() ||
+                                      state.journal!.projectId != projectId) {
+                                    return;
+                                  }
                                   await _showExportRangeDialog(
                                     context,
                                     ref,
@@ -301,16 +334,24 @@ class ConstructionJournalDetailScreen extends ConsumerWidget {
                         padding: const EdgeInsets.only(bottom: 12),
                         child: IndustrialCard(
                           onTap:
-                              () => Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder:
-                                      (_) => JournalEntryDetailScreen(
-                                        journalId: journalId,
-                                        entryId: entry.id,
-                                        projectId: projectId,
+                              !projectIsCurrent()
+                                  ? null
+                                  : () {
+                                    if (!projectIsCurrent() ||
+                                        state.journal?.projectId != projectId) {
+                                      return;
+                                    }
+                                    Navigator.of(context).push(
+                                      MaterialPageRoute(
+                                        builder:
+                                            (_) => JournalEntryDetailScreen(
+                                              journalId: journalId,
+                                              entryId: entry.id,
+                                              projectId: projectId,
+                                            ),
                                       ),
-                                ),
-                              ),
+                                    );
+                                  },
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
@@ -548,6 +589,13 @@ Future<void> _showExportRangeDialog(
                     isExporting
                         ? null
                         : () async {
+                          if (ref
+                                  .read(projectsProvider)
+                                  .selectedProject
+                                  ?.serverId !=
+                              journal.projectId) {
+                            return;
+                          }
                           if (dateTo.isBefore(dateFrom)) {
                             ScaffoldMessenger.of(dialogContext).showSnackBar(
                               const SnackBar(

@@ -53,7 +53,7 @@ class _ProjectsNotifier extends ProjectsNotifier {
 class _DailyPlansNotifier extends DailyWorkPlansNotifier {
   _DailyPlansNotifier(super._repository, {this.factError, this.plan})
     : super() {
-    state = DailyWorkPlansState(plans: [plan ?? _dailyPlan]);
+    state = DailyWorkPlansState(projectId: 15, plans: [plan ?? _dailyPlan]);
   }
 
   final Object? factError;
@@ -458,6 +458,7 @@ void main() {
             scheduleDetailProvider.overrideWith(
               (ref, scheduleId) => _DetailNotifier(repository),
             ),
+            projectsProvider.overrideWith((ref) => _ProjectsNotifier()),
             authProvider.overrideWith(
               (ref) => TestAuthNotifier(
                 user: _testUser(),

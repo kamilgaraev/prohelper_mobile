@@ -37,23 +37,56 @@ class JournalEntryDetailScreen extends ConsumerStatefulWidget {
 class _JournalEntryDetailScreenState
     extends ConsumerState<JournalEntryDetailScreen> {
   String? _activeAction;
+  int? _projectId;
+
+  @override
+  void initState() {
+    super.initState();
+    _projectId =
+        widget.projectId ??
+        ref.read(projectsProvider).selectedProject?.serverId;
+  }
+
+  bool get _isProjectCurrent =>
+      mounted &&
+      _projectId != null &&
+      ref.read(projectsProvider).selectedProject?.serverId == _projectId;
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<int?>(
+      projectsProvider.select((state) => state.selectedProject?.serverId),
+      (previous, next) {
+        if (widget.projectId == null && _projectId == null && next != null) {
+          setState(() => _projectId = next);
+        }
+      },
+    );
     final navigator = Navigator.of(context);
     final scaffoldMessenger = ScaffoldMessenger.of(context);
     final journalId = widget.journalId;
     final entryId = widget.entryId;
-    final projectId = widget.projectId;
-    final scope = (
-      entryId: entryId,
-      projectId:
-          projectId ?? ref.watch(projectsProvider).selectedProject?.serverId,
+    final selectedProjectId = ref.watch(
+      projectsProvider.select((state) => state.selectedProject?.serverId),
     );
+    final projectId = _projectId;
+    final projectMatches = projectId != null && selectedProjectId == projectId;
+    final scope = (entryId: entryId, projectId: projectId);
     final state = ref.watch(constructionJournalEntryDetailProvider(scope));
     final notifier = ref.read(
       constructionJournalEntryDetailProvider(scope).notifier,
     );
+
+    if (!projectMatches) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Запись журнала')),
+        body: const AppEmptyState(
+          icon: Icons.apartment_outlined,
+          title: 'Выбран другой объект',
+          description: 'Откройте запись из журнала выбранного объекта.',
+        ),
+      );
+    }
 
     if (state.isLoading && state.entry == null) {
       return const Scaffold(
@@ -82,19 +115,29 @@ class _JournalEntryDetailScreenState
     }
 
     final entry = state.entry!;
+    if (entry.id != entryId || entry.journalId != journalId) {
+      return const Scaffold(
+        body: AppEmptyState(
+          icon: Icons.event_note_outlined,
+          title: 'Запись не найдена',
+        ),
+      );
+    }
 
     return Scaffold(
       appBar: AppBar(
         title: Text('Запись №${entry.entryNumber}'),
         actions: [
           IconButton(
-            onPressed: notifier.load,
+            onPressed: _isProjectCurrent ? notifier.load : null,
             icon: const Icon(Icons.refresh_rounded),
           ),
         ],
       ),
       body: RefreshIndicator(
-        onRefresh: notifier.load,
+        onRefresh: () async {
+          if (_isProjectCurrent) await notifier.load();
+        },
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
@@ -276,18 +319,29 @@ class _JournalEntryDetailScreenState
                 if (entry.hasAction(ConstructionJournalActionKeys.update))
                   OutlinedButton.icon(
                     onPressed:
-                        _activeAction == null
+                        _activeAction == null &&
+                                projectMatches &&
+                                entry.id == entryId &&
+                                entry.journalId == journalId
                             ? () async {
+                              if (!_isProjectCurrent ||
+                                  entry.id != entryId ||
+                                  entry.journalId != journalId) {
+                                return;
+                              }
                               final updated = await navigator.push<bool>(
                                 MaterialPageRoute(
                                   builder:
                                       (_) => JournalEntryFormScreen(
                                         journalId: journalId,
+                                        projectId: scope.projectId,
                                         initialEntry: entry,
                                       ),
                                 ),
                               );
-                              if (updated == true && mounted) {
+                              if (updated == true &&
+                                  mounted &&
+                                  _isProjectCurrent) {
                                 await notifier.load();
                               }
                             }
@@ -298,7 +352,10 @@ class _JournalEntryDetailScreenState
                 if (entry.hasAction(ConstructionJournalActionKeys.submit))
                   ElevatedButton.icon(
                     onPressed:
-                        _activeAction == null
+                        _activeAction == null &&
+                                projectMatches &&
+                                entry.id == entryId &&
+                                entry.journalId == journalId
                             ? () async => _runAction('submit', () async {
                               await ref
                                   .read(constructionJournalRepositoryProvider)
@@ -312,7 +369,10 @@ class _JournalEntryDetailScreenState
                 if (entry.hasAction(ConstructionJournalActionKeys.approve))
                   ElevatedButton.icon(
                     onPressed:
-                        _activeAction == null
+                        _activeAction == null &&
+                                projectMatches &&
+                                entry.id == entryId &&
+                                entry.journalId == journalId
                             ? () async => _runAction('approve', () async {
                               await ref
                                   .read(constructionJournalRepositoryProvider)
@@ -329,19 +389,29 @@ class _JournalEntryDetailScreenState
                 if (entry.hasAction(ConstructionJournalActionKeys.reject))
                   OutlinedButton.icon(
                     onPressed:
-                        _activeAction == null
-                            ? () => _showRejectDialog(
-                              context,
-                              onReject:
-                                  (reason) => _runAction('reject', () async {
-                                    await ref
-                                        .read(
-                                          constructionJournalRepositoryProvider,
-                                        )
-                                        .rejectEntry(entryId, reason);
-                                    await notifier.load();
-                                  }),
-                            )
+                        _activeAction == null &&
+                                projectMatches &&
+                                entry.id == entryId &&
+                                entry.journalId == journalId
+                            ? () {
+                              if (!_isProjectCurrent ||
+                                  entry.id != entryId ||
+                                  entry.journalId != journalId) {
+                                return;
+                              }
+                              _showRejectDialog(
+                                context,
+                                onReject:
+                                    (reason) => _runAction('reject', () async {
+                                      await ref
+                                          .read(
+                                            constructionJournalRepositoryProvider,
+                                          )
+                                          .rejectEntry(entryId, reason);
+                                      await notifier.load();
+                                    }),
+                              );
+                            }
                             : null,
                     icon: const Icon(Icons.close_rounded),
                     label: const Text('Отклонить'),
@@ -349,7 +419,10 @@ class _JournalEntryDetailScreenState
                 if (entry.hasAction(ConstructionJournalActionKeys.delete))
                   OutlinedButton.icon(
                     onPressed:
-                        _activeAction == null
+                        _activeAction == null &&
+                                projectMatches &&
+                                entry.id == entryId &&
+                                entry.journalId == journalId
                             ? () async => _runAction('delete', () async {
                               await ref
                                   .read(constructionJournalRepositoryProvider)
@@ -365,7 +438,10 @@ class _JournalEntryDetailScreenState
                 ))
                   OutlinedButton.icon(
                     onPressed:
-                        _activeAction == null
+                        _activeAction == null &&
+                                projectMatches &&
+                                entry.id == entryId &&
+                                entry.journalId == journalId
                             ? () async => _runAction('export', () async {
                               final url = await ref
                                   .read(constructionJournalRepositoryProvider)
@@ -397,7 +473,7 @@ class _JournalEntryDetailScreenState
     String action,
     Future<void> Function() perform,
   ) async {
-    if (_activeAction != null) return false;
+    if (_activeAction != null || !_isProjectCurrent) return false;
     setState(() => _activeAction = action);
     try {
       await perform();

@@ -16,6 +16,7 @@ const _sentinel = Object();
 
 class ConstructionJournalState {
   const ConstructionJournalState({
+    this.projectId,
     this.isLoading = false,
     this.items = const [],
     this.summary = const ConstructionJournalSummary(),
@@ -27,6 +28,7 @@ class ConstructionJournalState {
     this.error,
   });
 
+  final int? projectId;
   final bool isLoading;
   final List<ConstructionJournalModel> items;
   final ConstructionJournalSummary summary;
@@ -38,6 +40,7 @@ class ConstructionJournalState {
   final String? error;
 
   ConstructionJournalState copyWith({
+    int? projectId,
     bool? isLoading,
     List<ConstructionJournalModel>? items,
     ConstructionJournalSummary? summary,
@@ -49,6 +52,7 @@ class ConstructionJournalState {
     Object? error = _sentinel,
   }) {
     return ConstructionJournalState(
+      projectId: projectId ?? this.projectId,
       isLoading: isLoading ?? this.isLoading,
       items: items ?? this.items,
       summary: summary ?? this.summary,
@@ -78,28 +82,27 @@ class ConstructionJournalNotifier
   final ConstructionJournalRepository _repository;
   final ConstructionJournalSnapshotAdapter? _snapshotAdapter;
   final bool Function()? _isOnline;
+  int _loadRevision = 0;
 
   bool get isLoading => state.isLoading;
 
   Future<void> load({required int? projectId}) async {
+    final revision = ++_loadRevision;
     if (projectId == null) {
-      state = state.copyWith(
-        isLoading: false,
-        items: const [],
-        permissionDenied: false,
-        fromCache: false,
-        hasDirtyLocal: false,
-        error: 'Сначала выберите объект.',
-        project: null,
-      );
+      state = ConstructionJournalState(error: 'Сначала выберите объект.');
       return;
     }
 
-    state = state.copyWith(
-      isLoading: true,
-      permissionDenied: false,
-      error: null,
-    );
+    final changedProject = state.projectId != projectId;
+    state =
+        changedProject
+            ? ConstructionJournalState(projectId: projectId, isLoading: true)
+            : state.copyWith(
+              projectId: projectId,
+              isLoading: true,
+              permissionDenied: false,
+              error: null,
+            );
 
     try {
       final snapshotAdapter = _snapshotAdapter;
@@ -108,9 +111,11 @@ class ConstructionJournalNotifier
           online: _isOnline?.call() ?? false,
           projectId: projectId,
         );
+        if (!mounted || revision != _loadRevision) return;
         final payload = read.data;
         final denied = read.presence == SnapshotPresence.permissionDenied;
         state = state.copyWith(
+          projectId: projectId,
           isLoading: false,
           items: denied ? const [] : (payload?.items ?? const []),
           summary:
@@ -128,7 +133,9 @@ class ConstructionJournalNotifier
         return;
       }
       final payload = await _repository.fetchJournals(projectId: projectId);
+      if (!mounted || revision != _loadRevision) return;
       state = state.copyWith(
+        projectId: projectId,
         isLoading: false,
         fromCache: false,
         hasDirtyLocal: false,
@@ -138,7 +145,9 @@ class ConstructionJournalNotifier
         project: payload.project,
       );
     } catch (error) {
+      if (!mounted || revision != _loadRevision) return;
       state = state.copyWith(
+        projectId: projectId,
         isLoading: false,
         permissionDenied: _isPermissionDenied(error),
         fromCache: false,

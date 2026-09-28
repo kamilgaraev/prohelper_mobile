@@ -27,6 +27,7 @@ class _JournalNotifier extends ConstructionJournalNotifier {
             ]
             : const <ConstructionJournalActionModel>[];
     state = ConstructionJournalState(
+      projectId: 9,
       availableActions: actions,
       items: [
         ConstructionJournalModel(
@@ -52,8 +53,18 @@ class _JournalNotifier extends ConstructionJournalNotifier {
     );
   }
 
+  final requestedProjects = <int?>[];
+
   @override
-  Future<void> load({required int? projectId}) async {}
+  Future<void> load({required int? projectId}) async {
+    requestedProjects.add(projectId);
+    if (projectId != 9) {
+      state = ConstructionJournalState(
+        projectId: projectId,
+        isLoading: projectId != null,
+      );
+    }
+  }
 }
 
 class _ProjectsRepository extends ProjectsRepository {
@@ -73,9 +84,51 @@ class _ProjectsNotifier extends ProjectsNotifier {
       selectedProject: selected,
     );
   }
+
+  void select(int id, String name) {
+    final selected =
+        Project()
+          ..serverId = id
+          ..name = name
+          ..address = 'Площадка $id';
+    state = state.copyWith(selectedProject: selected);
+  }
 }
 
 void main() {
+  testWidgets(
+    'retained journal screen reloads and hides previous project data',
+    (tester) async {
+      final projects = _ProjectsNotifier();
+      final journal = _JournalNotifier();
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            projectsProvider.overrideWith((ref) => projects),
+            constructionJournalProvider.overrideWith((ref) => journal),
+          ],
+          child: const MaterialApp(home: ConstructionJournalScreen()),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('Журнал_монтажных_работ_северного_корпуса_секции_А'),
+        findsOneWidget,
+      );
+
+      projects.select(52, 'Корпус 52');
+      await tester.pump();
+
+      expect(journal.requestedProjects, contains(52));
+      expect(
+        find.text('Журнал_монтажных_работ_северного_корпуса_секции_А'),
+        findsNothing,
+      );
+      expect(find.text('Загружаем журналы работ'), findsOneWidget);
+    },
+  );
+
   testWidgets('journal card shows long title above status on compact screen', (
     tester,
   ) async {

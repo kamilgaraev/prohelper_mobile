@@ -7,6 +7,8 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../core/utils/quantity_format.dart';
 import '../../auth/domain/auth_provider.dart';
+import '../../projects/domain/projects_provider.dart';
+import '../../../core/network/api_exception.dart';
 import '../../../core/widgets/app_empty_state.dart';
 import '../../../core/widgets/app_error_state.dart';
 import '../../../core/widgets/app_loading_state.dart';
@@ -73,10 +75,13 @@ class _ScheduleDetailsScreenState extends ConsumerState<ScheduleDetailsScreen> {
     ScheduleDetailsModel detail, [
     ScheduleTaskModel? task,
   ]) async {
-    final name = TextEditingController(text: task?.name ?? '');
-    final description = TextEditingController(text: task?.description ?? '');
-    final start = TextEditingController(text: task?.plannedStartDate ?? '');
-    final end = TextEditingController(text: task?.plannedEndDate ?? '');
+    final initialAuth = ref.read(authProvider);
+    final sessionIdentity =
+        initialAuth is AuthAuthenticated ? initialAuth.sessionIdentity : null;
+    var name = task?.name ?? '';
+    var description = task?.description ?? '';
+    var start = task?.plannedStartDate ?? '';
+    var end = task?.plannedEndDate ?? '';
     final form = GlobalKey<FormState>();
     final payload = await showDialog<Map<String, dynamic>>(
       context: context,
@@ -90,7 +95,8 @@ class _ScheduleDetailsScreenState extends ConsumerState<ScheduleDetailsScreen> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     TextFormField(
-                      controller: name,
+                      initialValue: name,
+                      onChanged: (value) => name = value,
                       decoration: const InputDecoration(labelText: 'Название'),
                       validator:
                           (value) =>
@@ -99,18 +105,21 @@ class _ScheduleDetailsScreenState extends ConsumerState<ScheduleDetailsScreen> {
                                   : null,
                     ),
                     TextFormField(
-                      controller: description,
+                      initialValue: description,
+                      onChanged: (value) => description = value,
                       decoration: const InputDecoration(labelText: 'Описание'),
                       maxLines: 3,
                     ),
                     TextFormField(
-                      controller: start,
+                      initialValue: start,
+                      onChanged: (value) => start = value,
                       decoration: const InputDecoration(
                         labelText: 'Начало (ГГГГ-ММ-ДД)',
                       ),
                     ),
                     TextFormField(
-                      controller: end,
+                      initialValue: end,
+                      onChanged: (value) => end = value,
                       decoration: const InputDecoration(
                         labelText: 'Окончание (ГГГГ-ММ-ДД)',
                       ),
@@ -128,12 +137,12 @@ class _ScheduleDetailsScreenState extends ConsumerState<ScheduleDetailsScreen> {
                 onPressed: () {
                   if (form.currentState!.validate()) {
                     Navigator.pop(dialogContext, <String, dynamic>{
-                      'name': name.text.trim(),
-                      'description': description.text.trim(),
+                      'name': name.trim(),
+                      'description': description.trim(),
                       'planned_start_date':
-                          start.text.trim().isEmpty ? null : start.text.trim(),
+                          start.trim().isEmpty ? null : start.trim(),
                       'planned_end_date':
-                          end.text.trim().isEmpty ? null : end.text.trim(),
+                          end.trim().isEmpty ? null : end.trim(),
                     });
                   }
                 },
@@ -142,14 +151,20 @@ class _ScheduleDetailsScreenState extends ConsumerState<ScheduleDetailsScreen> {
             ],
           ),
     );
-    name.dispose();
-    description.dispose();
-    start.dispose();
-    end.dispose();
     if (payload == null || !mounted) {
       return;
     }
     try {
+      final auth = ref.read(authProvider);
+      if (ref.read(projectsProvider).selectedProject?.serverId !=
+              detail.schedule.projectId ||
+          auth is! AuthAuthenticated ||
+          auth.sessionIdentity != sessionIdentity ||
+          !auth.user.grantedPermissions.contains('schedule.edit')) {
+        throw const ApiException(
+          'Объект или профиль изменился. Откройте задачу заново.',
+        );
+      }
       await ref
           .read(scheduleRepositoryProvider)
           .saveTask(
@@ -175,18 +190,36 @@ class _ScheduleDetailsScreenState extends ConsumerState<ScheduleDetailsScreen> {
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(scheduleDetailProvider(widget.scheduleId));
+    final projectId = ref.watch(projectsProvider).selectedProject?.serverId;
+    final detail = state.detail;
+    final isCurrentProject =
+        detail == null || detail.schedule.projectId == projectId;
     final canEditTasks =
+        isCurrentProject &&
         ref
-            .watch(authProvider)
-            .user
-            ?.grantedPermissions
-            .contains('schedule.edit') ??
-        false;
+                .watch(authProvider)
+                .user
+                ?.grantedPermissions
+                .contains('schedule.edit') ==
+            true;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Детали графика'), centerTitle: false),
       body:
-          state.isLoading && state.detail == null
+          projectId == null
+              ? const AppEmptyState(
+                icon: Icons.domain_outlined,
+                title: 'Объект не выбран',
+                description:
+                    'Сначала выберите объект, чтобы открыть график работ.',
+              )
+              : !isCurrentProject
+              ? const AppEmptyState(
+                icon: Icons.domain_outlined,
+                title: 'Выбран другой объект',
+                description: 'Откройте график выбранного объекта.',
+              )
+              : state.isLoading && state.detail == null
               ? const AppLoadingState(message: 'Загружаем график')
               : state.error != null && state.detail == null
               ? AppErrorState(

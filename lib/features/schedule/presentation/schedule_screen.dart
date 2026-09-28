@@ -47,11 +47,6 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
   void initState() {
     super.initState();
     _searchController.addListener(_handleSearchChanged);
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final projectId = ref.read(projectsProvider).selectedProject?.serverId;
-      ref.read(scheduleProvider.notifier).load(projectId: projectId);
-    });
   }
 
   @override
@@ -77,7 +72,8 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
   Widget build(BuildContext context) {
     final state = ref.watch(scheduleProvider);
     final selectedProject = ref.watch(projectsProvider).selectedProject;
-    final overview = state.overview;
+    final isCurrentProject = state.projectId == selectedProject?.serverId;
+    final overview = isCurrentProject ? state.overview : null;
 
     final schedules =
         overview == null
@@ -134,7 +130,7 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
                       'Сначала выберите объект, чтобы открыть графики работ.',
                 ),
               )
-            else if (state.isLoading && overview == null)
+            else if (!isCurrentProject || state.isLoading && overview == null)
               const SliverFillRemaining(
                 child: AppLoadingState(message: 'Загружаем графики работ'),
               )

@@ -12,12 +12,15 @@ import 'package:prohelpers_mobile/features/auth/data/auth_repository.dart';
 import 'package:prohelpers_mobile/features/auth/data/auth_session_identity.dart';
 import 'package:prohelpers_mobile/features/auth/data/user_model.dart';
 import 'package:prohelpers_mobile/features/auth/domain/auth_provider.dart';
+import 'package:prohelpers_mobile/features/projects/data/project_model.dart';
+import 'package:prohelpers_mobile/features/projects/domain/projects_provider.dart';
 import 'package:prohelpers_mobile/features/schedule/data/schedule_model.dart';
 import 'package:prohelpers_mobile/features/schedule/data/schedule_repository.dart';
 import 'package:prohelpers_mobile/features/schedule/data/schedule_snapshot_adapter.dart';
 import 'package:prohelpers_mobile/features/schedule/domain/schedule_provider.dart';
 
 import '../../../helpers/memory_entity_snapshot_store.dart';
+import '../../../helpers/mobile_integration_test_helpers.dart';
 
 class _ScheduleTestAuthNotifier extends AuthNotifier {
   _ScheduleTestAuthNotifier(AuthSessionIdentity identity)
@@ -693,6 +696,19 @@ void main() {
       final container = ProviderContainer(
         overrides: [
           authProvider.overrideWith((ref) => auth),
+          projectsProvider.overrideWith(
+            (ref) => TestProjectsNotifier(
+              projects: [
+                Project()
+                  ..serverId = 52
+                  ..name = 'Объект',
+              ],
+              selectedProject:
+                  Project()
+                    ..serverId = 52
+                    ..name = 'Объект',
+            ),
+          ),
           scheduleRepositoryProvider.overrideWithValue(repository),
           scheduleSnapshotAdapterProvider.overrideWithValue(adapter),
         ],
@@ -703,7 +719,7 @@ void main() {
       );
       final notifierA = container.read(dailyWorkPlansProvider.notifier);
 
-      await notifierA.load(projectId: 52);
+      await Future<void>.delayed(Duration.zero);
       await notifierA.load(projectId: 52);
       expect(
         identical(container.read(dailyWorkPlansProvider.notifier), notifierA),
@@ -723,7 +739,7 @@ void main() {
       final notifierB = container.read(dailyWorkPlansProvider.notifier);
       expect(identical(notifierB, notifierA), isFalse);
 
-      await notifierB.load(projectId: 52);
+      await Future<void>.delayed(Duration.zero);
       expect(notifierB.state.projectId, 52);
       expect(notifierB.state.plans, isEmpty);
       expect(notifierB.state.error, 'HTTP 503');
