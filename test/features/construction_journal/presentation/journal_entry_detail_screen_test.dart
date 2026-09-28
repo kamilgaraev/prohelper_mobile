@@ -8,6 +8,28 @@ import 'package:prohelpers_mobile/features/construction_journal/data/constructio
 import 'package:prohelpers_mobile/features/construction_journal/domain/construction_journal_provider.dart';
 import 'package:prohelpers_mobile/features/construction_journal/presentation/journal_entry_detail_screen.dart';
 import 'package:prohelpers_mobile/core/sync/sync_queue_service.dart';
+import 'package:prohelpers_mobile/features/projects/data/project_model.dart';
+import 'package:prohelpers_mobile/features/projects/data/projects_repository.dart';
+import 'package:prohelpers_mobile/features/projects/domain/projects_provider.dart';
+
+class _ProjectsRepository extends ProjectsRepository {
+  _ProjectsRepository() : super(Dio());
+}
+
+class _ProjectsNotifier extends ProjectsNotifier {
+  _ProjectsNotifier(int projectId) : super(_ProjectsRepository()) {
+    select(projectId);
+  }
+
+  void select(int projectId) {
+    final project =
+        Project()
+          ..serverId = projectId
+          ..name = 'Объект $projectId'
+          ..address = 'Площадка $projectId';
+    state = state.copyWith(selectedProject: project);
+  }
+}
 
 void main() {
   testWidgets('delete failure is reported and action remains retryable', (
@@ -26,6 +48,7 @@ void main() {
       ProviderScope(
         overrides: [
           constructionJournalRepositoryProvider.overrideWithValue(repository),
+          projectsProvider.overrideWith((ref) => _ProjectsNotifier(52)),
           constructionJournalEntryDetailProvider(
             scope,
           ).overrideWith((ref) => notifier),
@@ -74,6 +97,7 @@ void main() {
       ProviderScope(
         overrides: [
           constructionJournalRepositoryProvider.overrideWithValue(repository),
+          projectsProvider.overrideWith((ref) => _ProjectsNotifier(52)),
           constructionJournalEntryDetailProvider(
             scope,
           ).overrideWith((ref) => notifier),
@@ -96,6 +120,51 @@ void main() {
     expect(find.text('Отправить'), findsOneWidget);
     expect(repository.submitCalls, 1);
     expect(repository.detailCalls, 1);
+  });
+
+  testWidgets('reject dialog cannot write after the selected project changes', (
+    tester,
+  ) async {
+    final projects = _ProjectsNotifier(9);
+    final repository = _RejectRepository();
+    final notifier = ConstructionJournalEntryDetailNotifier(
+      repository,
+      84,
+      projectId: 9,
+    );
+    await notifier.load();
+    const scope = (entryId: 84, projectId: 9);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          constructionJournalRepositoryProvider.overrideWithValue(repository),
+          projectsProvider.overrideWith((ref) => projects),
+          constructionJournalEntryDetailProvider(
+            scope,
+          ).overrideWith((ref) => notifier),
+        ],
+        child: const MaterialApp(
+          home: JournalEntryDetailScreen(
+            journalId: 17,
+            entryId: 84,
+            projectId: 9,
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(OutlinedButton, 'Отклонить'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), 'Причина');
+
+    projects.select(52);
+    await tester.pump();
+    await tester.tap(find.widgetWithText(ElevatedButton, 'Отклонить'));
+    await tester.pumpAndSettle();
+
+    expect(repository.rejectCalls, 0);
+    expect(find.text('Выбран другой объект'), findsOneWidget);
   });
 
   testWidgets('compact rejected header fits at 240dp with large text', (
@@ -121,6 +190,25 @@ void main() {
   });
 }
 
+class _RejectRepository extends ConstructionJournalRepository {
+  _RejectRepository() : super(Dio());
+
+  int rejectCalls = 0;
+
+  @override
+  Future<ConstructionJournalEntryModel> fetchEntryDetail(int entryId) async =>
+      _entry(ConstructionJournalActionKeys.reject, 'Отклонить');
+
+  @override
+  Future<ConstructionJournalEntryModel> rejectEntry(
+    int entryId,
+    String reason,
+  ) async {
+    rejectCalls++;
+    throw const ApiException('Reject request failed', statusCode: 422);
+  }
+}
+
 Future<void> _expectCompactHeader(
   WidgetTester tester, {
   required double width,
@@ -144,6 +232,7 @@ Future<void> _expectCompactHeader(
     ProviderScope(
       overrides: [
         constructionJournalRepositoryProvider.overrideWithValue(repository),
+        projectsProvider.overrideWith((ref) => _ProjectsNotifier(52)),
         constructionJournalEntryDetailProvider(
           scope,
         ).overrideWith((ref) => notifier),

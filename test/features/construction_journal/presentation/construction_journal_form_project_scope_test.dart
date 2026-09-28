@@ -225,9 +225,10 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    projects.select(52);
     await tester.tap(find.text('Редактировать'));
     await tester.pumpAndSettle();
+    projects.select(52);
+    await tester.pump();
 
     expect(
       tester
