@@ -6,6 +6,7 @@ import 'package:prohelpers_mobile/core/models/user_context.dart';
 import 'package:prohelpers_mobile/core/providers/module_provider.dart';
 import 'package:prohelpers_mobile/core/services/permission_service.dart';
 import 'package:prohelpers_mobile/core/sync/sync_queue_service.dart';
+import 'package:prohelpers_mobile/core/widgets/pro_metric_tile.dart';
 import 'package:prohelpers_mobile/features/projects/data/project_model.dart';
 import 'package:prohelpers_mobile/features/projects/data/projects_repository.dart';
 import 'package:prohelpers_mobile/features/projects/domain/projects_provider.dart';
@@ -157,6 +158,7 @@ void main() {
   Widget buildScreen(
     _RecordingSafetyRepository repository, {
     SafetyAdmissionModel? myAdmission,
+    double? textScale,
   }) {
     return ProviderScope(
       overrides: [
@@ -177,7 +179,18 @@ void main() {
           (ref) => _TestSafetyNotifier(repository, myAdmission: myAdmission),
         ),
       ],
-      child: const MaterialApp(home: SafetyScreen()),
+      child: MaterialApp(
+        builder:
+            textScale == null
+                ? null
+                : (context, child) => MediaQuery(
+                  data: MediaQuery.of(
+                    context,
+                  ).copyWith(textScaler: TextScaler.linear(textScale)),
+                  child: child!,
+                ),
+        home: const SafetyScreen(),
+      ),
     );
   }
 
@@ -192,6 +205,74 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
   }
+
+  testWidgets('safety metric grid adapts to narrow and regular widths', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(240, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final repository = _RecordingSafetyRepository();
+    await tester.pumpWidget(buildScreen(repository, textScale: 1.3));
+    await pumpUi(tester);
+    await tester.scrollUntilVisible(
+      find.text('Допуски'),
+      160,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+
+    final tiles = find.byType(ProMetricTile);
+    expect(tiles, findsNWidgets(6));
+    for (final label in [
+      'Допуски',
+      'Происшествия',
+      'Нарушения',
+      'Подписи',
+      'Проверки',
+      'Замечания',
+    ]) {
+      expect(
+        find.descendant(of: tiles, matching: find.text(label)),
+        findsOneWidget,
+      );
+    }
+    expect(
+      tester.getTopLeft(tiles.at(1)).dy,
+      greaterThan(tester.getBottomLeft(tiles.first).dy),
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('safety metric grid keeps two columns at 360dp', (tester) async {
+    tester.view.physicalSize = const Size(360, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final repository = _RecordingSafetyRepository();
+    await tester.pumpWidget(buildScreen(repository));
+    await pumpUi(tester);
+    await tester.scrollUntilVisible(
+      find.text('Допуски'),
+      160,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+    final tiles = find.byType(ProMetricTile);
+    expect(tiles, findsNWidgets(6));
+    expect(
+      tester.getTopLeft(tiles.at(1)).dy,
+      closeTo(tester.getTopLeft(tiles.first).dy, 1),
+    );
+    expect(
+      tester.getTopLeft(tiles.at(2)).dy,
+      greaterThan(tester.getBottomLeft(tiles.first).dy),
+    );
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('submits incident type and visible occurrence time', (
     tester,
@@ -328,8 +409,12 @@ void main() {
       300,
       scrollable: find.byType(Scrollable).first,
     );
+    await tester.ensureVisible(find.text('Активные').first);
+    await tester.pump();
     await tester.tap(find.text('Активные').first);
     await pumpUi(tester);
+    await tester.ensureVisible(find.text('Зарегистрированы').first);
+    await tester.pump();
     await tester.tap(find.text('Зарегистрированы').first);
     await pumpUi(tester);
     await tester.tap(find.text('Открытые').last);

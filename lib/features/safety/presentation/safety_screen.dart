@@ -9,6 +9,7 @@ import '../../../core/widgets/app_error_state.dart';
 import '../../../core/widgets/app_loading_state.dart';
 import '../../../core/widgets/mesh_background.dart';
 import '../../../core/widgets/pro_card.dart';
+import '../../../core/widgets/pro_metric_grid.dart';
 import '../../../core/widgets/pro_metric_tile.dart';
 import '../../../core/widgets/pro_status_banner.dart';
 import '../../../core/providers/module_provider.dart';
@@ -1491,59 +1492,41 @@ class _SummaryStrip extends StatelessWidget {
 
     return Column(
       children: [
-        Wrap(
+        ProMetricGrid(
           spacing: 8,
           runSpacing: 8,
           children: [
-            SizedBox(
-              width: (MediaQuery.sizeOf(context).width - 48) / 2,
-              child: _MetricCard(
-                label: 'Допуски',
-                value:
-                    (state.dashboard?.activePermits ?? state.permits.length)
-                        .toString(),
-                icon: Icons.assignment_turned_in_outlined,
-              ),
+            _MetricCard(
+              label: 'Допуски',
+              value:
+                  (state.dashboard?.activePermits ?? state.permits.length)
+                      .toString(),
+              icon: Icons.assignment_turned_in_outlined,
             ),
-            SizedBox(
-              width: (MediaQuery.sizeOf(context).width - 48) / 2,
-              child: _MetricCard(
-                label: 'Происшествия',
-                value: openIncidents.toString(),
-                icon: Icons.report_problem_outlined,
-              ),
+            _MetricCard(
+              label: 'Происшествия',
+              value: openIncidents.toString(),
+              icon: Icons.report_problem_outlined,
             ),
-            SizedBox(
-              width: (MediaQuery.sizeOf(context).width - 48) / 2,
-              child: _MetricCard(
-                label: 'Нарушения',
-                value: openViolations.toString(),
-                icon: Icons.gpp_bad_outlined,
-              ),
+            _MetricCard(
+              label: 'Нарушения',
+              value: openViolations.toString(),
+              icon: Icons.gpp_bad_outlined,
             ),
-            SizedBox(
-              width: (MediaQuery.sizeOf(context).width - 48) / 2,
-              child: _MetricCard(
-                label: 'Подписи',
-                value: briefingsToSign.toString(),
-                icon: Icons.draw_outlined,
-              ),
+            _MetricCard(
+              label: 'Подписи',
+              value: briefingsToSign.toString(),
+              icon: Icons.draw_outlined,
             ),
-            SizedBox(
-              width: (MediaQuery.sizeOf(context).width - 48) / 2,
-              child: _MetricCard(
-                label: 'Проверки',
-                value: openInspections.toString(),
-                icon: Icons.fact_check_outlined,
-              ),
+            _MetricCard(
+              label: 'Проверки',
+              value: openInspections.toString(),
+              icon: Icons.fact_check_outlined,
             ),
-            SizedBox(
-              width: (MediaQuery.sizeOf(context).width - 48) / 2,
-              child: _MetricCard(
-                label: 'Замечания',
-                value: openFindings.toString(),
-                icon: Icons.warning_amber_outlined,
-              ),
+            _MetricCard(
+              label: 'Замечания',
+              value: openFindings.toString(),
+              icon: Icons.warning_amber_outlined,
             ),
           ],
         ),

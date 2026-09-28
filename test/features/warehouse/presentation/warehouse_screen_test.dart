@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:prohelpers_mobile/core/network/api_exception.dart';
 import 'package:prohelpers_mobile/core/theme/pro_theme.dart';
+import 'package:prohelpers_mobile/core/widgets/pro_metric_tile.dart';
 import 'package:prohelpers_mobile/features/warehouse/data/warehouse_media_picker.dart';
 import 'package:prohelpers_mobile/features/warehouse/data/warehouse_repository.dart';
 import 'package:prohelpers_mobile/features/warehouse/data/warehouse_summary_model.dart';
@@ -246,6 +247,52 @@ const _narrowWarehouseSummary = WarehouseSummaryModel(
 );
 
 void main() {
+  testWidgets('warehouse metric grid adapts to narrow and regular widths', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(240, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final repository = _FakeWarehouseRepository(
+      summary: _narrowWarehouseSummary,
+    );
+    await _pumpWarehouseScreen(
+      tester,
+      repository: repository,
+      mediaPicker: _FakeMediaPicker(),
+      textScale: 1.3,
+    );
+
+    final tiles = find.byType(ProMetricTile);
+    expect(tiles, findsNWidgets(4));
+    for (final label in ['Складов', 'Позиций', 'Низкий остаток', 'Резерв']) {
+      expect(find.text(label), findsOneWidget);
+    }
+    expect(
+      tester.getTopLeft(tiles.at(1)).dy,
+      greaterThan(tester.getBottomLeft(tiles.first).dy),
+    );
+    expect(tester.takeException(), isNull);
+
+    tester.view.physicalSize = const Size(360, 900);
+    await _pumpWarehouseScreen(
+      tester,
+      repository: repository,
+      mediaPicker: _FakeMediaPicker(),
+    );
+    expect(
+      tester.getTopLeft(tiles.at(1)).dy,
+      closeTo(tester.getTopLeft(tiles.first).dy, 1),
+    );
+    expect(
+      tester.getTopLeft(tiles.at(2)).dy,
+      greaterThan(tester.getBottomLeft(tiles.first).dy),
+    );
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('warehouse card keeps long name below its badges', (
     tester,
   ) async {

@@ -12,6 +12,7 @@ import '../../../core/widgets/app_error_state.dart';
 import '../../../core/widgets/app_loading_state.dart';
 import '../../../core/widgets/industrial_card.dart';
 import '../../../core/widgets/pro_action_tile.dart';
+import '../../../core/widgets/pro_metric_grid.dart';
 import '../../../core/widgets/pro_metric_tile.dart';
 import '../../../core/widgets/pro_status_banner.dart';
 import '../../auth/domain/auth_provider.dart';
@@ -636,46 +637,33 @@ class _SummarySection extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        Row(
+        ProMetricGrid(
+          spacing: 12,
+          runSpacing: 12,
           children: [
-            Expanded(
-              child: _SummaryCard(
-                title: 'Складов',
-                value: summary.warehouseCount.toString(),
-                icon: Icons.warehouse_outlined,
-                color: Theme.of(context).colorScheme.primary,
-              ),
+            _SummaryCard(
+              title: 'Складов',
+              value: summary.warehouseCount.toString(),
+              icon: Icons.warehouse_outlined,
+              color: Theme.of(context).colorScheme.primary,
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _SummaryCard(
-                title: 'Позиций',
-                value: summary.uniqueItemsCount.toString(),
-                icon: Icons.inventory_2_outlined,
-                color: AppColors.secondary,
-              ),
+            _SummaryCard(
+              title: 'Позиций',
+              value: summary.uniqueItemsCount.toString(),
+              icon: Icons.inventory_2_outlined,
+              color: AppColors.secondary,
             ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-              child: _SummaryCard(
-                title: 'Низкий остаток',
-                value: summary.lowStockCount.toString(),
-                icon: Icons.warning_amber_rounded,
-                color: AppColors.warning,
-              ),
+            _SummaryCard(
+              title: 'Низкий остаток',
+              value: summary.lowStockCount.toString(),
+              icon: Icons.warning_amber_rounded,
+              color: AppColors.warning,
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _SummaryCard(
-                title: 'Резерв',
-                value: summary.reservedItemsCount.toString(),
-                icon: Icons.inventory_outlined,
-                color: AppColors.success,
-              ),
+            _SummaryCard(
+              title: 'Резерв',
+              value: summary.reservedItemsCount.toString(),
+              icon: Icons.inventory_outlined,
+              color: AppColors.success,
             ),
           ],
         ),
