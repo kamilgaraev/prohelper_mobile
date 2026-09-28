@@ -191,6 +191,15 @@ void main() {
       isTrue,
     );
     expect(remaining.map((entity) => entity.remoteId), isNot(contains('42')));
+
+    repository.permissionDenied = false;
+    final restored = await adapter.load(online: true, projectId: 15);
+    final offlineAfterRestore = await adapter.load(
+      online: false,
+      projectId: 15,
+    );
+    expect(restored.data?.single.serverId, 42);
+    expect(offlineAfterRestore.data?.single.serverId, 42);
   });
 }
 
