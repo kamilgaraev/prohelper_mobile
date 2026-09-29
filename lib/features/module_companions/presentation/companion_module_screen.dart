@@ -840,7 +840,7 @@ class _SectionCard extends StatelessWidget {
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
-                    row.value,
+                    row.displayValue ?? row.value,
                     textAlign: TextAlign.right,
                     style: AppTypography.bodyMedium(context).copyWith(
                       color: theme.colorScheme.onSurface,
@@ -983,7 +983,8 @@ class _CommentsCard extends StatelessWidget {
             subtitle: Text(
               [
                 comment.body,
-                if (comment.status != null) comment.status!,
+                if (comment.status != null)
+                  comment.statusLabel ?? comment.status!,
                 if (comment.createdAt != null) _formatDate(comment.createdAt!),
               ].join('\n'),
             ),

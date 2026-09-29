@@ -48,12 +48,14 @@ class _FakeCompanionNotifier extends CompanionModuleNotifier {
     String? itemStatus,
     String? statusLabel,
     String? itemTitle,
+    Map<String, dynamic>? detailOverride,
     bool requiresComment = false,
     bool relatedRequiresComment = false,
   }) : _moduleSlug = moduleSlug,
        _itemStatus = itemStatus,
        _statusLabel = statusLabel,
        _itemTitle = itemTitle,
+       _detailOverride = detailOverride,
        _requiresComment = requiresComment,
        _relatedRequiresComment = relatedRequiresComment,
        super(_FakeCompanionRepository(), moduleSlug) {
@@ -64,6 +66,7 @@ class _FakeCompanionNotifier extends CompanionModuleNotifier {
   final String? _itemStatus;
   final String? _statusLabel;
   final String? _itemTitle;
+  final Map<String, dynamic>? _detailOverride;
   final bool _requiresComment;
   final bool _relatedRequiresComment;
   String? query;
@@ -104,7 +107,7 @@ class _FakeCompanionNotifier extends CompanionModuleNotifier {
   @override
   Future<CompanionModuleDetailModel> fetchDetail(int id) async {
     detailCalls++;
-    final detail = companionDetailJson(slug: _moduleSlug);
+    final detail = _detailOverride ?? companionDetailJson(slug: _moduleSlug);
     _setRequiresComment(
       detail['item'] as Map<String, dynamic>,
       _requiresComment,
@@ -283,6 +286,41 @@ void main() {
     await tester.tap(find.text('Черновик'));
     await tester.pump();
     expect(notifier.status, 'draft');
+  });
+
+  testWidgets('executive detail renders localized result and remark statuses', (
+    tester,
+  ) async {
+    final detail = companionDetailJson(slug: 'executive-documentation');
+    detail['result'] = {'status': 'draft'};
+    detail['comments'] = [
+      {'body': 'Проверить схему', 'status': 'open'},
+    ];
+    final notifier = _FakeCompanionNotifier(
+      moduleSlug: 'executive-documentation',
+      detailOverride: detail,
+    );
+    await tester.pumpWidget(
+      buildApp(
+        const CompanionModuleDetailScreen(
+          moduleSlug: 'executive-documentation',
+          title: 'Исполнительная документация',
+          icon: Icons.description_outlined,
+          itemId: 42,
+          requiresProject: true,
+          projectId: 9,
+        ),
+        notifier,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.text('Черновик'), 200);
+    expect(find.text('Статус'), findsOneWidget);
+    expect(find.text('draft'), findsNothing);
+    await tester.scrollUntilVisible(find.textContaining('Открыто'), 200);
+    expect(find.textContaining('Проверить схему\nОткрыто'), findsOneWidget);
+    expect(find.text('open'), findsNothing);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('labels previous companion list after offline search', (

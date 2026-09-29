@@ -136,10 +136,15 @@ class DesignPackageHistoryEntry {
 }
 
 class DesignPackageValue {
-  const DesignPackageValue({required this.label, required this.value});
+  const DesignPackageValue({
+    required this.label,
+    required this.value,
+    this.displayValue,
+  });
 
   final String label;
   final String value;
+  final String? displayValue;
 }
 
 class DesignPackageModel {
@@ -149,6 +154,7 @@ class DesignPackageModel {
     this.projectId,
     this.stage,
     this.projectStage,
+    this.projectStageLabel,
     this.discipline,
     this.status,
     this.statusLabel,
@@ -165,6 +171,7 @@ class DesignPackageModel {
   final String title;
   final String? stage;
   final String? projectStage;
+  final String? projectStageLabel;
   final String? discipline;
   final String? status;
   final String? statusLabel;
@@ -184,6 +191,9 @@ class DesignPackageModel {
       title: _string(json['title'], 'Пакет документации'),
       stage: _nullableString(json['stage']),
       projectStage: _nullableString(json['project_stage']),
+      projectStageLabel:
+          _nullableString(json['project_stage_label']) ??
+          _designProjectStageLabels[_nullableString(json['project_stage'])],
       discipline: _nullableString(json['discipline']),
       status: status,
       statusLabel:
@@ -220,6 +230,25 @@ const _designPackageStatusLabels = <String, String>{
   'archived': 'В архиве',
 };
 
+const _designProjectStageLabels = <String, String>{
+  'pd': 'Проектная документация',
+  'rd': 'Рабочая документация',
+  'survey': 'Изыскания и обследования',
+  'bim': 'Информационная модель',
+};
+
+const _designPackageResultLabels = <String, String>{
+  'status': 'Статус',
+  'composition_status': 'Статус состава',
+  'open_blocking_comments_count': 'Количество открытых блокирующих замечаний',
+};
+
+const _designCompositionStatusLabels = <String, String>{
+  'draft': 'Черновик',
+  'approved': 'Согласован',
+  'needs_review': 'Требует проверки',
+};
+
 List<DesignPackageValue> _resultRows(Object? value) {
   if (value is! Map) return const [];
   final result = value.map((key, item) => MapEntry(key.toString(), item));
@@ -246,12 +275,19 @@ List<DesignPackageValue> _resultRows(Object? value) {
         (entry) =>
             entry.value != null && entry.value is! Map && entry.value is! List,
       )
-      .map(
-        (entry) => DesignPackageValue(
-          label: _label(entry.key),
-          value: entry.value.toString(),
-        ),
-      )
+      .map((entry) {
+        final value = entry.value.toString();
+
+        return DesignPackageValue(
+          label: _designPackageResultLabels[entry.key] ?? _label(entry.key),
+          value: value,
+          displayValue: switch (entry.key) {
+            'status' => _designPackageStatusLabels[value],
+            'composition_status' => _designCompositionStatusLabels[value],
+            _ => null,
+          },
+        );
+      })
       .toList(growable: false);
 }
 

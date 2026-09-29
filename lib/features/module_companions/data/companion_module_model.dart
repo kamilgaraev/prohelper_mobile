@@ -102,8 +102,11 @@ class CompanionModuleDetailModel {
   final List<CompanionHistoryEntry> workflowHistory;
 
   factory CompanionModuleDetailModel.fromJson(Map<String, dynamic> json) {
+    final module = CompanionModuleInfo.fromJson(_map(json['module']));
+    final isExecutiveDocumentation = module.slug == 'executive-documentation';
+
     return CompanionModuleDetailModel(
-      module: CompanionModuleInfo.fromJson(_map(json['module'])),
+      module: module,
       item: CompanionListItem.fromJson(_map(json['item'])),
       sections: _list(
         json['sections'],
@@ -115,13 +118,27 @@ class CompanionModuleDetailModel {
       permissionState: CompanionStateText.fromJson(
         _map(json['permission_state']),
       ),
-      result: _resultRows(json['result']),
+      result: _resultRows(
+        json['result'],
+        statusLabels:
+            isExecutiveDocumentation
+                ? _executiveDocumentStatusLabels
+                : const {},
+      ),
       files: _list(
         json['files'],
       ).map(CompanionFile.fromJson).toList(growable: false),
-      comments: _list(
-        json['comments'],
-      ).map(CompanionComment.fromJson).toList(growable: false),
+      comments: _list(json['comments'])
+          .map(
+            (comment) => CompanionComment.fromJson(
+              comment,
+              statusLabels:
+                  isExecutiveDocumentation
+                      ? _executiveRemarkStatusLabels
+                      : const {},
+            ),
+          )
+          .toList(growable: false),
       workflowHistory: _list(
         json['workflow_history'],
       ).map(CompanionHistoryEntry.fromJson).toList(growable: false),
@@ -173,21 +190,28 @@ class CompanionComment {
     required this.author,
     required this.body,
     this.status,
+    this.statusLabel,
     this.createdAt,
   });
 
   final String author;
   final String body;
   final String? status;
+  final String? statusLabel;
   final DateTime? createdAt;
 
-  factory CompanionComment.fromJson(Map<String, dynamic> json) =>
-      CompanionComment(
-        author: _optionalString(json, 'author') ?? 'Участник проекта',
-        body: _optionalString(json, 'body') ?? '',
-        status: _optionalString(json, 'status'),
-        createdAt: _dateTime(json['created_at']),
-      );
+  factory CompanionComment.fromJson(
+    Map<String, dynamic> json, {
+    Map<String, String> statusLabels = const {},
+  }) => CompanionComment(
+    author: _optionalString(json, 'author') ?? 'Участник проекта',
+    body: _optionalString(json, 'body') ?? '',
+    status: _optionalString(json, 'status'),
+    statusLabel:
+        _optionalString(json, 'status_label') ??
+        statusLabels[_optionalString(json, 'status')],
+    createdAt: _dateTime(json['created_at']),
+  );
 }
 
 class CompanionHistoryEntry {
@@ -354,10 +378,15 @@ class CompanionSection {
 }
 
 class CompanionFieldRow {
-  const CompanionFieldRow({required this.label, required this.value});
+  const CompanionFieldRow({
+    required this.label,
+    required this.value,
+    this.displayValue,
+  });
 
   final String label;
   final String value;
+  final String? displayValue;
 
   factory CompanionFieldRow.fromJson(Map<String, dynamic> json) {
     return CompanionFieldRow(
@@ -413,7 +442,28 @@ Map<String, dynamic> _map(dynamic value) {
   throw const FormatException('Некорректный формат данных раздела');
 }
 
-List<CompanionFieldRow> _resultRows(Object? value) {
+const _executiveDocumentStatusLabels = <String, String>{
+  'draft': 'Черновик',
+  'prepared': 'Подготовлено',
+  'under_review': 'На проверке',
+  'remarks': 'Есть замечания',
+  'approved': 'Согласовано',
+  'rejected': 'Отклонено',
+  'transmitted': 'Передано',
+  'archived': 'В архиве',
+};
+
+const _executiveRemarkStatusLabels = <String, String>{
+  'open': 'Открыто',
+  'answered': 'Есть ответ',
+  'returned': 'Возвращено',
+  'resolved': 'Устранено',
+};
+
+List<CompanionFieldRow> _resultRows(
+  Object? value, {
+  Map<String, String> statusLabels = const {},
+}) {
   if (value is String && value.trim().isNotEmpty) {
     return [CompanionFieldRow(label: 'Результат', value: value.trim())];
   }
@@ -446,8 +496,15 @@ List<CompanionFieldRow> _resultRows(Object? value) {
       )
       .map(
         (entry) => CompanionFieldRow(
-          label: entry.key.replaceAll('_', ' '),
+          label:
+              entry.key == 'status' && statusLabels.isNotEmpty
+                  ? 'Статус'
+                  : entry.key.replaceAll('_', ' '),
           value: entry.value.toString(),
+          displayValue:
+              entry.key == 'status'
+                  ? statusLabels[entry.value.toString()]
+                  : null,
         ),
       )
       .toList(growable: false);
