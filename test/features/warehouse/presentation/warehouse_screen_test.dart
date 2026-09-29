@@ -835,6 +835,24 @@ void main() {
     expect(find.widgetWithText(FilledButton, 'Приход'), findsNothing);
   });
 
+  testWidgets('warehouse module full access exposes receipt actions', (
+    tester,
+  ) async {
+    await _pumpWarehouseScreen(
+      tester,
+      repository: _FakeWarehouseRepository(),
+      mediaPicker: _FakeMediaPicker(),
+      permissions: const {'basic-warehouse.*'},
+    );
+
+    expect(find.text('Оприходовать'), findsOneWidget);
+    await _ensureVisible(
+      tester,
+      find.widgetWithText(OutlinedButton, 'Остатки'),
+    );
+    expect(find.widgetWithText(FilledButton, 'Приход'), findsOneWidget);
+  });
+
   testWidgets('receipt grant exposes all warehouse receipt entry points', (
     tester,
   ) async {
