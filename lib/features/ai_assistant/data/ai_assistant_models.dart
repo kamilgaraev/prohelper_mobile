@@ -573,7 +573,9 @@ class AiAssistantEvidenceModel {
       fetchedAt: _dateTimeValue(json['fetched_at']),
       projectId: _stringValue(json['project_id']),
       entityId: _stringValue(json['entity_id'] ?? json['id']),
-      entityType: _stringValue(json['entity_type'] ?? json['source_type'] ?? json['type']),
+      entityType: _stringValue(
+        json['entity_type'] ?? json['source_type'] ?? json['type'],
+      ),
       excerpt: _stringValue(json['excerpt']),
     );
   }
@@ -628,6 +630,43 @@ class AiAssistantChatResult {
       creditUsage: AiCreditUsageModel.fromJson(
         _nullableMap(json['credit_usage']),
       ),
+    );
+  }
+}
+
+class AiAssistantChatRequest {
+  const AiAssistantChatRequest({
+    required this.requestId,
+    required this.status,
+    this.stage,
+    this.conversationId,
+    this.result,
+    this.errorCode,
+  });
+
+  final String requestId;
+  final String status;
+  final String? stage;
+  final int? conversationId;
+  final AiAssistantChatResult? result;
+  final String? errorCode;
+
+  bool get isTerminal =>
+      status == 'completed' || status == 'failed' || status == 'cancelled';
+
+  factory AiAssistantChatRequest.fromJson(Map<String, dynamic> json) {
+    final response = _nullableMap(json['response']);
+    return AiAssistantChatRequest(
+      requestId: _stringValue(json['request_id']) ?? '',
+      status: _stringValue(json['status']) ?? '',
+      stage: _stringValue(json['stage']),
+      conversationId:
+          json['conversation_id'] == null
+              ? null
+              : _intValue(json['conversation_id']),
+      result:
+          response == null ? null : AiAssistantChatResult.fromJson(response),
+      errorCode: _stringValue(json['error_code']),
     );
   }
 }

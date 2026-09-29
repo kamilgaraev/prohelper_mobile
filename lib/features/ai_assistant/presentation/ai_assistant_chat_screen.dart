@@ -62,8 +62,14 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
   CancelToken? _sendCancelToken;
   int _requestRevision = 0;
   String? _progress;
+  String? _progressDetail;
   String? _activeRequestId;
   Timer? _progressTimer;
+  Timer? _elapsedTimer;
+  int _elapsedSeconds = 0;
+  DateTime? _requestCreatedAt;
+  bool _isPolling = false;
+  DateTime? _requestStartedAt;
   bool _isQuoting = false;
   String? _quotingRequestId;
   int? _nextHistoryPage;
@@ -95,7 +101,7 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
   void didUpdateWidget(covariant AiAssistantChatScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.conversationId != widget.conversationId) {
-      _stopSending();
+      _detachSending();
       _conversationId = widget.conversationId;
       _messages = const [];
       _failedRequest = null;
@@ -106,17 +112,8 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
 
   @override
   void dispose() {
-    final requestId = _activeRequestId;
-    if (requestId != null) {
-      unawaited(
-        ref
-            .read(aiAssistantRepositoryProvider)
-            .cancelRequest(requestId)
-            .catchError((Object _) {}),
-      );
-    }
     _progressTimer?.cancel();
-    _sendCancelToken?.cancel('Экран диалога закрыт.');
+    _elapsedTimer?.cancel();
     _controller.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -198,53 +195,293 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
     }
   }
 
-  Future<void> _pollProgress(String requestId, int revision) async {
+  Future<void> _pollProgress(
+    String requestId,
+    int revision,
+    int? conversationId,
+  ) async {
+    if (_isPolling || !mounted || revision != _requestRevision) return;
+    if (_requestStartedAt != null &&
+        DateTime.now().difference(_requestStartedAt!) >
+            const Duration(minutes: 9)) {
+      _progressTimer?.cancel();
+      _elapsedTimer?.cancel();
+      setState(() {
+        _isSending = false;
+        _progress = null;
+        _progressDetail = null;
+        _error =
+            'Ответ задерживается. Проверьте результат этого запроса позже.';
+      });
+      return;
+    }
+    _isPolling = true;
     try {
       final progress = await ref
           .read(aiAssistantRepositoryProvider)
-          .fetchRequest(requestId);
-      if (!mounted || revision != _requestRevision) return;
-      final stage = progress['stage']?.toString();
-      setState(
-        () =>
-            _progress = switch (stage) {
-              'searching' => 'Проверяем источники',
-              'tools' => 'Получаем данные',
-              'generating' => 'Готовим ответ',
-              'validating' => 'Проверяем ответ',
-              _ => 'Ассистент готовит ответ',
-            },
+          .fetchChatRequest(requestId, conversationId: conversationId);
+      if (!mounted ||
+          revision != _requestRevision ||
+          requestId != _activeRequestId ||
+          conversationId != _conversationId) {
+        return;
+      }
+      if (progress.status == 'completed') {
+        _completeRequest(progress.result!, conversationId);
+        return;
+      }
+      if (progress.status == 'failed' || progress.status == 'cancelled') {
+        _failRequest(
+          progress.status == 'cancelled'
+              ? 'Запрос остановлен.'
+              : 'Ассистент не смог подготовить ответ. Попробуйте новый запрос.',
+          terminal: true,
+        );
+        return;
+      }
+      final (title, detail) = _stageDescription(progress.stage);
+      setState(() {
+        _progress = title;
+        _progressDetail = detail;
+      });
+    } catch (error) {
+      if (!mounted ||
+          revision != _requestRevision ||
+          requestId != _activeRequestId ||
+          conversationId != _conversationId) {
+        return;
+      }
+      if (error is ApiException &&
+          error.message == 'Получен ответ для другого запроса.') {
+        _failRequest(error.message, terminal: true);
+        return;
+      }
+      if (mounted && revision == _requestRevision && _isSending) {
+        setState(() {
+          _progress = 'Проверяю состояние запроса';
+          _progressDetail =
+              'Жду связь с сервером, запрос может продолжать обрабатываться.';
+        });
+      }
+    } finally {
+      _isPolling = false;
+    }
+  }
+
+  (String, String) _stageDescription(String? stage) => switch (stage) {
+    'queued' => ('Запрос в очереди', 'Ожидаю начала обработки.'),
+    'preparing' || 'access' => (
+      'Проверяю доступ',
+      'Уточняю, какие данные доступны для запроса.',
+    ),
+    'searching' => (
+      'Ищу доступные источники',
+      'Подбираю сведения, относящиеся к вопросу.',
+    ),
+    'tools' => (
+      'Получаю данные',
+      'Загружаю сведения из доступных разделов МОСТ.',
+    ),
+    'generating' => (
+      'Готовлю ответ',
+      'Составляю ответ на основе полученных данных.',
+    ),
+    'validating' => (
+      'Сверяю ответ',
+      'Проверяю подготовленный ответ перед показом.',
+    ),
+    _ => ('Запрос обрабатывается', 'Жду следующего состояния от сервера.'),
+  };
+
+  void _startElapsedTimer({bool reset = false}) {
+    _elapsedTimer?.cancel();
+    if (reset || _requestCreatedAt == null) {
+      _requestCreatedAt = DateTime.now();
+      _elapsedSeconds = 0;
+    }
+    _elapsedTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted || !_isSending) return;
+      final wallSeconds =
+          DateTime.now().difference(_requestCreatedAt!).inSeconds;
+      setState(() => _elapsedSeconds = max(_elapsedSeconds + 1, wallSeconds));
+    });
+  }
+
+  String get _elapsedLabel =>
+      '${(_elapsedSeconds ~/ 60).toString().padLeft(2, '0')}:${(_elapsedSeconds % 60).toString().padLeft(2, '0')}';
+
+  void _completeRequest(AiAssistantChatResult result, int? conversationAtSend) {
+    if (!mounted ||
+        result.requestId != _activeRequestId ||
+        conversationAtSend != _conversationId ||
+        (conversationAtSend != null &&
+            result.conversationId != conversationAtSend)) {
+      return;
+    }
+    _progressTimer?.cancel();
+    _elapsedTimer?.cancel();
+    _activeRequestId = null;
+    _sendCancelToken = null;
+    setState(() {
+      _conversationId = result.conversationId;
+      if (conversationAtSend == null) _canManageParticipants = true;
+      _failedRequest = null;
+      if (result.message != null &&
+          !_messages.any((item) => item.id == result.message!.id)) {
+        _messages = [..._messages, result.message!];
+      }
+      _isSending = false;
+      _progress = null;
+      _progressDetail = null;
+      _error = null;
+    });
+    if (result.creditUsage?.chargingEnabled == false) {
+      _showSnackBar(
+        'Тестовый режим: списания выключены. Фактическое списание — 0 ед. МОСТ.',
       );
-    } catch (_) {}
+    } else if (result.creditUsage?.actualCharge != null &&
+        (double.tryParse(result.creditUsage!.actualCharge!) ?? 0) > 0) {
+      _showSnackBar('Списано: ${result.creditUsage!.actualCharge} ед. МОСТ');
+    }
+    _scrollToBottom();
+  }
+
+  void _failRequest(String message, {bool terminal = false}) {
+    final pending = _failedRequest;
+    _progressTimer?.cancel();
+    _elapsedTimer?.cancel();
+    _activeRequestId = null;
+    _sendCancelToken = null;
+    setState(() {
+      _isSending = false;
+      _progress = null;
+      _progressDetail = null;
+      _error = message;
+      if (terminal) {
+        if (pending != null) {
+          _messages =
+              _messages
+                  .where((item) => item.id != pending.optimisticId)
+                  .toList();
+          if (_controller.text.isEmpty) _controller.text = pending.message;
+        }
+        _failedRequest = null;
+      }
+    });
+  }
+
+  void _detachSending() {
+    _progressTimer?.cancel();
+    _elapsedTimer?.cancel();
+    _sendCancelToken = null;
+    _activeRequestId = null;
+    _requestRevision++;
+    _isSending = false;
+    _progress = null;
+    _progressDetail = null;
+  }
+
+  Future<void> _recoverRequest() async {
+    final failed = _failedRequest;
+    if (failed == null ||
+        _isSending ||
+        failed.conversationId != _conversationId) {
+      return;
+    }
+    final revision = ++_requestRevision;
+    _activeRequestId = failed.requestId;
+    _requestStartedAt = DateTime.now();
+    setState(() {
+      _isSending = true;
+      _error = null;
+      _progress = 'Проверяю состояние запроса';
+      _progressDetail = 'Ищу результат сохранённого запроса.';
+    });
+    _startElapsedTimer();
+    try {
+      AiAssistantChatRequest request;
+      try {
+        request = await ref
+            .read(aiAssistantRepositoryProvider)
+            .fetchChatRequest(
+              failed.requestId,
+              conversationId: failed.conversationId,
+            );
+      } on ApiException catch (error) {
+        if (error.statusCode != 404) rethrow;
+        request = await ref
+            .read(aiAssistantRepositoryProvider)
+            .sendMessageRequest(
+              message: failed.message,
+              requestId: failed.requestId,
+              conversationId: failed.conversationId,
+              quoteId: failed.quote.id,
+              maxConfirmed: failed.quote.maxConfirmed,
+              profile: failed.profile,
+              context: failed.context,
+            );
+      }
+      if (!mounted ||
+          revision != _requestRevision ||
+          !_isSending ||
+          failed.conversationId != _conversationId) {
+        return;
+      }
+      if (request.status == 'completed') {
+        _completeRequest(request.result!, failed.conversationId);
+        return;
+      }
+      if (request.status == 'failed' || request.status == 'cancelled') {
+        _failRequest(
+          request.status == 'cancelled'
+              ? 'Запрос остановлен.'
+              : 'Ассистент не смог подготовить ответ. Попробуйте новый запрос.',
+          terminal: true,
+        );
+        return;
+      }
+      _progressTimer?.cancel();
+      _progressTimer = Timer.periodic(
+        const Duration(seconds: 2),
+        (_) => _pollProgress(failed.requestId, revision, failed.conversationId),
+      );
+      await _pollProgress(failed.requestId, revision, failed.conversationId);
+    } catch (error) {
+      if (mounted && revision == _requestRevision) {
+        _failRequest(_resolveError(error));
+      }
+    }
   }
 
   Future<void> _sendMessage([String? forcedValue, bool retry = false]) async {
-    final failed = retry ? _failedRequest : null;
-    final message = (failed?.message ?? forcedValue ?? _controller.text).trim();
+    if (retry) {
+      await _recoverRequest();
+      return;
+    }
+    final message = (forcedValue ?? _controller.text).trim();
     if (message.isEmpty ||
         _isLoading ||
         _isSending ||
         _isQuoting ||
+        _failedRequest != null ||
         !_canWrite) {
       return;
     }
 
-    final requestId = failed?.requestId ?? _newRequestId();
+    final requestId = _newRequestId();
     final requestRevision = ++_requestRevision;
-    final conversationAtSend = failed?.conversationId ?? _conversationId;
-    final assistantContext = failed?.context ?? _assistantContext();
-    final profile = failed?.profile ?? _profile;
+    final conversationAtSend = _conversationId;
+    final assistantContext = _assistantContext();
+    final profile = _profile;
     _isQuoting = true;
     _quotingRequestId = requestId;
-    final quote =
-        failed?.quote ??
-        await _confirmQuote(
-          message,
-          requestId,
-          conversationAtSend,
-          assistantContext,
-          profile,
-        );
+    final quote = await _confirmQuote(
+      message,
+      requestId,
+      conversationAtSend,
+      assistantContext,
+      profile,
+    );
     _isQuoting = false;
     if (quote == null ||
         !mounted ||
@@ -252,6 +489,12 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
         conversationAtSend != _conversationId) {
       return;
     }
+    final optimistic = AiMessageModel(
+      id: DateTime.now().millisecondsSinceEpoch,
+      role: 'user',
+      content: message,
+      createdAt: DateTime.now(),
+    );
     _failedRequest = _PendingChat(
       requestId: requestId,
       message: message,
@@ -259,18 +502,14 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
       context: assistantContext,
       profile: profile,
       quote: quote,
-    );
-    final optimistic = AiMessageModel(
-      id: DateTime.now().millisecondsSinceEpoch,
-      role: 'user',
-      content: message,
-      createdAt: DateTime.now(),
+      optimisticId: optimistic.id,
     );
 
     setState(() {
       _messages = [..._messages, optimistic];
       _isSending = true;
-      _progress = 'Отправляем запрос';
+      _progress = 'Отправляю запрос';
+      _progressDetail = 'Передаю вопрос ассистенту.';
       _error = null;
       _actionError = null;
       _activePreview = null;
@@ -283,13 +522,10 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
 
     try {
       _activeRequestId = requestId;
-      _progressTimer = Timer.periodic(
-        const Duration(seconds: 2),
-        (_) => _pollProgress(requestId, requestRevision),
-      );
+      _requestStartedAt = DateTime.now();
+      _startElapsedTimer(reset: true);
       _sendCancelToken = CancelToken();
-      if (mounted) setState(() => _progress = 'Ассистент готовит ответ');
-      final result = await ref
+      final request = await ref
           .read(aiAssistantRepositoryProvider)
           .sendMessageRequest(
             message: message,
@@ -307,39 +543,32 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
           conversationAtSend != _conversationId) {
         return;
       }
-      setState(() {
-        _conversationId = result.conversationId;
-        if (conversationAtSend == null) _canManageParticipants = true;
-        _failedRequest = null;
-        if (result.message != null) {
-          _messages = [..._messages, result.message!];
-        }
-        _isSending = false;
-        _progress = null;
-      });
-      if (result.creditUsage?.chargingEnabled == false) {
-        _showSnackBar(
-          'Тестовый режим: списания выключены. Фактическое списание — 0 ед. МОСТ.',
+      if (request.status == 'completed') {
+        _completeRequest(request.result!, conversationAtSend);
+      } else {
+        _progressTimer = Timer.periodic(
+          const Duration(seconds: 2),
+          (_) => _pollProgress(requestId, requestRevision, conversationAtSend),
         );
-      } else if (result.creditUsage?.actualCharge != null &&
-          (double.tryParse(result.creditUsage!.actualCharge!) ?? 0) > 0) {
-        _showSnackBar('Списано: ${result.creditUsage!.actualCharge} ед. МОСТ');
+        await _pollProgress(requestId, requestRevision, conversationAtSend);
       }
     } catch (error) {
       if (!mounted || requestRevision != _requestRevision) return;
-      setState(() {
-        _messages =
-            _messages.where((item) => item.id != optimistic.id).toList();
-        _error = _resolveError(error);
-        _isSending = false;
-        _progress = null;
-      });
-    } finally {
-      if (requestRevision == _requestRevision) {
-        _sendCancelToken = null;
-        _activeRequestId = null;
-        _progressTimer?.cancel();
+      if (error is ApiException &&
+          {400, 401, 403, 404, 409, 422, 429}.contains(error.statusCode)) {
+        _failRequest(_resolveError(error), terminal: true);
+        return;
       }
+      _progressTimer = Timer.periodic(
+        const Duration(seconds: 2),
+        (_) => _pollProgress(requestId, requestRevision, conversationAtSend),
+      );
+      setState(() {
+        _progress = 'Проверяю состояние запроса';
+        _progressDetail =
+            'Связь прервалась. Ответ может продолжать готовиться.';
+      });
+      await _pollProgress(requestId, requestRevision, conversationAtSend);
     }
 
     _scrollToBottom();
@@ -363,6 +592,7 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
             context: assistantContext,
           );
       if (!mounted || requestId != _quotingRequestId) return null;
+      if (double.tryParse(quote.amount) == 0) return quote;
       final confirmed = await showDialog<bool>(
         context: context,
         builder:
@@ -401,32 +631,37 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
     final requestId = _activeRequestId;
     final token = _sendCancelToken;
     _progressTimer?.cancel();
+    _elapsedTimer?.cancel();
     _activeRequestId = null;
-    _requestRevision++;
+    final stopRevision = ++_requestRevision;
     if (mounted) {
       setState(() {
         _isSending = false;
         _progress = null;
+        _progressDetail = null;
       });
     }
     if (requestId != null) {
       try {
         await ref.read(aiAssistantRepositoryProvider).cancelRequest(requestId);
-        token?.cancel('Пользователь остановил запрос.');
+        if (stopRevision == _requestRevision) _failedRequest = null;
       } catch (error) {
-        if (mounted) {
+        if (mounted && stopRevision == _requestRevision) {
           _showSnackBar(
             'Сервер не подтвердил остановку. ${_resolveError(error)}',
           );
         }
+      } finally {
+        token?.cancel('Пользователь остановил запрос.');
       }
     }
   }
 
   void _resetForOrganizationChange() {
     _progressTimer?.cancel();
+    _elapsedTimer?.cancel();
     _activeRequestId = null;
-    _sendCancelToken?.cancel('Организация изменена.');
+    _sendCancelToken = null;
     _requestRevision++;
     _quotingRequestId = null;
     _loadingHistory = false;
@@ -439,6 +674,7 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
       _error = null;
       _isSending = false;
       _progress = null;
+      _progressDetail = null;
       _isLoading = false;
       _isPreviewLoading = false;
       _isExecutingAction = false;
@@ -649,7 +885,8 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
   }
 
   AssistantSourceTarget? _sourceTarget(AiAssistantEvidenceModel evidence) {
-    final projectId = evidence.projectId ??
+    final projectId =
+        evidence.projectId ??
         (evidence.entityType == 'project' ? evidence.entityId : null);
     return resolveAssistantSourceTarget(
       evidence.url,
@@ -658,16 +895,14 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
     );
   }
 
-  String _sourceActionLabel(AiAssistantEvidenceModel evidence) {
+  bool _canOpenSource(AiAssistantEvidenceModel evidence) {
     final target = _sourceTarget(evidence);
-    if (target == null) return 'Предпросмотр источника';
-    if (target.webPath != null) return target.label;
-    final destination = visibleMobileDestinations(
-      ref.read(supportedMobileModulesProvider),
-    ).where((item) => item.matches(target.mobileRoute!));
-    return destination.isEmpty
-        ? 'Предпросмотр источника'
-        : 'Открыть раздел «${destination.first.shortTitle}»';
+    if (target == null) return false;
+    if (target.webPath != null || target.projectId != null) return true;
+    return target.mobileRoute != null &&
+        visibleMobileDestinations(
+          ref.read(supportedMobileModulesProvider),
+        ).any((item) => item.matches(target.mobileRoute!));
   }
 
   Future<void> _openAssistantSource(AiAssistantEvidenceModel evidence) async {
@@ -679,64 +914,35 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
       final matchingDestinations = destinations
           .where((item) => item.matches(target.mobileRoute!))
           .toList(growable: false);
-      final destination = matchingDestinations.isEmpty
-          ? null
-          : matchingDestinations.first;
+      final destination =
+          matchingDestinations.isEmpty ? null : matchingDestinations.first;
       final selectedProject = ref.read(projectsProvider).selectedProject;
-      final projectContextMatches = target.projectId == null ||
+      final projectContextMatches =
+          target.projectId == null ||
           selectedProject?.serverId.toString() == target.projectId;
       if (destination != null &&
           (!destination.requiresProject || projectContextMatches)) {
-        await Navigator.of(context).push<void>(
-          MaterialPageRoute<void>(
-            builder: destination.builder,
-          ),
-        );
+        await Navigator.of(
+          context,
+        ).push<void>(MaterialPageRoute<void>(builder: destination.builder));
         return;
       }
     }
 
-    final webPath = target?.webPath ??
+    final webPath =
+        target?.webPath ??
         (target?.projectId == null
             ? null
             : '/dashboard/projects/${Uri.encodeComponent(target!.projectId!)}');
     if (webPath != null) {
-      final uri = ref
-          .read(aiAssistantRepositoryProvider)
-          .sourceUri(webPath);
+      final uri = ref.read(aiAssistantRepositoryProvider).sourceUri(webPath);
       if (uri != null) {
         await launchUrl(uri, mode: LaunchMode.externalApplication);
         return;
       }
     }
 
-    if (!mounted) return;
-    await showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      builder: (sheetContext) => Padding(
-        padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(evidence.title, style: Theme.of(sheetContext).textTheme.titleMedium),
-            const SizedBox(height: 8),
-            Text('Источник: ${evidence.source ?? evidence.entityType ?? 'данные помощника'}'),
-            if (evidence.excerpt != null) ...[
-              const SizedBox(height: 8),
-              Text(evidence.excerpt!),
-            ],
-            if (evidence.entityId != null) Text('Запись №${evidence.entityId}'),
-            if (evidence.projectId != null) Text('Объект №${evidence.projectId}'),
-            if (evidence.fetchedAt != null)
-              Text('Получено: ${evidence.fetchedAt!.toLocal().toString().split('.').first}'),
-            const SizedBox(height: 12),
-            Text('В мобильном приложении для этого источника нет доступного перехода.'),
-          ],
-        ),
-      ),
-    );
+    if (mounted) _showSnackBar('Переход к записи сейчас недоступен.');
   }
 
   Map<String, dynamic> _assistantContext() {
@@ -875,7 +1081,16 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
           if (_error != null && _failedRequest != null)
             TextButton(
               onPressed: _isSending ? null : () => _sendMessage(null, true),
-              child: const Text('Повторить запрос без повторного списания'),
+              child: const Text('Проверить или возобновить запрос'),
+            ),
+          if (_isSending)
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                onPressed: _stopSending,
+                icon: const Icon(Icons.stop_circle_outlined),
+                label: const Text('Стоп'),
+              ),
             ),
           DropdownButton<String>(
             value: _profile,
@@ -944,17 +1159,38 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
                           return Padding(
                             padding: EdgeInsets.only(top: 8),
                             child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                CircularProgressIndicator(strokeWidth: 2),
-                                SizedBox(width: 12),
-                                Expanded(
-                                  child: Text(
-                                    _progress ?? 'Ассистент готовит ответ...',
+                                const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
                                   ),
                                 ),
-                                TextButton(
-                                  onPressed: _stopSending,
-                                  child: const Text('Стоп'),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        _progress ?? 'Запрос обрабатывается',
+                                        style: AppTypography.bodyMedium(
+                                          context,
+                                        ),
+                                      ),
+                                      if (_progressDetail != null)
+                                        Text(
+                                          _progressDetail!,
+                                          style: AppTypography.caption(context),
+                                        ),
+                                      Text(
+                                        'Прошло $_elapsedLabel',
+                                        style: AppTypography.caption(context),
+                                      ),
+                                    ],
+                                  ),
                                 ),
                               ],
                             ),
@@ -973,6 +1209,12 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
                             isUser
                                 ? const <AiAssistantActionModel>[]
                                 : message.actions;
+                        final sourceLinks =
+                            isUser
+                                ? const <AiAssistantEvidenceModel>[]
+                                : message.evidence
+                                    .where(_canOpenSource)
+                                    .toList();
                         final bubbleColor =
                             isUser
                                 ? theme.colorScheme.primary
@@ -1012,17 +1254,12 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
                                       context,
                                     ).copyWith(color: bubbleTextColor),
                                   ),
-                                if (!isUser &&
-                                    (message.evidence.isNotEmpty ||
-                                        message.selectedEntities.isNotEmpty ||
-                                        message.validationStatus !=
-                                            'unverified'))
+                                if (sourceLinks.isNotEmpty)
                                   Padding(
                                     padding: const EdgeInsets.only(top: 10),
-                                    child: _MessageProvenance(
-                                      message: message,
+                                    child: _MessageLinks(
+                                      evidence: sourceLinks,
                                       onOpen: _openAssistantSource,
-                                      actionLabel: _sourceActionLabel,
                                     ),
                                   ),
                                 if (reportArtifacts.isNotEmpty)
@@ -1141,63 +1378,33 @@ Color _readableForeground(Color background, Color preferred) {
   return whiteContrast >= blackContrast ? Colors.white : Colors.black87;
 }
 
-class _MessageProvenance extends StatelessWidget {
-  const _MessageProvenance({
-    required this.message,
-    required this.onOpen,
-    required this.actionLabel,
-  });
+class _MessageLinks extends StatelessWidget {
+  const _MessageLinks({required this.evidence, required this.onOpen});
 
-  final AiMessageModel message;
+  final List<AiAssistantEvidenceModel> evidence;
   final Future<void> Function(AiAssistantEvidenceModel) onOpen;
-  final String Function(AiAssistantEvidenceModel) actionLabel;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final validationLabel = switch (message.validationStatus) {
-      'verified' => 'Проверено',
-      'partial' => 'Частично проверено',
-      _ => 'Не проверено',
-    };
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            validationLabel,
-            style: AppTypography.caption(context).copyWith(
-              color: theme.colorScheme.onSurface,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-          if (message.selectedEntities.isNotEmpty)
-            Text(
-              message.selectedEntities.map((entity) => entity.label).join(', '),
-              style: AppTypography.caption(
-                context,
-              ).copyWith(color: theme.colorScheme.onSurfaceVariant),
-            ),
-          if (message.evidence.isNotEmpty)
-            ...message.evidence.map(
-              (evidence) => TextButton(
-                onPressed: () => onOpen(evidence),
-                child: Text(
-                  '${actionLabel(evidence)}: ${evidence.title}${evidence.fetchedAt == null ? '' : ' · ${evidence.fetchedAt!.toLocal().toString().split('.').first}'}',
-                  style: AppTypography.caption(
-                    context,
-                  ).copyWith(color: theme.colorScheme.onSurfaceVariant),
+    return Wrap(
+      spacing: 8,
+      runSpacing: 4,
+      children:
+          evidence
+              .map(
+                (item) => TextButton.icon(
+                  onPressed: () => onOpen(item),
+                  icon: const Icon(Icons.open_in_new, size: 16),
+                  label: Text(
+                    item.title,
+                    style: AppTypography.caption(
+                      context,
+                    ).copyWith(color: theme.colorScheme.primary),
+                  ),
                 ),
-              ),
-            ),
-        ],
-      ),
+              )
+              .toList(),
     );
   }
 }
@@ -1672,6 +1879,7 @@ class _PendingChat {
     required this.context,
     required this.profile,
     required this.quote,
+    required this.optimisticId,
   });
   final String requestId;
   final String message;
@@ -1679,4 +1887,5 @@ class _PendingChat {
   final Map<String, dynamic> context;
   final String profile;
   final AiCreditQuoteModel quote;
+  final int optimisticId;
 }

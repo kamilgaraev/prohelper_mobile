@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:prohelpers_mobile/core/network/api_exception.dart';
 import 'package:prohelpers_mobile/features/ai_assistant/data/ai_assistant_repository.dart';
 import 'package:prohelpers_mobile/features/ai_assistant/data/ai_assistant_models.dart';
 
@@ -207,10 +208,13 @@ void main() {
         allowActions: false,
         context: {'entity_refs': []},
       );
-      final chat = Map<String, dynamic>.from(requests[1].data as Map)
-        ..remove('quote_id');
+      final chat =
+          Map<String, dynamic>.from(requests[1].data as Map)
+            ..remove('quote_id')
+            ..remove('async');
       expect(chat, requests[0].data);
-      expect(result.creditUsage!.actualCharge, '0.50');
+      expect((requests[1].data as Map)['async'], true);
+      expect(result.result!.creditUsage!.actualCharge, '0.50');
     },
   );
 
@@ -227,6 +231,111 @@ void main() {
         maxConfirmed: true,
       ),
       throwsException,
+    );
+  });
+
+  test('202 request completes through GET with the same identity', () async {
+    final requests = <RequestOptions>[];
+    final dio = Dio(BaseOptions(baseUrl: 'https://api.example.test'));
+    dio.httpClientAdapter = _JsonAdapter((request) {
+      requests.add(request);
+      if (request.method == 'POST') {
+        return _responseData({
+          'request_id': 'request-1',
+          'conversation_id': null,
+          'status': 'running',
+          'stage': 'queued',
+        });
+      }
+      return _responseData({
+        'request_id': 'request-1',
+        'conversation_id': 12,
+        'status': 'completed',
+        'stage': 'completed',
+        'response': {
+          'request_id': 'request-1',
+          'conversation_id': 12,
+          'message': {'id': 17, 'role': 'assistant', 'content': 'Готово'},
+        },
+      });
+    }, statusCode: (request) => request.method == 'POST' ? 202 : 200);
+    final repository = AiAssistantRepository(dio);
+    final accepted = await repository.sendMessageRequest(
+      message: 'Вопрос',
+      requestId: 'request-1',
+      quoteId: 'quote-1',
+      maxConfirmed: true,
+    );
+    expect(accepted.status, 'running');
+    expect(accepted.result, isNull);
+    expect((requests.first.data as Map)['async'], true);
+    final completed = await repository.fetchChatRequest('request-1');
+    expect(completed.result!.message!.content, 'Готово');
+    expect(requests.last.path, '/ai-assistant/requests/request-1');
+  });
+
+  test(
+    'repeating the accepted POST preserves request and quote identity',
+    () async {
+      final payloads = <Map<String, dynamic>>[];
+      final dio = Dio(BaseOptions(baseUrl: 'https://api.example.test'));
+      dio.httpClientAdapter = _JsonAdapter((request) {
+        payloads.add(Map<String, dynamic>.from(request.data as Map));
+        return _responseData({'request_id': 'same-id', 'conversation_id': 12});
+      });
+      final repository = AiAssistantRepository(dio);
+      for (var i = 0; i < 2; i++) {
+        await repository.sendMessageRequest(
+          message: 'Вопрос',
+          requestId: 'same-id',
+          conversationId: 12,
+          quoteId: 'same-quote',
+          maxConfirmed: true,
+        );
+      }
+      expect(payloads, hasLength(2));
+      expect(payloads[1], payloads[0]);
+      expect(payloads[1]['request_id'], 'same-id');
+      expect(payloads[1]['quote_id'], 'same-quote');
+    },
+  );
+
+  test(
+    'request status rejects a result for a different conversation',
+    () async {
+      final dio = Dio(BaseOptions(baseUrl: 'https://api.example.test'));
+      dio.httpClientAdapter = _JsonAdapter(
+        (_) => _responseData({
+          'request_id': 'request-1',
+          'conversation_id': 12,
+          'status': 'completed',
+          'response': {'request_id': 'request-1', 'conversation_id': 13},
+        }),
+      );
+      await expectLater(
+        AiAssistantRepository(
+          dio,
+        ).fetchChatRequest('request-1', conversationId: 12),
+        throwsException,
+      );
+    },
+  );
+
+  test('missing request preserves 404 for same-ID recovery', () async {
+    final dio = Dio(BaseOptions(baseUrl: 'https://api.example.test'));
+    dio.httpClientAdapter = _JsonAdapter(
+      (_) => {'success': false, 'message': 'Не найдено'},
+      statusCode: (_) => 404,
+    );
+    await expectLater(
+      AiAssistantRepository(dio).fetchChatRequest('same-id'),
+      throwsA(
+        isA<ApiException>().having(
+          (error) => error.statusCode,
+          'statusCode',
+          404,
+        ),
+      ),
     );
   });
 
@@ -332,9 +441,10 @@ void main() {
 }
 
 class _JsonAdapter implements HttpClientAdapter {
-  _JsonAdapter(this.handler);
+  _JsonAdapter(this.handler, {this.statusCode});
 
   final Map<String, dynamic> Function(RequestOptions options) handler;
+  final int Function(RequestOptions options)? statusCode;
 
   @override
   void close({bool force = false}) {}
@@ -347,7 +457,7 @@ class _JsonAdapter implements HttpClientAdapter {
   ) async {
     return ResponseBody.fromString(
       jsonEncode(handler(options)),
-      200,
+      statusCode?.call(options) ?? 200,
       headers: {
         Headers.contentTypeHeader: [Headers.jsonContentType],
       },
