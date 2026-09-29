@@ -1017,6 +1017,7 @@ class _HistoryCard extends StatelessWidget {
             title: Text(entry.title),
             subtitle: Text(
               [
+                if (entry.statusLabel != null) entry.statusLabel!,
                 if (entry.description != null) entry.description!,
                 if (entry.createdAt != null) _formatDate(entry.createdAt!),
               ].join('\n'),

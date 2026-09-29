@@ -296,6 +296,13 @@ void main() {
     detail['comments'] = [
       {'body': 'Проверить схему', 'status': 'open'},
     ];
+    detail['workflow_history'] = [
+      {
+        'action': 'transmit',
+        'status': 'sent',
+        'comment': 'Передано в проверку',
+      },
+    ];
     final notifier = _FakeCompanionNotifier(
       moduleSlug: 'executive-documentation',
       detailOverride: detail,
@@ -320,6 +327,13 @@ void main() {
     await tester.scrollUntilVisible(find.textContaining('Открыто'), 200);
     expect(find.textContaining('Проверить схему\nОткрыто'), findsOneWidget);
     expect(find.text('open'), findsNothing);
+    await tester.scrollUntilVisible(find.text('Передача комплекта'), 200);
+    expect(
+      find.textContaining('Отправлено\nПередано в проверку'),
+      findsOneWidget,
+    );
+    expect(find.text('transmit'), findsNothing);
+    expect(find.text('sent'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
