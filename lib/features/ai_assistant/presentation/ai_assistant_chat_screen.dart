@@ -1,4 +1,9 @@
-﻿import 'package:flutter/material.dart';
+import 'dart:async';
+import 'package:flutter/material.dart';
+import 'dart:math';
+
+import 'package:dio/dio.dart';
+import 'package:open_filex/open_filex.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -11,8 +16,16 @@ import '../../../core/widgets/app_empty_state.dart';
 import '../../../core/widgets/app_loading_state.dart';
 import '../../../core/widgets/industrial_card.dart';
 import '../../projects/domain/projects_provider.dart';
+import '../../auth/domain/auth_provider.dart';
+import '../../actions/presentation/mobile_action_search.dart';
+import '../../../core/providers/module_provider.dart';
+import '../data/assistant_source_navigation.dart';
 import '../data/ai_assistant_models.dart';
 import '../data/ai_assistant_repository.dart';
+import 'ai_assistant_memory_screen.dart';
+import 'ai_assistant_sharing_screen.dart';
+import 'ai_assistant_credits_screen.dart';
+import 'ai_assistant_documents_screen.dart';
 
 class AiAssistantChatScreen extends ConsumerStatefulWidget {
   const AiAssistantChatScreen({
@@ -30,6 +43,10 @@ class AiAssistantChatScreen extends ConsumerStatefulWidget {
 }
 
 class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
+  static const _sourceBaseUrl = String.fromEnvironment(
+    'ASSISTANT_SOURCE_BASE_URL',
+    defaultValue: 'https://lk.xn--1-xtbgmf.xn--p1ai',
+  );
   final TextEditingController _controller = TextEditingController();
   final ScrollController _scrollController = ScrollController();
 
@@ -42,11 +59,32 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
   String? _actionError;
   int? _conversationId;
   AiActionPreviewModel? _activePreview;
+  CancelToken? _sendCancelToken;
+  int _requestRevision = 0;
+  String? _progress;
+  String? _activeRequestId;
+  Timer? _progressTimer;
+  bool _isQuoting = false;
+  String? _quotingRequestId;
+  int? _nextHistoryPage;
+  bool _loadingHistory = false;
+  String _profile = 'normal';
+  bool _canWrite = true;
+  bool _canManageParticipants = false;
+  _PendingChat? _failedRequest;
 
   @override
   void initState() {
     super.initState();
     _conversationId = widget.conversationId;
+    ref.listenManual(
+      authProvider.select(
+        (state) => (state.user?.serverId, state.user?.currentOrganizationId),
+      ),
+      (previous, next) {
+        if (previous != next) _resetForOrganizationChange();
+      },
+    );
     _controller.text = widget.initialPrompt ?? '';
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _bootstrap();
@@ -54,7 +92,31 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
   }
 
   @override
+  void didUpdateWidget(covariant AiAssistantChatScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.conversationId != widget.conversationId) {
+      _stopSending();
+      _conversationId = widget.conversationId;
+      _messages = const [];
+      _failedRequest = null;
+      _loadingHistory = false;
+      _bootstrap();
+    }
+  }
+
+  @override
   void dispose() {
+    final requestId = _activeRequestId;
+    if (requestId != null) {
+      unawaited(
+        ref
+            .read(aiAssistantRepositoryProvider)
+            .cancelRequest(requestId)
+            .catchError((Object _) {}),
+      );
+    }
+    _progressTimer?.cancel();
+    _sendCancelToken?.cancel('Экран диалога закрыт.');
     _controller.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -76,6 +138,7 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
   }
 
   Future<void> _loadConversation(int id) async {
+    final requestRevision = ++_requestRevision;
     setState(() {
       _isLoading = true;
       _error = null;
@@ -88,14 +151,20 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
           .read(aiAssistantRepositoryProvider)
           .fetchConversation(id);
 
+      if (!mounted || requestRevision != _requestRevision) return;
       setState(() {
         _conversationId = details.conversation.id;
+        _canWrite = details.conversation.canWrite;
+        _canManageParticipants = details.conversation.canManageParticipants;
         _messages = details.messages;
+        _nextHistoryPage = null;
         _isLoading = false;
       });
 
+      await _loadHistory(id, requestRevision);
       _scrollToBottom();
     } catch (error) {
+      if (!mounted || requestRevision != _requestRevision) return;
       setState(() {
         _error = UserMessage.fromError(error);
         _isLoading = false;
@@ -103,12 +172,94 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
     }
   }
 
-  Future<void> _sendMessage([String? forcedValue]) async {
-    final message = (forcedValue ?? _controller.text).trim();
-    if (message.isEmpty || _isSending) {
+  Future<void> _loadHistory(int id, int revision, {int page = 1}) async {
+    if (_loadingHistory) return;
+    _loadingHistory = true;
+    try {
+      final result = await ref
+          .read(aiAssistantRepositoryProvider)
+          .fetchMessages(id, page: page);
+      if (!mounted || revision != _requestRevision || id != _conversationId) {
+        return;
+      }
+      setState(() {
+        final combined =
+            page == 1 ? result.items : [...result.items, ..._messages];
+        final ids = <int>{};
+        _messages = combined.where((message) => ids.add(message.id)).toList();
+        _nextHistoryPage = result.nextPage;
+      });
+    } catch (error) {
+      if (mounted && revision == _requestRevision) {
+        _showSnackBar(_resolveError(error));
+      }
+    } finally {
+      _loadingHistory = false;
+    }
+  }
+
+  Future<void> _pollProgress(String requestId, int revision) async {
+    try {
+      final progress = await ref
+          .read(aiAssistantRepositoryProvider)
+          .fetchRequest(requestId);
+      if (!mounted || revision != _requestRevision) return;
+      final stage = progress['stage']?.toString();
+      setState(
+        () =>
+            _progress = switch (stage) {
+              'searching' => 'Проверяем источники',
+              'tools' => 'Получаем данные',
+              'generating' => 'Готовим ответ',
+              'validating' => 'Проверяем ответ',
+              _ => 'Ассистент готовит ответ',
+            },
+      );
+    } catch (_) {}
+  }
+
+  Future<void> _sendMessage([String? forcedValue, bool retry = false]) async {
+    final failed = retry ? _failedRequest : null;
+    final message = (failed?.message ?? forcedValue ?? _controller.text).trim();
+    if (message.isEmpty ||
+        _isLoading ||
+        _isSending ||
+        _isQuoting ||
+        !_canWrite) {
       return;
     }
 
+    final requestId = failed?.requestId ?? _newRequestId();
+    final requestRevision = ++_requestRevision;
+    final conversationAtSend = failed?.conversationId ?? _conversationId;
+    final assistantContext = failed?.context ?? _assistantContext();
+    final profile = failed?.profile ?? _profile;
+    _isQuoting = true;
+    _quotingRequestId = requestId;
+    final quote =
+        failed?.quote ??
+        await _confirmQuote(
+          message,
+          requestId,
+          conversationAtSend,
+          assistantContext,
+          profile,
+        );
+    _isQuoting = false;
+    if (quote == null ||
+        !mounted ||
+        requestRevision != _requestRevision ||
+        conversationAtSend != _conversationId) {
+      return;
+    }
+    _failedRequest = _PendingChat(
+      requestId: requestId,
+      message: message,
+      conversationId: conversationAtSend,
+      context: assistantContext,
+      profile: profile,
+      quote: quote,
+    );
     final optimistic = AiMessageModel(
       id: DateTime.now().millisecondsSinceEpoch,
       role: 'user',
@@ -119,6 +270,7 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
     setState(() {
       _messages = [..._messages, optimistic];
       _isSending = true;
+      _progress = 'Отправляем запрос';
       _error = null;
       _actionError = null;
       _activePreview = null;
@@ -130,34 +282,202 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
     _scrollToBottom();
 
     try {
-      final assistantContext = _assistantContext();
-      final details = await ref
+      _activeRequestId = requestId;
+      _progressTimer = Timer.periodic(
+        const Duration(seconds: 2),
+        (_) => _pollProgress(requestId, requestRevision),
+      );
+      _sendCancelToken = CancelToken();
+      if (mounted) setState(() => _progress = 'Ассистент готовит ответ');
+      final result = await ref
           .read(aiAssistantRepositoryProvider)
-          .sendMessage(
+          .sendMessageRequest(
             message: message,
-            conversationId: _conversationId,
-            desiredMode: 'grounded',
+            requestId: requestId,
+            quoteId: quote.id,
+            maxConfirmed: quote.maxConfirmed,
+            profile: profile,
+            conversationId: conversationAtSend,
             context: assistantContext,
+            cancelToken: _sendCancelToken,
           );
 
+      if (!mounted ||
+          requestRevision != _requestRevision ||
+          conversationAtSend != _conversationId) {
+        return;
+      }
       setState(() {
-        _conversationId = details.conversation.id;
-        _messages = details.messages;
+        _conversationId = result.conversationId;
+        if (conversationAtSend == null) _canManageParticipants = true;
+        _failedRequest = null;
+        if (result.message != null) {
+          _messages = [..._messages, result.message!];
+        }
         _isSending = false;
+        _progress = null;
       });
+      if (result.creditUsage?.chargingEnabled == false) {
+        _showSnackBar(
+          'Тестовый режим: списания выключены. Фактическое списание — 0 ед. МОСТ.',
+        );
+      } else if (result.creditUsage?.actualCharge != null &&
+          (double.tryParse(result.creditUsage!.actualCharge!) ?? 0) > 0) {
+        _showSnackBar('Списано: ${result.creditUsage!.actualCharge} ед. МОСТ');
+      }
     } catch (error) {
+      if (!mounted || requestRevision != _requestRevision) return;
       setState(() {
         _messages =
             _messages.where((item) => item.id != optimistic.id).toList();
         _error = _resolveError(error);
         _isSending = false;
+        _progress = null;
       });
+    } finally {
+      if (requestRevision == _requestRevision) {
+        _sendCancelToken = null;
+        _activeRequestId = null;
+        _progressTimer?.cancel();
+      }
     }
 
     _scrollToBottom();
   }
 
+  Future<AiCreditQuoteModel?> _confirmQuote(
+    String message,
+    String requestId,
+    int? conversationId,
+    Map<String, dynamic> assistantContext,
+    String profile,
+  ) async {
+    try {
+      final quote = await ref
+          .read(aiAssistantRepositoryProvider)
+          .quoteCredits(
+            message: message,
+            requestId: requestId,
+            profile: profile,
+            conversationId: conversationId,
+            context: assistantContext,
+          );
+      if (!mounted || requestId != _quotingRequestId) return null;
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder:
+            (context) => AlertDialog(
+              title: const Text('Оценка расхода'),
+              content: Text(
+                'Оценка до ${quote.amount} ${quote.unit}. Фактическое списание будет рассчитано после ответа.',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  child: const Text('Отмена'),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.pop(context, true),
+                  child: const Text('Продолжить'),
+                ),
+              ],
+            ),
+      );
+      return confirmed == true
+          ? AiCreditQuoteModel(
+            id: quote.id,
+            maxConfirmed: true,
+            amount: quote.amount,
+            unit: quote.unit,
+          )
+          : null;
+    } catch (error) {
+      if (mounted) _showSnackBar(_resolveError(error));
+      return null;
+    }
+  }
+
+  Future<void> _stopSending() async {
+    final requestId = _activeRequestId;
+    final token = _sendCancelToken;
+    _progressTimer?.cancel();
+    _activeRequestId = null;
+    _requestRevision++;
+    if (mounted) {
+      setState(() {
+        _isSending = false;
+        _progress = null;
+      });
+    }
+    if (requestId != null) {
+      try {
+        await ref.read(aiAssistantRepositoryProvider).cancelRequest(requestId);
+        token?.cancel('Пользователь остановил запрос.');
+      } catch (error) {
+        if (mounted) {
+          _showSnackBar(
+            'Сервер не подтвердил остановку. ${_resolveError(error)}',
+          );
+        }
+      }
+    }
+  }
+
+  void _resetForOrganizationChange() {
+    _progressTimer?.cancel();
+    _activeRequestId = null;
+    _sendCancelToken?.cancel('Организация изменена.');
+    _requestRevision++;
+    _quotingRequestId = null;
+    _loadingHistory = false;
+    if (!mounted) return;
+    setState(() {
+      _messages = const [];
+      _conversationId = null;
+      _activePreview = null;
+      _actionError = null;
+      _error = null;
+      _isSending = false;
+      _progress = null;
+      _isLoading = false;
+      _isPreviewLoading = false;
+      _isExecutingAction = false;
+      _canWrite = true;
+      _canManageParticipants = false;
+      _nextHistoryPage = null;
+      _failedRequest = null;
+    });
+  }
+
+  String _newRequestId() {
+    final random = Random.secure();
+    String hex(int length) =>
+        List.generate(
+          length,
+          (_) => random.nextInt(16).toRadixString(16),
+        ).join();
+    return '${hex(8)}-${hex(4)}-4${hex(3)}-${(8 + random.nextInt(4)).toRadixString(16)}${hex(3)}-${hex(12)}';
+  }
+
   Future<void> _previewAction(AiAssistantActionModel action) async {
+    if (action.type == 'navigate') {
+      final navigation = action.target?['navigation'];
+      final url =
+          (navigation is Map ? navigation['url'] : null) ??
+          action.target?['url'];
+      final uri = ref
+          .read(aiAssistantRepositoryProvider)
+          .sourceUri(url?.toString());
+      if (uri == null) {
+        _showSnackBar('Ссылка недоступна.');
+        return;
+      }
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+      return;
+    }
+    if (!_canWrite) return;
+    final revision = _requestRevision;
+    final conversation = _conversationId;
     if (_isPreviewLoading || _isExecutingAction || !action.allowed) {
       return;
     }
@@ -173,7 +493,9 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
           .read(aiAssistantRepositoryProvider)
           .previewAction(action: action, conversationId: _conversationId);
 
-      if (!mounted) {
+      if (!mounted ||
+          revision != _requestRevision ||
+          conversation != _conversationId) {
         return;
       }
 
@@ -182,7 +504,9 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
         _isPreviewLoading = false;
       });
     } catch (error) {
-      if (!mounted) {
+      if (!mounted ||
+          revision != _requestRevision ||
+          conversation != _conversationId) {
         return;
       }
 
@@ -196,6 +520,8 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
   }
 
   Future<void> _executeActivePreview() async {
+    final revision = _requestRevision;
+    final conversation = _conversationId;
     final preview = _activePreview;
     if (preview == null || _isExecutingAction || !preview.executable) {
       return;
@@ -211,7 +537,9 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
           .read(aiAssistantRepositoryProvider)
           .executeAction(preview: preview, conversationId: _conversationId);
 
-      if (!mounted) {
+      if (!mounted ||
+          revision != _requestRevision ||
+          conversation != _conversationId) {
         return;
       }
 
@@ -229,7 +557,9 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
         _showSnackBar(result.messageText!);
       }
     } catch (error) {
-      if (!mounted) {
+      if (!mounted ||
+          revision != _requestRevision ||
+          conversation != _conversationId) {
         return;
       }
 
@@ -277,21 +607,34 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
   }
 
   Future<void> _openReportArtifact(AiAssistantArtifact artifact) async {
-    final rawUrl = artifact.trustedUrl;
-    final uri = Uri.tryParse(rawUrl ?? '');
-
-    if (uri == null) {
-      _showSnackBar('Ссылка на отчет недоступна.');
-      return;
-    }
-
+    final revision = _requestRevision;
+    AiDownloadedReport? report;
+    var opened = false;
     try {
-      final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
-      if (!opened) {
-        _showSnackBar('Не удалось открыть отчет.');
+      report = await ref
+          .read(aiAssistantRepositoryProvider)
+          .downloadReport(artifact);
+      if (!mounted || revision != _requestRevision) return;
+      opened = (await OpenFilex.open(report.path)).type == ResultType.done;
+      if (!opened) _showSnackBar('Не удалось открыть отчёт.');
+    } catch (error) {
+      if (mounted && revision == _requestRevision) {
+        _showSnackBar(_resolveError(error));
       }
-    } catch (_) {
-      _showSnackBar('Не удалось открыть отчет.');
+    } finally {
+      if (report != null) {
+        final downloaded = report;
+        if (opened) {
+          unawaited(
+            Future<void>.delayed(
+              const Duration(minutes: 2),
+              downloaded.dispose,
+            ),
+          );
+        } else {
+          await downloaded.dispose();
+        }
+      }
     }
   }
 
@@ -303,6 +646,97 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  AssistantSourceTarget? _sourceTarget(AiAssistantEvidenceModel evidence) {
+    final projectId = evidence.projectId ??
+        (evidence.entityType == 'project' ? evidence.entityId : null);
+    return resolveAssistantSourceTarget(
+      evidence.url,
+      sourceBaseUrl: _sourceBaseUrl,
+      projectId: projectId,
+    );
+  }
+
+  String _sourceActionLabel(AiAssistantEvidenceModel evidence) {
+    final target = _sourceTarget(evidence);
+    if (target == null) return 'Предпросмотр источника';
+    if (target.webPath != null) return target.label;
+    final destination = visibleMobileDestinations(
+      ref.read(supportedMobileModulesProvider),
+    ).where((item) => item.matches(target.mobileRoute!));
+    return destination.isEmpty
+        ? 'Предпросмотр источника'
+        : 'Открыть раздел «${destination.first.shortTitle}»';
+  }
+
+  Future<void> _openAssistantSource(AiAssistantEvidenceModel evidence) async {
+    final target = _sourceTarget(evidence);
+    if (target != null && target.mobileRoute != null) {
+      final destinations = visibleMobileDestinations(
+        ref.read(supportedMobileModulesProvider),
+      );
+      final matchingDestinations = destinations
+          .where((item) => item.matches(target.mobileRoute!))
+          .toList(growable: false);
+      final destination = matchingDestinations.isEmpty
+          ? null
+          : matchingDestinations.first;
+      final selectedProject = ref.read(projectsProvider).selectedProject;
+      final projectContextMatches = target.projectId == null ||
+          selectedProject?.serverId.toString() == target.projectId;
+      if (destination != null &&
+          (!destination.requiresProject || projectContextMatches)) {
+        await Navigator.of(context).push<void>(
+          MaterialPageRoute<void>(
+            builder: destination.builder,
+          ),
+        );
+        return;
+      }
+    }
+
+    final webPath = target?.webPath ??
+        (target?.projectId == null
+            ? null
+            : '/dashboard/projects/${Uri.encodeComponent(target!.projectId!)}');
+    if (webPath != null) {
+      final uri = ref
+          .read(aiAssistantRepositoryProvider)
+          .sourceUri(webPath);
+      if (uri != null) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+        return;
+      }
+    }
+
+    if (!mounted) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) => Padding(
+        padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(evidence.title, style: Theme.of(sheetContext).textTheme.titleMedium),
+            const SizedBox(height: 8),
+            Text('Источник: ${evidence.source ?? evidence.entityType ?? 'данные помощника'}'),
+            if (evidence.excerpt != null) ...[
+              const SizedBox(height: 8),
+              Text(evidence.excerpt!),
+            ],
+            if (evidence.entityId != null) Text('Запись №${evidence.entityId}'),
+            if (evidence.projectId != null) Text('Объект №${evidence.projectId}'),
+            if (evidence.fetchedAt != null)
+              Text('Получено: ${evidence.fetchedAt!.toLocal().toString().split('.').first}'),
+            const SizedBox(height: 12),
+            Text('В мобильном приложении для этого источника нет доступного перехода.'),
+          ],
+        ),
+      ),
+    );
   }
 
   Map<String, dynamic> _assistantContext() {
@@ -342,6 +776,57 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
 
     return Scaffold(
       appBar: AppBar(
+        actions: [
+          IconButton(
+            tooltip: 'Документы',
+            icon: const Icon(Icons.description_outlined),
+            onPressed:
+                () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const AiAssistantDocumentsScreen(),
+                  ),
+                ),
+          ),
+
+          IconButton(
+            tooltip: 'Память',
+            icon: const Icon(Icons.psychology_outlined),
+            onPressed:
+                () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const AiAssistantMemoryScreen(),
+                  ),
+                ),
+          ),
+          IconButton(
+            tooltip: 'Баланс',
+            icon: const Icon(Icons.account_balance_wallet_outlined),
+            onPressed:
+                () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const AiAssistantCreditsScreen(),
+                  ),
+                ),
+          ),
+          if (_conversationId != null && _canManageParticipants)
+            IconButton(
+              tooltip: 'Доступ к чату',
+              icon: const Icon(Icons.group_outlined),
+              onPressed:
+                  () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder:
+                          (_) => AiAssistantSharingScreen(
+                            conversationId: _conversationId!,
+                          ),
+                    ),
+                  ),
+            ),
+        ],
         title: Text(
           _conversationId == null ? 'Новый чат' : 'Диалог #$_conversationId',
         ),
@@ -387,6 +872,36 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
                 ),
               ),
             ),
+          if (_error != null && _failedRequest != null)
+            TextButton(
+              onPressed: _isSending ? null : () => _sendMessage(null, true),
+              child: const Text('Повторить запрос без повторного списания'),
+            ),
+          DropdownButton<String>(
+            value: _profile,
+            items: const [
+              DropdownMenuItem(value: 'short', child: Text('Краткий ответ')),
+              DropdownMenuItem(value: 'normal', child: Text('Обычный ответ')),
+              DropdownMenuItem(
+                value: 'detailed',
+                child: Text('Подробный ответ'),
+              ),
+            ],
+            onChanged:
+                _isSending || _isQuoting
+                    ? null
+                    : (value) => setState(() => _profile = value ?? 'normal'),
+          ),
+          if (_nextHistoryPage != null)
+            TextButton(
+              onPressed:
+                  () => _loadHistory(
+                    _conversationId!,
+                    _requestRevision,
+                    page: _nextHistoryPage!,
+                  ),
+              child: const Text('Ранние сообщения'),
+            ),
           Expanded(
             child:
                 _isLoading
@@ -426,13 +941,21 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
                       itemCount: _messages.length + (_isSending ? 1 : 0),
                       itemBuilder: (context, index) {
                         if (_isSending && index == _messages.length) {
-                          return const Padding(
+                          return Padding(
                             padding: EdgeInsets.only(top: 8),
                             child: Row(
                               children: [
                                 CircularProgressIndicator(strokeWidth: 2),
                                 SizedBox(width: 12),
-                                Text('Ассистент готовит ответ...'),
+                                Expanded(
+                                  child: Text(
+                                    _progress ?? 'Ассистент готовит ответ...',
+                                  ),
+                                ),
+                                TextButton(
+                                  onPressed: _stopSending,
+                                  child: const Text('Стоп'),
+                                ),
                               ],
                             ),
                           );
@@ -488,6 +1011,19 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
                                     style: AppTypography.bodyMedium(
                                       context,
                                     ).copyWith(color: bubbleTextColor),
+                                  ),
+                                if (!isUser &&
+                                    (message.evidence.isNotEmpty ||
+                                        message.selectedEntities.isNotEmpty ||
+                                        message.validationStatus !=
+                                            'unverified'))
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 10),
+                                    child: _MessageProvenance(
+                                      message: message,
+                                      onOpen: _openAssistantSource,
+                                      actionLabel: _sourceActionLabel,
+                                    ),
                                   ),
                                 if (reportArtifacts.isNotEmpty)
                                   ...reportArtifacts.map(
@@ -546,32 +1082,41 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
                 onCancel: _rejectActionPreview,
               ),
             ),
-          SafeArea(
-            top: false,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _controller,
-                      minLines: 1,
-                      maxLines: 5,
-                      textInputAction: TextInputAction.newline,
-                      decoration: const InputDecoration(
-                        hintText: 'Введите вопрос для ассистента',
+          if (!_canWrite)
+            const Padding(
+              padding: EdgeInsets.all(12),
+              child: Text('Доступ только для просмотра.'),
+            )
+          else
+            SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _controller,
+                        minLines: 1,
+                        maxLines: 5,
+                        textInputAction: TextInputAction.newline,
+                        decoration: const InputDecoration(
+                          hintText: 'Введите вопрос для ассистента',
+                        ),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 12),
-                  FilledButton(
-                    onPressed: _isSending ? null : () => _sendMessage(),
-                    child: const Icon(Icons.send_rounded),
-                  ),
-                ],
+                    const SizedBox(width: 12),
+                    FilledButton(
+                      onPressed:
+                          _isSending || _isQuoting
+                              ? null
+                              : () => _sendMessage(),
+                      child: const Icon(Icons.send_rounded),
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
         ],
       ),
     );
@@ -594,6 +1139,67 @@ Color _readableForeground(Color background, Color preferred) {
   final blackContrast = _contrastRatio(background, Colors.black87);
 
   return whiteContrast >= blackContrast ? Colors.white : Colors.black87;
+}
+
+class _MessageProvenance extends StatelessWidget {
+  const _MessageProvenance({
+    required this.message,
+    required this.onOpen,
+    required this.actionLabel,
+  });
+
+  final AiMessageModel message;
+  final Future<void> Function(AiAssistantEvidenceModel) onOpen;
+  final String Function(AiAssistantEvidenceModel) actionLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final validationLabel = switch (message.validationStatus) {
+      'verified' => 'Проверено',
+      'partial' => 'Частично проверено',
+      _ => 'Не проверено',
+    };
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            validationLabel,
+            style: AppTypography.caption(context).copyWith(
+              color: theme.colorScheme.onSurface,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          if (message.selectedEntities.isNotEmpty)
+            Text(
+              message.selectedEntities.map((entity) => entity.label).join(', '),
+              style: AppTypography.caption(
+                context,
+              ).copyWith(color: theme.colorScheme.onSurfaceVariant),
+            ),
+          if (message.evidence.isNotEmpty)
+            ...message.evidence.map(
+              (evidence) => TextButton(
+                onPressed: () => onOpen(evidence),
+                child: Text(
+                  '${actionLabel(evidence)}: ${evidence.title}${evidence.fetchedAt == null ? '' : ' · ${evidence.fetchedAt!.toLocal().toString().split('.').first}'}',
+                  style: AppTypography.caption(
+                    context,
+                  ).copyWith(color: theme.colorScheme.onSurfaceVariant),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
 }
 
 double _contrastRatio(Color first, Color second) {
@@ -876,7 +1482,8 @@ class _ReportArtifactCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final url = artifact.trustedUrl;
+    final url =
+        artifact.downloadUrl ?? artifact.url ?? artifact.href ?? artifact.path;
     final rows = _artifactRows(artifact);
 
     return Material(
@@ -1056,3 +1663,20 @@ const _quickPrompts = [
   'Какие вопросы требуют внимания сегодня',
   'Есть ли перекос по финансам',
 ];
+
+class _PendingChat {
+  const _PendingChat({
+    required this.requestId,
+    required this.message,
+    required this.conversationId,
+    required this.context,
+    required this.profile,
+    required this.quote,
+  });
+  final String requestId;
+  final String message;
+  final int? conversationId;
+  final Map<String, dynamic> context;
+  final String profile;
+  final AiCreditQuoteModel quote;
+}
