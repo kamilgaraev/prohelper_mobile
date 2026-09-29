@@ -97,6 +97,78 @@ void main() {
   });
 
   test(
+    'uses API project stage label and backend fallback for known stages',
+    () {
+      const stageLabels = <String, String>{
+        'pd': 'Проектная документация',
+        'rd': 'Рабочая документация',
+        'survey': 'Изыскания и обследования',
+        'bim': 'Информационная модель',
+      };
+
+      for (final entry in stageLabels.entries) {
+        final package = DesignPackageModel.fromJson({
+          'id': 42,
+          'title': 'Рабочая документация',
+          'project_stage': entry.key,
+        });
+
+        expect(package.projectStage, entry.key);
+        expect(package.projectStageLabel, entry.value, reason: entry.key);
+      }
+
+      final packageWithApiLabel = DesignPackageModel.fromJson({
+        'id': 42,
+        'title': 'Рабочая документация',
+        'project_stage': 'bim',
+        'project_stage_label': 'Подпись API',
+      });
+
+      expect(packageWithApiLabel.projectStage, 'bim');
+      expect(packageWithApiLabel.projectStageLabel, 'Подпись API');
+    },
+  );
+
+  test('localizes only confirmed package result fields and values', () {
+    final package = DesignPackageModel.fromJson({
+      'id': 42,
+      'title': 'Рабочая документация',
+      'result': {
+        'status': 'draft',
+        'composition_status': 'approved',
+        'open_blocking_comments_count': 0,
+        'custom_text': 'approved',
+      },
+    });
+    final rows = {for (final row in package.result) row.label: row};
+
+    expect(rows['Статус']?.value, 'draft');
+    expect(rows['Статус']?.displayValue, 'Черновик');
+    expect(rows['Статус состава']?.value, 'approved');
+    expect(rows['Статус состава']?.displayValue, 'Согласован');
+    expect(rows['Количество открытых блокирующих замечаний']?.value, '0');
+    expect(rows['Custom text']?.value, 'approved');
+    expect(rows['Custom text']?.displayValue, isNull);
+
+    for (final entry
+        in const {
+          'draft': 'Черновик',
+          'approved': 'Согласован',
+          'needs_review': 'Требует проверки',
+        }.entries) {
+      final compositionStatus =
+          DesignPackageModel.fromJson({
+            'id': 42,
+            'title': 'Рабочая документация',
+            'result': {'composition_status': entry.key},
+          }).result.single;
+
+      expect(compositionStatus.value, entry.key);
+      expect(compositionStatus.displayValue, entry.value);
+    }
+  });
+
+  test(
     'uses selected-project pagination and confirmed package routes',
     () async {
       final requests = <RequestOptions>[];

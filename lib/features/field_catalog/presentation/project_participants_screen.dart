@@ -225,7 +225,10 @@ class _ProjectParticipantsScreenState
                   ProRecordCard(
                     title: participant.name,
                     subtitle: [
-                      if (!_showAvailable) participant.projectRole,
+                      if (!_showAvailable)
+                        participant.projectRole.trim() == 'member'
+                            ? 'Участник'
+                            : participant.projectRole,
                       participant.email,
                     ].where((value) => value.trim().isNotEmpty).join(' · '),
                     icon: Icons.person_outline_rounded,

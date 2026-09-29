@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/error/user_message.dart';
 import '../../../core/widgets/app_empty_state.dart';
@@ -9,7 +8,9 @@ import '../../../core/widgets/app_error_state.dart';
 import '../../../core/widgets/app_loading_state.dart';
 import '../../../core/widgets/app_permission_state.dart';
 import '../../../core/widgets/industrial_card.dart';
+import '../../auth/domain/auth_provider.dart';
 import '../../projects/domain/projects_provider.dart';
+import '../data/design_package_file_service.dart';
 import '../data/design_package_model.dart';
 import '../domain/design_package_provider.dart';
 
@@ -184,6 +185,7 @@ class _DesignPackageDetailScreen extends ConsumerStatefulWidget {
 class _DesignPackageDetailScreenState
     extends ConsumerState<_DesignPackageDetailScreen> {
   late Future<DesignPackageModel> _future;
+  bool _isOpeningFile = false;
 
   @override
   void initState() {
@@ -254,7 +256,10 @@ class _DesignPackageDetailScreenState
             child: Column(
               children: [
                 for (final row in package.result)
-                  ListTile(title: Text(row.label), subtitle: Text(row.value)),
+                  ListTile(
+                    title: Text(row.label),
+                    subtitle: Text(row.displayValue ?? row.value),
+                  ),
               ],
             ),
           ),
@@ -271,19 +276,30 @@ class _DesignPackageDetailScreenState
                     leading: const Icon(Icons.description_outlined),
                     title: Text(file.name),
                     subtitle:
-                        file.mimeType == null ? null : Text(file.mimeType!),
+                        file.mimeType == null ||
+                                file.mimeType == 'application/octet-stream'
+                            ? null
+                            : Text(file.mimeType!),
                     trailing: Wrap(
                       children: [
-                        if (file.uriFor('preview') != null)
+                        if (_isOpeningFile)
+                          const Padding(
+                            padding: EdgeInsets.all(12),
+                            child: SizedBox.square(
+                              dimension: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                          ),
+                        if (!_isOpeningFile && file.uriFor('preview') != null)
                           IconButton(
                             tooltip: 'Просмотреть',
                             onPressed:
                                 () => _openFile(package, file, 'preview'),
                             icon: const Icon(Icons.visibility_outlined),
                           ),
-                        if (file.uriFor('download') != null)
+                        if (!_isOpeningFile && file.uriFor('download') != null)
                           IconButton(
-                            tooltip: 'Скачать',
+                            tooltip: 'Скачать и открыть',
                             onPressed:
                                 () => _openFile(package, file, 'download'),
                             icon: const Icon(Icons.download_outlined),
@@ -369,16 +385,110 @@ class _DesignPackageDetailScreenState
     DesignPackageFile file,
     String purpose,
   ) async {
-    if (!_projectContextCurrent(package)) return;
-    final uri = file.uriFor(purpose);
-    if (uri == null) return;
+    if (_isOpeningFile || !_projectContextCurrent(package)) return;
+    final selectedProjectId =
+        ref.read(projectsProvider).selectedProject?.serverId;
+    final initialAuth = ref.read(authProvider);
+    if (selectedProjectId == null || initialAuth is! AuthAuthenticated) return;
+    final sessionIdentity = initialAuth.sessionIdentity;
+    if (sessionIdentity == null) return;
+    final service = ref.read(designPackageFileServiceProvider);
+    setState(() => _isOpeningFile = true);
+    String? downloadedPath;
     try {
-      if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
-        throw StateError('design_package_file_open_failed');
+      final freshPackage = await _load();
+      if (!_fileContextCurrent(
+        selectedProjectId,
+        sessionIdentity,
+        freshPackage,
+      )) {
+        return;
+      }
+      if (freshPackage.id != widget.id ||
+          freshPackage.id != package.id ||
+          freshPackage.projectId != package.projectId) {
+        return;
+      }
+      final freshFile =
+          freshPackage.files
+              .where((candidate) => candidate.id == file.id)
+              .firstOrNull;
+      if (freshFile == null) return;
+      final uri = freshFile.uriFor(purpose);
+      if (uri == null) {
+        throw const FormatException('Для файла нет актуальной ссылки.');
+      }
+      if (purpose == 'preview') {
+        final opened = await service.openPreview(uri);
+        if (!_fileContextCurrent(
+          selectedProjectId,
+          sessionIdentity,
+          freshPackage,
+        )) {
+          return;
+        }
+        if (!opened) {
+          throw const FormatException(
+            'Не удалось открыть файл. Проверьте, что на устройстве есть приложение для просмотра документов.',
+          );
+        }
+      } else {
+        downloadedPath = await service.download(uri, freshFile.name);
+        if (!_fileContextCurrent(
+          selectedProjectId,
+          sessionIdentity,
+          freshPackage,
+        )) {
+          await service.deleteDownloaded(downloadedPath);
+          downloadedPath = null;
+          return;
+        }
+        final opened = await service.openLocalFile(downloadedPath);
+        if (!_fileContextCurrent(
+          selectedProjectId,
+          sessionIdentity,
+          freshPackage,
+        )) {
+          await service.deleteDownloaded(downloadedPath);
+          downloadedPath = null;
+          return;
+        }
+        if (!opened) {
+          throw const FormatException(
+            'Не удалось открыть файл. Проверьте, что на устройстве есть приложение для просмотра документов.',
+          );
+        }
+        service.scheduleCleanup(downloadedPath);
+        downloadedPath = null;
       }
     } catch (error) {
-      if (mounted) AppErrorNotice.show(context, error);
+      if (downloadedPath != null) {
+        try {
+          await service.deleteDownloaded(downloadedPath);
+        } catch (_) {}
+      }
+      if (mounted &&
+          _fileContextCurrent(selectedProjectId, sessionIdentity, package)) {
+        AppErrorNotice.show(context, error);
+      }
+    } finally {
+      if (mounted) setState(() => _isOpeningFile = false);
     }
+  }
+
+  bool _fileContextCurrent(
+    int projectId,
+    Object sessionIdentity,
+    DesignPackageModel package,
+  ) {
+    if (!mounted ||
+        package.id != widget.id ||
+        package.projectId != projectId ||
+        ref.read(projectsProvider).selectedProject?.serverId != projectId) {
+      return false;
+    }
+    final auth = ref.read(authProvider);
+    return auth is AuthAuthenticated && auth.sessionIdentity == sessionIdentity;
   }
 
   Future<void> _performAction(
@@ -431,7 +541,7 @@ class _InfoCard extends StatelessWidget {
         if (package.projectStage != null)
           ListTile(
             title: const Text('Этап объекта'),
-            subtitle: Text(package.projectStage!),
+            subtitle: Text(package.projectStageLabel ?? package.projectStage!),
           ),
         if (package.discipline != null)
           ListTile(
