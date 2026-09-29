@@ -187,11 +187,15 @@ class _SiteRequestsScreenState extends ConsumerState<SiteRequestsScreen> {
     final inReviewCount = state.requests.where(_isInReview).length;
     final inWorkCount =
         state.requests.where((request) => _isInWork(request.status)).length;
+    final hasBlockingEmptyError =
+        state.error != null &&
+        state.requests.isEmpty &&
+        (!state.fromCache || state.permissionDenied || state.hasDirtyLocal);
     final canCreateRequest =
         !_isApprovalsMode &&
         selectedProject != null &&
         !state.permissionDenied &&
-        !(state.error != null && state.requests.isEmpty);
+        !hasBlockingEmptyError;
 
     ref.listen<SiteRequestsState>(siteRequestsProvider, (previous, next) {
       final shouldShowError =
@@ -292,7 +296,7 @@ class _SiteRequestsScreenState extends ConsumerState<SiteRequestsScreen> {
                   child: AppLoadingState(message: 'Загружаем заявки'),
                 )
               else ...[
-                if (state.fromCache && state.requests.isNotEmpty)
+                if (state.fromCache && !state.permissionDenied)
                   SliverPadding(
                     padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
                     sliver: SliverToBoxAdapter(
@@ -361,7 +365,7 @@ class _SiteRequestsScreenState extends ConsumerState<SiteRequestsScreen> {
                     ),
                   ),
                 ),
-                if (state.error != null && state.requests.isEmpty)
+                if (hasBlockingEmptyError)
                   SliverFillRemaining(
                     child: AppErrorState(
                       title:
