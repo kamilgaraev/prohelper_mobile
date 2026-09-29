@@ -122,6 +122,8 @@ class _FakeSiteRequestsNotifier extends SiteRequestsNotifier {
     bool permissionDenied = false,
     String? error,
     bool isLoading = false,
+    bool fromCache = false,
+    bool hasDirtyLocal = false,
   }) : super(
          _FakeSiteRequestsRepository(),
          initialProjectId: 15,
@@ -134,6 +136,8 @@ class _FakeSiteRequestsNotifier extends SiteRequestsNotifier {
       hasMore: false,
       permissionDenied: permissionDenied,
       error: error,
+      fromCache: fromCache,
+      hasDirtyLocal: hasDirtyLocal,
       statusFilter: null,
       projectFilter: 15,
       scope: scope,
@@ -225,6 +229,8 @@ void main() {
     bool permissionDenied = false,
     String? error,
     bool isLoading = false,
+    bool fromCache = false,
+    bool hasDirtyLocal = false,
     bool hasProject = true,
     _FakeProjectsNotifier? projectsNotifier,
     _FakeSiteRequestsNotifier? requestsNotifier,
@@ -241,6 +247,8 @@ void main() {
           permissionDenied: permissionDenied,
           error: error,
           isLoading: isLoading,
+          fromCache: fromCache,
+          hasDirtyLocal: hasDirtyLocal,
         );
 
     return ProviderScope(
@@ -412,6 +420,78 @@ void main() {
 
     expect(find.text('Новый объект'), findsOneWidget);
     expect(find.text('Заявка прежнего объекта'), findsNothing);
+  });
+
+  testWidgets('сохранённый пустой реестр остаётся доступен без сети', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      createWidget(
+        requests: const [],
+        fromCache: true,
+        error: 'Нет соединения с сервером. Проверьте интернет.',
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('Сохранённые данные'), findsOneWidget);
+    expect(find.text('Заявок пока нет'), findsOneWidget);
+    expect(find.text('Не удалось загрузить заявки'), findsNothing);
+    expect(find.byTooltip('Новая заявка'), findsOneWidget);
+  });
+
+  testWidgets('без сохранённого снимка пустой реестр показывает ошибку сети', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      createWidget(
+        requests: const [],
+        error: 'Нет соединения с сервером. Проверьте интернет.',
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('Не удалось загрузить заявки'), findsOneWidget);
+    expect(find.text('Сохранённые данные'), findsNothing);
+    expect(find.text('Заявок пока нет'), findsNothing);
+    expect(find.byTooltip('Новая заявка'), findsNothing);
+  });
+
+  testWidgets('отозванный доступ не подменяется пустым снимком', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      createWidget(
+        requests: const [],
+        fromCache: true,
+        permissionDenied: true,
+        error: 'Недостаточно прав для просмотра заявок.',
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('Нет доступа к заявкам объекта'), findsOneWidget);
+    expect(find.text('Сохранённые данные'), findsNothing);
+    expect(find.text('Заявок пока нет'), findsNothing);
+    expect(find.byTooltip('Новая заявка'), findsNothing);
+  });
+
+  testWidgets('конфликт локальных изменений не скрывается пустым снимком', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      createWidget(
+        requests: const [],
+        fromCache: true,
+        hasDirtyLocal: true,
+        error: 'Локальные изменения требуют проверки.',
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('Не удалось загрузить заявки'), findsOneWidget);
+    expect(find.text('Заявок пока нет'), findsNothing);
+    expect(find.byTooltip('Новая заявка'), findsNothing);
   });
 
   testWidgets('поле поиска и клавиатура остаются при медленном пустом ответе', (

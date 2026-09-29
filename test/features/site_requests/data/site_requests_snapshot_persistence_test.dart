@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:isar/isar.dart';
+import 'package:prohelpers_mobile/core/network/api_exception.dart';
 import 'package:prohelpers_mobile/core/storage/entity_snapshot_service.dart';
 import 'package:prohelpers_mobile/core/storage/cached_entity.dart';
 import 'package:prohelpers_mobile/core/storage/isar_entity_snapshot_store.dart';
@@ -15,6 +16,63 @@ import 'package:prohelpers_mobile/features/site_requests/data/site_requests_snap
 import 'package:prohelpers_mobile/features/site_requests/domain/site_requests_scope.dart';
 
 void main() {
+  test('пустой снимок сохраняется после открытия хранилища заново', () async {
+    await _initializeIsarCoreForTest();
+    final directory = await Directory.systemTemp.createTemp(
+      'site-requests-empty-snapshot-',
+    );
+    var isar = await _openIsar(directory);
+    addTearDown(() async {
+      if (isar.isOpen) await isar.close(deleteFromDisk: true);
+      if (await directory.exists()) await directory.delete(recursive: true);
+    });
+
+    const owner = EntitySnapshotOwner(userId: 39, orgId: 38);
+    final repository = _PersistedSnapshotRepository()..emptyList = true;
+    SiteRequestsSnapshotAdapter createAdapter(
+      Isar database, {
+      EntitySnapshotOwner currentOwner = owner,
+    }) => SiteRequestsSnapshotAdapter(
+      repository: repository,
+      snapshots: Future.value(
+        EntitySnapshotService(
+          store: IsarEntitySnapshotStore(database),
+          resolveOwner: () => currentOwner,
+        ),
+      ),
+    );
+
+    final fetched = await createAdapter(isar).load(online: true, projectId: 52);
+    expect(fetched.presence, SnapshotPresence.empty);
+    expect(fetched.data, isEmpty);
+    expect(fetched.fromCache, isFalse);
+
+    await isar.close();
+    isar = await _openIsar(directory);
+    repository.offline = true;
+    final adapter = createAdapter(isar);
+    final restored = await adapter.load(online: true, projectId: 52);
+    final otherProject = await adapter.load(online: false, projectId: 53);
+    final otherScope = await adapter.load(
+      online: false,
+      projectId: 52,
+      scope: SiteRequestsScope.own,
+    );
+    final otherOwner = await createAdapter(
+      isar,
+      currentOwner: const EntitySnapshotOwner(userId: 40, orgId: 38),
+    ).load(online: false, projectId: 52);
+
+    expect(restored.presence, SnapshotPresence.empty);
+    expect(restored.data, isEmpty);
+    expect(restored.fromCache, isTrue);
+    expect(restored.error, isNotNull);
+    expect(otherProject.presence, SnapshotPresence.missing);
+    expect(otherScope.presence, SnapshotPresence.missing);
+    expect(otherOwner.presence, SnapshotPresence.missing);
+    expect(repository.listFetchCount, 2);
+  });
+
   test(
     'search cache and status ACK preserve the full list across store reopen',
     () async {
@@ -173,6 +231,8 @@ class _PersistedSnapshotRepository extends SiteRequestsRepository {
 
   var listFetchCount = 0;
   var detailFetchCount = 0;
+  var emptyList = false;
+  var offline = false;
 
   @override
   Future<List<Map<String, dynamic>>> fetchSiteRequestPayloads({
@@ -190,6 +250,15 @@ class _PersistedSnapshotRepository extends SiteRequestsRepository {
   }) async {
     listFetchCount++;
     expect(projectId, 52);
+    if (offline) {
+      throw ApiException.fromDio(
+        DioException(
+          requestOptions: RequestOptions(path: '/site-requests'),
+          type: DioExceptionType.connectionError,
+        ),
+      );
+    }
+    if (emptyList) return const [];
     if (search == null) {
       return [
         for (var id = 569; id <= 577; id++)
