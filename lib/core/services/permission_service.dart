@@ -22,7 +22,10 @@ class PermissionService {
         grantedPermissions.contains(permission) ||
         grantedPermissions.contains('$module.*') ||
         grantedPermissions.contains('${module.replaceAll('_', '-')}.*') ||
-        grantedPermissions.contains('${module.replaceAll('-', '_')}.*');
+        grantedPermissions.contains('${module.replaceAll('-', '_')}.*') ||
+        (module == 'warehouse' &&
+            (grantedPermissions.contains('basic-warehouse.*') ||
+                grantedPermissions.contains('basic_warehouse.*')));
   }
 
   bool hasAnyPermission(Iterable<String> permissions) {
