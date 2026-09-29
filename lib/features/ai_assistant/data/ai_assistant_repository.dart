@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:path_provider/path_provider.dart';
 import 'package:dio/dio.dart';
@@ -26,6 +27,32 @@ class AiAssistantRepository {
   final String _sourceBaseUrl;
 
   final Dio _dio;
+
+  Future<AiImageAttachmentModel> uploadImage({
+    required String fileName,
+    required String mime,
+    required Uint8List bytes,
+    int? conversationId,
+    ProgressCallback? onSendProgress,
+  }) async {
+    final response = await _dio.post(
+      '/ai-assistant/attachments',
+      data: FormData.fromMap({
+        'image': MultipartFile.fromBytes(bytes, filename: fileName),
+        if (conversationId != null) 'conversation_id': conversationId,
+      }),
+      onSendProgress: onSendProgress,
+    );
+    return AiImageAttachmentModel.fromJson(_asMap(_unwrapData(response.data)));
+  }
+
+  Future<Uint8List> fetchImageContent(String id) async {
+    final response = await _dio.get<List<int>>(
+      '/ai-assistant/attachments/$id/content',
+      options: Options(responseType: ResponseType.bytes),
+    );
+    return Uint8List.fromList(response.data ?? const <int>[]);
+  }
 
   Future<AiAssistantHomeModel> fetchHome() async {
     try {
@@ -221,6 +248,7 @@ class AiAssistantRepository {
     String profile = 'normal',
     bool allowActions = true,
     Map<String, dynamic>? context,
+    List<String> attachmentIds = const <String>[],
     CancelToken? cancelToken,
   }) async {
     try {
@@ -235,6 +263,7 @@ class AiAssistantRepository {
           'profile': profile,
           'allow_actions': allowActions,
           if (context != null && context.isNotEmpty) 'context': context,
+          if (attachmentIds.isNotEmpty) 'attachment_ids': attachmentIds,
         },
         cancelToken: cancelToken,
       );
@@ -276,6 +305,7 @@ class AiAssistantRepository {
     bool allowActions = true,
     int? conversationId,
     Map<String, dynamic>? context,
+    List<String> attachmentIds = const <String>[],
   }) async {
     final response = await _dio.post(
       '/ai-assistant/credits/quote',
@@ -286,6 +316,7 @@ class AiAssistantRepository {
         'allow_actions': allowActions,
         if (conversationId != null) 'conversation_id': conversationId,
         if (context != null && context.isNotEmpty) 'context': context,
+        if (attachmentIds.isNotEmpty) 'attachment_ids': attachmentIds,
       },
     );
     final payload = _asMap(_unwrapData(response.data));

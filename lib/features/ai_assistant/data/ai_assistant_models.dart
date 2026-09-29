@@ -90,6 +90,7 @@ class AiMessageModel {
     required this.createdAt,
     this.metadata,
     this.structuredPayload,
+    this.attachments = const <AiImageAttachmentModel>[],
   });
 
   final int id;
@@ -98,6 +99,7 @@ class AiMessageModel {
   final DateTime? createdAt;
   final Map<String, dynamic>? metadata;
   final AiAssistantStructuredPayload? structuredPayload;
+  final List<AiImageAttachmentModel> attachments;
 
   String get validationStatus =>
       _stringValue(metadata?['validation_status']) ?? 'unverified';
@@ -132,8 +134,42 @@ class AiMessageModel {
       createdAt: _dateTimeValue(json['created_at']),
       metadata: metadata,
       structuredPayload: AiAssistantStructuredPayload.fromMetadata(metadata),
+      attachments: _asList(json['attachments'])
+          .map(
+            (item) =>
+                AiImageAttachmentModel.fromJson(_nullableMap(item) ?? const {}),
+          )
+          .toList(growable: false),
     );
   }
+}
+
+class AiImageAttachmentModel {
+  const AiImageAttachmentModel({
+    required this.id,
+    required this.name,
+    required this.mime,
+    required this.size,
+    this.width,
+    this.height,
+  });
+
+  final String id;
+  final String name;
+  final String mime;
+  final int size;
+  final int? width;
+  final int? height;
+
+  factory AiImageAttachmentModel.fromJson(Map<String, dynamic> json) =>
+      AiImageAttachmentModel(
+        id: _stringValue(json['id']) ?? '',
+        name: _stringValue(json['name']) ?? 'Изображение',
+        mime: _stringValue(json['mime']) ?? 'image/jpeg',
+        size: _intValue(json['size']),
+        width: _nullableInt(json['width']),
+        height: _nullableInt(json['height']),
+      );
 }
 
 class AiAssistantStructuredPayload {

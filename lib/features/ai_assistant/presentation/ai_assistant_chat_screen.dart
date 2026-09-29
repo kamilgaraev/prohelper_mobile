@@ -1,9 +1,12 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'dart:math';
+import 'dart:typed_data';
+import 'dart:ui' as ui;
 
 import 'package:dio/dio.dart';
 import 'package:open_filex/open_filex.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -78,6 +81,13 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
   bool _canWrite = true;
   bool _canManageParticipants = false;
   _PendingChat? _failedRequest;
+  final ImagePicker _imagePicker = ImagePicker();
+  List<_DraftImage> _draftImages = const [];
+  bool _isUploadingImage = false;
+  double? _imageUploadProgress;
+  String? _imageError;
+  int _draftRevision = 0;
+  int _uploadRevision = 0;
 
   @override
   void initState() {
@@ -102,7 +112,13 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.conversationId != widget.conversationId) {
       _detachSending();
+      _draftRevision++;
+      _uploadRevision++;
       _conversationId = widget.conversationId;
+      _draftImages = const [];
+      _isUploadingImage = false;
+      _imageUploadProgress = null;
+      _imageError = null;
       _messages = const [];
       _failedRequest = null;
       _loadingHistory = false;
@@ -419,6 +435,7 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
               maxConfirmed: failed.quote.maxConfirmed,
               profile: failed.profile,
               context: failed.context,
+              attachmentIds: failed.attachmentIds,
             );
       }
       if (!mounted ||
@@ -458,7 +475,12 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
       await _recoverRequest();
       return;
     }
-    final message = (forcedValue ?? _controller.text).trim();
+    final attachments = List<_DraftImage>.unmodifiable(_draftImages);
+    final message =
+        (forcedValue ?? _controller.text).trim().isEmpty &&
+                attachments.isNotEmpty
+            ? 'Проанализируй прикреплённое изображение.'
+            : (forcedValue ?? _controller.text).trim();
     if (message.isEmpty ||
         _isLoading ||
         _isSending ||
@@ -470,6 +492,8 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
 
     final requestId = _newRequestId();
     final requestRevision = ++_requestRevision;
+    final attachmentRevision = _draftRevision;
+    final attachmentIds = attachments.map((item) => item.metadata.id).toList();
     final conversationAtSend = _conversationId;
     final assistantContext = _assistantContext();
     final profile = _profile;
@@ -481,12 +505,14 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
       conversationAtSend,
       assistantContext,
       profile,
+      attachmentIds,
     );
     _isQuoting = false;
     if (quote == null ||
         !mounted ||
         requestRevision != _requestRevision ||
-        conversationAtSend != _conversationId) {
+        conversationAtSend != _conversationId ||
+        attachmentRevision != _draftRevision) {
       return;
     }
     final optimistic = AiMessageModel(
@@ -494,6 +520,7 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
       role: 'user',
       content: message,
       createdAt: DateTime.now(),
+      attachments: attachments.map((item) => item.metadata).toList(),
     );
     _failedRequest = _PendingChat(
       requestId: requestId,
@@ -502,6 +529,7 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
       context: assistantContext,
       profile: profile,
       quote: quote,
+      attachmentIds: attachmentIds,
       optimisticId: optimistic.id,
     );
 
@@ -513,6 +541,9 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
       _error = null;
       _actionError = null;
       _activePreview = null;
+      _draftImages = const [];
+      _draftRevision++;
+      _imageError = null;
       if (forcedValue == null) {
         _controller.clear();
       }
@@ -535,6 +566,7 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
             profile: profile,
             conversationId: conversationAtSend,
             context: assistantContext,
+            attachmentIds: attachmentIds,
             cancelToken: _sendCancelToken,
           );
 
@@ -574,12 +606,127 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
     _scrollToBottom();
   }
 
+  Future<void> _pickImage() async {
+    if (_isUploadingImage || _draftImages.length >= 2) return;
+    final revision = _draftRevision;
+    final uploadRevision = ++_uploadRevision;
+    final conversationAtPick = _conversationId;
+    try {
+      final file = await _imagePicker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 2048,
+        maxHeight: 2048,
+        imageQuality: 95,
+      );
+      if (file == null || !_isCurrentImagePick(revision, conversationAtPick)) {
+        return;
+      }
+      final fileLength = await file.length();
+      if (!_isCurrentImagePick(revision, conversationAtPick)) return;
+      if (fileLength > 5 * 1024 * 1024) {
+        setState(
+          () => _imageError = 'Размер изображения не должен превышать 5 МБ.',
+        );
+        return;
+      }
+      final bytes = await file.readAsBytes();
+      if (!_isCurrentImagePick(revision, conversationAtPick)) return;
+      final buffer = await ui.ImmutableBuffer.fromUint8List(bytes);
+      ui.ImageDescriptor? descriptor;
+      int width;
+      int height;
+      try {
+        descriptor = await ui.ImageDescriptor.encoded(buffer);
+        if (!_isCurrentImagePick(revision, conversationAtPick)) return;
+        width = descriptor.width;
+        height = descriptor.height;
+      } finally {
+        descriptor?.dispose();
+        buffer.dispose();
+      }
+      if (width > 2048 || height > 2048) {
+        setState(
+          () =>
+              _imageError =
+                  'Стороны изображения не должны превышать 2048 пикселей.',
+        );
+        return;
+      }
+      final name = file.name;
+      final extension = name.split('.').last.toLowerCase();
+      final mime = switch (extension) {
+        'png' => 'image/png',
+        'webp' => 'image/webp',
+        'jpg' || 'jpeg' => 'image/jpeg',
+        _ => file.mimeType ?? '',
+      };
+      if (!_isCurrentImagePick(revision, conversationAtPick)) return;
+      if (!{'image/jpeg', 'image/png', 'image/webp'}.contains(mime)) {
+        setState(
+          () => _imageError = 'Поддерживаются изображения JPEG, PNG и WEBP.',
+        );
+        return;
+      }
+      setState(() {
+        _isUploadingImage = true;
+        _imageUploadProgress = 0;
+        _imageError = null;
+      });
+      final metadata = await ref
+          .read(aiAssistantRepositoryProvider)
+          .uploadImage(
+            fileName: name,
+            mime: mime,
+            bytes: bytes,
+            conversationId: conversationAtPick,
+            onSendProgress: (sent, total) {
+              if (!mounted || revision != _draftRevision || total <= 0) return;
+              setState(() => _imageUploadProgress = sent / total);
+            },
+          );
+      if (!mounted ||
+          revision != _draftRevision ||
+          conversationAtPick != _conversationId) {
+        return;
+      }
+      setState(() {
+        _draftImages = [..._draftImages, _DraftImage(metadata, bytes)];
+        _draftRevision++;
+      });
+    } catch (error) {
+      if (mounted && revision == _draftRevision) {
+        setState(() => _imageError = _resolveError(error));
+      }
+    } finally {
+      if (mounted && uploadRevision == _uploadRevision) {
+        setState(() {
+          _isUploadingImage = false;
+          _imageUploadProgress = null;
+        });
+      }
+    }
+  }
+
+  bool _isCurrentImagePick(int revision, int? conversationId) =>
+      mounted &&
+      revision == _draftRevision &&
+      conversationId == _conversationId;
+
+  void _removeDraftImage(_DraftImage image) {
+    setState(() {
+      _draftImages = _draftImages.where((item) => item != image).toList();
+      _draftRevision++;
+      _imageError = null;
+    });
+  }
+
   Future<AiCreditQuoteModel?> _confirmQuote(
     String message,
     String requestId,
     int? conversationId,
     Map<String, dynamic> assistantContext,
     String profile,
+    List<String> attachmentIds,
   ) async {
     try {
       final quote = await ref
@@ -590,6 +737,7 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
             profile: profile,
             conversationId: conversationId,
             context: assistantContext,
+            attachmentIds: attachmentIds,
           );
       if (!mounted || requestId != _quotingRequestId) return null;
       if (double.tryParse(quote.amount) == 0) return quote;
@@ -664,10 +812,16 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
     _sendCancelToken = null;
     _requestRevision++;
     _quotingRequestId = null;
+    _uploadRevision++;
+    _draftRevision++;
     _loadingHistory = false;
     if (!mounted) return;
     setState(() {
       _messages = const [];
+      _draftImages = const [];
+      _isUploadingImage = false;
+      _imageUploadProgress = null;
+      _imageError = null;
       _conversationId = null;
       _activePreview = null;
       _actionError = null;
@@ -1247,6 +1401,23 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               mainAxisSize: MainAxisSize.min,
                               children: [
+                                if (message.attachments.isNotEmpty)
+                                  Padding(
+                                    padding: const EdgeInsets.only(bottom: 10),
+                                    child: Wrap(
+                                      spacing: 8,
+                                      runSpacing: 8,
+                                      children: message.attachments
+                                          .map(
+                                            (attachment) =>
+                                                _AuthenticatedAttachmentImage(
+                                                  key: ValueKey(attachment.id),
+                                                  attachment: attachment,
+                                                ),
+                                          )
+                                          .toList(growable: false),
+                                    ),
+                                  ),
                                 if (message.content.trim().isNotEmpty)
                                   Text(
                                     message.content,
@@ -1329,26 +1500,114 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
               top: false,
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-                child: Row(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Expanded(
-                      child: TextField(
-                        controller: _controller,
-                        minLines: 1,
-                        maxLines: 5,
-                        textInputAction: TextInputAction.newline,
-                        decoration: const InputDecoration(
-                          hintText: 'Введите вопрос для ассистента',
+                    if (_draftImages.isNotEmpty || _isUploadingImage)
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            ..._draftImages.map(
+                              (image) => Stack(
+                                clipBehavior: Clip.none,
+                                children: [
+                                  ClipRRect(
+                                    borderRadius: BorderRadius.circular(10),
+                                    child: Image.memory(
+                                      image.bytes,
+                                      width: 64,
+                                      height: 64,
+                                      fit: BoxFit.cover,
+                                    ),
+                                  ),
+                                  Positioned(
+                                    right: -6,
+                                    top: -6,
+                                    child: IconButton.filledTonal(
+                                      visualDensity: VisualDensity.compact,
+                                      constraints:
+                                          const BoxConstraints.tightFor(
+                                            width: 28,
+                                            height: 28,
+                                          ),
+                                      onPressed:
+                                          _isSending
+                                              ? null
+                                              : () => _removeDraftImage(image),
+                                      icon: const Icon(Icons.close, size: 16),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            if (_isUploadingImage)
+                              SizedBox(
+                                width: 64,
+                                height: 64,
+                                child: Center(
+                                  child: CircularProgressIndicator(
+                                    value: _imageUploadProgress,
+                                  ),
+                                ),
+                              ),
+                          ],
                         ),
                       ),
+                    if (_imageError != null)
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: Text(
+                            _imageError!,
+                            style: TextStyle(color: theme.colorScheme.error),
+                          ),
+                        ),
+                      ),
+                    Row(
+                      children: [
+                        IconButton(
+                          tooltip: 'Прикрепить изображение',
+                          onPressed:
+                              _isSending ||
+                                      _isUploadingImage ||
+                                      _draftImages.length >= 2
+                                  ? null
+                                  : _pickImage,
+                          icon: const Icon(Icons.image_outlined),
+                        ),
+                        Expanded(
+                          child: TextField(
+                            controller: _controller,
+                            minLines: 1,
+                            maxLines: 5,
+                            textInputAction: TextInputAction.newline,
+                            decoration: const InputDecoration(
+                              hintText: 'Введите вопрос для ассистента',
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        FilledButton(
+                          onPressed:
+                              _isSending || _isQuoting || _isUploadingImage
+                                  ? null
+                                  : () => _sendMessage(),
+                          child: const Icon(Icons.send_rounded),
+                        ),
+                      ],
                     ),
-                    const SizedBox(width: 12),
-                    FilledButton(
-                      onPressed:
-                          _isSending || _isQuoting
-                              ? null
-                              : () => _sendMessage(),
-                      child: const Icon(Icons.send_rounded),
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Text(
+                        'До 2 изображений · JPEG, PNG или WEBP · до 5 МБ каждое',
+                        style: AppTypography.caption(
+                          context,
+                        ).copyWith(color: theme.colorScheme.onSurfaceVariant),
+                      ),
                     ),
                   ],
                 ),
@@ -1879,6 +2138,7 @@ class _PendingChat {
     required this.context,
     required this.profile,
     required this.quote,
+    required this.attachmentIds,
     required this.optimisticId,
   });
   final String requestId;
@@ -1887,5 +2147,81 @@ class _PendingChat {
   final Map<String, dynamic> context;
   final String profile;
   final AiCreditQuoteModel quote;
+  final List<String> attachmentIds;
   final int optimisticId;
+}
+
+class _DraftImage {
+  const _DraftImage(this.metadata, this.bytes);
+
+  final AiImageAttachmentModel metadata;
+  final Uint8List bytes;
+}
+
+class _AuthenticatedAttachmentImage extends ConsumerStatefulWidget {
+  const _AuthenticatedAttachmentImage({super.key, required this.attachment});
+
+  final AiImageAttachmentModel attachment;
+
+  @override
+  ConsumerState<_AuthenticatedAttachmentImage> createState() =>
+      _AuthenticatedAttachmentImageState();
+}
+
+class _AuthenticatedAttachmentImageState
+    extends ConsumerState<_AuthenticatedAttachmentImage> {
+  late Future<Uint8List> _content;
+
+  @override
+  void initState() {
+    super.initState();
+    _content = _load();
+  }
+
+  @override
+  void didUpdateWidget(covariant _AuthenticatedAttachmentImage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.attachment.id != widget.attachment.id) {
+      _content = _load();
+    }
+  }
+
+  Future<Uint8List> _load() => ref
+      .read(aiAssistantRepositoryProvider)
+      .fetchImageContent(widget.attachment.id);
+
+  @override
+  Widget build(BuildContext context) => FutureBuilder<Uint8List>(
+    future: _content,
+    builder: (context, snapshot) {
+      if (snapshot.hasData && snapshot.data!.isNotEmpty) {
+        return ClipRRect(
+          borderRadius: BorderRadius.circular(10),
+          child: Image.memory(
+            snapshot.data!,
+            width: 160,
+            height: 130,
+            fit: BoxFit.cover,
+          ),
+        );
+      }
+      return Container(
+        width: 160,
+        height: 72,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child:
+            snapshot.hasError
+                ? const Icon(Icons.broken_image_outlined)
+                : const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+      );
+    },
+  );
 }
