@@ -101,4 +101,39 @@ void main() {
     expect(comments.last.status, 'custom_status');
     expect(comments.last.statusLabel, isNull);
   });
+
+  test(
+    'localizes executive transfer history without changing status codes',
+    () {
+      for (final entry
+          in const {
+            'sent': 'Отправлено',
+            'received': 'Получено',
+            'accepted': 'Принято',
+            'returned': 'Возвращено',
+          }.entries) {
+        final json = companionDetailJson(slug: 'executive-documentation');
+        json['workflow_history'] = [
+          {'action': 'transmit', 'status': entry.key, 'comment': 'Комментарий'},
+        ];
+        final history =
+            CompanionModuleDetailModel.fromJson(json).workflowHistory.single;
+
+        expect(history.title, 'Передача комплекта');
+        expect(history.status, entry.key);
+        expect(history.statusLabel, entry.value);
+        expect(history.description, 'Комментарий');
+      }
+
+      final json = companionDetailJson();
+      json['workflow_history'] = [
+        {'action': 'transmit', 'status': 'sent'},
+      ];
+      final history =
+          CompanionModuleDetailModel.fromJson(json).workflowHistory.single;
+      expect(history.title, 'transmit');
+      expect(history.status, 'sent');
+      expect(history.statusLabel, isNull);
+    },
+  );
 }

@@ -139,9 +139,14 @@ class CompanionModuleDetailModel {
             ),
           )
           .toList(growable: false),
-      workflowHistory: _list(
-        json['workflow_history'],
-      ).map(CompanionHistoryEntry.fromJson).toList(growable: false),
+      workflowHistory: _list(json['workflow_history'])
+          .map(
+            (entry) => CompanionHistoryEntry.fromJson(
+              entry,
+              isExecutiveDocumentation: isExecutiveDocumentation,
+            ),
+          )
+          .toList(growable: false),
     );
   }
 }
@@ -219,23 +224,41 @@ class CompanionHistoryEntry {
     required this.title,
     this.description,
     this.createdAt,
+    this.status,
+    this.statusLabel,
   });
 
   final String title;
   final String? description;
   final DateTime? createdAt;
+  final String? status;
+  final String? statusLabel;
 
-  factory CompanionHistoryEntry.fromJson(Map<String, dynamic> json) =>
-      CompanionHistoryEntry(
-        title:
-            _optionalString(json, 'title') ??
-            _optionalString(json, 'action') ??
-            'Изменение статуса',
-        description:
-            _optionalString(json, 'description') ??
-            _optionalString(json, 'comment'),
-        createdAt: _dateTime(json['created_at']),
-      );
+  factory CompanionHistoryEntry.fromJson(
+    Map<String, dynamic> json, {
+    bool isExecutiveDocumentation = false,
+  }) => CompanionHistoryEntry(
+    title:
+        _optionalString(json, 'title') ??
+        (isExecutiveDocumentation && json['action'] == 'transmit'
+            ? 'Передача комплекта'
+            : null) ??
+        _optionalString(json, 'action') ??
+        'Изменение статуса',
+    description:
+        _optionalString(json, 'description') ??
+        _optionalString(json, 'comment'),
+    createdAt: _dateTime(json['created_at']),
+    status: _optionalString(json, 'status'),
+    statusLabel:
+        isExecutiveDocumentation
+            ? _optionalString(json, 'status_label') ??
+                _executiveTransmittalStatusLabels[_optionalString(
+                  json,
+                  'status',
+                )]
+            : null,
+  );
 }
 
 class CompanionListItem {
@@ -458,6 +481,13 @@ const _executiveRemarkStatusLabels = <String, String>{
   'answered': 'Есть ответ',
   'returned': 'Возвращено',
   'resolved': 'Устранено',
+};
+
+const _executiveTransmittalStatusLabels = <String, String>{
+  'sent': 'Отправлено',
+  'received': 'Получено',
+  'accepted': 'Принято',
+  'returned': 'Возвращено',
 };
 
 List<CompanionFieldRow> _resultRows(
