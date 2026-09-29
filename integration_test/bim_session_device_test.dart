@@ -1160,6 +1160,7 @@ Future<Map<String, dynamic>> _inspect(WebViewWidget widget) async {
       pointer_events: {...(window.__mostBimSessionDeviceInput || {})},
       input_trace: [...(window.__mostBimSessionDeviceTrace || [])],
       canvas_rect: canvas ? (() => {const r=canvas.getBoundingClientRect(); return {x:r.x,y:r.y,width:r.width,height:r.height};})() : null,
+      viewport_center_hit: (() => {const x=innerWidth/2,y=innerHeight/2,e=document.elementFromPoint(x,y),r=canvas?.getBoundingClientRect(); return {x,y,target:e ? {tag:e.tagName,id:(e.id||'').slice(0,120),class:(typeof e.className==='string'?e.className:'').slice(0,200)} : null,canvas_contains:!!(canvas&&r&&x>=r.left&&x<=r.right&&y>=r.top&&y<=r.bottom)};})(),
       device_pixel_ratio: devicePixelRatio};
   })())''');
   dynamic decoded = raw;
@@ -1235,8 +1236,11 @@ Future<void> _observeDeviceInput(WebViewWidget widget) async {
     const trace = window.__mostBimSessionDeviceTrace = [];
     for (const type of ['pointerdown', 'pointermove', 'pointerup', 'pointercancel', 'pointerleave', 'click']) {
       window.addEventListener(type, event => {
-        if (!event.isTrusted || event.target.tagName !== 'CANVAS') return;
-        trace.push({type, trusted:event.isTrusted, target:event.target.tagName, x:event.clientX,y:event.clientY,
+        if (!event.isTrusted) return;
+        const target = event.target instanceof Element ? event.target : null;
+        trace.push({type, trusted:event.isTrusted,
+          target:target ? {tag:target.tagName,id:(target.id||'').slice(0,120),class:(typeof target.className==='string'?target.className:'').slice(0,200)} : null,
+          x:event.clientX,y:event.clientY,screen_x:event.screenX,screen_y:event.screenY,
           pointer_id:event.pointerId,pointer_type:event.pointerType,button:event.button,buttons:event.buttons});
         if (trace.length>60) trace.shift();
         if (event.pointerType !== 'touch') return;
