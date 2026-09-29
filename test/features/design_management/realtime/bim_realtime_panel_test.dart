@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -6,6 +7,7 @@ import 'package:prohelpers_mobile/features/design_management/realtime/bim_realti
 import 'package:prohelpers_mobile/features/design_management/realtime/bim_realtime_viewer.dart';
 import 'package:prohelpers_mobile/features/design_management/realtime/bim_session_coordinator.dart';
 import 'package:prohelpers_mobile/features/design_management/realtime/bim_session_models.dart';
+import 'package:prohelpers_mobile/features/design_management/viewer/bim_viewer_contract.dart';
 
 void main() {
   testWidgets('offline disables network actions in both themes', (
@@ -125,6 +127,119 @@ void main() {
       await viewer.close();
     },
   );
+
+  testWidgets('join waits for loaded models and cancels stale requests', (
+    tester,
+  ) async {
+    const first = BimSessionSummary(
+      id: 4,
+      name: 'Первый просмотр',
+      modelSetRevisionId: 9,
+    );
+    const second = BimSessionSummary(
+      id: 5,
+      name: 'Второй просмотр',
+      modelSetRevisionId: 9,
+    );
+    final controller = BimViewerController();
+    final commands = <(String, Map<String, dynamic>)>[];
+    final coordinator = BimSessionCoordinator(
+      api: _Api(),
+      viewer: BimRealtimeViewerAdapter(controller),
+      userId: 7,
+      userName: 'Анна',
+      clientId: 'own',
+    );
+    await expectLater(controller.command('sessionStart'), throwsStateError);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: BimRealtimePanel(
+            coordinator: coordinator,
+            sessions: const [first],
+            isLoading: false,
+            offline: false,
+            canCreate: true,
+            onRefresh: () async {},
+            onCreate: (_) async {},
+            onJoin: coordinator.join,
+          ),
+        ),
+      ),
+    );
+    expect(
+      tester
+          .widget<OutlinedButton>(find.widgetWithText(OutlinedButton, 'Войти'))
+          .onPressed,
+      isNull,
+    );
+    expect(
+      tester.widget<IconButton>(_icon('Создать совместный просмотр')).onPressed,
+      isNull,
+    );
+
+    final stale = coordinator.join(first);
+    await tester.pump();
+    expect(coordinator.currentState.connection, BimSessionConnection.joining);
+    final active = coordinator.join(second);
+    await tester.pump();
+    expect(commands.where((entry) => entry.$1 == 'sessionStart'), isEmpty);
+    controller.attach((type, payload) async {
+      commands.add((type, payload));
+      return {};
+    }, () async => Uint8List(0));
+    await tester.pump();
+    expect(commands.where((entry) => entry.$1 == 'sessionStart'), isEmpty);
+    controller.markReady();
+    controller.emit({'type': 'ready'});
+    await Future.wait([stale, active]);
+    await tester.pump();
+    expect(
+      commands
+          .where((entry) => entry.$1 == 'sessionStart')
+          .map((entry) => entry.$2['session_id']),
+      [second.id],
+    );
+
+    await coordinator.leave();
+    await tester.pump();
+    expect(
+      tester
+          .widget<OutlinedButton>(find.widgetWithText(OutlinedButton, 'Войти'))
+          .onPressed,
+      isNotNull,
+    );
+    expect(
+      tester.widget<IconButton>(_icon('Создать совместный просмотр')).onPressed,
+      isNotNull,
+    );
+    controller.emit({'type': 'loading'});
+    await tester.pump();
+    expect(
+      tester
+          .widget<OutlinedButton>(find.widgetWithText(OutlinedButton, 'Войти'))
+          .onPressed,
+      isNull,
+    );
+    final left = coordinator.join(first);
+    await tester.pump();
+    await coordinator.leave();
+    await left;
+    controller.emit({'type': 'ready'});
+    await tester.pump();
+    expect(commands.where((entry) => entry.$1 == 'sessionStart').length, 1);
+
+    controller.emit({'type': 'loading'});
+    final disposed = coordinator.join(first);
+    await tester.pump();
+    coordinator.dispose();
+    await disposed;
+    controller.emit({'type': 'ready'});
+    await tester.pump();
+    expect(commands.where((entry) => entry.$1 == 'sessionStart').length, 1);
+    await tester.pumpWidget(const SizedBox.shrink());
+    await controller.dispose();
+  });
 }
 
 Finder _icon(String tooltip) => find.byWidgetPredicate(
@@ -133,6 +248,8 @@ Finder _icon(String tooltip) => find.byWidgetPredicate(
 
 class _Viewer implements BimRealtimeViewer {
   final _events = StreamController<Map<String, dynamic>>.broadcast(sync: true);
+  @override
+  bool get isReady => true;
   void emit(String type) => _events.add({'type': type});
   Future<void> close() => _events.close();
   @override

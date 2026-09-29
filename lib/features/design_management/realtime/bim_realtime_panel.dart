@@ -89,7 +89,10 @@ class _BimRealtimePanelState extends State<BimRealtimePanel> {
             IconButton(
               tooltip: 'Создать совместный просмотр',
               onPressed:
-                  widget.offline || widget.isLoading || !widget.canCreate
+                  widget.offline ||
+                          widget.isLoading ||
+                          !widget.canCreate ||
+                          !widget.coordinator.rendererReady
                       ? null
                       : _create,
               icon: const Icon(Icons.group_add_outlined),
@@ -143,7 +146,9 @@ class _BimRealtimePanelState extends State<BimRealtimePanel> {
               title: Text(session.name),
               trailing: OutlinedButton(
                 onPressed:
-                    widget.offline || widget.isLoading
+                    widget.offline ||
+                            widget.isLoading ||
+                            !widget.coordinator.rendererReady
                         ? null
                         : () => widget.onJoin(session),
                 child: const Text('Войти'),

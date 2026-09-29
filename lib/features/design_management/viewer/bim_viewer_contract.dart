@@ -68,11 +68,13 @@ class BimViewerController {
   BimViewerCommandSender? _sender;
   Future<Uint8List> Function()? _capture;
   bool _disposed = false;
+  bool _ready = false;
   bool _capturing = false;
   BimViewerViewState? _snapshotState;
 
   Stream<Map<String, dynamic>> get events => _events.stream;
   bool get isAttached => _sender != null && !_disposed;
+  bool get isReady => isAttached && _ready;
 
   void attach(
     BimViewerCommandSender sender,
@@ -81,11 +83,17 @@ class BimViewerController {
     if (_disposed) throw StateError('Viewer controller disposed');
     _sender = sender;
     _capture = capture;
+    _ready = false;
+  }
+
+  void markReady() {
+    if (isAttached) _ready = true;
   }
 
   void detach() {
     _sender = null;
     _capture = null;
+    _ready = false;
     _snapshotState = null;
   }
 

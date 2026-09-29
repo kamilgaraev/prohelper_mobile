@@ -285,7 +285,9 @@ class _BimViewerSurfaceState extends ConsumerState<BimViewerSurface>
         'model_set_revision_id': widget.document.modelSetRevisionId?.toString(),
         'worker_url': _server.baseUri.resolve('vendor/worker.mjs').toString(),
       });
-      if (mounted && !_closed) setState(() => _ready = true);
+      if (!mounted || _closed) return;
+      widget.controller.markReady();
+      setState(() => _ready = true);
       widget.controller.emit({
         'type': 'ready',
         'payload': const <String, dynamic>{},

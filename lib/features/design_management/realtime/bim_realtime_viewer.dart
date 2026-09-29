@@ -2,6 +2,7 @@ import '../viewer/bim_viewer_contract.dart';
 import 'bim_session_models.dart';
 
 abstract interface class BimRealtimeViewer {
+  bool get isReady;
   Stream<Map<String, dynamic>> get events;
   Future<Map<String, dynamic>> command(
     String type, [
@@ -15,6 +16,9 @@ class BimRealtimeViewerAdapter implements BimRealtimeViewer {
   BimRealtimeViewerAdapter(this.controller);
 
   final BimViewerController controller;
+
+  @override
+  bool get isReady => controller.isReady;
 
   @override
   Stream<Map<String, dynamic>> get events => controller.events;

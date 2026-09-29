@@ -28,6 +28,7 @@ class BimSessionCoordinator extends StateNotifier<BimSessionState> {
       _onViewerEvent,
       onError: _onTransportError,
     );
+    _ready = _viewer.isReady;
   }
 
   final BimSessionApi _api;
@@ -47,21 +48,25 @@ class BimSessionCoordinator extends StateNotifier<BimSessionState> {
   Timer? _viewTimer;
   Timer? _followTimer;
   Completer<void>? _modelsReady;
+  Completer<void>? _joinReady;
   bool _ready = false;
   bool _disposed = false;
   bool _online = true;
   bool _heartbeatRunning = false;
   int _generation = 0;
+  int _joinRequest = 0;
   int _sequence = 0;
   int _followGeneration = 0;
 
   bool get online => _online;
+  bool get rendererReady => _ready;
   BimSessionState get currentState => state;
 
   Future<void> join(BimSessionSummary session) async {
     if (_disposed || !_online) return;
-    await leave();
-    if (_disposed || !_online) return;
+    final request = ++_joinRequest;
+    await _leave(invalidateJoinRequest: false);
+    if (_disposed || !_online || request != _joinRequest) return;
     final generation = ++_generation;
     state = BimSessionState(
       session: session,
@@ -88,6 +93,11 @@ class BimSessionCoordinator extends StateNotifier<BimSessionState> {
         );
       }
       final realtime = _publicRealtime(bimMap(bootstrap['realtime']));
+      if (!_ready) {
+        _joinReady ??= Completer<void>();
+        await _joinReady!.future;
+      }
+      if (!_current(generation)) return;
       await _viewer.command('sessionStart', {
         'session_id': session.id,
         'model_set_revision_id': session.modelSetRevisionId,
@@ -115,6 +125,8 @@ class BimSessionCoordinator extends StateNotifier<BimSessionState> {
     if (_disposed || _online == value) return;
     _online = value;
     if (!value) {
+      ++_joinRequest;
+      _wakeJoinWaiter();
       stopFollowing(notice: 'Совместный просмотр приостановлен: нет сети.');
       _cancelTimers();
       _pending.clear();
@@ -127,7 +139,11 @@ class BimSessionCoordinator extends StateNotifier<BimSessionState> {
     }
   }
 
-  Future<void> leave() async {
+  Future<void> leave() => _leave(invalidateJoinRequest: true);
+
+  Future<void> _leave({required bool invalidateJoinRequest}) async {
+    if (invalidateJoinRequest) ++_joinRequest;
+    _wakeJoinWaiter();
     final session = state.session;
     ++_generation;
     ++_followGeneration;
@@ -240,17 +256,29 @@ class BimSessionCoordinator extends StateNotifier<BimSessionState> {
       _generation == generation &&
       state.session != null;
 
+  void _wakeJoinWaiter() {
+    final waiter = _joinReady;
+    _joinReady = null;
+    if (waiter != null && !waiter.isCompleted) waiter.complete();
+  }
+
   void _onViewerEvent(Map<String, dynamic> event) {
     if (_disposed) return;
     final type = event['type'];
     final payload = bimMap(event['payload']);
     if (type == 'ready') {
+      final changed = !_ready;
       _ready = true;
       if (!(_modelsReady?.isCompleted ?? true)) _modelsReady!.complete();
+      _wakeJoinWaiter();
+      if (changed) state = state.copyWith();
       return;
     }
     if (type == 'loading') {
+      final changed = _ready;
       _ready = false;
+      if (_modelsReady?.isCompleted == true) _modelsReady = null;
+      if (changed) state = state.copyWith();
       return;
     }
     if (state.session == null || !_online) return;
@@ -685,10 +713,12 @@ class BimSessionCoordinator extends StateNotifier<BimSessionState> {
     if (_disposed) return;
     final session = state.session;
     _disposed = true;
+    ++_joinRequest;
     ++_generation;
     ++_followGeneration;
     _cancelTimers();
     _pending.clear();
+    _wakeJoinWaiter();
     if (!(_modelsReady?.isCompleted ?? true)) _modelsReady!.complete();
     unawaited(_subscription.cancel());
     unawaited(_safeCommand('cancelRemoteView'));

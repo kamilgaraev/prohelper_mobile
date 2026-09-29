@@ -252,6 +252,7 @@ void main() {
       await coordinator.join(session);
       viewer.emit('presenceSubscribed');
       await tester.pump();
+      viewer.emit('loading');
       final following = coordinator.follow(leader.clientId);
       await tester.pump();
       expect(coordinator.currentState.followLoading, isTrue);
@@ -451,6 +452,8 @@ BimPresenceEnvelope _event(
 
 class _Viewer implements BimRealtimeViewer {
   final _events = StreamController<Map<String, dynamic>>.broadcast(sync: true);
+  @override
+  bool get isReady => true;
   final commands = <(String, Map<String, dynamic>)>[];
   final applied = <BimViewState>[];
   final appliedCameras = <Map<String, dynamic>>[];

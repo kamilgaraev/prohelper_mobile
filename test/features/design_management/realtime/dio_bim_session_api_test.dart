@@ -41,7 +41,8 @@ void main() {
       });
       final controller =
           BimViewerController()
-            ..attach((type, payload) async => {}, () async => Uint8List(0));
+            ..attach((type, payload) async => {}, () async => Uint8List(0))
+            ..markReady();
       final coordinator = BimSessionCoordinator(
         api: api,
         viewer: BimRealtimeViewerAdapter(controller),
