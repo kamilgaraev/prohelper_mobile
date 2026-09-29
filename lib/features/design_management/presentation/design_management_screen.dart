@@ -13,6 +13,7 @@ import '../../projects/domain/projects_provider.dart';
 import '../data/design_package_file_service.dart';
 import '../data/design_package_model.dart';
 import '../domain/design_package_provider.dart';
+import 'bim_catalog_screen.dart';
 
 class DesignManagementScreen extends ConsumerStatefulWidget {
   const DesignManagementScreen({super.key});
@@ -44,6 +45,18 @@ class _DesignManagementScreenState
       appBar: AppBar(
         title: const Text('ПИР'),
         actions: [
+          IconButton(
+            tooltip: 'BIM-модели',
+            icon: const Icon(Icons.view_in_ar_outlined),
+            onPressed:
+                projectId == null
+                    ? null
+                    : () => Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => BimCatalogScreen(projectId: projectId),
+                      ),
+                    ),
+          ),
           IconButton(
             tooltip: 'Обновить',
             onPressed:

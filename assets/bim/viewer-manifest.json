@@ -1,0 +1,79 @@
+{
+  "schema_version": 1,
+  "runtime": {
+    "@thatopen/components": "3.4.6",
+    "@thatopen/components-front": "3.4.3",
+    "@thatopen/fragments": "3.4.5",
+    "three": "0.184.0",
+    "laravel-echo": "2.2.4",
+    "pusher-js": "8.4.0"
+  },
+  "files": [
+    {
+      "path": "assets/index-bg1nXeKp.css",
+      "size": 413,
+      "sha256": "40fae28e52a7da157f8a49015e7462e13f50466db4bb2d78f572897a5b74315e",
+      "mime": "text/css"
+    },
+    {
+      "path": "assets/index-Byr6vtuj.js",
+      "size": 102467,
+      "sha256": "a433265fdd183fcd71c71e86af138dd8224f46e43d6b369b737f68ff3f5c494d",
+      "mime": "text/javascript"
+    },
+    {
+      "path": "assets/index-Cz52BGMx.js",
+      "size": 528631,
+      "sha256": "b5384cb4f7db1edb61f0404bf61833f2453a86190d924c2f6ed5a7853a44e7b4",
+      "mime": "text/javascript"
+    },
+    {
+      "path": "assets/index-Dz_MvhfP.js",
+      "size": 4147914,
+      "sha256": "bdf87b5b7faaa20349e5c49080e0cc71828455c118979fc8a08831acfac77577",
+      "mime": "text/javascript"
+    },
+    {
+      "path": "assets/index-EiI8J9U7.js",
+      "size": 1011012,
+      "sha256": "842ccbc0a9759eaf460d9e3dc9c782dfccdf9cf46525c19ecccf64ba30db58c7",
+      "mime": "text/javascript"
+    },
+    {
+      "path": "assets/three.module-DuVn-7bU.js",
+      "size": 734259,
+      "sha256": "d2793394827e310ec88f2e258023f6f7cf92848efef203e9d7bb4a7417ca00e5",
+      "mime": "text/javascript"
+    },
+    {
+      "path": "assets/TransformControls-BCYYYGsb.js",
+      "size": 645084,
+      "sha256": "8c76f5de18566f69cda6f46c626ed254e7e41fd16325b3bab466f6e2497d7723",
+      "mime": "text/javascript"
+    },
+    {
+      "path": "assets/worker-u5_w900i.mjs",
+      "size": 3253387,
+      "sha256": "ad8817e1da803f85ab1ed817bc85c0d9a4c1538d325ed49d5fddc2cd64c31c6d",
+      "mime": "text/javascript"
+    },
+    {
+      "path": "capabilities.js",
+      "size": 370,
+      "sha256": "5d907bdb844b3fc7d3eb8c2b48d6a935ea460f156d17ee2da178a868b5a66555",
+      "mime": "text/javascript"
+    },
+    {
+      "path": "index.html",
+      "size": 533,
+      "sha256": "0fe1b783f494b33a1dc235711d936cf133fd2a4455cc358797e29330a58ecafa",
+      "mime": "text/html; charset=utf-8"
+    },
+    {
+      "path": "vendor/worker.mjs",
+      "size": 3253387,
+      "sha256": "ad8817e1da803f85ab1ed817bc85c0d9a4c1538d325ed49d5fddc2cd64c31c6d",
+      "mime": "text/javascript"
+    }
+  ]
+}

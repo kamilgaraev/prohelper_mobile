@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../design_management/offline/bim_context_change_dialog.dart';
 import 'package:flutter/services.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
@@ -147,6 +148,10 @@ class MobileMoreScreen extends ConsumerWidget {
                       context,
                     );
                     if (!confirmed || !context.mounted) {
+                      return;
+                    }
+                    if (!await prepareBimContextChange(context, ref) ||
+                        !context.mounted) {
                       return;
                     }
 

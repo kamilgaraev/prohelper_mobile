@@ -1,0 +1,1 @@
+(function(){var canvas=document.createElement('canvas');var gl=canvas.getContext('webgl2');if(!gl||typeof Worker==='undefined'){if(window.MostBimNative)window.MostBimNative.postMessage(JSON.stringify({schema_version:1,kind:'event',type:'unsupported',payload:null}));}if(gl){var extension=gl.getExtension('WEBGL_lose_context');if(extension)extension.loseContext();}})();
