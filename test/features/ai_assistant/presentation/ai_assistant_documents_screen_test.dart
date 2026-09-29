@@ -51,6 +51,20 @@ void main() {
     expect(repository.savedScope, 'archive');
     expect(repository.settingsCalls, 2);
   });
+
+  testWidgets('processing status loads once and refreshes only on request', (
+    tester,
+  ) async {
+    final repository = _Repository(false, processing: true);
+    await tester.pumpWidget(_screen(repository));
+    await tester.pumpAndSettle();
+    expect(repository.statusCalls, 1);
+    await tester.pump(const Duration(seconds: 12));
+    expect(repository.statusCalls, 1);
+    await tester.tap(find.byTooltip('Обновить'));
+    await tester.pumpAndSettle();
+    expect(repository.statusCalls, 2);
+  });
 }
 
 Widget _screen(_Repository repository) => ProviderScope(
@@ -59,18 +73,33 @@ Widget _screen(_Repository repository) => ProviderScope(
 );
 
 class _Repository extends AiAssistantRepository {
-  _Repository(this.owner) : super(Dio());
+  _Repository(this.owner, {this.processing = false}) : super(Dio());
   final bool owner;
+  final bool processing;
+  int statusCalls = 0;
   int settingsCalls = 0;
   int? savedLimit;
   String? savedScope;
   @override
-  Future<AiDocumentProcessingStatus> fetchDocumentProcessing() async =>
-      AiDocumentProcessingStatus.fromJson({
-        'can_manage_document_settings': owner,
-        'document_coverage': {'total': 4, 'ready': 2, 'ocr_required': 1},
-        'archive_scan': {'expected_file_count': 12, 'scanned_file_count': 8},
-      });
+  Future<AiDocumentProcessingStatus> fetchDocumentProcessing() async {
+    statusCalls++;
+    return AiDocumentProcessingStatus.fromJson({
+      'can_manage_document_settings': owner,
+      'processing': processing,
+      'document_coverage': {
+        'total': 4,
+        'ready': 2,
+        'ocr_required': 1,
+        'pending': processing ? 1 : 0,
+      },
+      'archive_scan': {
+        'expected_file_count': 12,
+        'scanned_file_count': 8,
+        'processing': processing,
+      },
+    });
+  }
+
   @override
   Future<AiDocumentBudget> fetchDocumentBudget() async {
     settingsCalls++;

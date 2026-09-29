@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import '../../../core/error/user_message.dart';
@@ -24,7 +23,6 @@ class _DocumentsState extends ConsumerState<AiAssistantDocumentsScreen> {
   String _scope = 'new';
   int _revision = 0;
   bool _sessionChanged = false;
-  Timer? _poll;
   final _limit = TextEditingController();
   @override
   void initState() {
@@ -37,7 +35,6 @@ class _DocumentsState extends ConsumerState<AiAssistantDocumentsScreen> {
         if (previous != next) {
           _revision++;
           _sessionChanged = true;
-          _poll?.cancel();
           if (mounted) {
             setState(() {
               _status = null;
@@ -53,7 +50,6 @@ class _DocumentsState extends ConsumerState<AiAssistantDocumentsScreen> {
 
   @override
   void dispose() {
-    _poll?.cancel();
     _limit.dispose();
     super.dispose();
   }
@@ -61,7 +57,6 @@ class _DocumentsState extends ConsumerState<AiAssistantDocumentsScreen> {
   Future<void> _load() async {
     if (_sessionChanged || _saving) return;
     final revision = ++_revision;
-    _poll?.cancel();
     try {
       final repository = ref.read(aiAssistantRepositoryProvider);
       final status = await repository.fetchDocumentProcessing();
@@ -89,12 +84,6 @@ class _DocumentsState extends ConsumerState<AiAssistantDocumentsScreen> {
           }
         }
       });
-      if (status.processing ||
-          status.archiveScan.processing ||
-          (status.documentCoverage['pending'] ?? 0) > 0 ||
-          (status.documentCoverage['ocr_processing'] ?? 0) > 0) {
-        _poll = Timer(const Duration(seconds: 5), _load);
-      }
     } catch (error) {
       if (!mounted || revision != _revision) return;
       setState(() {
@@ -126,7 +115,6 @@ class _DocumentsState extends ConsumerState<AiAssistantDocumentsScreen> {
       );
       return;
     }
-    _poll?.cancel();
     final revision = _revision;
     final enabled = _enabled;
     final scope = _scope;
@@ -158,7 +146,6 @@ class _DocumentsState extends ConsumerState<AiAssistantDocumentsScreen> {
         _sessionChanged) {
       return;
     }
-    _poll?.cancel();
     setState(() {
       _saving = true;
       _error = null;
