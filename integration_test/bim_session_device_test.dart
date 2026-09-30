@@ -395,7 +395,7 @@ void main() {
       final cursorEventsBefore = audit.events.length;
       await _phase(tester, control, 'native_cursor_input_ready', {
         ...cursorInput,
-        'move_x': cursorInput['x']! + 3,
+        'move_x': cursorInput['x']! + 48,
         'move_y': cursorInput['y'],
       });
       try {

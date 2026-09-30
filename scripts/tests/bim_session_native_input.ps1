@@ -55,6 +55,22 @@ function Invoke-BimAdb {
     return [pscustomobject]@{ stdout = $stdout; stderr = $stderr; exit_code = $exitCode }
 }
 
+function Assert-BimFocusedWindow {
+    param([Parameter(Mandatory = $true)] [string] $Stage)
+
+    $window = Invoke-BimAdb -Stage "${Stage}_focus" -Arguments ($deviceArgs + @('dumpsys', 'window'))
+    $focusLine = @($window.stdout -split "`r?`n" | Where-Object { $_ -match 'mCurrentFocus\b' } | Select-Object -First 1)
+    $focus = if ($focusLine.Count -gt 0) { $focusLine[0].Trim() } else { '' }
+    if (-not $focus -or $focus -notmatch [regex]::Escape($bimPackage)) {
+        throw "Cannot send '$Stage': mCurrentFocus is not the isolated BIM app. Current focus: $focus"
+    }
+    Write-Output ([pscustomobject]@{
+        stage = "${Stage}_focus"
+        observed_utc = [DateTimeOffset]::UtcNow.ToString('o')
+        current_focus = $focus
+    } | ConvertTo-Json -Compress)
+}
+
 $deviceArgs = @('-s', $Device, 'shell')
 $pidResult = Invoke-BimAdb -Stage 'preflight_pid' -Arguments ($deviceArgs + @('pidof', $bimPackage))
 if ($pidResult.stdout.Trim() -ne "$ViewerPid") {
@@ -106,17 +122,27 @@ try {
                 if ($bimCoordinate -ge $displayHeight) { throw 'Native cursor Y coordinate is outside the Android display.' }
             }
 
+            Assert-BimFocusedWindow -Stage 'native_cursor_swipe'
             $bimPointerDown = $true
             $swipeResult = Invoke-BimAdb -Stage 'native_cursor_swipe' -Arguments ($deviceArgs + @('input', 'touchscreen', 'swipe', [string][int]$bimCursor.x, [string][int]$bimCursor.y, [string][int]$bimCursor.move_x, [string][int]$bimCursor.move_y, '500'))
             if ($swipeResult.exit_code -ne 0) { throw 'Native cursor swipe failed.' }
             $bimPointerDown = $false
             $bimSent.Add('cursor') | Out-Null
-            Write-Output "Native cursor swipe sent for PID $ViewerPid."
+            Write-Output ([pscustomobject]@{
+                stage = 'native_cursor_gesture'
+                observed_utc = [DateTimeOffset]::UtcNow.ToString('o')
+                pid = $ViewerPid
+                from = @{ x = [int]$bimCursor.x; y = [int]$bimCursor.y }
+                to = @{ x = [int]$bimCursor.move_x; y = [int]$bimCursor.move_y }
+                delta = @{ x = [int]$bimCursor.move_x - [int]$bimCursor.x; y = [int]$bimCursor.move_y - [int]$bimCursor.y }
+                duration_ms = 500
+            } | ConvertTo-Json -Compress)
         }
 
         if ($bimSent.Contains('cursor') -and -not $bimSent.Contains('cursor_release') -and $bimLog.Contains('BIM_SESSION_PHASE native_cursor_input_complete')) {
             $releaseX = if ($null -ne $bimCursor) { [string][int]$bimCursor.move_x } else { '0' }
             $releaseY = if ($null -ne $bimCursor) { [string][int]$bimCursor.move_y } else { '0' }
+            Assert-BimFocusedWindow -Stage 'native_cursor_release_tap'
             $releaseResult = Invoke-BimAdb -Stage 'native_cursor_release_tap' -Arguments ($deviceArgs + @('input', 'touchscreen', 'tap', $releaseX, $releaseY))
             if ($releaseResult.exit_code -ne 0) { throw 'Native cursor release tap failed.' }
             $bimSent.Add('cursor_release') | Out-Null
@@ -130,6 +156,7 @@ try {
                 if ($bimCoordinate -isnot [ValueType] -or $bimCoordinate -lt 0 -or $bimCoordinate -gt 5000) { throw 'Invalid native selection coordinates.' }
             }
             if ($bimSelection.x -ge $displayWidth -or $bimSelection.y -ge $displayHeight) { throw 'Native selection coordinate is outside the Android display.' }
+            Assert-BimFocusedWindow -Stage 'native_selection_tap'
             $selectionResult = Invoke-BimAdb -Stage 'native_selection_tap' -Arguments ($deviceArgs + @('input', 'tap', [string][int]$bimSelection.x, [string][int]$bimSelection.y))
             if ($selectionResult.exit_code -ne 0) { throw 'Native selection tap failed.' }
             $bimSent.Add('selection') | Out-Null
