@@ -46,7 +46,10 @@ void main() {
         return _json(data);
       });
       final repository = AiAssistantRepository(dio);
-      final status = await repository.fetchDocumentProcessing();
+      final statusCancelToken = CancelToken();
+      final status = await repository.fetchDocumentProcessing(
+        cancelToken: statusCancelToken,
+      );
       final budget = await repository.fetchDocumentBudget();
       await repository.approveDocumentBudget(
         enabled: true,
@@ -55,6 +58,7 @@ void main() {
       );
       expect(status.documentCoverage['ocr_completed_pages'], 3);
       expect(status.statusAvailable, isTrue);
+      expect(requests[0].cancelToken, same(statusCancelToken));
       expect(status.archiveScan.scanned, 8);
       expect(status.canManageSettings, true);
       expect(budget.availableMinor, 2400);

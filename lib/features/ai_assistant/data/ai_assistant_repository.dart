@@ -495,8 +495,13 @@ class AiAssistantRepository {
     }
   }
 
-  Future<AiDocumentProcessingStatus> fetchDocumentProcessing() async {
-    final response = await _dio.get('/ai-assistant/rag/status');
+  Future<AiDocumentProcessingStatus> fetchDocumentProcessing({
+    CancelToken? cancelToken,
+  }) async {
+    final response = await _dio.get(
+      '/ai-assistant/rag/status',
+      cancelToken: cancelToken,
+    );
     return AiDocumentProcessingStatus.fromJson(
       _asMap(_unwrapData(response.data)),
     );
