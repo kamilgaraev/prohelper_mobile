@@ -243,6 +243,72 @@ void main() {
     },
   );
 
+  testWidgets('cursor hit reaches API before clear after a slow cursor clear', (
+    tester,
+  ) async {
+    final api = _Api()..blockedCursorClear = Completer<void>();
+    final viewer = _Viewer();
+    final coordinator = _coordinator(api, viewer);
+    await coordinator.join(session);
+    viewer.emit('presenceSubscribed');
+    await tester.pump();
+
+    viewer.emit('cursor');
+    await tester.pump(const Duration(milliseconds: 71));
+    expect(api.sent.where((event) => event['type'] == 'cursor').length, 1);
+    expect(api.sent.last['payload'], isNull);
+
+    viewer.emit('cursor', {
+      'position': {'x': 1, 'y': 2, 'z': 3},
+    });
+    viewer.emit('cursor');
+    api.blockedCursorClear!.complete();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 1));
+
+    final cursorEvents =
+        api.sent.where((event) => event['type'] == 'cursor').toList();
+    expect(cursorEvents.map((event) => event['payload']), [
+      null,
+      {'x': 1, 'y': 2, 'z': 3},
+      null,
+    ]);
+    coordinator.dispose();
+    await tester.pump();
+    await viewer.close();
+  });
+
+  testWidgets('failed cursor hit retries before the queued clear', (
+    tester,
+  ) async {
+    final api = _Api()..blockedCursorHit = Completer<void>();
+    final viewer = _Viewer();
+    final coordinator = _coordinator(api, viewer);
+    await coordinator.join(session);
+    viewer.emit('presenceSubscribed');
+    await tester.pump();
+
+    viewer.emit('cursor', {
+      'position': {'x': 4, 'y': 5, 'z': 6},
+    });
+    await tester.pump(const Duration(milliseconds: 71));
+    viewer.emit('cursor');
+    api.blockedCursorHit!.completeError(StateError('Temporary failure'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 751));
+
+    final cursorEvents =
+        api.sent.where((event) => event['type'] == 'cursor').toList();
+    expect(cursorEvents.map((event) => event['payload']), [
+      {'x': 4, 'y': 5, 'z': 6},
+      {'x': 4, 'y': 5, 'z': 6},
+      null,
+    ]);
+    coordinator.dispose();
+    await tester.pump();
+    await viewer.close();
+  });
+
   testWidgets(
     'follow waits for models, applies full state without feedback and own interaction keeps current view',
     (tester) async {
@@ -515,6 +581,8 @@ class _Api implements BimSessionApi {
   List<BimParticipant> participants = [leader];
   List<BimPresenceEnvelope> snapshots = [];
   Completer<void>? blockedSelect;
+  Completer<void>? blockedCursorClear;
+  Completer<void>? blockedCursorHit;
   Completer<List<BimPresenceEnvelope>>? blockedSnapshots;
   final BimViewState view = {
     'schema_version': 1,
@@ -551,6 +619,18 @@ class _Api implements BimSessionApi {
         blockedSelect != null &&
         !blockedSelect!.isCompleted) {
       await blockedSelect!.future;
+    }
+    if (envelope['type'] == 'cursor' &&
+        envelope['payload'] == null &&
+        blockedCursorClear != null &&
+        !blockedCursorClear!.isCompleted) {
+      await blockedCursorClear!.future;
+    }
+    if (envelope['type'] == 'cursor' &&
+        envelope['payload'] != null &&
+        blockedCursorHit != null &&
+        !blockedCursorHit!.isCompleted) {
+      await blockedCursorHit!.future;
     }
   }
 

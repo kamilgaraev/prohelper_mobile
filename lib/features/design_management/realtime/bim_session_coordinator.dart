@@ -41,6 +41,7 @@ class BimSessionCoordinator extends StateNotifier<BimSessionState> {
   final Duration retryInterval;
   late final StreamSubscription<Map<String, dynamic>> _subscription;
   final _pending = <String, Map<String, dynamic>>{};
+  final _cursorPending = <Map<String, dynamic>>[];
   final _sending = <String>{};
   final _lastSequence = <String, Map<String, int>>{};
   final _eventTimers = <String, Timer>{};
@@ -130,6 +131,7 @@ class BimSessionCoordinator extends StateNotifier<BimSessionState> {
       stopFollowing(notice: 'Совместный просмотр приостановлен: нет сети.');
       _cancelTimers();
       _pending.clear();
+      _cursorPending.clear();
       if (state.session != null) {
         state = state.copyWith(connection: BimSessionConnection.offline);
       }
@@ -149,6 +151,7 @@ class BimSessionCoordinator extends StateNotifier<BimSessionState> {
     ++_followGeneration;
     _cancelTimers();
     _pending.clear();
+    _cursorPending.clear();
     _sending.clear();
     _lastSequence.clear();
     if (!_disposed) state = const BimSessionState();
@@ -361,6 +364,9 @@ class BimSessionCoordinator extends StateNotifier<BimSessionState> {
       for (final type in _pending.keys.toList()) {
         unawaited(_flush(type, generation));
       }
+      if (_cursorPending.isNotEmpty) {
+        unawaited(_flush('cursor', generation));
+      }
       _scheduleViewState();
       if (state.followingClientId case final leader?) {
         unawaited(_refreshFollow(leader, _followGeneration));
@@ -492,7 +498,21 @@ class BimSessionCoordinator extends StateNotifier<BimSessionState> {
 
   void _queue(String type, Map<String, dynamic> payload) {
     if (!_online || state.session == null) return;
-    _pending[type] = Map.of(payload)..remove('source');
+    final queued = Map<String, dynamic>.of(payload)..remove('source');
+    if (type == 'cursor') {
+      if (_cursorClear(queued)) {
+        if (_cursorPending.isNotEmpty && _cursorClear(_cursorPending.last)) {
+          _cursorPending.removeLast();
+        }
+        _cursorPending.add(queued);
+      } else {
+        _cursorPending
+          ..clear()
+          ..add(queued);
+      }
+    } else {
+      _pending[type] = queued;
+    }
     if (_sending.contains(type) || (_eventTimers[type]?.isActive ?? false)) {
       return;
     }
@@ -513,7 +533,10 @@ class BimSessionCoordinator extends StateNotifier<BimSessionState> {
         _sending.contains(type)) {
       return;
     }
-    final payload = _pending.remove(type);
+    final payload =
+        type == 'cursor'
+            ? (_cursorPending.isEmpty ? null : _cursorPending.removeAt(0))
+            : _pending.remove(type);
     if (payload == null) return;
     final wirePayload = _wirePayload(type, payload);
     if (wirePayload == null) return;
@@ -543,13 +566,22 @@ class BimSessionCoordinator extends StateNotifier<BimSessionState> {
     } catch (error) {
       failed = true;
       if (_current(generation)) {
-        _pending.putIfAbsent(type, () => payload);
+        if (type == 'cursor') {
+          if (_cursorPending.isEmpty ||
+              (!_cursorClear(payload) && _cursorClear(_cursorPending.first))) {
+            _cursorPending.insert(0, payload);
+          }
+        } else {
+          _pending.putIfAbsent(type, () => payload);
+        }
         state = state.copyWith(error: error);
       }
     } finally {
       if (_current(generation)) {
         _sending.remove(type);
-        if (_pending.containsKey(type)) {
+        if (type == 'cursor'
+            ? _cursorPending.isNotEmpty
+            : _pending.containsKey(type)) {
           _eventTimers[type] = Timer(
             failed ? retryInterval : Duration.zero,
             () => unawaited(_flush(type, generation)),
@@ -558,6 +590,11 @@ class BimSessionCoordinator extends StateNotifier<BimSessionState> {
       }
     }
   }
+
+  bool _cursorClear(Map<String, dynamic> payload) =>
+      payload['position'] == null &&
+      payload['cursor'] == null &&
+      !payload.containsKey('x');
 
   void _scheduleViewState() {
     _viewTimer?.cancel();
@@ -718,6 +755,7 @@ class BimSessionCoordinator extends StateNotifier<BimSessionState> {
     ++_followGeneration;
     _cancelTimers();
     _pending.clear();
+    _cursorPending.clear();
     _wakeJoinWaiter();
     if (!(_modelsReady?.isCompleted ?? true)) _modelsReady!.complete();
     unawaited(_subscription.cancel());
