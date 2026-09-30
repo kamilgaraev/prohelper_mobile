@@ -3,7 +3,10 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:prohelpers_mobile/core/network/dio_client.dart';
+import 'package:prohelpers_mobile/core/storage/secure_storage_service.dart';
 import 'package:prohelpers_mobile/core/network/api_exception.dart';
 import 'package:prohelpers_mobile/features/ai_assistant/data/ai_assistant_repository.dart';
 import 'package:prohelpers_mobile/features/ai_assistant/data/ai_assistant_models.dart';
@@ -180,6 +183,7 @@ void main() {
           return _responseData({
             'quote_id': 'quote-uuid',
             'max_units_minor': 175,
+            'metadata': {'processing_deadline_seconds': 120},
           });
         }
         return _responseData({
@@ -198,6 +202,7 @@ void main() {
         context: {'entity_refs': []},
       );
       expect(quote.amount, '1.75');
+      expect(quote.processingDeadlineSeconds, 120);
       final result = await repository.sendMessageRequest(
         message: 'Question',
         requestId: requestId,
@@ -468,6 +473,51 @@ void main() {
       expect(requests[2].method, 'POST');
     },
   );
+
+  test(
+    'cancel uses the current auth token and path-only request scope',
+    () async {
+      final storage = _MutableSecureStorage('old-organization-token');
+      final container = ProviderContainer(
+        overrides: [secureStorageProvider.overrideWithValue(storage)],
+      );
+      addTearDown(container.dispose);
+
+      final requests = <RequestOptions>[];
+      final dio = container.read(dioProvider);
+      dio.httpClientAdapter = _JsonAdapter((request) {
+        requests.add(request);
+        return _responseData({
+          'request_id': 'request-uuid',
+          'status': 'cancelled',
+        });
+      });
+      final repository = AiAssistantRepository(dio);
+
+      storage.token = 'current-organization-token';
+      await repository.cancelRequest('request-uuid');
+
+      expect(requests, hasLength(1));
+      expect(requests.single.method, 'POST');
+      expect(
+        requests.single.path,
+        '/ai-assistant/requests/request-uuid/cancel',
+      );
+      expect(
+        requests.single.headers['Authorization'],
+        'Bearer current-organization-token',
+      );
+      expect(requests.single.queryParameters, isEmpty);
+      expect(requests.single.data, isNull);
+      expect(
+        requests.single.headers.keys.any(
+          (key) => key.toLowerCase().contains('organization'),
+        ),
+        isFalse,
+      );
+    },
+  );
+
   test('source navigation accepts only configured origin', () {
     final repository = AiAssistantRepository(
       Dio(BaseOptions(baseUrl: 'https://api.example.test/api/v1/mobile/')),
@@ -484,6 +534,15 @@ void main() {
       isNull,
     );
   });
+}
+
+class _MutableSecureStorage extends SecureStorageService {
+  _MutableSecureStorage(this.token);
+
+  String? token;
+
+  @override
+  Future<String?> getToken() async => token;
 }
 
 class _JsonAdapter implements HttpClientAdapter {

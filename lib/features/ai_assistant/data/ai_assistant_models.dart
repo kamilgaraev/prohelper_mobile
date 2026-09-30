@@ -848,12 +848,14 @@ class AiCreditQuoteModel {
     required this.maxConfirmed,
     required this.amount,
     required this.unit,
+    this.processingDeadlineSeconds,
   });
 
   final String id;
   final bool maxConfirmed;
   final String amount;
   final String unit;
+  final int? processingDeadlineSeconds;
 
   factory AiCreditQuoteModel.fromJson(Map<String, dynamic> json) {
     return AiCreditQuoteModel(
@@ -861,6 +863,12 @@ class AiCreditQuoteModel {
       maxConfirmed: _boolValue(json['max_confirmed']),
       amount: formatAiMinor(_intValue(json['max_units_minor'])),
       unit: _stringValue(json['unit']) ?? 'ед. МОСТ',
+      processingDeadlineSeconds:
+          json['metadata'] is Map<String, dynamic> &&
+                  (json['metadata']['processing_deadline_seconds'] is int) &&
+                  json['metadata']['processing_deadline_seconds'] > 0
+              ? json['metadata']['processing_deadline_seconds'] as int
+              : null,
     );
   }
 }
