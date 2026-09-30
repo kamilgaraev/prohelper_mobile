@@ -16,8 +16,11 @@ class _Repository extends MachineryOperationsRepository {
 }
 
 class _Notifier extends MachineryOperationsNotifier {
-  _Notifier({MachineryAssetModel? asset, bool activeShift = false})
-    : super(_Repository()) {
+  _Notifier({
+    MachineryAssetModel? asset,
+    bool activeShift = false,
+    bool completedShift = false,
+  }) : super(_Repository()) {
     state = MachineryOperationsState(
       assets: [
         asset ??
@@ -35,19 +38,21 @@ class _Notifier extends MachineryOperationsNotifier {
             ),
       ],
       shiftReports:
-          activeShift
-              ? const [
+          activeShift || completedShift
+              ? [
                 MachineryShiftReportModel(
                   id: 45,
                   assetId: 10,
                   projectId: 30,
                   reportDate: '2026-09-27',
-                  status: 'draft',
-                  statusLabel: 'Смена активна',
+                  status: completedShift ? 'completed' : 'draft',
+                  statusLabel:
+                      completedShift ? 'Смена завершена' : 'Смена активна',
                   actualHours: 0,
                   fuelConsumed: 0,
-                  availableActions: ['finish'],
+                  availableActions: [completedShift ? 'submit' : 'finish'],
                   meterStart: 125.5,
+                  meterEnd: completedShift ? 125.51 : null,
                 ),
               ]
               : const [],
@@ -80,6 +85,30 @@ class _Notifier extends MachineryOperationsNotifier {
 }
 
 void main() {
+  testWidgets('completed shift can be submitted without starting another', (
+    tester,
+  ) async {
+    final notifier = _Notifier(completedShift: true);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          machineryOperationsProvider.overrideWith((ref) => notifier),
+        ],
+        child: const MaterialApp(home: OperatorShiftScreen()),
+      ),
+    );
+
+    expect(find.byKey(const Key('start-shift-button')), findsNothing);
+    expect(find.byKey(const Key('submit-shift-button')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('submit-shift-button')));
+    await tester.pump();
+
+    final action = notifier.action as SubmitShiftAction;
+    expect(action.assetId, 10);
+    expect(action.shiftId, 45);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('operator sees assignment and starts shift with meter', (
     tester,
   ) async {
