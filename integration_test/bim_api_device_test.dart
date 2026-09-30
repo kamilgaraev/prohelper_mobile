@@ -445,7 +445,7 @@ Dio _dio(Map<String, dynamic> config, String base, String token) {
         'Authorization': 'Bearer ${config['BIM_API_$token']}',
       },
       connectTimeout: const Duration(seconds: 15),
-      receiveTimeout: const Duration(seconds: 45),
+      receiveTimeout: const Duration(seconds: 120),
     ),
   );
 }

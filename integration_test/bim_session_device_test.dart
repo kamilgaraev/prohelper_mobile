@@ -1001,7 +1001,7 @@ Dio _api(Map<String, dynamic> config) {
         'X-Organization-ID': '${config['BIM_API_ORGANIZATION_ID']}',
       },
       connectTimeout: const Duration(seconds: 15),
-      receiveTimeout: const Duration(seconds: 45),
+      receiveTimeout: const Duration(seconds: 120),
     ),
   );
 }
