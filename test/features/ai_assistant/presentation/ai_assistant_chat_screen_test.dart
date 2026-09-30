@@ -267,6 +267,112 @@ void main() {
     expect(repository.sentIds, hasLength(1));
   });
 
+  testWidgets(
+    'shows accepted progress and keeps completed sources after a fast response',
+    (tester) async {
+      final repository = _RaceRepository(
+        asyncAccepted: true,
+        initialProgress: const [
+          AiAssistantProgressModel(id: 31, code: 'estimates', state: 'started'),
+        ],
+      );
+      await tester.pumpWidget(buildScreen(repository));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), 'Вопрос про бетон');
+      await tester.tap(find.byIcon(Icons.send_rounded));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Продолжить'));
+      await tester.pump();
+      expect(find.text('Проверяю сметы'), findsOneWidget);
+      const completedProgress = [
+        AiAssistantProgressModel(id: 31, code: 'estimates', state: 'completed'),
+        AiAssistantProgressModel(id: 32, code: 'warehouse', state: 'completed'),
+      ];
+      repository.answer.complete(
+        AiAssistantChatRequest(
+          requestId: repository.requestId!,
+          status: 'completed',
+          progress: completedProgress,
+          result: AiAssistantChatResult(
+            requestId: repository.requestId!,
+            conversationId: 1,
+            message: const AiMessageModel(
+              id: 101,
+              role: 'assistant',
+              content: 'Ответ про бетон',
+              createdAt: null,
+            ),
+            progress: completedProgress,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Ответ про бетон'), findsOneWidget);
+      expect(find.text('Сметы проверены'), findsOneWidget);
+      expect(find.text('Склад проверен'), findsOneWidget);
+    },
+  );
+
+  testWidgets('keeps the latest 24 events as progress window advances', (
+    tester,
+  ) async {
+    final repeatedEstimates = List<AiAssistantProgressModel>.generate(
+      23,
+      (index) => AiAssistantProgressModel(
+        id: index + 2,
+        code: 'estimates',
+        state: 'completed',
+      ),
+    );
+    final repository = _RaceRepository(
+      asyncAccepted: true,
+      initialProgress: [
+        const AiAssistantProgressModel(
+          id: 1,
+          code: 'warehouse',
+          state: 'started',
+        ),
+        ...repeatedEstimates,
+      ],
+      progressSnapshots: [
+        [
+          ...repeatedEstimates,
+          const AiAssistantProgressModel(
+            id: 25,
+            code: 'warehouse',
+            state: 'completed',
+          ),
+        ],
+      ],
+    );
+    await tester.pumpWidget(buildScreen(repository));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), 'Вопрос');
+    await tester.tap(find.byIcon(Icons.send_rounded));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Продолжить'));
+    await tester.pump();
+    expect(find.text('Проверяю склад'), findsNothing);
+    expect(find.text('Склад проверен'), findsOneWidget);
+    repository.answer.complete(
+      AiAssistantChatRequest(
+        requestId: repository.requestId!,
+        status: 'completed',
+        result: AiAssistantChatResult(
+          requestId: repository.requestId!,
+          conversationId: 1,
+          message: const AiMessageModel(
+            id: 102,
+            role: 'assistant',
+            content: 'Готово',
+            createdAt: null,
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+  });
+
   testWidgets('shows observed stage, explanation and elapsed time', (
     tester,
   ) async {
@@ -601,13 +707,18 @@ class _RaceRepository extends AiAssistantRepository {
     this.asyncAccepted = false,
     this.stages = const [],
     this.freeQuote = false,
+    this.initialProgress = const [],
+    this.progressSnapshots = const [],
   }) : super(Dio());
   final bool canWrite;
   final bool failFirst;
   final bool asyncAccepted;
   final bool freeQuote;
   final List<String> stages;
+  final List<AiAssistantProgressModel> initialProgress;
+  final List<List<AiAssistantProgressModel>> progressSnapshots;
   int _stageIndex = 0;
+  int _progressIndex = 0;
   int quoteCalls = 0;
   final sentIds = <String>[];
   final answer = Completer<AiAssistantChatRequest>();
@@ -676,6 +787,7 @@ class _RaceRepository extends AiAssistantRepository {
           requestId: requestId,
           status: 'running',
           stage: 'queued',
+          progress: initialProgress,
         ),
       );
     }
@@ -688,11 +800,16 @@ class _RaceRepository extends AiAssistantRepository {
     int? conversationId,
   }) async {
     polledIds.add(requestId);
-    if (_stageIndex < stages.length) {
+    if (_stageIndex < stages.length ||
+        _progressIndex < progressSnapshots.length) {
       return AiAssistantChatRequest(
         requestId: requestId,
         status: 'running',
-        stage: stages[_stageIndex++],
+        stage: _stageIndex < stages.length ? stages[_stageIndex++] : null,
+        progress:
+            _progressIndex < progressSnapshots.length
+                ? progressSnapshots[_progressIndex++]
+                : const [],
       );
     }
     return answer.future;

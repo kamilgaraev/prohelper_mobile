@@ -245,6 +245,9 @@ void main() {
           'conversation_id': null,
           'status': 'running',
           'stage': 'queued',
+          'progress': [
+            {'id': 31, 'code': 'estimates', 'state': 'started'},
+          ],
         });
       }
       return _responseData({
@@ -252,10 +255,18 @@ void main() {
         'conversation_id': 12,
         'status': 'completed',
         'stage': 'completed',
+        'progress': [
+          {'id': 31, 'code': 'estimates', 'state': 'completed'},
+          {'id': 32, 'code': 'warehouse', 'state': 'completed'},
+        ],
         'response': {
           'request_id': 'request-1',
           'conversation_id': 12,
           'message': {'id': 17, 'role': 'assistant', 'content': 'Готово'},
+          'progress': [
+            {'id': 31, 'code': 'estimates', 'state': 'completed'},
+            {'id': 32, 'code': 'warehouse', 'state': 'completed'},
+          ],
         },
       });
     }, statusCode: (request) => request.method == 'POST' ? 202 : 200);
@@ -268,11 +279,46 @@ void main() {
     );
     expect(accepted.status, 'running');
     expect(accepted.result, isNull);
+    expect(accepted.progress.single.code, 'estimates');
+    expect(accepted.progress.single.state, 'started');
     expect((requests.first.data as Map)['async'], true);
     final completed = await repository.fetchChatRequest('request-1');
     expect(completed.result!.message!.content, 'Готово');
+    expect(completed.progress.map((step) => step.code), [
+      'estimates',
+      'warehouse',
+    ]);
+    expect(completed.result!.progress.last.state, 'completed');
     expect(requests.last.path, '/ai-assistant/requests/request-1');
   });
+
+  test(
+    'progress accepts ids above 24 and keeps at most 24 latest events',
+    () async {
+      final dio = Dio(BaseOptions(baseUrl: 'https://api.example.test'));
+      dio.httpClientAdapter = _JsonAdapter((_) {
+        return _responseData({
+          'request_id': 'request-2',
+          'conversation_id': 12,
+          'status': 'running',
+          'progress': List.generate(
+            26,
+            (index) => {
+              'id': 31 + index,
+              'code': 'warehouse',
+              'state': 'completed',
+            },
+          ),
+        });
+      });
+      final progress = await AiAssistantRepository(
+        dio,
+      ).fetchChatRequest('request-2');
+      expect(progress.progress, hasLength(24));
+      expect(progress.progress.first.id, 33);
+      expect(progress.progress.last.id, 56);
+    },
+  );
 
   test(
     'repeating the accepted POST preserves request and quote identity',
