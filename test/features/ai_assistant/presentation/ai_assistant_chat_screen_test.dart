@@ -640,6 +640,7 @@ class _RaceRepository extends AiAssistantRepository {
     bool allowActions = true,
     int? conversationId,
     Map<String, dynamic>? context,
+    List<String> attachmentIds = const <String>[],
   }) async {
     quoteCalls++;
     quoteRequestId = requestId;
@@ -661,6 +662,7 @@ class _RaceRepository extends AiAssistantRepository {
     String profile = 'normal',
     bool allowActions = true,
     Map<String, dynamic>? context,
+    List<String> attachmentIds = const <String>[],
     CancelToken? cancelToken,
   }) {
     this.requestId = requestId;
