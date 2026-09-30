@@ -1,11 +1,13 @@
 class AiDocumentProcessingStatus {
   const AiDocumentProcessingStatus({
+    required this.statusAvailable,
     required this.documentCoverage,
     required this.archiveScan,
     required this.canManageSettings,
     required this.coverageComplete,
     required this.processing,
   });
+  final bool statusAvailable;
   final Map<String, int> documentCoverage;
   final AiArchiveScan archiveScan;
   final bool canManageSettings;
@@ -19,6 +21,7 @@ class AiDocumentProcessingStatus {
     final archive =
         json['archive_scan'] is Map ? json['archive_scan'] as Map : const {};
     return AiDocumentProcessingStatus(
+      statusAvailable: json['status_available'] != false,
       documentCoverage: {
         for (final key in const [
           'total',

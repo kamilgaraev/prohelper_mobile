@@ -65,6 +65,21 @@ void main() {
     await tester.pumpAndSettle();
     expect(repository.statusCalls, 2);
   });
+
+  testWidgets('unavailable status hides counts and does not load settings', (
+    tester,
+  ) async {
+    final repository = _Repository(true, statusAvailable: false);
+    await tester.pumpWidget(_screen(repository));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Статистика временно недоступна'), findsOneWidget);
+    expect(find.textContaining('Документы: готовы'), findsNothing);
+    expect(find.text('Всего документов'), findsNothing);
+    expect(find.textContaining('Архив: проверено'), findsNothing);
+    expect(find.byType(SwitchListTile), findsNothing);
+    expect(repository.settingsCalls, 0);
+  });
 }
 
 Widget _screen(_Repository repository) => ProviderScope(
@@ -73,9 +88,14 @@ Widget _screen(_Repository repository) => ProviderScope(
 );
 
 class _Repository extends AiAssistantRepository {
-  _Repository(this.owner, {this.processing = false}) : super(Dio());
+  _Repository(
+    this.owner, {
+    this.processing = false,
+    this.statusAvailable = true,
+  }) : super(Dio());
   final bool owner;
   final bool processing;
+  final bool statusAvailable;
   int statusCalls = 0;
   int settingsCalls = 0;
   int? savedLimit;
@@ -84,6 +104,7 @@ class _Repository extends AiAssistantRepository {
   Future<AiDocumentProcessingStatus> fetchDocumentProcessing() async {
     statusCalls++;
     return AiDocumentProcessingStatus.fromJson({
+      'status_available': statusAvailable,
       'can_manage_document_settings': owner,
       'processing': processing,
       'document_coverage': {
