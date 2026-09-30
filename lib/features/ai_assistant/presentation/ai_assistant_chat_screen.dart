@@ -30,6 +30,44 @@ import 'ai_assistant_sharing_screen.dart';
 import 'ai_assistant_credits_screen.dart';
 import 'ai_assistant_documents_screen.dart';
 
+const _progressLabels = <String, List<String>>{
+  'rag_search': ['Ищу информацию', 'Информация собрана'],
+  'estimates': ['Проверяю сметы', 'Сметы проверены'],
+  'warehouse': ['Проверяю склад', 'Склад проверен'],
+  'projects': ['Проверяю проекты', 'Проекты проверены'],
+  'contracts': ['Проверяю договоры', 'Договоры проверены'],
+  'procurement': ['Проверяю закупки', 'Закупки проверены'],
+  'schedule': ['Проверяю график', 'График проверен'],
+  'work_volumes': ['Проверяю объёмы работ', 'Объёмы работ проверены'],
+  'materials': ['Проверяю материалы', 'Материалы проверены'],
+  'reports': ['Проверяю отчёты', 'Отчёты проверены'],
+  'financial_data': [
+    'Проверяю финансовые данные',
+    'Финансовые данные проверены',
+  ],
+};
+
+List<AiAssistantProgressModel> _mergeProgress(
+  List<AiAssistantProgressModel> current,
+  List<AiAssistantProgressModel> incoming,
+) {
+  final byId = <int, AiAssistantProgressModel>{
+    for (final step in current) step.id: step,
+  };
+  for (final step in incoming) {
+    byId[step.id] = step;
+  }
+  final result =
+      byId.values.toList()..sort((left, right) => left.id.compareTo(right.id));
+  return result
+      .skip(result.length > 24 ? result.length - 24 : 0)
+      .toList(growable: false);
+}
+
+String _progressLabel(AiAssistantProgressModel step) =>
+    _progressLabels[step.code]?[step.state == 'completed' ? 1 : 0] ??
+    'Запрос обрабатывается';
+
 class AiAssistantChatScreen extends ConsumerStatefulWidget {
   const AiAssistantChatScreen({
     super.key,
@@ -66,6 +104,9 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
   int _requestRevision = 0;
   String? _progress;
   String? _progressDetail;
+  List<AiAssistantProgressModel> _progressSteps = const [];
+  final Map<int, List<AiAssistantProgressModel>> _completedProgressByMessageId =
+      {};
   String? _activeRequestId;
   Timer? _progressTimer;
   Timer? _elapsedTimer;
@@ -120,6 +161,8 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
       _imageUploadProgress = null;
       _imageError = null;
       _messages = const [];
+      _progressSteps = const [];
+      _completedProgressByMessageId.clear();
       _failedRequest = null;
       _loadingHistory = false;
       _bootstrap();
@@ -243,7 +286,11 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
         return;
       }
       if (progress.status == 'completed') {
-        _completeRequest(progress.result!, conversationId);
+        _completeRequest(
+          progress.result!,
+          conversationId,
+          progress: progress.progress,
+        );
         return;
       }
       if (progress.status == 'failed' || progress.status == 'cancelled') {
@@ -259,6 +306,7 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
       setState(() {
         _progress = title;
         _progressDetail = detail;
+        _progressSteps = _mergeProgress(_progressSteps, progress.progress);
       });
     } catch (error) {
       if (!mounted ||
@@ -326,7 +374,11 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
   String get _elapsedLabel =>
       '${(_elapsedSeconds ~/ 60).toString().padLeft(2, '0')}:${(_elapsedSeconds % 60).toString().padLeft(2, '0')}';
 
-  void _completeRequest(AiAssistantChatResult result, int? conversationAtSend) {
+  void _completeRequest(
+    AiAssistantChatResult result,
+    int? conversationAtSend, {
+    List<AiAssistantProgressModel> progress = const [],
+  }) {
     if (!mounted ||
         result.requestId != _activeRequestId ||
         conversationAtSend != _conversationId ||
@@ -336,6 +388,13 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
     }
     _progressTimer?.cancel();
     _elapsedTimer?.cancel();
+    final completedProgress = _mergeProgress(
+      _mergeProgress(_progressSteps, progress),
+      result.progress,
+    );
+    if (result.message != null && completedProgress.isNotEmpty) {
+      _completedProgressByMessageId[result.message!.id] = completedProgress;
+    }
     _activeRequestId = null;
     _sendCancelToken = null;
     setState(() {
@@ -349,6 +408,7 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
       _isSending = false;
       _progress = null;
       _progressDetail = null;
+      _progressSteps = const [];
       _error = null;
     });
     if (result.creditUsage?.chargingEnabled == false) {
@@ -372,6 +432,7 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
       _isSending = false;
       _progress = null;
       _progressDetail = null;
+      _progressSteps = const [];
       _error = message;
       if (terminal) {
         if (pending != null) {
@@ -395,6 +456,7 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
     _isSending = false;
     _progress = null;
     _progressDetail = null;
+    _progressSteps = const [];
   }
 
   Future<void> _recoverRequest() async {
@@ -538,6 +600,7 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
       _isSending = true;
       _progress = 'Отправляю запрос';
       _progressDetail = 'Передаю вопрос ассистенту.';
+      _progressSteps = const [];
       _error = null;
       _actionError = null;
       _activePreview = null;
@@ -575,8 +638,17 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
           conversationAtSend != _conversationId) {
         return;
       }
+      if (request.progress.isNotEmpty) {
+        setState(() {
+          _progressSteps = _mergeProgress(_progressSteps, request.progress);
+        });
+      }
       if (request.status == 'completed') {
-        _completeRequest(request.result!, conversationAtSend);
+        _completeRequest(
+          request.result!,
+          conversationAtSend,
+          progress: request.progress,
+        );
       } else {
         _progressTimer = Timer.periodic(
           const Duration(seconds: 2),
@@ -787,6 +859,7 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
         _isSending = false;
         _progress = null;
         _progressDetail = null;
+        _progressSteps = const [];
       });
     }
     if (requestId != null) {
@@ -818,6 +891,8 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
     if (!mounted) return;
     setState(() {
       _messages = const [];
+      _progressSteps = const [];
+      _completedProgressByMessageId.clear();
       _draftImages = const [];
       _isUploadingImage = false;
       _imageUploadProgress = null;
@@ -1343,6 +1418,12 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
                                         'Прошло $_elapsedLabel',
                                         style: AppTypography.caption(context),
                                       ),
+                                      if (_progressSteps.isNotEmpty) ...[
+                                        const SizedBox(height: 6),
+                                        _AssistantProgressList(
+                                          steps: _progressSteps,
+                                        ),
+                                      ],
                                     ],
                                   ),
                                 ),
@@ -1425,6 +1506,17 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
                                       context,
                                     ).copyWith(color: bubbleTextColor),
                                   ),
+                                if (!isUser &&
+                                    _completedProgressByMessageId.containsKey(
+                                      message.id,
+                                    )) ...[
+                                  const SizedBox(height: 10),
+                                  _AssistantProgressList(
+                                    steps:
+                                        _completedProgressByMessageId[message
+                                            .id]!,
+                                  ),
+                                ],
                                 if (sourceLinks.isNotEmpty)
                                   Padding(
                                     padding: const EdgeInsets.only(top: 10),
@@ -2224,4 +2316,47 @@ class _AuthenticatedAttachmentImageState
       );
     },
   );
+}
+
+class _AssistantProgressList extends StatelessWidget {
+  const _AssistantProgressList({required this.steps});
+
+  final List<AiAssistantProgressModel> steps;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: steps
+          .map((step) {
+            final completed = step.state == 'completed';
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    completed
+                        ? Icons.check_circle_outline
+                        : Icons.hourglass_top,
+                    size: 16,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      _progressLabel(step),
+                      style: AppTypography.caption(
+                        context,
+                      ).copyWith(color: theme.colorScheme.onSurfaceVariant),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          })
+          .toList(growable: false),
+    );
+  }
 }

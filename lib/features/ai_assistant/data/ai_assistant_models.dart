@@ -643,18 +643,67 @@ class AiAssistantSelectedEntity {
   }
 }
 
+class AiAssistantProgressModel {
+  const AiAssistantProgressModel({
+    required this.id,
+    required this.code,
+    required this.state,
+  });
+
+  final int id;
+  final String code;
+  final String state;
+}
+
+List<AiAssistantProgressModel> _assistantProgressList(dynamic value) {
+  const codes = <String>{
+    'rag_search',
+    'estimates',
+    'warehouse',
+    'projects',
+    'contracts',
+    'procurement',
+    'schedule',
+    'work_volumes',
+    'materials',
+    'reports',
+    'financial_data',
+  };
+  final unique = <int, AiAssistantProgressModel>{};
+  final items = _asList(value);
+  for (final item in items.skip(items.length > 24 ? items.length - 24 : 0)) {
+    final json = _nullableMap(item);
+    if (json == null) continue;
+    final id = _intValue(json['id']);
+    final code = _stringValue(json['code']);
+    final state = _stringValue(json['state']);
+    if (id <= 0 ||
+        !codes.contains(code) ||
+        (state != 'started' && state != 'completed')) {
+      continue;
+    }
+    unique[id] = AiAssistantProgressModel(id: id, code: code!, state: state!);
+  }
+  final result =
+      unique.values.toList()
+        ..sort((left, right) => left.id.compareTo(right.id));
+  return result.take(24).toList(growable: false);
+}
+
 class AiAssistantChatResult {
   const AiAssistantChatResult({
     required this.requestId,
     required this.conversationId,
     this.message,
     this.creditUsage,
+    this.progress = const [],
   });
 
   final String requestId;
   final int conversationId;
   final AiMessageModel? message;
   final AiCreditUsageModel? creditUsage;
+  final List<AiAssistantProgressModel> progress;
 
   factory AiAssistantChatResult.fromJson(Map<String, dynamic> json) {
     final messageJson = _nullableMap(json['message']);
@@ -666,6 +715,7 @@ class AiAssistantChatResult {
       creditUsage: AiCreditUsageModel.fromJson(
         _nullableMap(json['credit_usage']),
       ),
+      progress: _assistantProgressList(json['progress']),
     );
   }
 }
@@ -675,6 +725,7 @@ class AiAssistantChatRequest {
     required this.requestId,
     required this.status,
     this.stage,
+    this.progress = const [],
     this.conversationId,
     this.result,
     this.errorCode,
@@ -683,6 +734,7 @@ class AiAssistantChatRequest {
   final String requestId;
   final String status;
   final String? stage;
+  final List<AiAssistantProgressModel> progress;
   final int? conversationId;
   final AiAssistantChatResult? result;
   final String? errorCode;
@@ -696,6 +748,7 @@ class AiAssistantChatRequest {
       requestId: _stringValue(json['request_id']) ?? '',
       status: _stringValue(json['status']) ?? '',
       stage: _stringValue(json['stage']),
+      progress: _assistantProgressList(json['progress']),
       conversationId:
           json['conversation_id'] == null
               ? null
