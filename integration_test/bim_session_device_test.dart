@@ -154,6 +154,12 @@ void main() {
         'coordinator_state_trace': stateTrace,
         'native_auth_status_trace': audit.authStatuses,
       };
+      final flutterInputCounts = <String, int>{};
+      final flutterInputTrace = <Map<String, dynamic>>[];
+      report['flutter_raw_input'] = {
+        'counts': flutterInputCounts,
+        'trace': flutterInputTrace,
+      };
       binding.reportData = report;
       addTearDown(() async {
         stopStateTrace();
@@ -180,13 +186,43 @@ void main() {
               body: Column(
                 children: [
                   Expanded(
-                    child: BimViewerSurface(
-                      document: BimViewerDocument(
-                        models: documentModels,
-                        modelSetRevisionId: revisionId,
+                    child: Listener(
+                      onPointerDown:
+                          (event) => _recordFlutterInput(
+                            'pointerdown',
+                            event,
+                            flutterInputCounts,
+                            flutterInputTrace,
+                          ),
+                      onPointerMove:
+                          (event) => _recordFlutterInput(
+                            'pointermove',
+                            event,
+                            flutterInputCounts,
+                            flutterInputTrace,
+                          ),
+                      onPointerUp:
+                          (event) => _recordFlutterInput(
+                            'pointerup',
+                            event,
+                            flutterInputCounts,
+                            flutterInputTrace,
+                          ),
+                      onPointerCancel:
+                          (event) => _recordFlutterInput(
+                            'pointercancel',
+                            event,
+                            flutterInputCounts,
+                            flutterInputTrace,
+                          ),
+                      child: BimViewerSurface(
+                        document: BimViewerDocument(
+                          models: documentModels,
+                          modelSetRevisionId: revisionId,
+                        ),
+                        controller: controller,
+                        onError: errors.add,
                       ),
-                      controller: controller,
-                      onError: errors.add,
                     ),
                   ),
                   Row(
@@ -1159,6 +1195,8 @@ Future<Map<String, dynamic>> _inspect(WebViewWidget widget) async {
       text: document.body.innerText, width: canvas?.width, height: canvas?.height,
       pointer_events: {...(window.__mostBimSessionDeviceInput || {})},
       input_trace: [...(window.__mostBimSessionDeviceTrace || [])],
+      raw_input_events: {...(window.__mostBimSessionRawInput || {})},
+      raw_input_trace: [...(window.__mostBimSessionRawTrace || [])],
       canvas_rect: canvas ? (() => {const r=canvas.getBoundingClientRect(); return {x:r.x,y:r.y,width:r.width,height:r.height};})() : null,
       viewport_center_hit: (() => {const x=innerWidth/2,y=innerHeight/2,e=document.elementFromPoint(x,y),r=canvas?.getBoundingClientRect(); return {x,y,target:e ? {tag:e.tagName,id:(e.id||'').slice(0,120),class:(typeof e.className==='string'?e.className:'').slice(0,200)} : null,canvas_contains:!!(canvas&&r&&x>=r.left&&x<=r.right&&y>=r.top&&y<=r.bottom)};})(),
       device_pixel_ratio: devicePixelRatio};
@@ -1185,6 +1223,7 @@ Future<void> _cursorDiagnostic(
   String safe(Object error) => _safeDiagnostic(error)!;
   final diagnostic = <String, dynamic>{
     'renderer_errors': errors.take(10).map(safe).toList(),
+    'flutter_raw_input': report['flutter_raw_input'],
     'outgoing_events':
         audit.events.reversed.take(40).map((event) {
           final payload = bimMap(event['payload']);
@@ -1234,20 +1273,44 @@ Future<void> _observeDeviceInput(WebViewWidget widget) async {
     if (window.__mostBimSessionDeviceInput) return;
     const counts = window.__mostBimSessionDeviceInput = {};
     const trace = window.__mostBimSessionDeviceTrace = [];
-    for (const type of ['pointerdown', 'pointermove', 'pointerup', 'pointercancel', 'pointerleave', 'click']) {
+    const rawCounts = window.__mostBimSessionRawInput = {};
+    const rawTrace = window.__mostBimSessionRawTrace = [];
+    for (const type of ['pointerdown', 'pointermove', 'pointerup', 'pointercancel', 'pointerleave', 'click',
+      'touchstart', 'touchmove', 'touchend', 'touchcancel', 'mousedown', 'mousemove', 'mouseup']) {
       window.addEventListener(type, event => {
         if (!event.isTrusted) return;
         const target = event.target instanceof Element ? event.target : null;
-        trace.push({type, trusted:event.isTrusted,
+        const point = event.changedTouches?.[0] || event.touches?.[0] || event;
+        const item = {type, trusted:true,
           target:target ? {tag:target.tagName,id:(target.id||'').slice(0,120),class:(typeof target.className==='string'?target.className:'').slice(0,200)} : null,
-          x:event.clientX,y:event.clientY,screen_x:event.screenX,screen_y:event.screenY,
-          pointer_id:event.pointerId,pointer_type:event.pointerType,button:event.button,buttons:event.buttons});
+          x:point.clientX,y:point.clientY,screen_x:point.screenX,screen_y:point.screenY,
+          pointer_id:event.pointerId,pointer_type:event.pointerType,button:event.button,buttons:event.buttons};
+        rawTrace.push(item);
+        if (rawTrace.length>60) rawTrace.shift();
+        rawCounts[type] = (rawCounts[type] || 0) + 1;
+        if (type.startsWith('pointer')) trace.push(item);
         if (trace.length>60) trace.shift();
         if (event.pointerType !== 'touch') return;
         counts[type] = (counts[type] || 0) + 1;
       }, true);
     }
   })()''');
+}
+
+void _recordFlutterInput(
+  String type,
+  PointerEvent event,
+  Map<String, int> counts,
+  List<Map<String, dynamic>> trace,
+) {
+  counts[type] = (counts[type] ?? 0) + 1;
+  trace.add({
+    'type': type,
+    'kind': event.kind.name,
+    'x': double.parse(event.position.dx.toStringAsFixed(1)),
+    'y': double.parse(event.position.dy.toStringAsFixed(1)),
+  });
+  if (trace.length > 60) trace.removeAt(0);
 }
 
 BimViewState _pickPose(
