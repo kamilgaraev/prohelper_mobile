@@ -68,6 +68,61 @@ String _progressLabel(AiAssistantProgressModel step) =>
     _progressLabels[step.code]?[step.state == 'completed' ? 1 : 0] ??
     'Запрос обрабатывается';
 
+String _currentActivity(
+  String? stage,
+  List<AiAssistantProgressModel> progress,
+) {
+  if (const {
+    'generating',
+    'verifying',
+    'cancel_requested',
+    'recovering',
+  }.contains(stage)) {
+    return _stageLabels[stage]!;
+  }
+  final latestByCode = <String, AiAssistantProgressModel>{};
+  for (final step in progress) {
+    latestByCode[step.code] = step;
+  }
+  final active =
+      latestByCode.values.where((step) => step.state == 'started').toList()
+        ..sort((left, right) => right.id.compareTo(left.id));
+  if (active.isNotEmpty) {
+    return _progressLabels[active.first.code]?[0] ?? 'Запрос обрабатывается';
+  }
+  return _stageLabels[stage] ?? 'Запрос обрабатывается';
+}
+
+List<AiAssistantProgressModel> _completedSources(
+  List<AiAssistantProgressModel> progress,
+) {
+  final byCode = <String, AiAssistantProgressModel>{};
+  for (final step in progress) {
+    if (step.state == 'completed') byCode[step.code] = step;
+  }
+  final result =
+      byCode.values.toList()
+        ..sort((left, right) => left.id.compareTo(right.id));
+  return result;
+}
+
+const _stageLabels = <String, String>{
+  'queued': 'В очереди',
+  'reading': 'Анализирую данные',
+  'preparing': 'Проверяю доступ',
+  'access': 'Проверяю доступ',
+  'searching': 'Ищу доступные источники',
+  'tools': 'Получаю данные',
+  'generating': 'Формирую ответ',
+  'verifying': 'Проверяю ответ',
+  'validating': 'Проверяю ответ',
+  'cancel_requested': 'Останавливаю обработку запроса',
+  'cancelled': 'Запрос остановлен',
+  'failed': 'Не удалось завершить запрос',
+  'sending': 'Отправляю запрос',
+  'recovering': 'Проверяю состояние запроса',
+};
+
 class AiAssistantChatScreen extends ConsumerStatefulWidget {
   const AiAssistantChatScreen({
     super.key,
@@ -103,11 +158,12 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
   CancelToken? _sendCancelToken;
   int _requestRevision = 0;
   String? _progress;
-  String? _progressDetail;
   List<AiAssistantProgressModel> _progressSteps = const [];
   final Map<int, List<AiAssistantProgressModel>> _completedProgressByMessageId =
       {};
   String? _activeRequestId;
+  AiAssistantRepository? _activeRequestRepository;
+  int? _activeRequestOrganizationId;
   Timer? _progressTimer;
   Timer? _elapsedTimer;
   int _elapsedSeconds = 0;
@@ -139,7 +195,7 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
         (state) => (state.user?.serverId, state.user?.currentOrganizationId),
       ),
       (previous, next) {
-        if (previous != next) _resetForOrganizationChange();
+        if (previous != next) _resetForOrganizationChange(previous?.$2);
       },
     );
     _controller.text = widget.initialPrompt ?? '';
@@ -171,8 +227,7 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
 
   @override
   void dispose() {
-    _progressTimer?.cancel();
-    _elapsedTimer?.cancel();
+    _detachSending(cancelServer: true, updateUi: false);
     _controller.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -268,7 +323,6 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
       setState(() {
         _isSending = false;
         _progress = null;
-        _progressDetail = null;
         _error =
             'Ответ задерживается. Проверьте результат этого запроса позже.';
       });
@@ -276,9 +330,12 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
     }
     _isPolling = true;
     try {
-      final progress = await ref
-          .read(aiAssistantRepositoryProvider)
-          .fetchChatRequest(requestId, conversationId: conversationId);
+      final repository =
+          _activeRequestRepository ?? ref.read(aiAssistantRepositoryProvider)!;
+      final progress = await repository.fetchChatRequest(
+        requestId,
+        conversationId: conversationId,
+      );
       if (!mounted ||
           revision != _requestRevision ||
           requestId != _activeRequestId ||
@@ -302,11 +359,10 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
         );
         return;
       }
-      final (title, detail) = _stageDescription(progress.stage);
+      final mergedProgress = _mergeProgress(_progressSteps, progress.progress);
       setState(() {
-        _progress = title;
-        _progressDetail = detail;
-        _progressSteps = _mergeProgress(_progressSteps, progress.progress);
+        _progressSteps = mergedProgress;
+        _progress = _currentActivity(progress.stage, mergedProgress);
       });
     } catch (error) {
       if (!mounted ||
@@ -320,42 +376,20 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
         _failRequest(error.message, terminal: true);
         return;
       }
+      if (error is ApiException &&
+          const {401, 403, 404}.contains(error.statusCode)) {
+        _failRequest(_resolveError(error), terminal: true);
+        return;
+      }
       if (mounted && revision == _requestRevision && _isSending) {
         setState(() {
           _progress = 'Проверяю состояние запроса';
-          _progressDetail =
-              'Жду связь с сервером, запрос может продолжать обрабатываться.';
         });
       }
     } finally {
       _isPolling = false;
     }
   }
-
-  (String, String) _stageDescription(String? stage) => switch (stage) {
-    'queued' => ('Запрос в очереди', 'Ожидаю начала обработки.'),
-    'preparing' || 'access' => (
-      'Проверяю доступ',
-      'Уточняю, какие данные доступны для запроса.',
-    ),
-    'searching' => (
-      'Ищу доступные источники',
-      'Подбираю сведения, относящиеся к вопросу.',
-    ),
-    'tools' => (
-      'Получаю данные',
-      'Загружаю сведения из доступных разделов МОСТ.',
-    ),
-    'generating' => (
-      'Готовлю ответ',
-      'Составляю ответ на основе полученных данных.',
-    ),
-    'validating' => (
-      'Сверяю ответ',
-      'Проверяю подготовленный ответ перед показом.',
-    ),
-    _ => ('Запрос обрабатывается', 'Жду следующего состояния от сервера.'),
-  };
 
   void _startElapsedTimer({bool reset = false}) {
     _elapsedTimer?.cancel();
@@ -373,6 +407,9 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
 
   String get _elapsedLabel =>
       '${(_elapsedSeconds ~/ 60).toString().padLeft(2, '0')}:${(_elapsedSeconds % 60).toString().padLeft(2, '0')}';
+
+  List<AiAssistantProgressModel> get _visibleCompletedProgress =>
+      _completedSources(_progressSteps);
 
   void _completeRequest(
     AiAssistantChatResult result,
@@ -392,11 +429,14 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
       _mergeProgress(_progressSteps, progress),
       result.progress,
     );
-    if (result.message != null && completedProgress.isNotEmpty) {
-      _completedProgressByMessageId[result.message!.id] = completedProgress;
+    final completedSources = _completedSources(completedProgress);
+    if (result.message != null && completedSources.isNotEmpty) {
+      _completedProgressByMessageId[result.message!.id] = completedSources;
     }
     _activeRequestId = null;
     _sendCancelToken = null;
+    _activeRequestRepository = null;
+    _activeRequestOrganizationId = null;
     setState(() {
       _conversationId = result.conversationId;
       if (conversationAtSend == null) _canManageParticipants = true;
@@ -407,7 +447,6 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
       }
       _isSending = false;
       _progress = null;
-      _progressDetail = null;
       _progressSteps = const [];
       _error = null;
     });
@@ -428,10 +467,11 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
     _elapsedTimer?.cancel();
     _activeRequestId = null;
     _sendCancelToken = null;
+    _activeRequestRepository = null;
+    _activeRequestOrganizationId = null;
     setState(() {
       _isSending = false;
       _progress = null;
-      _progressDetail = null;
       _progressSteps = const [];
       _error = message;
       if (terminal) {
@@ -447,16 +487,42 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
     });
   }
 
-  void _detachSending() {
+  void _detachSending({
+    bool cancelServer = false,
+    bool updateUi = true,
+    bool requireOrganizationMatch = false,
+    int? expectedOrganizationId,
+  }) {
+    final requestId = _activeRequestId;
+    final token = _sendCancelToken;
+    final repository = _activeRequestRepository;
+    final organizationId = _activeRequestOrganizationId;
+    if (cancelServer &&
+        requestId != null &&
+        repository != null &&
+        (!requireOrganizationMatch ||
+            organizationId == expectedOrganizationId)) {
+      unawaited(repository.cancelRequest(requestId).catchError((_) {}));
+    }
     _progressTimer?.cancel();
     _elapsedTimer?.cancel();
+    token?.cancel('Запрос отсоединён от текущего экрана.');
     _sendCancelToken = null;
     _activeRequestId = null;
+    _activeRequestRepository = null;
+    _activeRequestOrganizationId = null;
     _requestRevision++;
-    _isSending = false;
-    _progress = null;
-    _progressDetail = null;
-    _progressSteps = const [];
+    if (mounted && updateUi) {
+      setState(() {
+        _isSending = false;
+        _progress = null;
+        _progressSteps = const [];
+      });
+    } else {
+      _isSending = false;
+      _progress = null;
+      _progressSteps = const [];
+    }
   }
 
   Future<void> _recoverRequest() async {
@@ -468,37 +534,36 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
     }
     final revision = ++_requestRevision;
     _activeRequestId = failed.requestId;
+    _activeRequestRepository = ref.read(aiAssistantRepositoryProvider);
+    _activeRequestOrganizationId =
+        ref.read(authProvider).user?.currentOrganizationId;
+    final repository = _activeRequestRepository!;
     _requestStartedAt = DateTime.now();
     setState(() {
       _isSending = true;
       _error = null;
       _progress = 'Проверяю состояние запроса';
-      _progressDetail = 'Ищу результат сохранённого запроса.';
     });
     _startElapsedTimer();
     try {
       AiAssistantChatRequest request;
       try {
-        request = await ref
-            .read(aiAssistantRepositoryProvider)
-            .fetchChatRequest(
-              failed.requestId,
-              conversationId: failed.conversationId,
-            );
+        request = await repository.fetchChatRequest(
+          failed.requestId,
+          conversationId: failed.conversationId,
+        );
       } on ApiException catch (error) {
         if (error.statusCode != 404) rethrow;
-        request = await ref
-            .read(aiAssistantRepositoryProvider)
-            .sendMessageRequest(
-              message: failed.message,
-              requestId: failed.requestId,
-              conversationId: failed.conversationId,
-              quoteId: failed.quote.id,
-              maxConfirmed: failed.quote.maxConfirmed,
-              profile: failed.profile,
-              context: failed.context,
-              attachmentIds: failed.attachmentIds,
-            );
+        request = await repository.sendMessageRequest(
+          message: failed.message,
+          requestId: failed.requestId,
+          conversationId: failed.conversationId,
+          quoteId: failed.quote.id,
+          maxConfirmed: failed.quote.maxConfirmed,
+          profile: failed.profile,
+          context: failed.context,
+          attachmentIds: failed.attachmentIds,
+        );
       }
       if (!mounted ||
           revision != _requestRevision ||
@@ -599,7 +664,6 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
       _messages = [..._messages, optimistic];
       _isSending = true;
       _progress = 'Отправляю запрос';
-      _progressDetail = 'Передаю вопрос ассистенту.';
       _progressSteps = const [];
       _error = null;
       _actionError = null;
@@ -616,33 +680,34 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
 
     try {
       _activeRequestId = requestId;
+      _activeRequestRepository = ref.read(aiAssistantRepositoryProvider);
+      _activeRequestOrganizationId =
+          ref.read(authProvider).user?.currentOrganizationId;
       _requestStartedAt = DateTime.now();
       _startElapsedTimer(reset: true);
       _sendCancelToken = CancelToken();
-      final request = await ref
-          .read(aiAssistantRepositoryProvider)
-          .sendMessageRequest(
-            message: message,
-            requestId: requestId,
-            quoteId: quote.id,
-            maxConfirmed: quote.maxConfirmed,
-            profile: profile,
-            conversationId: conversationAtSend,
-            context: assistantContext,
-            attachmentIds: attachmentIds,
-            cancelToken: _sendCancelToken,
-          );
+      final request = await _activeRequestRepository!.sendMessageRequest(
+        message: message,
+        requestId: requestId,
+        quoteId: quote.id,
+        maxConfirmed: quote.maxConfirmed,
+        profile: profile,
+        conversationId: conversationAtSend,
+        context: assistantContext,
+        attachmentIds: attachmentIds,
+        cancelToken: _sendCancelToken,
+      );
 
       if (!mounted ||
           requestRevision != _requestRevision ||
           conversationAtSend != _conversationId) {
         return;
       }
-      if (request.progress.isNotEmpty) {
-        setState(() {
-          _progressSteps = _mergeProgress(_progressSteps, request.progress);
-        });
-      }
+      final mergedProgress = _mergeProgress(_progressSteps, request.progress);
+      setState(() {
+        _progressSteps = mergedProgress;
+        _progress = _currentActivity(request.stage, mergedProgress);
+      });
       if (request.status == 'completed') {
         _completeRequest(
           request.result!,
@@ -669,8 +734,6 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
       );
       setState(() {
         _progress = 'Проверяю состояние запроса';
-        _progressDetail =
-            'Связь прервалась. Ответ может продолжать готовиться.';
       });
       await _pollProgress(requestId, requestRevision, conversationAtSend);
     }
@@ -819,7 +882,12 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
             (context) => AlertDialog(
               title: const Text('Оценка расхода'),
               content: Text(
-                'Оценка до ${quote.amount} ${quote.unit}. Фактическое списание будет рассчитано после ответа.',
+                [
+                  'Оценка до ${quote.amount} ${quote.unit}. Фактическое списание будет рассчитано после ответа.',
+                  if (profile == 'detailed' &&
+                      quote.processingDeadlineSeconds != null)
+                    'Подробный анализ: ожидание до ${_formatProcessingDeadline(quote.processingDeadlineSeconds!)}.',
+                ].join('\n'),
               ),
               actions: [
                 TextButton(
@@ -839,6 +907,7 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
             maxConfirmed: true,
             amount: quote.amount,
             unit: quote.unit,
+            processingDeadlineSeconds: quote.processingDeadlineSeconds,
           )
           : null;
     } catch (error) {
@@ -847,24 +916,36 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
     }
   }
 
+  String _formatProcessingDeadline(int seconds) {
+    final minutes = seconds ~/ 60;
+    final remainingSeconds = seconds % 60;
+    if (minutes == 0) return '$seconds сек';
+    if (remainingSeconds == 0) return '$minutes мин';
+    return '$minutes мин $remainingSeconds сек';
+  }
+
   Future<void> _stopSending() async {
     final requestId = _activeRequestId;
     final token = _sendCancelToken;
+    final repository = _activeRequestRepository;
     _progressTimer?.cancel();
     _elapsedTimer?.cancel();
     _activeRequestId = null;
+    _sendCancelToken = null;
+    _activeRequestRepository = null;
+    _activeRequestOrganizationId = null;
     final stopRevision = ++_requestRevision;
+    token?.cancel('Пользователь остановил запрос.');
     if (mounted) {
       setState(() {
         _isSending = false;
         _progress = null;
-        _progressDetail = null;
         _progressSteps = const [];
       });
     }
-    if (requestId != null) {
+    if (requestId != null && repository != null) {
       try {
-        await ref.read(aiAssistantRepositoryProvider).cancelRequest(requestId);
+        await repository.cancelRequest(requestId);
         if (stopRevision == _requestRevision) _failedRequest = null;
       } catch (error) {
         if (mounted && stopRevision == _requestRevision) {
@@ -872,18 +953,17 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
             'Сервер не подтвердил остановку. ${_resolveError(error)}',
           );
         }
-      } finally {
-        token?.cancel('Пользователь остановил запрос.');
       }
     }
   }
 
-  void _resetForOrganizationChange() {
-    _progressTimer?.cancel();
-    _elapsedTimer?.cancel();
-    _activeRequestId = null;
-    _sendCancelToken = null;
-    _requestRevision++;
+  void _resetForOrganizationChange(int? previousOrganizationId) {
+    _detachSending(
+      cancelServer: true,
+      updateUi: false,
+      requireOrganizationMatch: true,
+      expectedOrganizationId: previousOrganizationId,
+    );
     _quotingRequestId = null;
     _uploadRevision++;
     _draftRevision++;
@@ -903,7 +983,6 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
       _error = null;
       _isSending = false;
       _progress = null;
-      _progressDetail = null;
       _isLoading = false;
       _isPreviewLoading = false;
       _isExecutingAction = false;
@@ -1409,19 +1488,15 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
                                           context,
                                         ),
                                       ),
-                                      if (_progressDetail != null)
-                                        Text(
-                                          _progressDetail!,
-                                          style: AppTypography.caption(context),
-                                        ),
                                       Text(
                                         'Прошло $_elapsedLabel',
                                         style: AppTypography.caption(context),
                                       ),
-                                      if (_progressSteps.isNotEmpty) ...[
+                                      if (_visibleCompletedProgress
+                                          .isNotEmpty) ...[
                                         const SizedBox(height: 6),
-                                        _AssistantProgressList(
-                                          steps: _progressSteps,
+                                        _CompletedAssistantSources(
+                                          steps: _visibleCompletedProgress,
                                         ),
                                       ],
                                     ],
@@ -1511,10 +1586,11 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
                                       message.id,
                                     )) ...[
                                   const SizedBox(height: 10),
-                                  _AssistantProgressList(
-                                    steps:
-                                        _completedProgressByMessageId[message
-                                            .id]!,
+                                  _CompletedAssistantSources(
+                                    steps: _completedSources(
+                                      _completedProgressByMessageId[message
+                                          .id]!,
+                                    ),
                                   ),
                                 ],
                                 if (sourceLinks.isNotEmpty)
@@ -2318,8 +2394,8 @@ class _AuthenticatedAttachmentImageState
   );
 }
 
-class _AssistantProgressList extends StatelessWidget {
-  const _AssistantProgressList({required this.steps});
+class _CompletedAssistantSources extends StatelessWidget {
+  const _CompletedAssistantSources({required this.steps});
 
   final List<AiAssistantProgressModel> steps;
 
@@ -2330,16 +2406,13 @@ class _AssistantProgressList extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: steps
           .map((step) {
-            final completed = step.state == 'completed';
             return Padding(
               padding: const EdgeInsets.only(bottom: 4),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Icon(
-                    completed
-                        ? Icons.check_circle_outline
-                        : Icons.hourglass_top,
+                    Icons.check_circle_outline,
                     size: 16,
                     color: theme.colorScheme.onSurfaceVariant,
                   ),
