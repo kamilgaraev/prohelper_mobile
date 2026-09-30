@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:prohelpers_mobile/features/ai_assistant/data/ai_assistant_document_models.dart';
 import 'package:prohelpers_mobile/features/ai_assistant/data/ai_assistant_models.dart';
 import 'package:prohelpers_mobile/features/ai_assistant/data/ai_assistant_repository.dart';
 
@@ -53,6 +54,7 @@ void main() {
         limitMinor: 2550,
       );
       expect(status.documentCoverage['ocr_completed_pages'], 3);
+      expect(status.statusAvailable, isTrue);
       expect(status.archiveScan.scanned, 8);
       expect(status.canManageSettings, true);
       expect(budget.availableMinor, 2400);
@@ -73,6 +75,27 @@ void main() {
         throwsException,
       );
       expect(requests, hasLength(3));
+    },
+  );
+  test(
+    'unavailable status is explicit and legacy status defaults available',
+    () {
+      final unavailable = AiDocumentProcessingStatus.fromJson({
+        'status_available': false,
+        'source_count': null,
+        'chunk_count': null,
+        'coverage_complete': false,
+        'eligible_known': false,
+        'ready': false,
+        'document_coverage': null,
+        'archive_scan': null,
+      });
+      final legacy = AiDocumentProcessingStatus.fromJson(const {});
+
+      expect(unavailable.statusAvailable, isFalse);
+      expect(unavailable.documentCoverage['total'], 0);
+      expect(unavailable.coverageComplete, isFalse);
+      expect(legacy.statusAvailable, isTrue);
     },
   );
   test(

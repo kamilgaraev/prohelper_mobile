@@ -66,7 +66,7 @@ class _DocumentsState extends ConsumerState<AiAssistantDocumentsScreen> {
         _loading = false;
       });
       AiDocumentBudget? budget;
-      if (status.canManageSettings) {
+      if (status.statusAvailable && status.canManageSettings) {
         budget = await repository.fetchDocumentBudget();
       }
       if (!mounted || revision != _revision) return;
@@ -74,7 +74,9 @@ class _DocumentsState extends ConsumerState<AiAssistantDocumentsScreen> {
         _status = status;
         _loading = false;
         _error = null;
-        if (!status.canManageSettings) _budget = null;
+        if (!status.statusAvailable || !status.canManageSettings) {
+          _budget = null;
+        }
         if (budget != null) {
           _budget = budget;
           if (!_budgetDraft) {
@@ -205,7 +207,9 @@ class _DocumentsState extends ConsumerState<AiAssistantDocumentsScreen> {
                       color: Theme.of(context).colorScheme.error,
                     ),
                   ),
-                if (_status != null) ...[
+                if (_status != null && !_status!.statusAvailable)
+                  const Text('Статистика временно недоступна'),
+                if (_status != null && _status!.statusAvailable) ...[
                   Text(
                     'Документы: готовы ${_status!.documentCoverage['ready'] ?? 0} из ${_status!.documentCoverage['total'] ?? 0}',
                     style: Theme.of(context).textTheme.titleMedium,
