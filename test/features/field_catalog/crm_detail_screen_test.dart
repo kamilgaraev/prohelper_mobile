@@ -3,11 +3,55 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:prohelpers_mobile/core/models/user_context.dart';
+import 'package:prohelpers_mobile/core/providers/module_provider.dart';
 import 'package:prohelpers_mobile/core/services/permission_service.dart';
 import 'package:prohelpers_mobile/features/field_catalog/data/field_catalog_repository.dart';
 import 'package:prohelpers_mobile/features/field_catalog/presentation/field_catalog_screen.dart';
 
 void main() {
+  testWidgets('CRM company note uses singular API target type', (tester) async {
+    const companyId = 'c124c9a8-138d-48c8-b9d1-148452fcc911';
+    final repository = _Repository(
+      FieldCatalogEntry.fromJson({
+        'id': companyId,
+        'name': 'Тестовая компания',
+        'status': 'new',
+      }),
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          fieldCatalogRepositoryProvider.overrideWithValue(repository),
+          permissionServiceProvider.overrideWithValue(
+            PermissionService(
+              context: UserContext.office,
+              activeModules: const {AppModule.crm},
+              grantedPermissions: const {'crm.activities.create'},
+            ),
+          ),
+        ],
+        child: const MaterialApp(
+          home: FieldCatalogDetailScreen(
+            title: 'Компания',
+            catalog: 'crm',
+            entity: 'companies',
+            uuid: companyId,
+            icon: Icons.business,
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Добавить заметку или контакт'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.widgetWithText(TextField, 'Тема'), 'QA note');
+    await tester.tap(find.text('Сохранить'));
+    await tester.pumpAndSettle();
+
+    expect(repository.createdTargetType, 'company');
+    expect(repository.createdTargetId, companyId);
+  });
+
   testWidgets('CRM detail shows business fields without technical metadata', (
     tester,
   ) async {
@@ -99,6 +143,22 @@ class _Repository extends FieldCatalogRepository {
   _Repository(this.entry) : super(Dio());
 
   final FieldCatalogEntry entry;
+  String? createdTargetType;
+  String? createdTargetId;
+
+  @override
+  Future<Map<String, dynamic>> createCrmActivity({
+    required String kind,
+    required String targetType,
+    required String targetId,
+    required String subject,
+    String? body,
+    DateTime? dueAt,
+  }) async {
+    createdTargetType = targetType;
+    createdTargetId = targetId;
+    return const {};
+  }
 
   @override
   Future<FieldCatalogEntry> fetchDetail({
