@@ -97,12 +97,14 @@ List<MachineryOperationsDestination> machineryOperationsDestinationsFor(
 ) {
   final grants =
       permissions.map((permission) => permission.toLowerCase()).toSet();
+  final hasFullAccess =
+      grants.contains('*') || grants.contains('machinery-operations.*');
   final canView =
-      grants.contains('*') ||
+      hasFullAccess ||
       grants.contains('view') ||
-      grants.contains('machinery-operations.view') ||
-      grants.contains('machinery-operations.*');
-  final canReview = grants.contains('machinery-operations.shifts.approve');
+      grants.contains('machinery-operations.view');
+  final canReview =
+      hasFullAccess || grants.contains('machinery-operations.shifts.approve');
 
   return [
     if (canView && canReview)
@@ -111,9 +113,9 @@ List<MachineryOperationsDestination> machineryOperationsDestinationsFor(
       MachineryOperationsDestination.fleet
     else if (canReview)
       MachineryOperationsDestination.shiftReview,
-    if (grants.contains('machinery-operations.shifts.create'))
+    if (hasFullAccess || grants.contains('machinery-operations.shifts.create'))
       MachineryOperationsDestination.shift,
-    if (grants.contains('machinery-operations.downtime.manage'))
+    if (hasFullAccess || grants.contains('machinery-operations.downtime.manage'))
       MachineryOperationsDestination.maintenance,
   ];
 }
