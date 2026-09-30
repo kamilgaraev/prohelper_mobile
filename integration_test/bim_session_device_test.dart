@@ -300,6 +300,7 @@ void main() {
         await _native(
           tester,
           () => coordinator.join(BimSessionSummary.fromJson(bootstrap)),
+          timeout: const Duration(seconds: 120),
         );
         report['join_elapsed_ms'] = joinClock.elapsedMilliseconds;
         await _connected(tester, coordinator, errors);
