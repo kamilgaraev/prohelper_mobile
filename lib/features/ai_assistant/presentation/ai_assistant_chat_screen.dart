@@ -1,4 +1,12 @@
-﻿import 'package:flutter/material.dart';
+import 'dart:async';
+import 'package:flutter/material.dart';
+import 'dart:math';
+import 'dart:typed_data';
+import 'dart:ui' as ui;
+
+import 'package:dio/dio.dart';
+import 'package:open_filex/open_filex.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -11,8 +19,16 @@ import '../../../core/widgets/app_empty_state.dart';
 import '../../../core/widgets/app_loading_state.dart';
 import '../../../core/widgets/industrial_card.dart';
 import '../../projects/domain/projects_provider.dart';
+import '../../auth/domain/auth_provider.dart';
+import '../../actions/presentation/mobile_action_search.dart';
+import '../../../core/providers/module_provider.dart';
+import '../data/assistant_source_navigation.dart';
 import '../data/ai_assistant_models.dart';
 import '../data/ai_assistant_repository.dart';
+import 'ai_assistant_memory_screen.dart';
+import 'ai_assistant_sharing_screen.dart';
+import 'ai_assistant_credits_screen.dart';
+import 'ai_assistant_documents_screen.dart';
 
 class AiAssistantChatScreen extends ConsumerStatefulWidget {
   const AiAssistantChatScreen({
@@ -30,6 +46,10 @@ class AiAssistantChatScreen extends ConsumerStatefulWidget {
 }
 
 class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
+  static const _sourceBaseUrl = String.fromEnvironment(
+    'ASSISTANT_SOURCE_BASE_URL',
+    defaultValue: 'https://lk.xn--1-xtbgmf.xn--p1ai',
+  );
   final TextEditingController _controller = TextEditingController();
   final ScrollController _scrollController = ScrollController();
 
@@ -42,11 +62,45 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
   String? _actionError;
   int? _conversationId;
   AiActionPreviewModel? _activePreview;
+  CancelToken? _sendCancelToken;
+  int _requestRevision = 0;
+  String? _progress;
+  String? _progressDetail;
+  String? _activeRequestId;
+  Timer? _progressTimer;
+  Timer? _elapsedTimer;
+  int _elapsedSeconds = 0;
+  DateTime? _requestCreatedAt;
+  bool _isPolling = false;
+  DateTime? _requestStartedAt;
+  bool _isQuoting = false;
+  String? _quotingRequestId;
+  int? _nextHistoryPage;
+  bool _loadingHistory = false;
+  String _profile = 'normal';
+  bool _canWrite = true;
+  bool _canManageParticipants = false;
+  _PendingChat? _failedRequest;
+  final ImagePicker _imagePicker = ImagePicker();
+  List<_DraftImage> _draftImages = const [];
+  bool _isUploadingImage = false;
+  double? _imageUploadProgress;
+  String? _imageError;
+  int _draftRevision = 0;
+  int _uploadRevision = 0;
 
   @override
   void initState() {
     super.initState();
     _conversationId = widget.conversationId;
+    ref.listenManual(
+      authProvider.select(
+        (state) => (state.user?.serverId, state.user?.currentOrganizationId),
+      ),
+      (previous, next) {
+        if (previous != next) _resetForOrganizationChange();
+      },
+    );
     _controller.text = widget.initialPrompt ?? '';
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _bootstrap();
@@ -54,7 +108,28 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
   }
 
   @override
+  void didUpdateWidget(covariant AiAssistantChatScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.conversationId != widget.conversationId) {
+      _detachSending();
+      _draftRevision++;
+      _uploadRevision++;
+      _conversationId = widget.conversationId;
+      _draftImages = const [];
+      _isUploadingImage = false;
+      _imageUploadProgress = null;
+      _imageError = null;
+      _messages = const [];
+      _failedRequest = null;
+      _loadingHistory = false;
+      _bootstrap();
+    }
+  }
+
+  @override
   void dispose() {
+    _progressTimer?.cancel();
+    _elapsedTimer?.cancel();
     _controller.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -76,6 +151,7 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
   }
 
   Future<void> _loadConversation(int id) async {
+    final requestRevision = ++_requestRevision;
     setState(() {
       _isLoading = true;
       _error = null;
@@ -88,14 +164,20 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
           .read(aiAssistantRepositoryProvider)
           .fetchConversation(id);
 
+      if (!mounted || requestRevision != _requestRevision) return;
       setState(() {
         _conversationId = details.conversation.id;
+        _canWrite = details.conversation.canWrite;
+        _canManageParticipants = details.conversation.canManageParticipants;
         _messages = details.messages;
+        _nextHistoryPage = null;
         _isLoading = false;
       });
 
+      await _loadHistory(id, requestRevision);
       _scrollToBottom();
     } catch (error) {
+      if (!mounted || requestRevision != _requestRevision) return;
       setState(() {
         _error = UserMessage.fromError(error);
         _isLoading = false;
@@ -103,25 +185,365 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
     }
   }
 
-  Future<void> _sendMessage([String? forcedValue]) async {
-    final message = (forcedValue ?? _controller.text).trim();
-    if (message.isEmpty || _isSending) {
+  Future<void> _loadHistory(int id, int revision, {int page = 1}) async {
+    if (_loadingHistory) return;
+    _loadingHistory = true;
+    try {
+      final result = await ref
+          .read(aiAssistantRepositoryProvider)
+          .fetchMessages(id, page: page);
+      if (!mounted || revision != _requestRevision || id != _conversationId) {
+        return;
+      }
+      setState(() {
+        final combined =
+            page == 1 ? result.items : [...result.items, ..._messages];
+        final ids = <int>{};
+        _messages = combined.where((message) => ids.add(message.id)).toList();
+        _nextHistoryPage = result.nextPage;
+      });
+    } catch (error) {
+      if (mounted && revision == _requestRevision) {
+        _showSnackBar(_resolveError(error));
+      }
+    } finally {
+      _loadingHistory = false;
+    }
+  }
+
+  Future<void> _pollProgress(
+    String requestId,
+    int revision,
+    int? conversationId,
+  ) async {
+    if (_isPolling || !mounted || revision != _requestRevision) return;
+    if (_requestStartedAt != null &&
+        DateTime.now().difference(_requestStartedAt!) >
+            const Duration(minutes: 9)) {
+      _progressTimer?.cancel();
+      _elapsedTimer?.cancel();
+      setState(() {
+        _isSending = false;
+        _progress = null;
+        _progressDetail = null;
+        _error =
+            'Ответ задерживается. Проверьте результат этого запроса позже.';
+      });
+      return;
+    }
+    _isPolling = true;
+    try {
+      final progress = await ref
+          .read(aiAssistantRepositoryProvider)
+          .fetchChatRequest(requestId, conversationId: conversationId);
+      if (!mounted ||
+          revision != _requestRevision ||
+          requestId != _activeRequestId ||
+          conversationId != _conversationId) {
+        return;
+      }
+      if (progress.status == 'completed') {
+        _completeRequest(progress.result!, conversationId);
+        return;
+      }
+      if (progress.status == 'failed' || progress.status == 'cancelled') {
+        _failRequest(
+          progress.status == 'cancelled'
+              ? 'Запрос остановлен.'
+              : 'Ассистент не смог подготовить ответ. Попробуйте новый запрос.',
+          terminal: true,
+        );
+        return;
+      }
+      final (title, detail) = _stageDescription(progress.stage);
+      setState(() {
+        _progress = title;
+        _progressDetail = detail;
+      });
+    } catch (error) {
+      if (!mounted ||
+          revision != _requestRevision ||
+          requestId != _activeRequestId ||
+          conversationId != _conversationId) {
+        return;
+      }
+      if (error is ApiException &&
+          error.message == 'Получен ответ для другого запроса.') {
+        _failRequest(error.message, terminal: true);
+        return;
+      }
+      if (mounted && revision == _requestRevision && _isSending) {
+        setState(() {
+          _progress = 'Проверяю состояние запроса';
+          _progressDetail =
+              'Жду связь с сервером, запрос может продолжать обрабатываться.';
+        });
+      }
+    } finally {
+      _isPolling = false;
+    }
+  }
+
+  (String, String) _stageDescription(String? stage) => switch (stage) {
+    'queued' => ('Запрос в очереди', 'Ожидаю начала обработки.'),
+    'preparing' || 'access' => (
+      'Проверяю доступ',
+      'Уточняю, какие данные доступны для запроса.',
+    ),
+    'searching' => (
+      'Ищу доступные источники',
+      'Подбираю сведения, относящиеся к вопросу.',
+    ),
+    'tools' => (
+      'Получаю данные',
+      'Загружаю сведения из доступных разделов МОСТ.',
+    ),
+    'generating' => (
+      'Готовлю ответ',
+      'Составляю ответ на основе полученных данных.',
+    ),
+    'validating' => (
+      'Сверяю ответ',
+      'Проверяю подготовленный ответ перед показом.',
+    ),
+    _ => ('Запрос обрабатывается', 'Жду следующего состояния от сервера.'),
+  };
+
+  void _startElapsedTimer({bool reset = false}) {
+    _elapsedTimer?.cancel();
+    if (reset || _requestCreatedAt == null) {
+      _requestCreatedAt = DateTime.now();
+      _elapsedSeconds = 0;
+    }
+    _elapsedTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted || !_isSending) return;
+      final wallSeconds =
+          DateTime.now().difference(_requestCreatedAt!).inSeconds;
+      setState(() => _elapsedSeconds = max(_elapsedSeconds + 1, wallSeconds));
+    });
+  }
+
+  String get _elapsedLabel =>
+      '${(_elapsedSeconds ~/ 60).toString().padLeft(2, '0')}:${(_elapsedSeconds % 60).toString().padLeft(2, '0')}';
+
+  void _completeRequest(AiAssistantChatResult result, int? conversationAtSend) {
+    if (!mounted ||
+        result.requestId != _activeRequestId ||
+        conversationAtSend != _conversationId ||
+        (conversationAtSend != null &&
+            result.conversationId != conversationAtSend)) {
+      return;
+    }
+    _progressTimer?.cancel();
+    _elapsedTimer?.cancel();
+    _activeRequestId = null;
+    _sendCancelToken = null;
+    setState(() {
+      _conversationId = result.conversationId;
+      if (conversationAtSend == null) _canManageParticipants = true;
+      _failedRequest = null;
+      if (result.message != null &&
+          !_messages.any((item) => item.id == result.message!.id)) {
+        _messages = [..._messages, result.message!];
+      }
+      _isSending = false;
+      _progress = null;
+      _progressDetail = null;
+      _error = null;
+    });
+    if (result.creditUsage?.chargingEnabled == false) {
+      _showSnackBar(
+        'Тестовый режим: списания выключены. Фактическое списание — 0 ед. МОСТ.',
+      );
+    } else if (result.creditUsage?.actualCharge != null &&
+        (double.tryParse(result.creditUsage!.actualCharge!) ?? 0) > 0) {
+      _showSnackBar('Списано: ${result.creditUsage!.actualCharge} ед. МОСТ');
+    }
+    _scrollToBottom();
+  }
+
+  void _failRequest(String message, {bool terminal = false}) {
+    final pending = _failedRequest;
+    _progressTimer?.cancel();
+    _elapsedTimer?.cancel();
+    _activeRequestId = null;
+    _sendCancelToken = null;
+    setState(() {
+      _isSending = false;
+      _progress = null;
+      _progressDetail = null;
+      _error = message;
+      if (terminal) {
+        if (pending != null) {
+          _messages =
+              _messages
+                  .where((item) => item.id != pending.optimisticId)
+                  .toList();
+          if (_controller.text.isEmpty) _controller.text = pending.message;
+        }
+        _failedRequest = null;
+      }
+    });
+  }
+
+  void _detachSending() {
+    _progressTimer?.cancel();
+    _elapsedTimer?.cancel();
+    _sendCancelToken = null;
+    _activeRequestId = null;
+    _requestRevision++;
+    _isSending = false;
+    _progress = null;
+    _progressDetail = null;
+  }
+
+  Future<void> _recoverRequest() async {
+    final failed = _failedRequest;
+    if (failed == null ||
+        _isSending ||
+        failed.conversationId != _conversationId) {
+      return;
+    }
+    final revision = ++_requestRevision;
+    _activeRequestId = failed.requestId;
+    _requestStartedAt = DateTime.now();
+    setState(() {
+      _isSending = true;
+      _error = null;
+      _progress = 'Проверяю состояние запроса';
+      _progressDetail = 'Ищу результат сохранённого запроса.';
+    });
+    _startElapsedTimer();
+    try {
+      AiAssistantChatRequest request;
+      try {
+        request = await ref
+            .read(aiAssistantRepositoryProvider)
+            .fetchChatRequest(
+              failed.requestId,
+              conversationId: failed.conversationId,
+            );
+      } on ApiException catch (error) {
+        if (error.statusCode != 404) rethrow;
+        request = await ref
+            .read(aiAssistantRepositoryProvider)
+            .sendMessageRequest(
+              message: failed.message,
+              requestId: failed.requestId,
+              conversationId: failed.conversationId,
+              quoteId: failed.quote.id,
+              maxConfirmed: failed.quote.maxConfirmed,
+              profile: failed.profile,
+              context: failed.context,
+              attachmentIds: failed.attachmentIds,
+            );
+      }
+      if (!mounted ||
+          revision != _requestRevision ||
+          !_isSending ||
+          failed.conversationId != _conversationId) {
+        return;
+      }
+      if (request.status == 'completed') {
+        _completeRequest(request.result!, failed.conversationId);
+        return;
+      }
+      if (request.status == 'failed' || request.status == 'cancelled') {
+        _failRequest(
+          request.status == 'cancelled'
+              ? 'Запрос остановлен.'
+              : 'Ассистент не смог подготовить ответ. Попробуйте новый запрос.',
+          terminal: true,
+        );
+        return;
+      }
+      _progressTimer?.cancel();
+      _progressTimer = Timer.periodic(
+        const Duration(seconds: 2),
+        (_) => _pollProgress(failed.requestId, revision, failed.conversationId),
+      );
+      await _pollProgress(failed.requestId, revision, failed.conversationId);
+    } catch (error) {
+      if (mounted && revision == _requestRevision) {
+        _failRequest(_resolveError(error));
+      }
+    }
+  }
+
+  Future<void> _sendMessage([String? forcedValue, bool retry = false]) async {
+    if (retry) {
+      await _recoverRequest();
+      return;
+    }
+    final attachments = List<_DraftImage>.unmodifiable(_draftImages);
+    final message =
+        (forcedValue ?? _controller.text).trim().isEmpty &&
+                attachments.isNotEmpty
+            ? 'Проанализируй прикреплённое изображение.'
+            : (forcedValue ?? _controller.text).trim();
+    if (message.isEmpty ||
+        _isLoading ||
+        _isSending ||
+        _isQuoting ||
+        _failedRequest != null ||
+        !_canWrite) {
       return;
     }
 
+    final requestId = _newRequestId();
+    final requestRevision = ++_requestRevision;
+    final attachmentRevision = _draftRevision;
+    final attachmentIds = attachments.map((item) => item.metadata.id).toList();
+    final conversationAtSend = _conversationId;
+    final assistantContext = _assistantContext();
+    final profile = _profile;
+    _isQuoting = true;
+    _quotingRequestId = requestId;
+    final quote = await _confirmQuote(
+      message,
+      requestId,
+      conversationAtSend,
+      assistantContext,
+      profile,
+      attachmentIds,
+    );
+    _isQuoting = false;
+    if (quote == null ||
+        !mounted ||
+        requestRevision != _requestRevision ||
+        conversationAtSend != _conversationId ||
+        attachmentRevision != _draftRevision) {
+      return;
+    }
     final optimistic = AiMessageModel(
       id: DateTime.now().millisecondsSinceEpoch,
       role: 'user',
       content: message,
       createdAt: DateTime.now(),
+      attachments: attachments.map((item) => item.metadata).toList(),
+    );
+    _failedRequest = _PendingChat(
+      requestId: requestId,
+      message: message,
+      conversationId: conversationAtSend,
+      context: assistantContext,
+      profile: profile,
+      quote: quote,
+      attachmentIds: attachmentIds,
+      optimisticId: optimistic.id,
     );
 
     setState(() {
       _messages = [..._messages, optimistic];
       _isSending = true;
+      _progress = 'Отправляю запрос';
+      _progressDetail = 'Передаю вопрос ассистенту.';
       _error = null;
       _actionError = null;
       _activePreview = null;
+      _draftImages = const [];
+      _draftRevision++;
+      _imageError = null;
       if (forcedValue == null) {
         _controller.clear();
       }
@@ -130,34 +552,322 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
     _scrollToBottom();
 
     try {
-      final assistantContext = _assistantContext();
-      final details = await ref
+      _activeRequestId = requestId;
+      _requestStartedAt = DateTime.now();
+      _startElapsedTimer(reset: true);
+      _sendCancelToken = CancelToken();
+      final request = await ref
           .read(aiAssistantRepositoryProvider)
-          .sendMessage(
+          .sendMessageRequest(
             message: message,
-            conversationId: _conversationId,
-            desiredMode: 'grounded',
+            requestId: requestId,
+            quoteId: quote.id,
+            maxConfirmed: quote.maxConfirmed,
+            profile: profile,
+            conversationId: conversationAtSend,
             context: assistantContext,
+            attachmentIds: attachmentIds,
+            cancelToken: _sendCancelToken,
           );
 
-      setState(() {
-        _conversationId = details.conversation.id;
-        _messages = details.messages;
-        _isSending = false;
-      });
+      if (!mounted ||
+          requestRevision != _requestRevision ||
+          conversationAtSend != _conversationId) {
+        return;
+      }
+      if (request.status == 'completed') {
+        _completeRequest(request.result!, conversationAtSend);
+      } else {
+        _progressTimer = Timer.periodic(
+          const Duration(seconds: 2),
+          (_) => _pollProgress(requestId, requestRevision, conversationAtSend),
+        );
+        await _pollProgress(requestId, requestRevision, conversationAtSend);
+      }
     } catch (error) {
+      if (!mounted || requestRevision != _requestRevision) return;
+      if (error is ApiException &&
+          {400, 401, 403, 404, 409, 422, 429}.contains(error.statusCode)) {
+        _failRequest(_resolveError(error), terminal: true);
+        return;
+      }
+      _progressTimer = Timer.periodic(
+        const Duration(seconds: 2),
+        (_) => _pollProgress(requestId, requestRevision, conversationAtSend),
+      );
       setState(() {
-        _messages =
-            _messages.where((item) => item.id != optimistic.id).toList();
-        _error = _resolveError(error);
-        _isSending = false;
+        _progress = 'Проверяю состояние запроса';
+        _progressDetail =
+            'Связь прервалась. Ответ может продолжать готовиться.';
       });
+      await _pollProgress(requestId, requestRevision, conversationAtSend);
     }
 
     _scrollToBottom();
   }
 
+  Future<void> _pickImage() async {
+    if (_isUploadingImage || _draftImages.length >= 2) return;
+    final revision = _draftRevision;
+    final uploadRevision = ++_uploadRevision;
+    final conversationAtPick = _conversationId;
+    try {
+      final file = await _imagePicker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 2048,
+        maxHeight: 2048,
+        imageQuality: 95,
+      );
+      if (file == null || !_isCurrentImagePick(revision, conversationAtPick)) {
+        return;
+      }
+      final fileLength = await file.length();
+      if (!_isCurrentImagePick(revision, conversationAtPick)) return;
+      if (fileLength > 5 * 1024 * 1024) {
+        setState(
+          () => _imageError = 'Размер изображения не должен превышать 5 МБ.',
+        );
+        return;
+      }
+      final bytes = await file.readAsBytes();
+      if (!_isCurrentImagePick(revision, conversationAtPick)) return;
+      final buffer = await ui.ImmutableBuffer.fromUint8List(bytes);
+      ui.ImageDescriptor? descriptor;
+      int width;
+      int height;
+      try {
+        descriptor = await ui.ImageDescriptor.encoded(buffer);
+        if (!_isCurrentImagePick(revision, conversationAtPick)) return;
+        width = descriptor.width;
+        height = descriptor.height;
+      } finally {
+        descriptor?.dispose();
+        buffer.dispose();
+      }
+      if (width > 2048 || height > 2048) {
+        setState(
+          () =>
+              _imageError =
+                  'Стороны изображения не должны превышать 2048 пикселей.',
+        );
+        return;
+      }
+      final name = file.name;
+      final extension = name.split('.').last.toLowerCase();
+      final mime = switch (extension) {
+        'png' => 'image/png',
+        'webp' => 'image/webp',
+        'jpg' || 'jpeg' => 'image/jpeg',
+        _ => file.mimeType ?? '',
+      };
+      if (!_isCurrentImagePick(revision, conversationAtPick)) return;
+      if (!{'image/jpeg', 'image/png', 'image/webp'}.contains(mime)) {
+        setState(
+          () => _imageError = 'Поддерживаются изображения JPEG, PNG и WEBP.',
+        );
+        return;
+      }
+      setState(() {
+        _isUploadingImage = true;
+        _imageUploadProgress = 0;
+        _imageError = null;
+      });
+      final metadata = await ref
+          .read(aiAssistantRepositoryProvider)
+          .uploadImage(
+            fileName: name,
+            mime: mime,
+            bytes: bytes,
+            conversationId: conversationAtPick,
+            onSendProgress: (sent, total) {
+              if (!mounted || revision != _draftRevision || total <= 0) return;
+              setState(() => _imageUploadProgress = sent / total);
+            },
+          );
+      if (!mounted ||
+          revision != _draftRevision ||
+          conversationAtPick != _conversationId) {
+        return;
+      }
+      setState(() {
+        _draftImages = [..._draftImages, _DraftImage(metadata, bytes)];
+        _draftRevision++;
+      });
+    } catch (error) {
+      if (mounted && revision == _draftRevision) {
+        setState(() => _imageError = _resolveError(error));
+      }
+    } finally {
+      if (mounted && uploadRevision == _uploadRevision) {
+        setState(() {
+          _isUploadingImage = false;
+          _imageUploadProgress = null;
+        });
+      }
+    }
+  }
+
+  bool _isCurrentImagePick(int revision, int? conversationId) =>
+      mounted &&
+      revision == _draftRevision &&
+      conversationId == _conversationId;
+
+  void _removeDraftImage(_DraftImage image) {
+    setState(() {
+      _draftImages = _draftImages.where((item) => item != image).toList();
+      _draftRevision++;
+      _imageError = null;
+    });
+  }
+
+  Future<AiCreditQuoteModel?> _confirmQuote(
+    String message,
+    String requestId,
+    int? conversationId,
+    Map<String, dynamic> assistantContext,
+    String profile,
+    List<String> attachmentIds,
+  ) async {
+    try {
+      final quote = await ref
+          .read(aiAssistantRepositoryProvider)
+          .quoteCredits(
+            message: message,
+            requestId: requestId,
+            profile: profile,
+            conversationId: conversationId,
+            context: assistantContext,
+            attachmentIds: attachmentIds,
+          );
+      if (!mounted || requestId != _quotingRequestId) return null;
+      if (double.tryParse(quote.amount) == 0) return quote;
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder:
+            (context) => AlertDialog(
+              title: const Text('Оценка расхода'),
+              content: Text(
+                'Оценка до ${quote.amount} ${quote.unit}. Фактическое списание будет рассчитано после ответа.',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  child: const Text('Отмена'),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.pop(context, true),
+                  child: const Text('Продолжить'),
+                ),
+              ],
+            ),
+      );
+      return confirmed == true
+          ? AiCreditQuoteModel(
+            id: quote.id,
+            maxConfirmed: true,
+            amount: quote.amount,
+            unit: quote.unit,
+          )
+          : null;
+    } catch (error) {
+      if (mounted) _showSnackBar(_resolveError(error));
+      return null;
+    }
+  }
+
+  Future<void> _stopSending() async {
+    final requestId = _activeRequestId;
+    final token = _sendCancelToken;
+    _progressTimer?.cancel();
+    _elapsedTimer?.cancel();
+    _activeRequestId = null;
+    final stopRevision = ++_requestRevision;
+    if (mounted) {
+      setState(() {
+        _isSending = false;
+        _progress = null;
+        _progressDetail = null;
+      });
+    }
+    if (requestId != null) {
+      try {
+        await ref.read(aiAssistantRepositoryProvider).cancelRequest(requestId);
+        if (stopRevision == _requestRevision) _failedRequest = null;
+      } catch (error) {
+        if (mounted && stopRevision == _requestRevision) {
+          _showSnackBar(
+            'Сервер не подтвердил остановку. ${_resolveError(error)}',
+          );
+        }
+      } finally {
+        token?.cancel('Пользователь остановил запрос.');
+      }
+    }
+  }
+
+  void _resetForOrganizationChange() {
+    _progressTimer?.cancel();
+    _elapsedTimer?.cancel();
+    _activeRequestId = null;
+    _sendCancelToken = null;
+    _requestRevision++;
+    _quotingRequestId = null;
+    _uploadRevision++;
+    _draftRevision++;
+    _loadingHistory = false;
+    if (!mounted) return;
+    setState(() {
+      _messages = const [];
+      _draftImages = const [];
+      _isUploadingImage = false;
+      _imageUploadProgress = null;
+      _imageError = null;
+      _conversationId = null;
+      _activePreview = null;
+      _actionError = null;
+      _error = null;
+      _isSending = false;
+      _progress = null;
+      _progressDetail = null;
+      _isLoading = false;
+      _isPreviewLoading = false;
+      _isExecutingAction = false;
+      _canWrite = true;
+      _canManageParticipants = false;
+      _nextHistoryPage = null;
+      _failedRequest = null;
+    });
+  }
+
+  String _newRequestId() {
+    final random = Random.secure();
+    String hex(int length) =>
+        List.generate(
+          length,
+          (_) => random.nextInt(16).toRadixString(16),
+        ).join();
+    return '${hex(8)}-${hex(4)}-4${hex(3)}-${(8 + random.nextInt(4)).toRadixString(16)}${hex(3)}-${hex(12)}';
+  }
+
   Future<void> _previewAction(AiAssistantActionModel action) async {
+    if (action.type == 'navigate') {
+      final navigation = action.target?['navigation'];
+      final url =
+          (navigation is Map ? navigation['url'] : null) ??
+          action.target?['url'];
+      final uri = ref
+          .read(aiAssistantRepositoryProvider)
+          .sourceUri(url?.toString());
+      if (uri == null) {
+        _showSnackBar('Ссылка недоступна.');
+        return;
+      }
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+      return;
+    }
+    if (!_canWrite) return;
+    final revision = _requestRevision;
+    final conversation = _conversationId;
     if (_isPreviewLoading || _isExecutingAction || !action.allowed) {
       return;
     }
@@ -173,7 +883,9 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
           .read(aiAssistantRepositoryProvider)
           .previewAction(action: action, conversationId: _conversationId);
 
-      if (!mounted) {
+      if (!mounted ||
+          revision != _requestRevision ||
+          conversation != _conversationId) {
         return;
       }
 
@@ -182,7 +894,9 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
         _isPreviewLoading = false;
       });
     } catch (error) {
-      if (!mounted) {
+      if (!mounted ||
+          revision != _requestRevision ||
+          conversation != _conversationId) {
         return;
       }
 
@@ -196,6 +910,8 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
   }
 
   Future<void> _executeActivePreview() async {
+    final revision = _requestRevision;
+    final conversation = _conversationId;
     final preview = _activePreview;
     if (preview == null || _isExecutingAction || !preview.executable) {
       return;
@@ -211,7 +927,9 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
           .read(aiAssistantRepositoryProvider)
           .executeAction(preview: preview, conversationId: _conversationId);
 
-      if (!mounted) {
+      if (!mounted ||
+          revision != _requestRevision ||
+          conversation != _conversationId) {
         return;
       }
 
@@ -229,7 +947,9 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
         _showSnackBar(result.messageText!);
       }
     } catch (error) {
-      if (!mounted) {
+      if (!mounted ||
+          revision != _requestRevision ||
+          conversation != _conversationId) {
         return;
       }
 
@@ -277,21 +997,34 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
   }
 
   Future<void> _openReportArtifact(AiAssistantArtifact artifact) async {
-    final rawUrl = artifact.trustedUrl;
-    final uri = Uri.tryParse(rawUrl ?? '');
-
-    if (uri == null) {
-      _showSnackBar('Ссылка на отчет недоступна.');
-      return;
-    }
-
+    final revision = _requestRevision;
+    AiDownloadedReport? report;
+    var opened = false;
     try {
-      final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
-      if (!opened) {
-        _showSnackBar('Не удалось открыть отчет.');
+      report = await ref
+          .read(aiAssistantRepositoryProvider)
+          .downloadReport(artifact);
+      if (!mounted || revision != _requestRevision) return;
+      opened = (await OpenFilex.open(report.path)).type == ResultType.done;
+      if (!opened) _showSnackBar('Не удалось открыть отчёт.');
+    } catch (error) {
+      if (mounted && revision == _requestRevision) {
+        _showSnackBar(_resolveError(error));
       }
-    } catch (_) {
-      _showSnackBar('Не удалось открыть отчет.');
+    } finally {
+      if (report != null) {
+        final downloaded = report;
+        if (opened) {
+          unawaited(
+            Future<void>.delayed(
+              const Duration(minutes: 2),
+              downloaded.dispose,
+            ),
+          );
+        } else {
+          await downloaded.dispose();
+        }
+      }
     }
   }
 
@@ -303,6 +1036,67 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  AssistantSourceTarget? _sourceTarget(AiAssistantEvidenceModel evidence) {
+    final projectId =
+        evidence.projectId ??
+        (evidence.entityType == 'project' ? evidence.entityId : null);
+    return resolveAssistantSourceTarget(
+      evidence.url,
+      sourceBaseUrl: _sourceBaseUrl,
+      projectId: projectId,
+    );
+  }
+
+  bool _canOpenSource(AiAssistantEvidenceModel evidence) {
+    final target = _sourceTarget(evidence);
+    if (target == null) return false;
+    if (target.webPath != null || target.projectId != null) return true;
+    return target.mobileRoute != null &&
+        visibleMobileDestinations(
+          ref.read(supportedMobileModulesProvider),
+        ).any((item) => item.matches(target.mobileRoute!));
+  }
+
+  Future<void> _openAssistantSource(AiAssistantEvidenceModel evidence) async {
+    final target = _sourceTarget(evidence);
+    if (target != null && target.mobileRoute != null) {
+      final destinations = visibleMobileDestinations(
+        ref.read(supportedMobileModulesProvider),
+      );
+      final matchingDestinations = destinations
+          .where((item) => item.matches(target.mobileRoute!))
+          .toList(growable: false);
+      final destination =
+          matchingDestinations.isEmpty ? null : matchingDestinations.first;
+      final selectedProject = ref.read(projectsProvider).selectedProject;
+      final projectContextMatches =
+          target.projectId == null ||
+          selectedProject?.serverId.toString() == target.projectId;
+      if (destination != null &&
+          (!destination.requiresProject || projectContextMatches)) {
+        await Navigator.of(
+          context,
+        ).push<void>(MaterialPageRoute<void>(builder: destination.builder));
+        return;
+      }
+    }
+
+    final webPath =
+        target?.webPath ??
+        (target?.projectId == null
+            ? null
+            : '/dashboard/projects/${Uri.encodeComponent(target!.projectId!)}');
+    if (webPath != null) {
+      final uri = ref.read(aiAssistantRepositoryProvider).sourceUri(webPath);
+      if (uri != null) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+        return;
+      }
+    }
+
+    if (mounted) _showSnackBar('Переход к записи сейчас недоступен.');
   }
 
   Map<String, dynamic> _assistantContext() {
@@ -342,6 +1136,57 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
 
     return Scaffold(
       appBar: AppBar(
+        actions: [
+          IconButton(
+            tooltip: 'Документы',
+            icon: const Icon(Icons.description_outlined),
+            onPressed:
+                () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const AiAssistantDocumentsScreen(),
+                  ),
+                ),
+          ),
+
+          IconButton(
+            tooltip: 'Память',
+            icon: const Icon(Icons.psychology_outlined),
+            onPressed:
+                () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const AiAssistantMemoryScreen(),
+                  ),
+                ),
+          ),
+          IconButton(
+            tooltip: 'Баланс',
+            icon: const Icon(Icons.account_balance_wallet_outlined),
+            onPressed:
+                () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const AiAssistantCreditsScreen(),
+                  ),
+                ),
+          ),
+          if (_conversationId != null && _canManageParticipants)
+            IconButton(
+              tooltip: 'Доступ к чату',
+              icon: const Icon(Icons.group_outlined),
+              onPressed:
+                  () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder:
+                          (_) => AiAssistantSharingScreen(
+                            conversationId: _conversationId!,
+                          ),
+                    ),
+                  ),
+            ),
+        ],
         title: Text(
           _conversationId == null ? 'Новый чат' : 'Диалог #$_conversationId',
         ),
@@ -387,6 +1232,45 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
                 ),
               ),
             ),
+          if (_error != null && _failedRequest != null)
+            TextButton(
+              onPressed: _isSending ? null : () => _sendMessage(null, true),
+              child: const Text('Проверить или возобновить запрос'),
+            ),
+          if (_isSending)
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                onPressed: _stopSending,
+                icon: const Icon(Icons.stop_circle_outlined),
+                label: const Text('Стоп'),
+              ),
+            ),
+          DropdownButton<String>(
+            value: _profile,
+            items: const [
+              DropdownMenuItem(value: 'short', child: Text('Краткий ответ')),
+              DropdownMenuItem(value: 'normal', child: Text('Обычный ответ')),
+              DropdownMenuItem(
+                value: 'detailed',
+                child: Text('Подробный ответ'),
+              ),
+            ],
+            onChanged:
+                _isSending || _isQuoting
+                    ? null
+                    : (value) => setState(() => _profile = value ?? 'normal'),
+          ),
+          if (_nextHistoryPage != null)
+            TextButton(
+              onPressed:
+                  () => _loadHistory(
+                    _conversationId!,
+                    _requestRevision,
+                    page: _nextHistoryPage!,
+                  ),
+              child: const Text('Ранние сообщения'),
+            ),
           Expanded(
             child:
                 _isLoading
@@ -426,13 +1310,42 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
                       itemCount: _messages.length + (_isSending ? 1 : 0),
                       itemBuilder: (context, index) {
                         if (_isSending && index == _messages.length) {
-                          return const Padding(
+                          return Padding(
                             padding: EdgeInsets.only(top: 8),
                             child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                CircularProgressIndicator(strokeWidth: 2),
-                                SizedBox(width: 12),
-                                Text('Ассистент готовит ответ...'),
+                                const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        _progress ?? 'Запрос обрабатывается',
+                                        style: AppTypography.bodyMedium(
+                                          context,
+                                        ),
+                                      ),
+                                      if (_progressDetail != null)
+                                        Text(
+                                          _progressDetail!,
+                                          style: AppTypography.caption(context),
+                                        ),
+                                      Text(
+                                        'Прошло $_elapsedLabel',
+                                        style: AppTypography.caption(context),
+                                      ),
+                                    ],
+                                  ),
+                                ),
                               ],
                             ),
                           );
@@ -450,6 +1363,12 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
                             isUser
                                 ? const <AiAssistantActionModel>[]
                                 : message.actions;
+                        final sourceLinks =
+                            isUser
+                                ? const <AiAssistantEvidenceModel>[]
+                                : message.evidence
+                                    .where(_canOpenSource)
+                                    .toList();
                         final bubbleColor =
                             isUser
                                 ? theme.colorScheme.primary
@@ -482,12 +1401,37 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               mainAxisSize: MainAxisSize.min,
                               children: [
+                                if (message.attachments.isNotEmpty)
+                                  Padding(
+                                    padding: const EdgeInsets.only(bottom: 10),
+                                    child: Wrap(
+                                      spacing: 8,
+                                      runSpacing: 8,
+                                      children: message.attachments
+                                          .map(
+                                            (attachment) =>
+                                                _AuthenticatedAttachmentImage(
+                                                  key: ValueKey(attachment.id),
+                                                  attachment: attachment,
+                                                ),
+                                          )
+                                          .toList(growable: false),
+                                    ),
+                                  ),
                                 if (message.content.trim().isNotEmpty)
                                   Text(
                                     message.content,
                                     style: AppTypography.bodyMedium(
                                       context,
                                     ).copyWith(color: bubbleTextColor),
+                                  ),
+                                if (sourceLinks.isNotEmpty)
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 10),
+                                    child: _MessageLinks(
+                                      evidence: sourceLinks,
+                                      onOpen: _openAssistantSource,
+                                    ),
                                   ),
                                 if (reportArtifacts.isNotEmpty)
                                   ...reportArtifacts.map(
@@ -546,32 +1490,129 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
                 onCancel: _rejectActionPreview,
               ),
             ),
-          SafeArea(
-            top: false,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _controller,
-                      minLines: 1,
-                      maxLines: 5,
-                      textInputAction: TextInputAction.newline,
-                      decoration: const InputDecoration(
-                        hintText: 'Введите вопрос для ассистента',
+          if (!_canWrite)
+            const Padding(
+              padding: EdgeInsets.all(12),
+              child: Text('Доступ только для просмотра.'),
+            )
+          else
+            SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (_draftImages.isNotEmpty || _isUploadingImage)
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            ..._draftImages.map(
+                              (image) => Stack(
+                                clipBehavior: Clip.none,
+                                children: [
+                                  ClipRRect(
+                                    borderRadius: BorderRadius.circular(10),
+                                    child: Image.memory(
+                                      image.bytes,
+                                      width: 64,
+                                      height: 64,
+                                      fit: BoxFit.cover,
+                                    ),
+                                  ),
+                                  Positioned(
+                                    right: -6,
+                                    top: -6,
+                                    child: IconButton.filledTonal(
+                                      visualDensity: VisualDensity.compact,
+                                      constraints:
+                                          const BoxConstraints.tightFor(
+                                            width: 28,
+                                            height: 28,
+                                          ),
+                                      onPressed:
+                                          _isSending
+                                              ? null
+                                              : () => _removeDraftImage(image),
+                                      icon: const Icon(Icons.close, size: 16),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            if (_isUploadingImage)
+                              SizedBox(
+                                width: 64,
+                                height: 64,
+                                child: Center(
+                                  child: CircularProgressIndicator(
+                                    value: _imageUploadProgress,
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    if (_imageError != null)
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: Text(
+                            _imageError!,
+                            style: TextStyle(color: theme.colorScheme.error),
+                          ),
+                        ),
+                      ),
+                    Row(
+                      children: [
+                        IconButton(
+                          tooltip: 'Прикрепить изображение',
+                          onPressed:
+                              _isSending ||
+                                      _isUploadingImage ||
+                                      _draftImages.length >= 2
+                                  ? null
+                                  : _pickImage,
+                          icon: const Icon(Icons.image_outlined),
+                        ),
+                        Expanded(
+                          child: TextField(
+                            controller: _controller,
+                            minLines: 1,
+                            maxLines: 5,
+                            textInputAction: TextInputAction.newline,
+                            decoration: const InputDecoration(
+                              hintText: 'Введите вопрос для ассистента',
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        FilledButton(
+                          onPressed:
+                              _isSending || _isQuoting || _isUploadingImage
+                                  ? null
+                                  : () => _sendMessage(),
+                          child: const Icon(Icons.send_rounded),
+                        ),
+                      ],
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Text(
+                        'До 2 изображений · JPEG, PNG или WEBP · до 5 МБ каждое',
+                        style: AppTypography.caption(
+                          context,
+                        ).copyWith(color: theme.colorScheme.onSurfaceVariant),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 12),
-                  FilledButton(
-                    onPressed: _isSending ? null : () => _sendMessage(),
-                    child: const Icon(Icons.send_rounded),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
-          ),
         ],
       ),
     );
@@ -594,6 +1635,37 @@ Color _readableForeground(Color background, Color preferred) {
   final blackContrast = _contrastRatio(background, Colors.black87);
 
   return whiteContrast >= blackContrast ? Colors.white : Colors.black87;
+}
+
+class _MessageLinks extends StatelessWidget {
+  const _MessageLinks({required this.evidence, required this.onOpen});
+
+  final List<AiAssistantEvidenceModel> evidence;
+  final Future<void> Function(AiAssistantEvidenceModel) onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Wrap(
+      spacing: 8,
+      runSpacing: 4,
+      children:
+          evidence
+              .map(
+                (item) => TextButton.icon(
+                  onPressed: () => onOpen(item),
+                  icon: const Icon(Icons.open_in_new, size: 16),
+                  label: Text(
+                    item.title,
+                    style: AppTypography.caption(
+                      context,
+                    ).copyWith(color: theme.colorScheme.primary),
+                  ),
+                ),
+              )
+              .toList(),
+    );
+  }
 }
 
 double _contrastRatio(Color first, Color second) {
@@ -876,7 +1948,8 @@ class _ReportArtifactCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final url = artifact.trustedUrl;
+    final url =
+        artifact.downloadUrl ?? artifact.url ?? artifact.href ?? artifact.path;
     final rows = _artifactRows(artifact);
 
     return Material(
@@ -1056,3 +2129,99 @@ const _quickPrompts = [
   'Какие вопросы требуют внимания сегодня',
   'Есть ли перекос по финансам',
 ];
+
+class _PendingChat {
+  const _PendingChat({
+    required this.requestId,
+    required this.message,
+    required this.conversationId,
+    required this.context,
+    required this.profile,
+    required this.quote,
+    required this.attachmentIds,
+    required this.optimisticId,
+  });
+  final String requestId;
+  final String message;
+  final int? conversationId;
+  final Map<String, dynamic> context;
+  final String profile;
+  final AiCreditQuoteModel quote;
+  final List<String> attachmentIds;
+  final int optimisticId;
+}
+
+class _DraftImage {
+  const _DraftImage(this.metadata, this.bytes);
+
+  final AiImageAttachmentModel metadata;
+  final Uint8List bytes;
+}
+
+class _AuthenticatedAttachmentImage extends ConsumerStatefulWidget {
+  const _AuthenticatedAttachmentImage({super.key, required this.attachment});
+
+  final AiImageAttachmentModel attachment;
+
+  @override
+  ConsumerState<_AuthenticatedAttachmentImage> createState() =>
+      _AuthenticatedAttachmentImageState();
+}
+
+class _AuthenticatedAttachmentImageState
+    extends ConsumerState<_AuthenticatedAttachmentImage> {
+  late Future<Uint8List> _content;
+
+  @override
+  void initState() {
+    super.initState();
+    _content = _load();
+  }
+
+  @override
+  void didUpdateWidget(covariant _AuthenticatedAttachmentImage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.attachment.id != widget.attachment.id) {
+      _content = _load();
+    }
+  }
+
+  Future<Uint8List> _load() => ref
+      .read(aiAssistantRepositoryProvider)
+      .fetchImageContent(widget.attachment.id);
+
+  @override
+  Widget build(BuildContext context) => FutureBuilder<Uint8List>(
+    future: _content,
+    builder: (context, snapshot) {
+      if (snapshot.hasData && snapshot.data!.isNotEmpty) {
+        return ClipRRect(
+          borderRadius: BorderRadius.circular(10),
+          child: Image.memory(
+            snapshot.data!,
+            width: 160,
+            height: 130,
+            fit: BoxFit.cover,
+          ),
+        );
+      }
+      return Container(
+        width: 160,
+        height: 72,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child:
+            snapshot.hasError
+                ? const Icon(Icons.broken_image_outlined)
+                : const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+      );
+    },
+  );
+}

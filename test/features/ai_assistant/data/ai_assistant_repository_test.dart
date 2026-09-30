@@ -1,10 +1,12 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:prohelpers_mobile/core/network/api_exception.dart';
 import 'package:prohelpers_mobile/features/ai_assistant/data/ai_assistant_repository.dart';
+import 'package:prohelpers_mobile/features/ai_assistant/data/ai_assistant_models.dart';
 
 void main() {
   test('loads usage and nonempty mobile conversations list', () async {
@@ -14,10 +16,13 @@ void main() {
       requests.add(options);
       if (options.path == '/ai-assistant/usage') {
         return _responseData({
-          'monthly_limit': 5000,
+          'billing_contract_version': 2,
+          'limiting_resource': 'organization_ai_credits',
+          'usage_kind': 'statistics',
+          'monthly_limit': null,
           'used': 125,
-          'remaining': 4875,
-          'percentage_used': 2.5,
+          'remaining': null,
+          'percentage_used': null,
           'tokens_used': 8400,
           'cost_rub': 12.5,
         });
@@ -39,6 +44,17 @@ void main() {
           ],
         };
       }
+      if (options.path == '/ai-assistant/credits/balance') {
+        return _responseData({
+          'included_minor': 500000,
+          'purchased_minor': 25000,
+          'reserved_minor': 5000,
+          'available_minor': 520000,
+          'total_minor': 525000,
+          'packs': [],
+          'charging_enabled': true,
+        });
+      }
       throw StateError('Unexpected endpoint: ${options.path}');
     });
 
@@ -48,9 +64,12 @@ void main() {
     expect(requests.map((request) => request.path).toSet(), {
       '/ai-assistant/usage',
       '/ai-assistant/conversations',
+      '/ai-assistant/credits/balance',
     });
-    expect(home.usage.monthlyLimit, 5000);
+    expect(home.usage.monthlyLimit, isNull);
     expect(home.usage.used, 125);
+    expect(home.usage.tokensUsed, 8400);
+    expect(home.balance?.available, '5200.00');
     expect(home.conversations, hasLength(1));
     expect(home.conversations.single.id, 12);
     expect(home.conversations.single.title, 'Риски по объекту');
@@ -125,12 +144,307 @@ void main() {
       expect(uiState['selected_project_id'], 77);
     },
   );
+  test(
+    'keeps envelope pagination and uses chronological history endpoint',
+    () async {
+      final dio = Dio(BaseOptions(baseUrl: 'https://api.example.test'));
+      dio.httpClientAdapter = _JsonAdapter((request) {
+        expect(request.path, '/ai-assistant/conversations/12/history');
+        expect(request.queryParameters['page'], 2);
+        return {
+          'success': true,
+          'data': [
+            {'id': '2', 'role': 'assistant', 'content': 'Earlier'},
+          ],
+          'meta': {'current_page': 2, 'last_page': 3, 'total': 52},
+        };
+      });
+      final result = await AiAssistantRepository(
+        dio,
+      ).fetchMessages(12, page: 2);
+      expect(result.nextPage, 3);
+      expect(result.total, 52);
+      expect(result.items.single.id, 2);
+    },
+  );
+
+  test(
+    'quote and chat bind identical UUID, profile, context and allow_actions',
+    () async {
+      final requests = <RequestOptions>[];
+      final dio = Dio(BaseOptions(baseUrl: 'https://api.example.test'));
+      const requestId = 'abcde123-1234-4123-8123-123456789abc';
+      dio.httpClientAdapter = _JsonAdapter((request) {
+        requests.add(request);
+        if (request.path.endsWith('/quote')) {
+          return _responseData({
+            'quote_id': 'quote-uuid',
+            'max_units_minor': 175,
+          });
+        }
+        return _responseData({
+          'request_id': requestId,
+          'conversation_id': 12,
+          'credit_usage': {'charged_minor': 50},
+        });
+      });
+      final repository = AiAssistantRepository(dio);
+      final quote = await repository.quoteCredits(
+        message: 'Question',
+        requestId: requestId,
+        conversationId: 12,
+        profile: 'short',
+        allowActions: false,
+        context: {'entity_refs': []},
+      );
+      expect(quote.amount, '1.75');
+      final result = await repository.sendMessageRequest(
+        message: 'Question',
+        requestId: requestId,
+        conversationId: 12,
+        quoteId: quote.id,
+        maxConfirmed: true,
+        profile: 'short',
+        allowActions: false,
+        context: {'entity_refs': []},
+      );
+      final chat =
+          Map<String, dynamic>.from(requests[1].data as Map)
+            ..remove('quote_id')
+            ..remove('async');
+      expect(chat, requests[0].data);
+      expect((requests[1].data as Map)['async'], true);
+      expect(result.result!.creditUsage!.actualCharge, '0.50');
+    },
+  );
+
+  test('rejects responses belonging to another request', () async {
+    final dio = Dio();
+    dio.httpClientAdapter = _JsonAdapter(
+      (_) => _responseData({'request_id': 'other', 'conversation_id': 12}),
+    );
+    await expectLater(
+      AiAssistantRepository(dio).sendMessageRequest(
+        message: 'Question',
+        requestId: 'current',
+        quoteId: 'quote',
+        maxConfirmed: true,
+      ),
+      throwsException,
+    );
+  });
+
+  test('202 request completes through GET with the same identity', () async {
+    final requests = <RequestOptions>[];
+    final dio = Dio(BaseOptions(baseUrl: 'https://api.example.test'));
+    dio.httpClientAdapter = _JsonAdapter((request) {
+      requests.add(request);
+      if (request.method == 'POST') {
+        return _responseData({
+          'request_id': 'request-1',
+          'conversation_id': null,
+          'status': 'running',
+          'stage': 'queued',
+        });
+      }
+      return _responseData({
+        'request_id': 'request-1',
+        'conversation_id': 12,
+        'status': 'completed',
+        'stage': 'completed',
+        'response': {
+          'request_id': 'request-1',
+          'conversation_id': 12,
+          'message': {'id': 17, 'role': 'assistant', 'content': 'Готово'},
+        },
+      });
+    }, statusCode: (request) => request.method == 'POST' ? 202 : 200);
+    final repository = AiAssistantRepository(dio);
+    final accepted = await repository.sendMessageRequest(
+      message: 'Вопрос',
+      requestId: 'request-1',
+      quoteId: 'quote-1',
+      maxConfirmed: true,
+    );
+    expect(accepted.status, 'running');
+    expect(accepted.result, isNull);
+    expect((requests.first.data as Map)['async'], true);
+    final completed = await repository.fetchChatRequest('request-1');
+    expect(completed.result!.message!.content, 'Готово');
+    expect(requests.last.path, '/ai-assistant/requests/request-1');
+  });
+
+  test(
+    'repeating the accepted POST preserves request and quote identity',
+    () async {
+      final payloads = <Map<String, dynamic>>[];
+      final dio = Dio(BaseOptions(baseUrl: 'https://api.example.test'));
+      dio.httpClientAdapter = _JsonAdapter((request) {
+        payloads.add(Map<String, dynamic>.from(request.data as Map));
+        return _responseData({'request_id': 'same-id', 'conversation_id': 12});
+      });
+      final repository = AiAssistantRepository(dio);
+      for (var i = 0; i < 2; i++) {
+        await repository.sendMessageRequest(
+          message: 'Вопрос',
+          requestId: 'same-id',
+          conversationId: 12,
+          quoteId: 'same-quote',
+          maxConfirmed: true,
+        );
+      }
+      expect(payloads, hasLength(2));
+      expect(payloads[1], payloads[0]);
+      expect(payloads[1]['request_id'], 'same-id');
+      expect(payloads[1]['quote_id'], 'same-quote');
+    },
+  );
+
+  test(
+    'request status rejects a result for a different conversation',
+    () async {
+      final dio = Dio(BaseOptions(baseUrl: 'https://api.example.test'));
+      dio.httpClientAdapter = _JsonAdapter(
+        (_) => _responseData({
+          'request_id': 'request-1',
+          'conversation_id': 12,
+          'status': 'completed',
+          'response': {'request_id': 'request-1', 'conversation_id': 13},
+        }),
+      );
+      await expectLater(
+        AiAssistantRepository(
+          dio,
+        ).fetchChatRequest('request-1', conversationId: 12),
+        throwsException,
+      );
+    },
+  );
+
+  test('missing request preserves 404 for same-ID recovery', () async {
+    final dio = Dio(BaseOptions(baseUrl: 'https://api.example.test'));
+    dio.httpClientAdapter = _JsonAdapter(
+      (_) => {'success': false, 'message': 'Не найдено'},
+      statusCode: (_) => 404,
+    );
+    await expectLater(
+      AiAssistantRepository(dio).fetchChatRequest('same-id'),
+      throwsA(
+        isA<ApiException>().having(
+          (error) => error.statusCode,
+          'statusCode',
+          404,
+        ),
+      ),
+    );
+  });
+
+  test('executes only confirmed server action ID and preview token', () async {
+    late RequestOptions request;
+    final dio = Dio();
+    dio.httpClientAdapter = _JsonAdapter((value) {
+      request = value;
+      return _responseData({'message': 'Done'});
+    });
+    final preview = AiActionPreviewModel.fromJson({
+      'title': 'Review',
+      'action': {
+        'id': 'action-uuid',
+        'tool_name': 'create_task',
+        'arguments': {'project_id': 2},
+      },
+      'preview_token': 'token',
+      'executable': true,
+    });
+    await AiAssistantRepository(
+      dio,
+    ).executeAction(preview: preview, conversationId: 12);
+    expect(request.data, {
+      'conversation_id': 12,
+      'action': {
+        'id': 'action-uuid',
+        'preview_token': 'token',
+        'confirmed': true,
+      },
+    });
+  });
+
+  test(
+    'memory mutations require confirmation and purchase uses commercial pack',
+    () async {
+      final requests = <RequestOptions>[];
+      final dio = Dio();
+      dio.httpClientAdapter = _JsonAdapter((request) {
+        requests.add(request);
+        return _responseData(
+          request.path.endsWith('/purchase')
+              ? {'confirmation_url': 'https://pay.example.test/order'}
+              : {'id': 'memory-uuid', 'content': 'Remember'},
+        );
+      });
+      final repository = AiAssistantRepository(dio);
+      await repository.createMemory(scope: 'user', content: 'Remember');
+      await repository.updateMemory('memory-uuid', content: 'Updated');
+      await repository.deleteMemory('memory-uuid');
+      final url = await repository.purchaseCredits(pack: 5000);
+      expect(requests[0].data, {'content': 'Remember', 'confirmed': true});
+      expect(requests[1].method, 'PATCH');
+      expect(requests[1].data, {'content': 'Updated', 'confirmed': true});
+      expect(requests[2].method, 'DELETE');
+      expect(requests[3].data, {'pack_id': 'ai-credits-5000'});
+      expect(url, 'https://pay.example.test/order');
+    },
+  );
+
+  test(
+    'sharing sends explicit participant roles and cancel reaches server',
+    () async {
+      final requests = <RequestOptions>[];
+      final dio = Dio();
+      dio.httpClientAdapter = _JsonAdapter((request) {
+        requests.add(request);
+        return _responseData({'stage': 'searching', 'status': 'running'});
+      });
+      final repository = AiAssistantRepository(dio);
+      await repository.updateParticipants(12, [
+        const AiConversationParticipantModel(userId: '5', role: 'viewer'),
+      ]);
+      await repository.fetchRequest('request-uuid');
+      await repository.cancelRequest('request-uuid');
+      expect(requests[0].method, 'PUT');
+      expect(requests[0].data, {
+        'participants': [
+          {'user_id': '5', 'role': 'viewer'},
+        ],
+      });
+      expect(requests[1].method, 'GET');
+      expect(requests[2].path, '/ai-assistant/requests/request-uuid/cancel');
+      expect(requests[2].method, 'POST');
+    },
+  );
+  test('source navigation accepts only configured origin', () {
+    final repository = AiAssistantRepository(
+      Dio(BaseOptions(baseUrl: 'https://api.example.test/api/v1/mobile/')),
+      sourceBaseUrl: 'https://most.example.test',
+    );
+    expect(
+      repository.sourceUri('/admin/estimates/3').toString(),
+      'https://most.example.test/admin/estimates/3',
+    );
+    expect(repository.sourceUri('https://evil.example.test/file'), isNull);
+    expect(repository.sourceUri('javascript:alert(1)'), isNull);
+    expect(
+      repository.sourceUri('https://user:password@most.example.test/file'),
+      isNull,
+    );
+  });
 }
 
 class _JsonAdapter implements HttpClientAdapter {
-  _JsonAdapter(this.handler);
+  _JsonAdapter(this.handler, {this.statusCode});
 
   final Map<String, dynamic> Function(RequestOptions options) handler;
+  final int Function(RequestOptions options)? statusCode;
 
   @override
   void close({bool force = false}) {}
@@ -143,7 +457,7 @@ class _JsonAdapter implements HttpClientAdapter {
   ) async {
     return ResponseBody.fromString(
       jsonEncode(handler(options)),
-      200,
+      statusCode?.call(options) ?? 200,
       headers: {
         Headers.contentTypeHeader: [Headers.jsonContentType],
       },

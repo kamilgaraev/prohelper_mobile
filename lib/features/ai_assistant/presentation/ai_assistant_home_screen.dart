@@ -9,6 +9,9 @@ import '../../../core/widgets/industrial_card.dart';
 import '../data/ai_assistant_models.dart';
 import '../domain/ai_assistant_provider.dart';
 import 'ai_assistant_chat_screen.dart';
+import 'ai_assistant_memory_screen.dart';
+import 'ai_assistant_credits_screen.dart';
+import 'ai_assistant_documents_screen.dart';
 
 class AiAssistantHomeScreen extends ConsumerWidget {
   const AiAssistantHomeScreen({super.key});
@@ -19,7 +22,44 @@ class AiAssistantHomeScreen extends ConsumerWidget {
     final theme = Theme.of(context);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('AI-ассистент')),
+      appBar: AppBar(
+        title: const Text('Помощник МОСТ'),
+        actions: [
+          IconButton(
+            tooltip: 'Документы',
+            icon: const Icon(Icons.description_outlined),
+            onPressed:
+                () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const AiAssistantDocumentsScreen(),
+                  ),
+                ),
+          ),
+          IconButton(
+            tooltip: 'Память',
+            icon: const Icon(Icons.psychology_outlined),
+            onPressed:
+                () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const AiAssistantMemoryScreen(),
+                  ),
+                ),
+          ),
+          IconButton(
+            tooltip: 'Баланс',
+            icon: const Icon(Icons.account_balance_wallet_outlined),
+            onPressed:
+                () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const AiAssistantCreditsScreen(),
+                  ),
+                ),
+          ),
+        ],
+      ),
       body: RefreshIndicator(
         onRefresh: () => ref.read(aiAssistantHomeProvider.notifier).load(),
         child: CustomScrollView(
@@ -109,6 +149,15 @@ class AiAssistantHomeScreen extends ConsumerWidget {
                   vertical: 8,
                 ),
                 sliver: SliverToBoxAdapter(
+                  child: _CreditsCard(balance: state.home?.balance),
+                ),
+              ),
+              SliverPadding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
+                sliver: SliverToBoxAdapter(
                   child: _QuickPromptsCard(
                     onPromptTap: (prompt) {
                       Navigator.of(context).push(
@@ -146,6 +195,26 @@ class AiAssistantHomeScreen extends ConsumerWidget {
                   }, childCount: state.home?.conversations.length ?? 0),
                 ),
               ),
+              if (state.home?.nextPage != null)
+                SliverToBoxAdapter(
+                  child: TextButton(
+                    onPressed:
+                        state.isLoading
+                            ? null
+                            : () =>
+                                ref
+                                    .read(aiAssistantHomeProvider.notifier)
+                                    .loadMore(),
+                    child: const Text('Ещё диалоги'),
+                  ),
+                ),
+              if (state.error != null)
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Text(state.error!),
+                  ),
+                ),
               if ((state.home?.conversations.isEmpty ?? true))
                 const SliverPadding(
                   padding: EdgeInsets.fromLTRB(16, 8, 16, 24),
@@ -173,7 +242,7 @@ class _UsageCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Запросы за месяц',
+            'Статистика помощника',
             style: AppTypography.caption(
               context,
             ).copyWith(fontWeight: FontWeight.w800),
@@ -183,9 +252,7 @@ class _UsageCard extends StatelessWidget {
             children: [
               Expanded(
                 child: Text(
-                  usage == null
-                      ? '—'
-                      : '${usage!.used} / ${usage!.monthlyLimit}',
+                  usage == null ? '—' : '${usage!.used} запросов',
                   style: AppTypography.h2(
                     context,
                   ).copyWith(fontSize: 26, fontWeight: FontWeight.w900),
@@ -201,7 +268,9 @@ class _UsageCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(16),
                 ),
                 child: Text(
-                  usage == null ? '0%' : '${usage!.percentageUsed.round()}%',
+                  usage?.tokensUsed == null
+                      ? 'Запросы'
+                      : '${usage!.tokensUsed} токенов',
                   style: AppTypography.bodyLarge(context).copyWith(
                     color: theme.colorScheme.primary,
                     fontWeight: FontWeight.w800,
@@ -211,21 +280,12 @@ class _UsageCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 12),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(999),
-            child: LinearProgressIndicator(
-              value:
-                  usage == null
-                      ? 0
-                      : (usage!.percentageUsed / 100).clamp(0, 1).toDouble(),
-              minHeight: 10,
-            ),
-          ),
-          const SizedBox(height: 10),
           Text(
             usage == null
-                ? 'Лимит не загружен'
-                : 'Осталось ${usage!.remaining} запросов',
+                ? 'Статистика не загружена'
+                : usage!.costRub == null
+                ? 'Зафиксировано обращений к помощнику'
+                : 'Стоимость: ${usage!.costRub!.toStringAsFixed(2)} ₽',
             style: AppTypography.bodyMedium(
               context,
             ).copyWith(color: theme.colorScheme.onSurfaceVariant),
@@ -234,6 +294,40 @@ class _UsageCard extends StatelessWidget {
       ),
     );
   }
+}
+
+class _CreditsCard extends StatelessWidget {
+  const _CreditsCard({required this.balance});
+
+  final AiCreditsBalanceModel? balance;
+
+  @override
+  Widget build(BuildContext context) => IndustrialCard(
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Кредиты МОСТ', style: AppTypography.caption(context)),
+        const SizedBox(height: 8),
+        Text(
+          balance == null
+              ? 'Баланс не загружен'
+              : 'Доступно ${balance!.available} ед. МОСТ',
+          style: AppTypography.bodyLarge(
+            context,
+          ).copyWith(fontWeight: FontWeight.w800),
+        ),
+        if (balance?.billingMode == 'shadow') ...[
+          const SizedBox(height: 6),
+          Text(
+            'Тестовый режим: списания выключены. Показана оценка расхода, фактическое списание — 0.',
+            style: AppTypography.bodyMedium(
+              context,
+            ).copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
+          ),
+        ],
+      ],
+    ),
+  );
 }
 
 class _QuickPromptsCard extends StatelessWidget {

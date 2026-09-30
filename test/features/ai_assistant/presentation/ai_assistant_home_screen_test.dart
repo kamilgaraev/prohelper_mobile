@@ -5,8 +5,31 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:prohelpers_mobile/features/ai_assistant/data/ai_assistant_models.dart';
 import 'package:prohelpers_mobile/features/ai_assistant/data/ai_assistant_repository.dart';
 import 'package:prohelpers_mobile/features/ai_assistant/presentation/ai_assistant_home_screen.dart';
+import 'package:prohelpers_mobile/features/ai_assistant/presentation/ai_assistant_credits_screen.dart';
 
 void main() {
+  testWidgets('shows shadow billing as estimate and does not offer purchase', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          aiAssistantRepositoryProvider.overrideWithValue(
+            _ShadowCreditsRepository(),
+          ),
+        ],
+        child: const MaterialApp(home: AiAssistantCreditsScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.textContaining('Тестовый режим: списания выключены'),
+      findsOneWidget,
+    );
+    expect(find.byType(OutlinedButton), findsNothing);
+  });
+
   testWidgets('new chat button follows the intro at compact large text size', (
     tester,
   ) async {
@@ -52,11 +75,37 @@ class _Repository extends AiAssistantRepository {
   @override
   Future<AiAssistantHomeModel> fetchHome() async => const AiAssistantHomeModel(
     usage: AiUsageModel(
-      monthlyLimit: 100,
+      monthlyLimit: null,
       used: 0,
-      remaining: 100,
-      percentageUsed: 0,
+      remaining: null,
+      percentageUsed: null,
     ),
     conversations: [],
   );
+}
+
+class _ShadowCreditsRepository extends AiAssistantRepository {
+  _ShadowCreditsRepository() : super(Dio());
+
+  @override
+  Future<AiCreditsBalanceModel> fetchCreditsBalance() async =>
+      const AiCreditsBalanceModel(
+        organizationName: 'Организация',
+        unit: 'ед. МОСТ',
+        base: '5000.00',
+        purchased: '0.00',
+        reserved: '0.00',
+        available: '5000.00',
+        chargingEnabled: false,
+        billingMode: 'shadow',
+        canPurchase: false,
+        packPurchaseEnabled: false,
+        packs: [
+          AiCreditPack(
+            id: 'ai-credits-1000',
+            unitsMinor: 100000,
+            amountMinor: 50000,
+          ),
+        ],
+      );
 }
