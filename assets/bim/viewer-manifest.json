@@ -16,9 +16,9 @@
       "mime": "text/css"
     },
     {
-      "path": "assets/index-BNySjKND.js",
-      "size": 103015,
-      "sha256": "5e767c3b6a7b3c663e07c763c8da91771eded6ed7001d6f5f0e48b8c789952b9",
+      "path": "assets/index-C1uRuxfO.js",
+      "size": 104798,
+      "sha256": "65afd890ec65b9e7ae385e2a2b6c42eee72013d0c352a965340f5d83db054245",
       "mime": "text/javascript"
     },
     {
@@ -66,7 +66,7 @@
     {
       "path": "index.html",
       "size": 533,
-      "sha256": "04deba3e4d918e6471a040f53079929b71146ecf504728e1c28d1b8c81c0513a",
+      "sha256": "35a62b1391a6cb0dd9cf200fa0962ecb4930b614bc1ac4f13b0c98930fbdacaf",
       "mime": "text/html; charset=utf-8"
     },
     {

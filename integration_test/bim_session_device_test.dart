@@ -110,31 +110,40 @@ void main() {
       var ready = false;
       final viewerEvents = controller.events.listen((event) {
         final payload = bimMap(event['payload']);
+        final safePayload = <String, dynamic>{
+          for (final key in [
+            'state',
+            'status',
+            'connection',
+            'message',
+            'error',
+            'channel',
+            'socket_id',
+            'session_id',
+            'client_id',
+          ])
+            if (payload.containsKey(key) &&
+                (payload[key] == null ||
+                    payload[key] is String ||
+                    payload[key] is num ||
+                    payload[key] is bool))
+              key:
+                  payload[key] is String
+                      ? _safeDiagnostic(payload[key])
+                      : payload[key],
+        };
+        if (event['type'] == 'cursor') {
+          for (final key in ['x', 'y', 'z']) {
+            if (payload.containsKey(key) &&
+                (payload[key] == null || payload[key] is num)) {
+              safePayload[key] = payload[key];
+            }
+          }
+        }
         sessionEventTrace.add({
           'at_ms': DateTime.now().millisecondsSinceEpoch,
           'type': event['type'],
-          'payload': {
-            for (final key in [
-              'state',
-              'status',
-              'connection',
-              'message',
-              'error',
-              'channel',
-              'socket_id',
-              'session_id',
-              'client_id',
-            ])
-              if (payload.containsKey(key) &&
-                  (payload[key] == null ||
-                      payload[key] is String ||
-                      payload[key] is num ||
-                      payload[key] is bool))
-                key:
-                    payload[key] is String
-                        ? _safeDiagnostic(payload[key])
-                        : payload[key],
-          },
+          'payload': safePayload,
         });
         if (sessionEventTrace.length > 60) sessionEventTrace.removeAt(0);
         if (event['type'] == 'ready') ready = true;
@@ -1198,6 +1207,7 @@ Future<Map<String, dynamic>> _inspect(WebViewWidget widget) async {
       input_trace: [...(window.__mostBimSessionDeviceTrace || [])],
       raw_input_events: {...(window.__mostBimSessionRawInput || {})},
       raw_input_trace: [...(window.__mostBimSessionRawTrace || [])],
+      raycast_trace: [...(window.__mostBimRaycastTrace || [])],
       canvas_rect: canvas ? (() => {const r=canvas.getBoundingClientRect(); return {x:r.x,y:r.y,width:r.width,height:r.height};})() : null,
       viewport_center_hit: (() => {const x=innerWidth/2,y=innerHeight/2,e=document.elementFromPoint(x,y),r=canvas?.getBoundingClientRect(); return {x,y,target:e ? {tag:e.tagName,id:(e.id||'').slice(0,120),class:(typeof e.className==='string'?e.className:'').slice(0,200)} : null,canvas_contains:!!(canvas&&r&&x>=r.left&&x<=r.right&&y>=r.top&&y<=r.bottom)};})(),
       device_pixel_ratio: devicePixelRatio};
@@ -1271,6 +1281,7 @@ Future<void> _cursorDiagnostic(
 
 Future<void> _observeDeviceInput(WebViewWidget widget) async {
   await widget.platform.params.controller.runJavaScript('''(() => {
+    window.__mostBimRaycastTrace = [];
     if (window.__mostBimSessionDeviceInput) return;
     const counts = window.__mostBimSessionDeviceInput = {};
     const trace = window.__mostBimSessionDeviceTrace = [];
