@@ -63,16 +63,14 @@ class AiAssistantRepository {
       ]);
 
       final usageData = _unwrapData(responses[0].data);
-      final conversationsData = _unwrapData(responses[1].data);
+      final conversationsResponse = MobileApiResponse.list(responses[1].data);
       final balanceData = _unwrapData(responses[2].data);
 
       final usage = AiUsageModel.fromJson(_asMap(usageData));
       final conversations =
-          _asList(
-            conversationsData,
-          ).map((item) => AiConversationModel.fromJson(_asMap(item))).toList();
+          conversationsResponse.data.map(AiConversationModel.fromJson).toList();
 
-      final meta = MobileApiResponse.list(responses[1].data).meta;
+      final meta = conversationsResponse.meta;
       final current = _intValue(meta['current_page']);
       final last = _intValue(meta['last_page']);
       return AiAssistantHomeModel(
@@ -635,8 +633,24 @@ class AiAssistantRepository {
       result.requestId == requestId &&
       (conversationId == null || result.conversationId == conversationId);
 
-  Future<void> cancelRequest(String requestId) async {
-    await _dio.post('/ai-assistant/requests/$requestId/cancel');
+  Future<AiAssistantChatRequest> cancelRequest(String requestId) async {
+    try {
+      final response = await _dio.post(
+        '/ai-assistant/requests/$requestId/cancel',
+      );
+      final request = AiAssistantChatRequest.fromJson(
+        _asMap(_unwrapData(response.data)),
+      );
+      if (request.requestId != requestId) {
+        throw const ApiException('Получен ответ для другого запроса.');
+      }
+      return request;
+    } on DioException catch (error) {
+      throw ApiException.fromDio(
+        error,
+        fallbackMessage: 'Не удалось остановить запрос.',
+      );
+    }
   }
 
   Future<void> deleteConversation(int id) async {

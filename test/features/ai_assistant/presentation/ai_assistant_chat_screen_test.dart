@@ -311,6 +311,107 @@ void main() {
     expect(repository.sentIds, hasLength(1));
   });
 
+  testWidgets('retries an unaccepted POST with the same request and quote', (
+    tester,
+  ) async {
+    final repository = _RaceRepository(failFirst: true, notSubmittedOnce: true);
+    await tester.pumpWidget(buildScreen(repository));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), 'Question');
+    await tester.tap(find.byIcon(Icons.send_rounded));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Продолжить'));
+    await tester.pump();
+    expect(repository.sentIds, [repository.requestId, repository.requestId]);
+    expect(repository.quoteCalls, 1);
+    repository.answer.complete(
+      AiAssistantChatRequest(
+        requestId: repository.requestId!,
+        status: 'completed',
+        result: AiAssistantChatResult(
+          requestId: repository.requestId!,
+          conversationId: 1,
+          message: const AiMessageModel(
+            id: 100,
+            role: 'assistant',
+            content: 'Повтор принят',
+            createdAt: null,
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Повтор принят'), findsOneWidget);
+  });
+
+  testWidgets('keeps cancellation pending until a terminal server state', (
+    tester,
+  ) async {
+    final repository = _RaceRepository(
+      asyncAccepted: true,
+      cancelPending: true,
+    );
+    await tester.pumpWidget(buildScreen(repository));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), 'Question');
+    await tester.tap(find.byIcon(Icons.send_rounded));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Продолжить'));
+    await tester.pump();
+    await tester.tap(find.text('Стоп'));
+    await tester.pump();
+    expect(repository.cancelledRequestId, repository.requestId);
+    expect(
+      tester
+          .widget<FilledButton>(
+            find.ancestor(
+              of: find.byIcon(Icons.send_rounded),
+              matching: find.byType(FilledButton),
+            ),
+          )
+          .onPressed,
+      isNull,
+    );
+    expect(repository.sentIds, hasLength(1));
+    repository.answer.complete(
+      AiAssistantChatRequest(
+        requestId: repository.requestId!,
+        status: 'cancelled',
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Стоп'), findsNothing);
+    expect(
+      tester.widget<TextField>(find.byType(TextField)).controller?.text,
+      'Question',
+    );
+  });
+
+  testWidgets(
+    'keeps the question and stops resubmitting after quote expiration',
+    (tester) async {
+      final repository = _RaceRepository(
+        failFirst: true,
+        notSubmittedOnce: true,
+        quoteExpiresAt: DateTime(2020),
+      );
+      await tester.pumpWidget(buildScreen(repository));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), 'Question');
+      await tester.tap(find.byIcon(Icons.send_rounded));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Продолжить'));
+      await tester.pumpAndSettle();
+      expect(repository.sentIds, hasLength(1));
+      expect(repository.quoteCalls, 1);
+      expect(
+        tester.widget<TextField>(find.byType(TextField)).controller?.text,
+        'Question',
+      );
+      expect(find.text('Стоп'), findsNothing);
+    },
+  );
+
   testWidgets(
     'shows accepted progress and keeps completed sources after a fast response',
     (tester) async {
@@ -874,6 +975,9 @@ class _RaceRepository extends AiAssistantRepository {
     this.initialProgress = const [],
     this.progressSnapshots = const [],
     this.pollErrorStatusCode,
+    this.notSubmittedOnce = false,
+    this.cancelPending = false,
+    this.quoteExpiresAt,
   }) : super(Dio());
   final bool canWrite;
   final bool failFirst;
@@ -884,6 +988,9 @@ class _RaceRepository extends AiAssistantRepository {
   final List<AiAssistantProgressModel> initialProgress;
   final List<List<AiAssistantProgressModel>> progressSnapshots;
   final int? pollErrorStatusCode;
+  final bool notSubmittedOnce;
+  final bool cancelPending;
+  final DateTime? quoteExpiresAt;
   int _stageIndex = 0;
   int _progressIndex = 0;
   int quoteCalls = 0;
@@ -929,6 +1036,7 @@ class _RaceRepository extends AiAssistantRepository {
       amount: freeQuote ? '0.00' : '1.50',
       unit: 'ед. МОСТ',
       processingDeadlineSeconds: processingDeadlineSeconds,
+      expiresAt: quoteExpiresAt,
     );
   }
 
@@ -970,6 +1078,13 @@ class _RaceRepository extends AiAssistantRepository {
     int? conversationId,
   }) async {
     polledIds.add(requestId);
+    if (notSubmittedOnce && polledIds.length == 1) {
+      return AiAssistantChatRequest(
+        requestId: requestId,
+        status: 'not_submitted',
+        stage: 'not_submitted',
+      );
+    }
     if (pollErrorStatusCode != null) {
       throw ApiException('Ошибка доступа', statusCode: pollErrorStatusCode);
     }
@@ -989,7 +1104,11 @@ class _RaceRepository extends AiAssistantRepository {
   }
 
   @override
-  Future<void> cancelRequest(String requestId) async {
+  Future<AiAssistantChatRequest> cancelRequest(String requestId) async {
     cancelledRequestId = requestId;
+    return AiAssistantChatRequest(
+      requestId: requestId,
+      status: cancelPending ? 'cancel_requested' : 'cancelled',
+    );
   }
 }

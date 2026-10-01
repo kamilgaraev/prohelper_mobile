@@ -34,17 +34,22 @@ void main() {
         return {
           'success': true,
           'message': null,
-          'data': [
-            {
-              'id': 12,
-              'title': 'Риски по объекту',
-              'created_at': '2026-09-25T10:00:00.000000Z',
-              'updated_at': '2026-09-26T14:30:00.000000Z',
-              'last_message_preview': 'Проверьте график поставок',
-              'last_message_at': '2026-09-26T14:30:00.000000Z',
-              'messages_count': 4,
-            },
-          ],
+          'data': {
+            'current_page': 1,
+            'last_page': 2,
+            'total': 20,
+            'data': [
+              {
+                'id': 12,
+                'title': 'Риски по объекту',
+                'created_at': '2026-09-25T10:00:00.000000Z',
+                'updated_at': '2026-09-26T14:30:00.000000Z',
+                'last_message_preview': 'Проверьте график поставок',
+                'last_message_at': '2026-09-26T14:30:00.000000Z',
+                'messages_count': 4,
+              },
+            ],
+          },
         };
       }
       if (options.path == '/ai-assistant/credits/balance') {
@@ -74,6 +79,7 @@ void main() {
     expect(home.usage.tokensUsed, 8400);
     expect(home.balance?.available, '5200.00');
     expect(home.conversations, hasLength(1));
+    expect(home.nextPage, 2);
     expect(home.conversations.single.id, 12);
     expect(home.conversations.single.title, 'Риски по объекту');
     expect(
@@ -82,6 +88,28 @@ void main() {
     );
     expect(home.conversations.single.messagesCount, 4);
   });
+
+  test(
+    'preserves the server cancellation state and rejects a foreign request',
+    () async {
+      final dio = Dio(BaseOptions(baseUrl: 'https://api.example.test'));
+      dio.httpClientAdapter = _JsonAdapter(
+        (options) => _responseData({
+          'request_id': 'request-1',
+          'status': 'cancel_requested',
+          'stage': 'generating',
+        }),
+      );
+      final repository = AiAssistantRepository(dio);
+      final request = await repository.cancelRequest('request-1');
+      expect(request.status, 'cancel_requested');
+      expect(request.stage, 'generating');
+      await expectLater(
+        repository.cancelRequest('request-2'),
+        throwsA(isA<ApiException>()),
+      );
+    },
+  );
 
   test(
     'sends selected project and mobile UI context to chat endpoint',
@@ -454,7 +482,11 @@ void main() {
       final dio = Dio();
       dio.httpClientAdapter = _JsonAdapter((request) {
         requests.add(request);
-        return _responseData({'stage': 'searching', 'status': 'running'});
+        return _responseData({
+          'request_id': 'request-uuid',
+          'stage': 'searching',
+          'status': 'running',
+        });
       });
       final repository = AiAssistantRepository(dio);
       await repository.updateParticipants(12, [
