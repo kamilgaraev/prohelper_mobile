@@ -169,6 +169,7 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
   int _elapsedSeconds = 0;
   DateTime? _requestCreatedAt;
   bool _isPolling = false;
+  bool _cancelRequested = false;
   DateTime? _requestStartedAt;
   bool _isQuoting = false;
   String? _quotingRequestId;
@@ -332,7 +333,7 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
     try {
       final repository =
           _activeRequestRepository ?? ref.read(aiAssistantRepositoryProvider)!;
-      final progress = await repository.fetchChatRequest(
+      var progress = await repository.fetchChatRequest(
         requestId,
         conversationId: conversationId,
       );
@@ -341,6 +342,16 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
           requestId != _activeRequestId ||
           conversationId != _conversationId) {
         return;
+      }
+      if (progress.status == 'not_submitted' && !_cancelRequested) {
+        final pending = _failedRequest;
+        if (pending == null) return;
+        progress = await _resubmitRequest(repository, pending);
+        if (!mounted ||
+            revision != _requestRevision ||
+            requestId != _activeRequestId) {
+          return;
+        }
       }
       if (progress.status == 'completed') {
         _completeRequest(
@@ -362,7 +373,10 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
       final mergedProgress = _mergeProgress(_progressSteps, progress.progress);
       setState(() {
         _progressSteps = mergedProgress;
-        _progress = _currentActivity(progress.stage, mergedProgress);
+        _progress =
+            progress.status == 'cancel_requested' || _cancelRequested
+                ? 'Останавливаю обработку'
+                : _currentActivity(progress.stage, mergedProgress);
       });
     } catch (error) {
       if (!mounted ||
@@ -377,7 +391,7 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
         return;
       }
       if (error is ApiException &&
-          const {401, 403, 404}.contains(error.statusCode)) {
+          const {401, 403, 404, 422}.contains(error.statusCode)) {
         _failRequest(_resolveError(error), terminal: true);
         return;
       }
@@ -462,6 +476,7 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
   }
 
   void _failRequest(String message, {bool terminal = false}) {
+    _cancelRequested = false;
     final pending = _failedRequest;
     _progressTimer?.cancel();
     _elapsedTimer?.cancel();
@@ -502,7 +517,11 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
         repository != null &&
         (!requireOrganizationMatch ||
             organizationId == expectedOrganizationId)) {
-      unawaited(repository.cancelRequest(requestId).catchError((_) {}));
+      unawaited(
+        repository
+            .cancelRequest(requestId)
+            .then<void>((_) {}, onError: (Object _) {}),
+      );
     }
     _progressTimer?.cancel();
     _elapsedTimer?.cancel();
@@ -554,22 +573,17 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
         );
       } on ApiException catch (error) {
         if (error.statusCode != 404) rethrow;
-        request = await repository.sendMessageRequest(
-          message: failed.message,
-          requestId: failed.requestId,
-          conversationId: failed.conversationId,
-          quoteId: failed.quote.id,
-          maxConfirmed: failed.quote.maxConfirmed,
-          profile: failed.profile,
-          context: failed.context,
-          attachmentIds: failed.attachmentIds,
-        );
+        request = await _resubmitRequest(repository, failed);
       }
       if (!mounted ||
           revision != _requestRevision ||
           !_isSending ||
           failed.conversationId != _conversationId) {
         return;
+      }
+      if (request.status == 'not_submitted' && !_cancelRequested) {
+        request = await _resubmitRequest(repository, failed);
+        if (!mounted || revision != _requestRevision || !_isSending) return;
       }
       if (request.status == 'completed') {
         _completeRequest(request.result!, failed.conversationId);
@@ -592,7 +606,11 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
       await _pollProgress(failed.requestId, revision, failed.conversationId);
     } catch (error) {
       if (mounted && revision == _requestRevision) {
-        _failRequest(_resolveError(error));
+        _failRequest(
+          _resolveError(error),
+          terminal:
+              error is ApiException && {404, 422}.contains(error.statusCode),
+        );
       }
     }
   }
@@ -602,6 +620,7 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
       await _recoverRequest();
       return;
     }
+    _cancelRequested = false;
     final attachments = List<_DraftImage>.unmodifiable(_draftImages);
     final message =
         (forcedValue ?? _controller.text).trim().isEmpty &&
@@ -908,6 +927,7 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
             amount: quote.amount,
             unit: quote.unit,
             processingDeadlineSeconds: quote.processingDeadlineSeconds,
+            expiresAt: quote.expiresAt,
           )
           : null;
     } catch (error) {
@@ -926,35 +946,62 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
 
   Future<void> _stopSending() async {
     final requestId = _activeRequestId;
-    final token = _sendCancelToken;
     final repository = _activeRequestRepository;
-    _progressTimer?.cancel();
-    _elapsedTimer?.cancel();
-    _activeRequestId = null;
-    _sendCancelToken = null;
-    _activeRequestRepository = null;
-    _activeRequestOrganizationId = null;
-    final stopRevision = ++_requestRevision;
-    token?.cancel('Пользователь остановил запрос.');
-    if (mounted) {
-      setState(() {
-        _isSending = false;
-        _progress = null;
-        _progressSteps = const [];
-      });
-    }
-    if (requestId != null && repository != null) {
-      try {
-        await repository.cancelRequest(requestId);
-        if (stopRevision == _requestRevision) _failedRequest = null;
-      } catch (error) {
-        if (mounted && stopRevision == _requestRevision) {
-          _showSnackBar(
-            'Сервер не подтвердил остановку. ${_resolveError(error)}',
-          );
-        }
+    if (requestId == null || repository == null || _cancelRequested) return;
+    final revision = _requestRevision;
+    setState(() {
+      _cancelRequested = true;
+      _progress = 'Останавливаю обработку';
+    });
+    try {
+      final request = await repository.cancelRequest(requestId);
+      if (!mounted ||
+          revision != _requestRevision ||
+          requestId != _activeRequestId) {
+        return;
+      }
+      if (request.status == 'cancelled' || request.status == 'failed') {
+        _failRequest('Запрос остановлен.', terminal: true);
+      } else if (request.status == 'completed' && request.result != null) {
+        _completeRequest(request.result!, _conversationId);
+      } else {
+        _progressTimer ??= Timer.periodic(
+          const Duration(seconds: 2),
+          (_) => _pollProgress(requestId, revision, _conversationId),
+        );
+        await _pollProgress(requestId, revision, _conversationId);
+      }
+    } catch (error) {
+      if (mounted && revision == _requestRevision) {
+        setState(() => _cancelRequested = false);
+        _showSnackBar(
+          'Сервер не подтвердил остановку. ${_resolveError(error)}',
+        );
       }
     }
+  }
+
+  Future<AiAssistantChatRequest> _resubmitRequest(
+    AiAssistantRepository repository,
+    _PendingChat pending,
+  ) {
+    if (pending.quote.expiresAt != null &&
+        !pending.quote.expiresAt!.isAfter(DateTime.now())) {
+      throw const ApiException(
+        'Оценка истекла. Рассчитайте стоимость снова.',
+        statusCode: 422,
+      );
+    }
+    return repository.sendMessageRequest(
+      message: pending.message,
+      requestId: pending.requestId,
+      conversationId: pending.conversationId,
+      quoteId: pending.quote.id,
+      maxConfirmed: pending.quote.maxConfirmed,
+      profile: pending.profile,
+      context: pending.context,
+      attachmentIds: pending.attachmentIds,
+    );
   }
 
   void _resetForOrganizationChange(int? previousOrganizationId) {

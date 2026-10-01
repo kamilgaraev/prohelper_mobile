@@ -200,19 +200,26 @@ class AiAssistantStructuredPayload {
         .where((artifact) => artifact != null)
         .cast<AiAssistantArtifact>()
         .toList(growable: false);
-    final actions = [
-          ..._asList(payload['next_actions']),
-          ..._asList(payload['proposed_actions']),
-        ]
-        .map(AiAssistantActionModel.fromJson)
-        .where((action) => action != null)
-        .cast<AiAssistantActionModel>()
-        .toList(growable: false);
+    final actions = <String, AiAssistantActionModel>{};
+    for (final value in [
+      ..._asList(payload['next_actions']),
+      ..._asList(payload['proposed_actions']),
+    ]) {
+      final json = _nullableMap(value);
+      if (json == null) continue;
+      final action = AiAssistantActionModel.fromJson({
+        ...json,
+        'origin_request_id': json['origin_request_id'] ?? payload['request_id'],
+      });
+      if (action != null) {
+        actions[action.id ?? '${action.toolName}:${action.arguments}'] = action;
+      }
+    }
 
     return AiAssistantStructuredPayload(
       answer: _stringValue(payload['answer']),
       artifacts: artifacts,
-      actions: actions,
+      actions: actions.values.toList(growable: false),
       raw: payload,
     );
   }
@@ -228,6 +235,7 @@ class AiAssistantActionModel {
     required this.requiresConfirmation,
     required this.actionClass,
     this.toolName,
+    this.originRequestId,
     this.arguments = const <String, dynamic>{},
     this.requiredPermissions = const <String>[],
     this.target,
@@ -242,6 +250,7 @@ class AiAssistantActionModel {
   final bool requiresConfirmation;
   final String actionClass;
   final String? toolName;
+  final String? originRequestId;
   final Map<String, dynamic> arguments;
   final List<String> requiredPermissions;
   final Map<String, dynamic>? target;
@@ -260,6 +269,7 @@ class AiAssistantActionModel {
       'requires_confirmation': requiresConfirmation,
       'action_class': actionClass,
       if (toolName != null) 'tool_name': toolName,
+      if (originRequestId != null) 'origin_request_id': originRequestId,
       if (arguments.isNotEmpty) 'arguments': arguments,
       if (requiredPermissions.isNotEmpty)
         'required_permissions': requiredPermissions,
@@ -293,6 +303,7 @@ class AiAssistantActionModel {
       requiresConfirmation: _boolValue(json['requires_confirmation']),
       actionClass: _stringValue(json['action_class']) ?? 'safe',
       toolName: _stringValue(json['tool_name']),
+      originRequestId: _stringValue(json['origin_request_id']),
       arguments: _nullableMap(json['arguments']) ?? const <String, dynamic>{},
       requiredPermissions: _asList(json['required_permissions'])
           .map((item) => item.toString().trim())
@@ -849,6 +860,7 @@ class AiCreditQuoteModel {
     required this.amount,
     required this.unit,
     this.processingDeadlineSeconds,
+    this.expiresAt,
   });
 
   final String id;
@@ -856,11 +868,13 @@ class AiCreditQuoteModel {
   final String amount;
   final String unit;
   final int? processingDeadlineSeconds;
+  final DateTime? expiresAt;
 
   factory AiCreditQuoteModel.fromJson(Map<String, dynamic> json) {
     return AiCreditQuoteModel(
       id: _stringValue(json['quote_id']) ?? _stringValue(json['id']) ?? '',
       maxConfirmed: _boolValue(json['max_confirmed']),
+      expiresAt: DateTime.tryParse(_stringValue(json['expires_at']) ?? ''),
       amount: formatAiMinor(_intValue(json['max_units_minor'])),
       unit: _stringValue(json['unit']) ?? 'ед. МОСТ',
       processingDeadlineSeconds:
