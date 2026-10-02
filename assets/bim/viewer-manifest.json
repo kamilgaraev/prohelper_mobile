@@ -10,12 +10,6 @@
   },
   "files": [
     {
-      "path": "assets/index-B4Dg-J9Y.js",
-      "size": 104915,
-      "sha256": "ac0a0694a0d1ddab9f879f7fc7f41d5596c7bc17ed999617c1ab00507b187f3b",
-      "mime": "text/javascript"
-    },
-    {
       "path": "assets/index-bg1nXeKp.css",
       "size": 413,
       "sha256": "40fae28e52a7da157f8a49015e7462e13f50466db4bb2d78f572897a5b74315e",
@@ -37,6 +31,12 @@
       "path": "assets/index-EiI8J9U7.js",
       "size": 1011012,
       "sha256": "842ccbc0a9759eaf460d9e3dc9c782dfccdf9cf46525c19ecccf64ba30db58c7",
+      "mime": "text/javascript"
+    },
+    {
+      "path": "assets/index-tIKMGi5T.js",
+      "size": 104920,
+      "sha256": "8f3751fe1e646e0e89d083f905e34f671840e63c487eb7ff298bf820236078d2",
       "mime": "text/javascript"
     },
     {
@@ -66,7 +66,7 @@
     {
       "path": "index.html",
       "size": 533,
-      "sha256": "6b59e75764bcb28afa07408fa22087508d0091c6799497fe9ed15fb4a98c3c63",
+      "sha256": "b1df743943b0ba66d659f7af7866abefa0738b218fdb46040ce53fdf83acbb7e",
       "mime": "text/html; charset=utf-8"
     },
     {
