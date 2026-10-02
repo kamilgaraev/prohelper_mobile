@@ -693,7 +693,12 @@ class _FieldCatalogDetailScreenState
                     MaterialPageRoute<bool>(
                       builder:
                           (_) => CrmActivityFormScreen(
-                            targetType: widget.entity!,
+                            targetType: const {
+                              'companies': 'company',
+                              'contacts': 'contact',
+                              'leads': 'lead',
+                              'deals': 'deal',
+                            }[widget.entity]!,
                             targetId: entry.uuid,
                           ),
                     ),
