@@ -107,6 +107,7 @@ void main() {
         if (stateTrace.length > 60) stateTrace.removeAt(0);
       });
       final sessionEventTrace = <Map<String, dynamic>>[];
+      final receivedEventTrace = <Map<String, dynamic>>[];
       var ready = false;
       final viewerEvents = controller.events.listen((event) {
         final payload = bimMap(event['payload']);
@@ -121,6 +122,10 @@ void main() {
             'socket_id',
             'session_id',
             'client_id',
+            'schema_version',
+            'type',
+            'sequence',
+            'model_set_revision_id',
           ])
             if (payload.containsKey(key) &&
                 (payload[key] == null ||
@@ -149,7 +154,22 @@ void main() {
         if (event['type'] == 'ready') ready = true;
         if (event['type'] == 'presence' || event['type'] == 'presenceEvent') {
           final envelope = BimPresenceEnvelope.tryParse(event['payload']);
-          if (envelope != null) received.add(envelope);
+          if (envelope != null) {
+            received.add(envelope);
+            receivedEventTrace.add({
+              'at_ms': DateTime.now().millisecondsSinceEpoch,
+              'client_id': envelope.clientId,
+              'type': envelope.type,
+              'sequence': envelope.sequence,
+              'session_id': envelope.sessionId,
+              'model_set_revision_id': envelope.modelSetRevisionId,
+              if (envelope.type == 'cursor' ||
+                  envelope.type == 'select' ||
+                  envelope.type == 'camera')
+                'payload': envelope.payload,
+            });
+            if (receivedEventTrace.length > 100) receivedEventTrace.removeAt(0);
+          }
         }
       });
       final report = <String, dynamic>{
@@ -160,6 +180,7 @@ void main() {
         'model_set_revision_id': revisionId,
         'version_ids': context.versionIds,
         'session_event_trace': sessionEventTrace,
+        'received_event_trace': receivedEventTrace,
         'coordinator_state_trace': stateTrace,
         'native_auth_status_trace': audit.authStatuses,
       };
@@ -522,12 +543,17 @@ void main() {
       final leader = coordinator.currentState.participants.firstWhere(
         (participant) => participant.clientId == leaderClientId,
       );
-      await _command(
+      final shortCommand = await _command(
         tester,
         control,
         'short_events_ready',
         timeout: const Duration(seconds: 300),
       );
+      final cursorSequence = bimInt(shortCommand['cursor_sequence']);
+      final selectSequence = bimInt(shortCommand['select_sequence']);
+      expect(cursorSequence, greaterThan(0));
+      expect(selectSequence, greaterThan(0));
+      report['short_events_stage'] = 'await_transport';
       await _wait(
         tester,
         () async =>
@@ -535,24 +561,59 @@ void main() {
               (event) =>
                   event.clientId == leaderClientId &&
                   event.type == 'cursor' &&
+                  event.sequence == cursorSequence &&
                   event.payload.isNotEmpty,
             ) &&
             received.any(
               (event) =>
-                  event.clientId == leaderClientId && event.type == 'select',
+                  event.clientId == leaderClientId &&
+                  event.type == 'select' &&
+                  event.sequence == selectSequence,
             ),
         'Desktop cursor and selection must arrive through the actual WebSocket bridge.',
       );
+      final desktopCursor = received.firstWhere(
+        (event) =>
+            event.clientId == leaderClientId &&
+            event.type == 'cursor' &&
+            event.sequence == cursorSequence,
+      );
+      await _phase(tester, control, 'nativeShortTransportReady', {
+        'leader_client_id': leaderClientId,
+        'cursor_sequence': cursorSequence,
+        'cursor': desktopCursor.payload,
+        'select_sequence': selectSequence,
+      });
+      final shortView = bimMap(shortCommand['expected_view_state']);
+      expect(bimInt(shortView['model_set_revision_id']), revisionId);
+      expect(bimMap(shortView['camera']), isNotEmpty);
+      report['short_events_stage'] = 'align_view';
+      await _native(tester, () => controller.applyViewState(shortView));
       await _wait(
         tester,
-        () async =>
-            '${(await _native(tester, () => _inspect(webview)))['text']}'
-                .contains(leader.name),
-        'The renderer must display the desktop participant cursor label.',
+        () async => _sameState(
+          await _native(tester, controller.getViewState),
+          shortView,
+        ),
+        'The cursor check must use the desktop camera and pinned model state.',
       );
+      report['short_events_stage'] = 'await_label';
+      await _wait(tester, () async {
+        final inspected = await _native(tester, () => _inspect(webview));
+        final labels = inspected['cursor_labels'];
+        return labels is List &&
+            labels.any((item) {
+              final label = bimMap(item);
+              return label['text'] == leader.name && label['visible'] == true;
+            });
+      }, 'The renderer must display the desktop participant cursor label.');
+      report['short_events_stage'] = 'complete';
       await _phase(tester, control, 'nativeShortEventsReady', {
         'leader_client_id': leaderClientId,
         'leader_name': leader.name,
+        'cursor_sequence': cursorSequence,
+        'select_sequence': selectSequence,
+        'aligned_view_state': await _native(tester, controller.getViewState),
         'received_types':
             received
                 .where((event) => event.clientId == leaderClientId)
@@ -576,7 +637,12 @@ void main() {
             releaseCountBefore,
         'The actual Android cursor gesture must release before following.',
       );
-      final fullCommand = await _command(tester, control, 'leader_full_view');
+      final fullCommand = await _command(
+        tester,
+        control,
+        'leader_full_view',
+        timeout: const Duration(seconds: 420),
+      );
       final leaderView =
           fullCommand['expected_view_state'] is Map
               ? bimMap(fullCommand['expected_view_state'])
@@ -589,12 +655,19 @@ void main() {
       await _native(tester, () => coordinator.follow(leaderClientId));
       await _wait(
         tester,
-        () async =>
-            !coordinator.currentState.followLoading &&
-            _sameState(
-              await _native(tester, controller.getViewState),
-              leaderView,
-            ),
+        () async {
+          final actual = await _native(tester, controller.getViewState);
+          final state = coordinator.currentState;
+          report['full_follow_diagnostics'] = {
+            'at_ms': DateTime.now().millisecondsSinceEpoch,
+            'following_client_id': state.followingClientId,
+            'follow_loading': state.followLoading,
+            'error': _safeDiagnostic(state.error),
+            'expected': _portable(leaderView),
+            'actual': _portable(actual),
+          };
+          return !state.followLoading && _sameState(actual, leaderView);
+        },
         'Complete HTTP leader state must restore camera, transforms, visibility, selection and sections.',
       );
       final followed = await _native(tester, controller.getViewState);
@@ -1203,6 +1276,13 @@ Future<Map<String, dynamic>> _inspect(WebViewWidget widget) async {
       origin: location.origin, url_without_query: location.origin + location.pathname,
       jwt_in_page: /eyJ[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+/.test(page),
       text: document.body.innerText, width: canvas?.width, height: canvas?.height,
+      cursor_labels: [...document.querySelectorAll('.pir-bim-remote-cursor-label')].map(node => {
+        const rect = node.getBoundingClientRect();
+        const style = getComputedStyle(node);
+        return {text: node.textContent, visible: !node.hidden && style.display !== 'none' &&
+          style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0,
+          x: rect.x, y: rect.y, width: rect.width, height: rect.height};
+      }),
       pointer_events: {...(window.__mostBimSessionDeviceInput || {})},
       input_trace: [...(window.__mostBimSessionDeviceTrace || [])],
       raw_input_events: {...(window.__mostBimSessionRawInput || {})},
