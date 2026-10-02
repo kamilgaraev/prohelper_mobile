@@ -258,6 +258,12 @@ class _PendingTimeEntryApprovalsState
       .read(timeTrackingRepositoryProvider)
       .fetchPendingApprovals(projectId: widget.projectId);
 
+  void _reload() {
+    setState(() {
+      _future = _load();
+    });
+  }
+
   Future<void> _decide(TimeEntryModel entry, String action) async {
     if (!_decidingEntryIds.add(entry.id)) return;
     if (mounted) setState(() {});
@@ -282,7 +288,8 @@ class _PendingTimeEntryApprovalsState
               )
               : await _submitApproval(entry, action);
       if (result != true || !mounted) return;
-      setState(() => _future = _load());
+      _reload();
+      ref.read(timeTrackingProvider.notifier).loadDailySummary();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
@@ -329,7 +336,7 @@ class _PendingTimeEntryApprovalsState
               ),
               IconButton(
                 tooltip: 'Повторить загрузку',
-                onPressed: () => setState(() => _future = _load()),
+                onPressed: _reload,
                 icon: const Icon(Icons.refresh_rounded),
               ),
             ],
