@@ -25,7 +25,13 @@ class PermissionService {
         grantedPermissions.contains('${module.replaceAll('-', '_')}.*') ||
         (module == 'warehouse' &&
             (grantedPermissions.contains('basic-warehouse.*') ||
-                grantedPermissions.contains('basic_warehouse.*')));
+                grantedPermissions.contains('basic_warehouse.*'))) ||
+        (module == 'report_files' &&
+            (grantedPermissions.contains('file-management.*') ||
+                grantedPermissions.contains('file_management.*'))) ||
+        (module == 'rate_coefficients' &&
+            (grantedPermissions.contains('rate-management.*') ||
+                grantedPermissions.contains('rate_management.*')));
   }
 
   bool hasAnyPermission(Iterable<String> permissions) {
