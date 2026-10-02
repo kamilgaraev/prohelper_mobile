@@ -1,22 +1,37 @@
-﻿class AiUsageModel {
+class AiUsageModel {
   const AiUsageModel({
     required this.monthlyLimit,
     required this.used,
     required this.remaining,
     required this.percentageUsed,
+    this.tokensUsed,
+    this.costRub,
+    this.billingContractVersion,
+    this.limitingResource,
+    this.usageKind,
   });
 
-  final int monthlyLimit;
+  final int? monthlyLimit;
   final int used;
-  final int remaining;
-  final double percentageUsed;
+  final int? remaining;
+  final double? percentageUsed;
+  final int? tokensUsed;
+  final double? costRub;
+  final int? billingContractVersion;
+  final String? limitingResource;
+  final String? usageKind;
 
   factory AiUsageModel.fromJson(Map<String, dynamic> json) {
     return AiUsageModel(
-      monthlyLimit: _intValue(json['monthly_limit']),
+      monthlyLimit: _nullableInt(json['monthly_limit']),
       used: _intValue(json['used']),
-      remaining: _intValue(json['remaining']),
-      percentageUsed: _doubleValue(json['percentage_used']),
+      remaining: _nullableInt(json['remaining']),
+      percentageUsed: _nullableDouble(json['percentage_used']),
+      tokensUsed: _nullableInt(json['tokens_used']),
+      costRub: _nullableDouble(json['cost_rub']),
+      billingContractVersion: _nullableInt(json['billing_contract_version']),
+      limitingResource: _stringValue(json['limiting_resource']),
+      usageKind: _stringValue(json['usage_kind']),
     );
   }
 }
@@ -30,6 +45,10 @@ class AiConversationModel {
     this.lastMessagePreview,
     this.lastMessageAt,
     this.messagesCount = 0,
+    this.uuid,
+    this.canWrite = true,
+    this.canManageParticipants = false,
+    this.scope = 'personal',
   });
 
   final int id;
@@ -39,6 +58,12 @@ class AiConversationModel {
   final String? lastMessagePreview;
   final DateTime? lastMessageAt;
   final int messagesCount;
+  final String? uuid;
+  final bool canWrite;
+  final bool canManageParticipants;
+  final String scope;
+
+  String get stableId => uuid ?? id.toString();
 
   factory AiConversationModel.fromJson(Map<String, dynamic> json) {
     return AiConversationModel(
@@ -49,6 +74,10 @@ class AiConversationModel {
       lastMessagePreview: json['last_message_preview'] as String?,
       lastMessageAt: _dateTimeValue(json['last_message_at']),
       messagesCount: _intValue(json['messages_count']),
+      uuid: _stringValue(json['uuid']),
+      canWrite: _boolValue(json['can_write'] ?? json['can_edit']),
+      canManageParticipants: _boolValue(json['can_manage_participants']),
+      scope: _stringValue(json['scope']) ?? 'personal',
     );
   }
 }
@@ -61,6 +90,7 @@ class AiMessageModel {
     required this.createdAt,
     this.metadata,
     this.structuredPayload,
+    this.attachments = const <AiImageAttachmentModel>[],
   });
 
   final int id;
@@ -69,6 +99,24 @@ class AiMessageModel {
   final DateTime? createdAt;
   final Map<String, dynamic>? metadata;
   final AiAssistantStructuredPayload? structuredPayload;
+  final List<AiImageAttachmentModel> attachments;
+
+  String get validationStatus =>
+      _stringValue(metadata?['validation_status']) ?? 'unverified';
+
+  List<AiAssistantEvidenceModel> get evidence => [
+        ..._asList(metadata?['source_refs']),
+        ..._asList(_nullableMap(metadata?['rag_context'])?['sources']),
+      ]
+      .map(AiAssistantEvidenceModel.fromJson)
+      .whereType<AiAssistantEvidenceModel>()
+      .toList(growable: false);
+
+  List<AiAssistantSelectedEntity> get selectedEntities =>
+      _asList(metadata?['entity_references'])
+          .map(AiAssistantSelectedEntity.fromJson)
+          .whereType<AiAssistantSelectedEntity>()
+          .toList(growable: false);
 
   bool get isUser => role == 'user';
   List<AiAssistantArtifact> get artifacts =>
@@ -86,8 +134,42 @@ class AiMessageModel {
       createdAt: _dateTimeValue(json['created_at']),
       metadata: metadata,
       structuredPayload: AiAssistantStructuredPayload.fromMetadata(metadata),
+      attachments: _asList(json['attachments'])
+          .map(
+            (item) =>
+                AiImageAttachmentModel.fromJson(_nullableMap(item) ?? const {}),
+          )
+          .toList(growable: false),
     );
   }
+}
+
+class AiImageAttachmentModel {
+  const AiImageAttachmentModel({
+    required this.id,
+    required this.name,
+    required this.mime,
+    required this.size,
+    this.width,
+    this.height,
+  });
+
+  final String id;
+  final String name;
+  final String mime;
+  final int size;
+  final int? width;
+  final int? height;
+
+  factory AiImageAttachmentModel.fromJson(Map<String, dynamic> json) =>
+      AiImageAttachmentModel(
+        id: _stringValue(json['id']) ?? '',
+        name: _stringValue(json['name']) ?? 'Изображение',
+        mime: _stringValue(json['mime']) ?? 'image/jpeg',
+        size: _intValue(json['size']),
+        width: _nullableInt(json['width']),
+        height: _nullableInt(json['height']),
+      );
 }
 
 class AiAssistantStructuredPayload {
@@ -118,19 +200,26 @@ class AiAssistantStructuredPayload {
         .where((artifact) => artifact != null)
         .cast<AiAssistantArtifact>()
         .toList(growable: false);
-    final actions = [
-          ..._asList(payload['next_actions']),
-          ..._asList(payload['proposed_actions']),
-        ]
-        .map(AiAssistantActionModel.fromJson)
-        .where((action) => action != null)
-        .cast<AiAssistantActionModel>()
-        .toList(growable: false);
+    final actions = <String, AiAssistantActionModel>{};
+    for (final value in [
+      ..._asList(payload['next_actions']),
+      ..._asList(payload['proposed_actions']),
+    ]) {
+      final json = _nullableMap(value);
+      if (json == null) continue;
+      final action = AiAssistantActionModel.fromJson({
+        ...json,
+        'origin_request_id': json['origin_request_id'] ?? payload['request_id'],
+      });
+      if (action != null) {
+        actions[action.id ?? '${action.toolName}:${action.arguments}'] = action;
+      }
+    }
 
     return AiAssistantStructuredPayload(
       answer: _stringValue(payload['answer']),
       artifacts: artifacts,
-      actions: actions,
+      actions: actions.values.toList(growable: false),
       raw: payload,
     );
   }
@@ -146,6 +235,7 @@ class AiAssistantActionModel {
     required this.requiresConfirmation,
     required this.actionClass,
     this.toolName,
+    this.originRequestId,
     this.arguments = const <String, dynamic>{},
     this.requiredPermissions = const <String>[],
     this.target,
@@ -160,6 +250,7 @@ class AiAssistantActionModel {
   final bool requiresConfirmation;
   final String actionClass;
   final String? toolName;
+  final String? originRequestId;
   final Map<String, dynamic> arguments;
   final List<String> requiredPermissions;
   final Map<String, dynamic>? target;
@@ -178,6 +269,7 @@ class AiAssistantActionModel {
       'requires_confirmation': requiresConfirmation,
       'action_class': actionClass,
       if (toolName != null) 'tool_name': toolName,
+      if (originRequestId != null) 'origin_request_id': originRequestId,
       if (arguments.isNotEmpty) 'arguments': arguments,
       if (requiredPermissions.isNotEmpty)
         'required_permissions': requiredPermissions,
@@ -191,8 +283,12 @@ class AiAssistantActionModel {
       return null;
     }
 
-    final label = _stringValue(json['label']);
-    final type = _stringValue(json['type']);
+    final label =
+        _stringValue(json['label']) ??
+        (json['tool_name'] == null ? null : 'Изменить данные');
+    final type =
+        _stringValue(json['type']) ??
+        (json['tool_name'] == null ? null : 'action');
 
     if (label == null || type == null) {
       return null;
@@ -207,6 +303,7 @@ class AiAssistantActionModel {
       requiresConfirmation: _boolValue(json['requires_confirmation']),
       actionClass: _stringValue(json['action_class']) ?? 'safe',
       toolName: _stringValue(json['tool_name']),
+      originRequestId: _stringValue(json['origin_request_id']),
       arguments: _nullableMap(json['arguments']) ?? const <String, dynamic>{},
       requiredPermissions: _asList(json['required_permissions'])
           .map((item) => item.toString().trim())
@@ -457,10 +554,377 @@ class AiAssistantHomeModel {
   const AiAssistantHomeModel({
     required this.usage,
     required this.conversations,
+    this.nextPage,
+    this.balance,
   });
 
   final AiUsageModel usage;
   final List<AiConversationModel> conversations;
+  final int? nextPage;
+  final AiCreditsBalanceModel? balance;
+}
+
+class AiAssistantPage<T> {
+  const AiAssistantPage({required this.items, this.nextPage, this.total});
+
+  final List<T> items;
+  final int? nextPage;
+  final int? total;
+
+  bool get hasNextPage => nextPage != null;
+}
+
+class AiAssistantEvidenceModel {
+  const AiAssistantEvidenceModel({
+    required this.title,
+    this.source,
+    this.url,
+    this.status,
+    this.fetchedAt,
+    this.projectId,
+    this.entityId,
+    this.entityType,
+    this.excerpt,
+  });
+
+  final String title;
+  final String? source;
+  final String? url;
+  final String? status;
+  final DateTime? fetchedAt;
+  final String? projectId;
+  final String? entityId;
+  final String? entityType;
+  final String? excerpt;
+
+  static AiAssistantEvidenceModel? fromJson(dynamic value) {
+    final json = _nullableMap(value);
+    final title =
+        _stringValue(json?['title']) ??
+        _stringValue(json?['label']) ??
+        _sourceTitle(json);
+    if (json == null || title == null) return null;
+    return AiAssistantEvidenceModel(
+      title: title,
+      source:
+          json['source'] is String
+              ? _stringValue(json['source'])
+              : (json['provenance'] is String
+                  ? _stringValue(json['provenance'])
+                  : null),
+      url:
+          _stringValue(_nullableMap(json['navigation'])?['url']) ??
+          _stringValue(_nullableMap(json['navigation_target'])?['route']) ??
+          _stringValue(json['url']),
+      status: _stringValue(json['status']),
+      fetchedAt: _dateTimeValue(json['fetched_at']),
+      projectId: _stringValue(json['project_id']),
+      entityId: _stringValue(json['entity_id'] ?? json['id']),
+      entityType: _stringValue(
+        json['entity_type'] ?? json['source_type'] ?? json['type'],
+      ),
+      excerpt: _stringValue(json['excerpt']),
+    );
+  }
+}
+
+class AiAssistantSelectedEntity {
+  const AiAssistantSelectedEntity({
+    required this.id,
+    required this.type,
+    required this.label,
+  });
+
+  final String id;
+  final String type;
+  final String label;
+
+  static AiAssistantSelectedEntity? fromJson(dynamic value) {
+    final json = _nullableMap(value);
+    final id =
+        _stringValue(json?['id']) ??
+        _stringValue(json?['entity_id']) ??
+        _stringValue(json?['uuid']);
+    if (json == null || id == null) return null;
+    return AiAssistantSelectedEntity(
+      id: id,
+      type: _stringValue(json['type'] ?? json['entity_type']) ?? 'entity',
+      label: _stringValue(json['label']) ?? _stringValue(json['name']) ?? id,
+    );
+  }
+}
+
+class AiAssistantProgressModel {
+  const AiAssistantProgressModel({
+    required this.id,
+    required this.code,
+    required this.state,
+  });
+
+  final int id;
+  final String code;
+  final String state;
+}
+
+List<AiAssistantProgressModel> _assistantProgressList(dynamic value) {
+  const codes = <String>{
+    'rag_search',
+    'estimates',
+    'warehouse',
+    'projects',
+    'contracts',
+    'procurement',
+    'schedule',
+    'work_volumes',
+    'materials',
+    'reports',
+    'financial_data',
+  };
+  final unique = <int, AiAssistantProgressModel>{};
+  final items = _asList(value);
+  for (final item in items.skip(items.length > 24 ? items.length - 24 : 0)) {
+    final json = _nullableMap(item);
+    if (json == null) continue;
+    final id = _intValue(json['id']);
+    final code = _stringValue(json['code']);
+    final state = _stringValue(json['state']);
+    if (id <= 0 ||
+        !codes.contains(code) ||
+        (state != 'started' && state != 'completed')) {
+      continue;
+    }
+    unique[id] = AiAssistantProgressModel(id: id, code: code!, state: state!);
+  }
+  final result =
+      unique.values.toList()
+        ..sort((left, right) => left.id.compareTo(right.id));
+  return result.take(24).toList(growable: false);
+}
+
+class AiAssistantChatResult {
+  const AiAssistantChatResult({
+    required this.requestId,
+    required this.conversationId,
+    this.message,
+    this.creditUsage,
+    this.progress = const [],
+  });
+
+  final String requestId;
+  final int conversationId;
+  final AiMessageModel? message;
+  final AiCreditUsageModel? creditUsage;
+  final List<AiAssistantProgressModel> progress;
+
+  factory AiAssistantChatResult.fromJson(Map<String, dynamic> json) {
+    final messageJson = _nullableMap(json['message']);
+    return AiAssistantChatResult(
+      requestId: _stringValue(json['request_id']) ?? '',
+      conversationId: _intValue(json['conversation_id']),
+      message:
+          messageJson == null ? null : AiMessageModel.fromJson(messageJson),
+      creditUsage: AiCreditUsageModel.fromJson(
+        _nullableMap(json['credit_usage']),
+      ),
+      progress: _assistantProgressList(json['progress']),
+    );
+  }
+}
+
+class AiAssistantChatRequest {
+  const AiAssistantChatRequest({
+    required this.requestId,
+    required this.status,
+    this.stage,
+    this.progress = const [],
+    this.conversationId,
+    this.result,
+    this.errorCode,
+  });
+
+  final String requestId;
+  final String status;
+  final String? stage;
+  final List<AiAssistantProgressModel> progress;
+  final int? conversationId;
+  final AiAssistantChatResult? result;
+  final String? errorCode;
+
+  bool get isTerminal =>
+      status == 'completed' || status == 'failed' || status == 'cancelled';
+
+  factory AiAssistantChatRequest.fromJson(Map<String, dynamic> json) {
+    final response = _nullableMap(json['response']);
+    return AiAssistantChatRequest(
+      requestId: _stringValue(json['request_id']) ?? '',
+      status: _stringValue(json['status']) ?? '',
+      stage: _stringValue(json['stage']),
+      progress: _assistantProgressList(json['progress']),
+      conversationId:
+          json['conversation_id'] == null
+              ? null
+              : _intValue(json['conversation_id']),
+      result:
+          response == null ? null : AiAssistantChatResult.fromJson(response),
+      errorCode: _stringValue(json['error_code']),
+    );
+  }
+}
+
+class AiCreditUsageModel {
+  const AiCreditUsageModel({
+    this.actualCharge,
+    this.balance,
+    this.availableAfterMinor,
+    this.chargingEnabled,
+  });
+
+  final String? actualCharge;
+  final AiCreditsBalanceModel? balance;
+  final int? availableAfterMinor;
+  final bool? chargingEnabled;
+
+  static AiCreditUsageModel? fromJson(Map<String, dynamic>? json) {
+    if (json == null || json.isEmpty) return null;
+    return AiCreditUsageModel(
+      actualCharge: formatAiMinor(_intValue(json['charged_minor'])),
+      availableAfterMinor: _nullableInt(json['available_after_minor']),
+      balance: AiCreditsBalanceModel.fromJson(_nullableMap(json['balance'])),
+      chargingEnabled: _nullableBool(json['charging_enabled']),
+    );
+  }
+}
+
+class AiCreditsBalanceModel {
+  const AiCreditsBalanceModel({
+    required this.organizationName,
+    required this.unit,
+    required this.base,
+    required this.purchased,
+    required this.reserved,
+    required this.available,
+    this.canPurchase = false,
+    this.chargingEnabled = false,
+    this.billingMode,
+    this.canManageBilling = false,
+    this.packPurchaseEnabled = false,
+    this.packs = const [],
+    this.basePeriodExpiresAt,
+  });
+
+  final String organizationName;
+  final String unit;
+  final String base;
+  final String purchased;
+  final String reserved;
+  final String available;
+  final bool canPurchase;
+  final bool chargingEnabled;
+  final String? billingMode;
+  final bool canManageBilling;
+  final bool packPurchaseEnabled;
+  final List<AiCreditPack> packs;
+  final DateTime? basePeriodExpiresAt;
+
+  factory AiCreditsBalanceModel.fromJson(Map<String, dynamic>? json) {
+    final value = json ?? const <String, dynamic>{};
+    return AiCreditsBalanceModel(
+      organizationName: _stringValue(value['organization_name']) ?? '',
+      unit: _stringValue(value['unit']) ?? 'ед. МОСТ',
+      base: formatAiMinor(_intValue(value['included_minor'])),
+      purchased: formatAiMinor(_intValue(value['purchased_minor'])),
+      reserved: formatAiMinor(_intValue(value['reserved_minor'])),
+      available: formatAiMinor(_intValue(value['available_minor'])),
+      canPurchase: _boolValue(value['can_purchase']),
+      chargingEnabled: _boolValue(value['charging_enabled']),
+      billingMode: _stringValue(value['billing_mode']),
+      canManageBilling: _boolValue(value['can_manage_billing']),
+      packPurchaseEnabled:
+          value.containsKey('pack_purchase_enabled')
+              ? _boolValue(value['pack_purchase_enabled'])
+              : _boolValue(value['can_purchase']),
+      basePeriodExpiresAt: _dateTimeValue(value['base_period_expires_at']),
+      packs:
+          _asList(value['packs'])
+              .map((item) => AiCreditPack.fromJson(_nullableMap(item) ?? {}))
+              .where((item) => item.id.isNotEmpty)
+              .toList(),
+    );
+  }
+}
+
+class AiCreditQuoteModel {
+  const AiCreditQuoteModel({
+    required this.id,
+    required this.maxConfirmed,
+    required this.amount,
+    required this.unit,
+    this.processingDeadlineSeconds,
+    this.expiresAt,
+  });
+
+  final String id;
+  final bool maxConfirmed;
+  final String amount;
+  final String unit;
+  final int? processingDeadlineSeconds;
+  final DateTime? expiresAt;
+
+  factory AiCreditQuoteModel.fromJson(Map<String, dynamic> json) {
+    return AiCreditQuoteModel(
+      id: _stringValue(json['quote_id']) ?? _stringValue(json['id']) ?? '',
+      maxConfirmed: _boolValue(json['max_confirmed']),
+      expiresAt: DateTime.tryParse(_stringValue(json['expires_at']) ?? ''),
+      amount: formatAiMinor(_intValue(json['max_units_minor'])),
+      unit: _stringValue(json['unit']) ?? 'ед. МОСТ',
+      processingDeadlineSeconds:
+          json['metadata'] is Map<String, dynamic> &&
+                  (json['metadata']['processing_deadline_seconds'] is int) &&
+                  json['metadata']['processing_deadline_seconds'] > 0
+              ? json['metadata']['processing_deadline_seconds'] as int
+              : null,
+    );
+  }
+}
+
+class AiMemoryModel {
+  const AiMemoryModel({
+    required this.id,
+    required this.scope,
+    required this.content,
+    this.updatedAt,
+  });
+
+  final String id;
+  final String scope;
+  final String content;
+  final DateTime? updatedAt;
+
+  factory AiMemoryModel.fromJson(Map<String, dynamic> json) => AiMemoryModel(
+    id: _stringValue(json['id']) ?? _stringValue(json['uuid']) ?? '',
+    scope: _stringValue(json['scope']) ?? 'user',
+    content: _stringValue(json['content']) ?? _stringValue(json['value']) ?? '',
+    updatedAt: _dateTimeValue(json['updated_at']),
+  );
+}
+
+class AiConversationParticipantModel {
+  const AiConversationParticipantModel({
+    required this.userId,
+    required this.role,
+    this.name,
+  });
+
+  final String userId;
+  final String role;
+  final String? name;
+
+  factory AiConversationParticipantModel.fromJson(Map<String, dynamic> json) =>
+      AiConversationParticipantModel(
+        userId: _stringValue(json['user_id']) ?? _stringValue(json['id']) ?? '',
+        role: _stringValue(json['role']) ?? 'viewer',
+        name: _stringValue(json['name']),
+      );
 }
 
 int _intValue(dynamic value) {
@@ -475,16 +939,9 @@ int _intValue(dynamic value) {
   return int.tryParse(value?.toString() ?? '') ?? 0;
 }
 
-double _doubleValue(dynamic value) {
-  if (value is double) {
-    return value;
-  }
-
-  if (value is num) {
-    return value.toDouble();
-  }
-
-  return double.tryParse(value?.toString() ?? '') ?? 0;
+double? _nullableDouble(dynamic value) {
+  if (value is num) return value.toDouble();
+  return double.tryParse(value?.toString() ?? '');
 }
 
 DateTime? _dateTimeValue(dynamic value) {
@@ -542,6 +999,12 @@ int? _nullableInt(dynamic value) {
   return int.tryParse(value?.toString() ?? '');
 }
 
+bool? _nullableBool(dynamic value) {
+  if (value is bool) return value;
+  if (value == null) return null;
+  return _boolValue(value);
+}
+
 bool _boolValue(dynamic value) {
   if (value is bool) {
     return value;
@@ -553,4 +1016,41 @@ bool _boolValue(dynamic value) {
 
   final raw = value?.toString().trim().toLowerCase();
   return raw == 'true' || raw == '1' || raw == 'yes';
+}
+
+String formatAiMinor(int minor) =>
+    '${minor < 0 ? '-' : ''}${minor.abs() ~/ 100}.${(minor.abs() % 100).toString().padLeft(2, '0')}';
+
+class AiCreditPack {
+  const AiCreditPack({
+    required this.id,
+    required this.unitsMinor,
+    required this.amountMinor,
+  });
+  final String id;
+  final int unitsMinor;
+  final int amountMinor;
+  factory AiCreditPack.fromJson(Map<String, dynamic> json) => AiCreditPack(
+    id: _stringValue(json['id']) ?? '',
+    unitsMinor: _intValue(json['units_minor']),
+    amountMinor: _intValue(json['amount_minor']),
+  );
+}
+
+String? _sourceTitle(Map<String, dynamic>? json) {
+  if (json == null) return null;
+  final type = _stringValue(
+    json['type'] ?? json['entity_type'] ?? json['source_type'],
+  );
+  final label = switch (type) {
+    'estimate' || 'estimate_item' || 'estimate_section' => 'Смета',
+    'project' => 'Проект',
+    'contract' => 'Договор',
+    'completed_work' => 'Выполненные работы',
+    'material' => 'Материал',
+    'file_document' || 'assistant_document' => 'Документ',
+    _ => 'Источник',
+  };
+  final id = _stringValue(json['id'] ?? json['entity_id'] ?? json['source_id']);
+  return id == null ? label : '$label №$id';
 }

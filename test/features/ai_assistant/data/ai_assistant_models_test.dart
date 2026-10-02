@@ -1,7 +1,36 @@
-﻿import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_test/flutter_test.dart';
 import 'package:prohelpers_mobile/features/ai_assistant/data/ai_assistant_models.dart';
 
 void main() {
+  test('parses shadow billing status and zero actual charge', () {
+    final balance = AiCreditsBalanceModel.fromJson({
+      'included_minor': 500000,
+      'purchased_minor': 0,
+      'reserved_minor': 0,
+      'available_minor': 500000,
+      'charging_enabled': false,
+      'billing_mode': 'shadow',
+      'can_purchase': false,
+      'can_manage_billing': true,
+      'pack_purchase_enabled': false,
+      'packs': [
+        {'id': 'ai-credits-1000', 'units_minor': 100000, 'amount_minor': 50000},
+      ],
+    });
+    final usage = AiCreditUsageModel.fromJson({
+      'charged_minor': 0,
+      'charging_enabled': false,
+    });
+
+    expect(balance.billingMode, 'shadow');
+    expect(balance.chargingEnabled, isFalse);
+    expect(balance.canPurchase, isFalse);
+    expect(balance.packPurchaseEnabled, isFalse);
+    expect(balance.canManageBilling, isTrue);
+    expect(usage?.actualCharge, '0.00');
+    expect(usage?.chargingEnabled, isFalse);
+  });
+
   test('parses assistant report artifacts from structured metadata', () {
     final message = AiMessageModel.fromJson({
       'id': 12,
@@ -81,4 +110,52 @@ void main() {
     expect(message.actions.single.isExecutableCandidate, isTrue);
     expect(message.actions.single.arguments['project_id'], 77);
   });
+  test(
+    'parses source navigation and validation from authoritative metadata',
+    () {
+      final message = AiMessageModel.fromJson({
+        'id': '12',
+        'role': 'assistant',
+        'content': 'Answer',
+        'metadata': {
+          'validation_status': 'partial',
+          'source_refs': [
+            {
+              'title': 'Estimate',
+              'entity_type': 'estimate_item',
+              'entity_id': 'item-3',
+              'project_id': '550e8400-e29b-41d4-a716-446655440000',
+              'excerpt': 'Риски по срокам графика',
+              'navigation': {'url': 'https://most.example.test/estimates/3'},
+            },
+          ],
+          'entity_references': [
+            {'id': 3, 'type': 'estimate', 'label': 'Estimate 3'},
+          ],
+        },
+      });
+      expect(message.id, 12);
+      expect(message.validationStatus, 'partial');
+      expect(
+        message.evidence.single.url,
+        'https://most.example.test/estimates/3',
+      );
+      expect(
+        message.evidence.single.projectId,
+        '550e8400-e29b-41d4-a716-446655440000',
+      );
+      expect(message.evidence.single.entityId, 'item-3');
+      expect(message.evidence.single.excerpt, 'Риски по срокам графика');
+      expect(message.selectedEntities.single.id, '3');
+      expect(
+        AiCreditsBalanceModel.fromJson({
+          'included_minor': 500000,
+          'purchased_minor': 75,
+          'reserved_minor': 25,
+          'available_minor': 500050,
+        }).available,
+        '5000.50',
+      );
+    },
+  );
 }
