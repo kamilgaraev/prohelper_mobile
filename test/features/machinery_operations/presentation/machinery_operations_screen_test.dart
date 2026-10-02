@@ -44,28 +44,21 @@ void main() {
   });
 
   test('view-only grant opens the fleet without exposing actions', () {
-    for (final permission in [
-      '*',
-      'view',
-      'machinery-operations.view',
-      'machinery-operations.*',
-    ]) {
+    for (final permission in ['view', 'machinery-operations.view']) {
       expect(machineryOperationsDestinationsFor([permission]), [
         MachineryOperationsDestination.fleet,
       ]);
     }
   });
 
-  test('wildcard and view grants do not imply action permissions', () {
-    expect(
-      machineryOperationsDestinationsFor([
-        '*',
-        'view',
-        'shift.create',
-        'machinery-operations.shifts.approve-extra',
-      ]),
-      [MachineryOperationsDestination.fleet],
-    );
+  test('full module grants expose fleet, shifts and maintenance', () {
+    for (final permission in ['*', 'machinery-operations.*']) {
+      expect(machineryOperationsDestinationsFor([permission]), [
+        MachineryOperationsDestination.fleetAndReview,
+        MachineryOperationsDestination.shift,
+        MachineryOperationsDestination.maintenance,
+      ]);
+    }
   });
 
   test('view remains available alongside maintenance access', () {
