@@ -8,6 +8,8 @@ import 'package:prohelpers_mobile/features/auth/data/auth_repository.dart';
 import 'package:prohelpers_mobile/features/auth/data/auth_session_identity.dart';
 import 'package:prohelpers_mobile/features/auth/data/user_model.dart';
 import 'package:prohelpers_mobile/features/auth/domain/auth_provider.dart';
+import 'package:prohelpers_mobile/features/design_management/offline/bim_offline_provider.dart';
+import 'package:prohelpers_mobile/features/design_management/offline/bim_offline_service.dart';
 import 'package:prohelpers_mobile/features/projects/data/project_model.dart';
 import 'package:prohelpers_mobile/features/projects/data/projects_repository.dart';
 import 'package:prohelpers_mobile/features/projects/domain/projects_provider.dart';
@@ -65,6 +67,14 @@ class _TestAuthNotifier extends AuthNotifier {
     logoutCalls += 1;
     state = AuthUnauthenticated();
   }
+}
+
+class _TestBimOfflineService implements BimOfflineService {
+  @override
+  Future<bool> hasPending() async => false;
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
 class _TestProjectsRepository extends ProjectsRepository {
@@ -168,6 +178,9 @@ void main() {
     return ProviderScope(
       overrides: [
         authProvider.overrideWith((ref) => authNotifier),
+        bimOfflineServiceProvider.overrideWith(
+          (ref) async => _TestBimOfflineService(),
+        ),
         projectsProvider.overrideWith((ref) => projectsNotifier),
       ],
       child: child,
@@ -408,6 +421,9 @@ void main() {
         ProviderScope(
           overrides: [
             authProvider.overrideWith((ref) => auth),
+            bimOfflineServiceProvider.overrideWith(
+              (ref) async => _TestBimOfflineService(),
+            ),
             projectsRepositoryProvider.overrideWithValue(repository),
             secureStorageProvider.overrideWith(
               (ref) => _TestSecureStorageService(),
@@ -466,6 +482,9 @@ void main() {
       ProviderScope(
         overrides: [
           authProvider.overrideWith((ref) => auth),
+          bimOfflineServiceProvider.overrideWith(
+            (ref) async => _TestBimOfflineService(),
+          ),
           projectsRepositoryProvider.overrideWithValue(repository),
           secureStorageProvider.overrideWith(
             (ref) => _TestSecureStorageService(),

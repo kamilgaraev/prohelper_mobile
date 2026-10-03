@@ -66,6 +66,214 @@ class EncryptedLocalFileCache {
   final AesGcm _cipher;
   final Map<String, Future<List<int>>> _keyFutures = {};
 
+  Future<String> streamPath({
+    required String ownerIdentity,
+    required String context,
+  }) async => (await _queuedAttachmentFile(ownerIdentity, context)).path;
+
+  Future<int> streamLength({
+    required String encryptedPath,
+    required int totalLength,
+    bool repair = false,
+  }) async {
+    final file = File(encryptedPath);
+    if (!await file.exists()) return 0;
+    final input = await file.open(
+      mode: repair ? FileMode.append : FileMode.read,
+    );
+    try {
+      await input.setPosition(0);
+      await _readStreamHeader(input, totalLength);
+      var length = 0;
+      var validEnd = await input.position();
+      final fileLength = await input.length();
+      while (await input.position() < fileLength) {
+        final bytes = await input.read(4);
+        if (bytes.length != 4) break;
+        final size = ByteData.sublistView(
+          Uint8List.fromList(bytes),
+        ).getUint32(0, Endian.big);
+        if (size <= 0 || size > _chunkSize || length + size > totalLength) {
+          throw const FormatException('Сохранённый файл повреждён.');
+        }
+        final next = await input.position() + 12 + size + 16;
+        if (next > fileLength) break;
+        await input.setPosition(next);
+        validEnd = next;
+        length += size;
+      }
+      if (validEnd != fileLength) {
+        if (!repair) {
+          throw const FormatException('Загрузка файла не завершена.');
+        }
+        await input.truncate(validEnd);
+      }
+      return length;
+    } finally {
+      await input.close();
+    }
+  }
+
+  Future<int> appendEncryptedStream({
+    required String ownerIdentity,
+    required String context,
+    required String encryptedPath,
+    required int totalLength,
+    required Stream<List<int>> source,
+    void Function(int length)? onProgress,
+    bool Function()? cancelled,
+  }) async {
+    final file = File(encryptedPath);
+    final key = await _getKey(ownerIdentity);
+    var written = await streamLength(
+      encryptedPath: encryptedPath,
+      totalLength: totalLength,
+      repair: true,
+    );
+    final output = await file.open(mode: FileMode.append);
+    try {
+      if (await output.length() == 0) {
+        await output.writeFrom(_magic);
+        final header =
+            ByteData(_metadataSize)
+              ..setUint32(0, _chunkSize, Endian.big)
+              ..setUint32(4, (totalLength >> 32) & 0xffffffff, Endian.big)
+              ..setUint32(8, totalLength & 0xffffffff, Endian.big);
+        await output.writeFrom(header.buffer.asUint8List());
+      }
+      var index = 0;
+      await output.setPosition(_magic.length + _metadataSize);
+      while (await output.position() < await output.length()) {
+        final size = ByteData.sublistView(
+          Uint8List.fromList(await output.read(4)),
+        ).getUint32(0, Endian.big);
+        await output.setPosition(await output.position() + 12 + size + 16);
+        index++;
+      }
+      Future<void> flush(List<int> bytes) async {
+        if (cancelled?.call() == true) throw StateError('Загрузка отменена.');
+        if (written + bytes.length > totalLength) {
+          throw const FormatException('Размер пакета изменился.');
+        }
+        final box = await _cipher.encrypt(
+          bytes,
+          secretKey: SecretKey(key),
+          nonce: _cipher.newNonce(),
+          aad: utf8.encode('$context:$totalLength:$index'),
+        );
+        final size = ByteData(4)..setUint32(0, bytes.length, Endian.big);
+        await output.writeFrom(size.buffer.asUint8List());
+        await output.writeFrom(box.nonce);
+        await output.writeFrom(box.cipherText);
+        await output.writeFrom(box.mac.bytes);
+        await output.flush();
+        written += bytes.length;
+        index++;
+        onProgress?.call(written);
+      }
+
+      var pending = BytesBuilder(copy: false);
+      await for (final chunk in source) {
+        var offset = 0;
+        while (offset < chunk.length) {
+          final count = min(_chunkSize - pending.length, chunk.length - offset);
+          pending.add(chunk.sublist(offset, offset + count));
+          offset += count;
+          if (pending.length == _chunkSize) {
+            await flush(pending.takeBytes());
+          }
+        }
+      }
+      if (pending.isNotEmpty) await flush(pending.takeBytes());
+      return written;
+    } finally {
+      await output.close();
+    }
+  }
+
+  Stream<List<int>> decryptStream({
+    required String ownerIdentity,
+    required String encryptedPath,
+    required String context,
+    required int totalLength,
+    int start = 0,
+    int? end,
+  }) async* {
+    final limit = end ?? totalLength;
+    if (start < 0 || start > limit || limit > totalLength) {
+      throw RangeError('Неверный диапазон файла.');
+    }
+    final key = await _getKey(ownerIdentity);
+    final input = await File(encryptedPath).open();
+    try {
+      await _readStreamHeader(input, totalLength);
+      var index = 0;
+      var offset = 0;
+      while (offset < limit) {
+        final bytes = await input.read(4);
+        if (bytes.length != 4) {
+          throw const FormatException('Сохранённый файл повреждён.');
+        }
+        final size = ByteData.sublistView(
+          Uint8List.fromList(bytes),
+        ).getUint32(0, Endian.big);
+        if (size <= 0 || size > _chunkSize || offset + size > totalLength) {
+          throw const FormatException('Сохранённый файл повреждён.');
+        }
+        if (offset + size <= start) {
+          await input.setPosition(await input.position() + 12 + size + 16);
+        } else {
+          final nonce = await input.read(12);
+          final ciphertext = await input.read(size);
+          final mac = await input.read(16);
+          if (nonce.length != 12 ||
+              ciphertext.length != size ||
+              mac.length != 16) {
+            throw const FormatException('Сохранённый файл повреждён.');
+          }
+          final plaintext = await _cipher.decrypt(
+            SecretBox(ciphertext, nonce: nonce, mac: Mac(mac)),
+            secretKey: SecretKey(key),
+            aad: utf8.encode('$context:$totalLength:$index'),
+          );
+          yield plaintext.sublist(
+            max(0, start - offset),
+            min(size, limit - offset),
+          );
+        }
+        offset += size;
+        index++;
+      }
+      if (limit == totalLength &&
+          await input.position() != await input.length()) {
+        throw const FormatException('Сохранённый файл содержит лишние данные.');
+      }
+    } finally {
+      await input.close();
+    }
+  }
+
+  Future<void> _readStreamHeader(
+    RandomAccessFile input,
+    int totalLength,
+  ) async {
+    if (!_bytesEqual(await input.read(_magic.length), _magic)) {
+      throw const FormatException('Неверный формат сохранённого файла.');
+    }
+    final header = await input.read(_metadataSize);
+    if (header.length != _metadataSize) {
+      throw const FormatException('Сохранённый файл повреждён.');
+    }
+    final metadata = ByteData.sublistView(Uint8List.fromList(header));
+    final length =
+        (metadata.getUint32(4, Endian.big) << 32) |
+        metadata.getUint32(8, Endian.big);
+    if (metadata.getUint32(0, Endian.big) != _chunkSize ||
+        length != totalLength) {
+      throw const FormatException('Размер сохранённого файла изменился.');
+    }
+  }
+
   Future<String> saveForOffline({
     required String ownerIdentity,
     required int documentId,

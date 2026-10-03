@@ -11,6 +11,7 @@ import '../data/auth_session_identity.dart';
 import '../data/user_model.dart';
 import '../../notifications/data/mobile_push_service.dart';
 import 'auth_session_provider.dart';
+import '../../design_management/offline/bim_offline_provider.dart';
 
 Future<bool> _hasNoActiveNetwork() async {
   try {
@@ -51,24 +52,30 @@ class AuthError extends AuthState {
   final String message;
 }
 
-final authProvider = StateNotifierProvider<AuthNotifier, AuthState>((ref) {
-  final notifier = AuthNotifier(
-    ref.read(authRepositoryProvider),
-    ref.read(secureStorageProvider),
-    autoCheckAuth: false,
-    beforeLogout:
-        () => ref.read(mobilePushServiceProvider).setAuthenticated(false),
-    onSessionInvalidated: () {
-      ref.read(authSessionVersionProvider.notifier).state++;
-    },
-  );
+final StateNotifierProvider<AuthNotifier, AuthState> authProvider =
+    StateNotifierProvider<AuthNotifier, AuthState>((ref) {
+      final notifier = AuthNotifier(
+        ref.read(authRepositoryProvider),
+        ref.read(secureStorageProvider),
+        autoCheckAuth: false,
+        beforeContextChange: () async {
+          await (await ref.read(
+            bimOfflineServiceProvider.future,
+          )).prepareContextChange();
+        },
+        beforeLogout:
+            () => ref.read(mobilePushServiceProvider).setAuthenticated(false),
+        onSessionInvalidated: () {
+          ref.read(authSessionVersionProvider.notifier).state++;
+        },
+      );
 
-  ref.listen<int>(authSessionVersionProvider, (_, __) {
-    notifier.handleSessionInvalidation();
-  });
+      ref.listen<int>(authSessionVersionProvider, (_, __) {
+        notifier.handleSessionInvalidation();
+      });
 
-  return notifier;
-});
+      return notifier;
+    });
 
 class AuthNotifier extends StateNotifier<AuthState> {
   AuthNotifier(
@@ -76,9 +83,11 @@ class AuthNotifier extends StateNotifier<AuthState> {
     this._storage, {
     bool autoCheckAuth = true,
     Future<void> Function()? beforeLogout,
+    Future<void> Function()? beforeContextChange,
     void Function()? onSessionInvalidated,
     Future<bool> Function()? isDefinitelyOffline,
-  }) : _onSessionInvalidated = onSessionInvalidated,
+  }) : _beforeContextChange = beforeContextChange,
+       _onSessionInvalidated = onSessionInvalidated,
        _beforeLogout = beforeLogout,
        _isDefinitelyOffline = isDefinitelyOffline ?? _hasNoActiveNetwork,
        super(AuthInitial()) {
@@ -90,10 +99,14 @@ class AuthNotifier extends StateNotifier<AuthState> {
   final SecureStorageService _storage;
   final void Function()? _onSessionInvalidated;
   final Future<void> Function()? _beforeLogout;
+  final Future<void> Function()? _beforeContextChange;
   final Future<bool> Function() _isDefinitelyOffline;
   bool _loggingOut = false;
   int _operation = 0;
   Future<void> _offlineMutationQueue = Future<void>.value();
+  Future<bool>? _queueVerification;
+  AuthSessionIdentity? _queueVerificationIdentity;
+  int? _queueVerificationOperation;
 
   Future<void> checkAuth() async {
     final operation = ++_operation;
@@ -194,6 +207,14 @@ class AuthNotifier extends StateNotifier<AuthState> {
     if (auth is! AuthAuthenticated) return;
     final currentIdentity = auth.sessionIdentity;
     if (currentIdentity == null) return;
+    if (currentIdentity.organizationId == organizationId) return;
+    await _beforeContextChange?.call();
+    final currentAuth = state;
+    if (!mounted ||
+        currentAuth is! AuthAuthenticated ||
+        currentAuth.sessionIdentity != currentIdentity) {
+      return;
+    }
     final operation = ++_operation;
     try {
       final updatedUser = await _repository.switchOrganization(organizationId);
@@ -218,7 +239,31 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
-  Future<bool> verifyOnlineForQueue() async {
+  Future<bool> verifyOnlineForQueue() {
+    final auth = state;
+    if (auth is! AuthAuthenticated || auth.sessionIdentity == null) {
+      return Future.value(false);
+    }
+    if (_queueVerification != null &&
+        _queueVerificationIdentity == auth.sessionIdentity &&
+        _queueVerificationOperation == _operation) {
+      return _queueVerification!;
+    }
+    late final Future<bool> verification;
+    verification = _verifyOnlineForQueue().whenComplete(() {
+      if (identical(_queueVerification, verification)) {
+        _queueVerification = null;
+        _queueVerificationIdentity = null;
+        _queueVerificationOperation = null;
+      }
+    });
+    _queueVerification = verification;
+    _queueVerificationIdentity = auth.sessionIdentity;
+    _queueVerificationOperation = _operation;
+    return verification;
+  }
+
+  Future<bool> _verifyOnlineForQueue() async {
     final auth = state;
     if (auth is! AuthAuthenticated) return false;
     final originalIdentity = auth.sessionIdentity;
@@ -266,6 +311,15 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
   Future<void> logout() async {
     if (!mounted || _loggingOut) return;
+    final authBeforeLogout = state;
+    await _beforeContextChange?.call();
+    final currentAuth = state;
+    final sameSession =
+        authBeforeLogout is AuthAuthenticated &&
+                currentAuth is AuthAuthenticated
+            ? currentAuth.sessionIdentity == authBeforeLogout.sessionIdentity
+            : currentAuth == authBeforeLogout;
+    if (!mounted || _loggingOut || !sameSession) return;
     _loggingOut = true;
     ++_operation;
     state = AuthLoading();

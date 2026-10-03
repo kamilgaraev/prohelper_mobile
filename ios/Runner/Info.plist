@@ -27,11 +27,31 @@
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSCameraUsageDescription</key>
-	<string>Камера нужна для сканирования QR-кодов и штрихкодов склада, а также для фотографий складских операций.</string>
+	<string>Камера нужна для сканирования кодов и фотографий к операциям и замечаниям проекта.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>Доступ нужен для выбора и сохранения складских фотографий.</string>
+	<string>Доступ нужен для сохранения фотографий операций и замечаний проекта.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Доступ к галерее нужен для прикрепления фотографий к складским позициям и операциям.</string>
+	<string>Доступ к галерее нужен для прикрепления фотографий к операциям и замечаниям проекта.</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSExceptionDomains</key>
+		<dict>
+			<key>127.0.0.1</key>
+			<dict>
+				<key>NSExceptionAllowsInsecureHTTPLoads</key>
+				<true/>
+				<key>NSIncludesSubdomains</key>
+				<false/>
+			</dict>
+			<key>localhost</key>
+			<dict>
+				<key>NSExceptionAllowsInsecureHTTPLoads</key>
+				<true/>
+				<key>NSIncludesSubdomains</key>
+				<false/>
+			</dict>
+		</dict>
+	</dict>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

@@ -130,6 +130,17 @@ class _MemoryStorage extends SecureStorageService {
   }
 }
 
+class _BlockingVerificationRepository extends _FakeAuthRepository {
+  final started = Completer<void>();
+  final release = Completer<void>();
+  @override
+  Future<User> getMe({String? token}) async {
+    if (!started.isCompleted) started.complete();
+    await release.future;
+    return super.getMe(token: token);
+  }
+}
+
 class _BlockingClearStorage extends _MemoryStorage {
   final clearStarted = Completer<void>();
   final allowClear = Completer<void>();
@@ -153,6 +164,23 @@ class _BlockingClearStorage extends _MemoryStorage {
 }
 
 void main() {
+  test(
+    'same-session parallel online verification shares one request and accepts both callers',
+    () async {
+      final storage = _MemoryStorage();
+      final repository = _BlockingVerificationRepository();
+      final notifier = AuthNotifier(repository, storage, autoCheckAuth: false);
+      addTearDown(notifier.dispose);
+      await notifier.login('foreman@example.test', 'password');
+      final first = notifier.verifyOnlineForQueue();
+      await repository.started.future;
+      final second = notifier.verifyOnlineForQueue();
+      expect(identical(first, second), true);
+      repository.release.complete();
+      expect(await Future.wait([first, second]), [true, true]);
+      expect(repository.getMeCalls, 1);
+    },
+  );
   Map<String, dynamic> offlineAuthRecord(DateTime confirmedAt) => {
     'token': 'token-1',
     'session_id': 'session-1',

@@ -5,6 +5,7 @@ import '../../features/auth/data/user_model.dart';
 import '../../features/contract_management/data/legal_document_snapshot.dart';
 import '../sync/queued_sync_operation.dart';
 import 'cached_entity.dart';
+import '../../features/design_management/offline/bim_offline_record.dart';
 
 final isarProvider = FutureProvider<Isar>((ref) async {
   final dir = await getApplicationDocumentsDirectory();
@@ -13,6 +14,8 @@ final isarProvider = FutureProvider<Isar>((ref) async {
     QueuedSyncOperationSchema,
     LegalDocumentSnapshotSchema,
     CachedEntitySchema,
+    BimOfflineRecordSchema,
+    BimElementIndexSchema,
   ], directory: dir.path);
 });
 

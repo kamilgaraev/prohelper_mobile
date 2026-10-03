@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../../core/theme/app_colors.dart';
@@ -9,6 +9,7 @@ import '../../../projects/presentation/project_selection_screen.dart';
 import '../../data/user_model.dart';
 import '../../domain/auth_provider.dart';
 import 'logout_confirmation_dialog.dart';
+import '../../../design_management/offline/bim_context_change_dialog.dart';
 
 class UserProfileBottomSheet extends ConsumerWidget {
   const UserProfileBottomSheet({super.key, required this.user});
@@ -75,6 +76,7 @@ class UserProfileBottomSheet extends ConsumerWidget {
                   }
 
                   try {
+                    if (!await prepareBimContextChange(context, ref)) return;
                     await ref
                         .read(authProvider.notifier)
                         .switchOrganization(orgId);
@@ -182,6 +184,10 @@ class UserProfileBottomSheet extends ConsumerWidget {
               onPressed: () async {
                 final confirmed = await showLogoutConfirmationDialog(context);
                 if (!confirmed || !context.mounted) {
+                  return;
+                }
+                if (!await prepareBimContextChange(context, ref) ||
+                    !context.mounted) {
                   return;
                 }
 

@@ -13,6 +13,7 @@ import 'package:prohelpers_mobile/features/auth/presentation/widgets/logout_conf
 import 'package:prohelpers_mobile/features/auth/presentation/widgets/user_profile_bottom_sheet.dart';
 import 'package:prohelpers_mobile/features/projects/domain/projects_provider.dart';
 import 'package:prohelpers_mobile/features/projects/presentation/widgets/project_card.dart';
+import '../../design_management/offline/bim_context_change_dialog.dart';
 
 class ProjectSelectionScreen extends ConsumerStatefulWidget {
   const ProjectSelectionScreen({super.key});
@@ -69,6 +70,7 @@ class _ProjectSelectionScreenState
     if (!confirmed || !mounted) {
       return;
     }
+    if (!await prepareBimContextChange(context, ref) || !mounted) return;
 
     await ref.read(authProvider.notifier).logout();
   }
