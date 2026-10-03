@@ -30,6 +30,7 @@ class BimParticipant {
     required this.name,
     this.color = '#3b82f6',
     this.lastSeenAt,
+    this.maxSequence,
   });
 
   final String clientId;
@@ -37,6 +38,7 @@ class BimParticipant {
   final String name;
   final String color;
   final DateTime? lastSeenAt;
+  final int? maxSequence;
 
   factory BimParticipant.fromJson(Map<String, dynamic> json) {
     final user = bimMap(json['user'] ?? json['sender']);
@@ -46,6 +48,8 @@ class BimParticipant {
       name: (json['name'] ?? user['name'] ?? 'Участник').toString(),
       color: (json['color'] ?? user['color'] ?? '#3b82f6').toString(),
       lastSeenAt: DateTime.tryParse((json['last_seen_at'] ?? '').toString()),
+      maxSequence:
+          json['max_sequence'] == null ? null : bimInt(json['max_sequence']),
     );
   }
 }
@@ -59,6 +63,7 @@ class BimPresenceEnvelope {
     required this.type,
     required this.senderId,
     required this.senderName,
+    this.senderColor,
     required this.occurredAt,
     required this.payload,
   });
@@ -70,6 +75,7 @@ class BimPresenceEnvelope {
   final String type;
   final int senderId;
   final String senderName;
+  final String? senderColor;
   final DateTime occurredAt;
   final Map<String, dynamic> payload;
 
@@ -80,7 +86,14 @@ class BimPresenceEnvelope {
     final type = (json['type'] ?? '').toString();
     if (bimInt(json['schema_version']) != 2 ||
         clientId.isEmpty ||
-        !const {'camera', 'cursor', 'select', 'view'}.contains(type) ||
+        !const {
+          'camera',
+          'cursor',
+          'select',
+          'view',
+          'heartbeat',
+          'leave',
+        }.contains(type) ||
         bimInt(json['sequence']) < 1) {
       return null;
     }
@@ -92,6 +105,7 @@ class BimPresenceEnvelope {
       type: type,
       senderId: bimInt(sender['id']),
       senderName: (sender['name'] ?? 'Участник').toString(),
+      senderColor: sender['color']?.toString(),
       occurredAt:
           DateTime.tryParse((json['occurred_at'] ?? '').toString()) ??
           DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
@@ -103,7 +117,11 @@ class BimPresenceEnvelope {
     'schema_version': 2,
     'session_id': sessionId,
     'model_set_revision_id': modelSetRevisionId,
-    'sender': {'id': senderId, 'name': senderName},
+    'sender': {
+      'id': senderId,
+      'name': senderName,
+      if (senderColor != null) 'color': senderColor,
+    },
     'client_id': clientId,
     'sequence': sequence,
     'type': type,

@@ -222,6 +222,7 @@ void main() {
           'data': [
             {
               'client_id': 'second-device',
+              'max_sequence': 9,
               'sender': {'id': 7, 'name': 'Анна', 'color': '#123456'},
               'latest_events': {
                 'select': {
@@ -249,10 +250,39 @@ void main() {
     );
     expect(participants.single.name, 'Анна');
     expect(participants.single.color, '#123456');
+    expect(participants.single.maxSequence, 9);
     final snapshots = await api.fetchSnapshots(4);
     expect(snapshots.single.type, 'select');
     expect(snapshots.single.payload['element_id'], isNull);
     expect(await api.fetchViewState(4, 'native'), isNull);
+  });
+
+  test('v2 leave and heartbeat retain their sequence in transport parser', () {
+    final raw = {
+      'schema_version': 2,
+      'session_id': 4,
+      'model_set_revision_id': 9,
+      'client_id': 'second-device',
+      'sequence': 8,
+      'sender': {'id': 7, 'name': 'Анна'},
+      'occurred_at': '2026-10-02T00:00:00Z',
+      'payload': null,
+    };
+    expect(
+      BimPresenceEnvelope.tryParse({...raw, 'type': 'leave'})?.sequence,
+      8,
+    );
+    expect(
+      BimPresenceEnvelope.tryParse({...raw, 'type': 'heartbeat'})?.sequence,
+      8,
+    );
+    final colored = BimPresenceEnvelope.tryParse({
+      ...raw,
+      'type': 'cursor',
+      'sender': {'id': 7, 'name': 'Анна', 'color': '#c2410c'},
+    });
+    expect(colored?.senderColor, '#c2410c');
+    expect((colored?.toJson()['sender'] as Map)['color'], '#c2410c');
   });
 }
 

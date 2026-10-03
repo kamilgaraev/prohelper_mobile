@@ -363,6 +363,332 @@ void main() {
   });
 
   testWidgets(
+    'leave barrier rejects late activity and delayed leave after rejoin',
+    (tester) async {
+      final api = _Api();
+      final viewer = _Viewer();
+      final coordinator = _coordinator(api, viewer);
+      await coordinator.join(session);
+      viewer.emit('presenceSubscribed');
+      await tester.pump();
+      viewer.emit('presence', _event('heartbeat', 4, {}).toJson());
+      viewer.emit('presence', _event('leave', 8, {}).toJson());
+      viewer.emit('presenceMemberLeft', {'client_id': leader.clientId});
+      viewer.emit('presence', _event('cursor', 6, {'x': 1}).toJson());
+      viewer.emit('presence', _event('heartbeat', 7, {}).toJson());
+      await tester.pump();
+      expect(coordinator.currentState.participants, isEmpty);
+      expect(
+        viewer.commands.where((value) => value.$1 == 'remoteCursor'),
+        isEmpty,
+      );
+      viewer.emit('presence', _event('heartbeat', 9, {}).toJson());
+      viewer.emit('presence', _event('leave', 8, {}).toJson());
+      viewer.emit(
+        'presence',
+        _event('select', 7, {
+          'model_version_id': 10,
+          'element_id': 42,
+        }).toJson(),
+      );
+      viewer.emit('presence', _event('cursor', 10, {'x': 2}).toJson());
+      await tester.pump();
+      expect(
+        coordinator.currentState.participants.single.clientId,
+        leader.clientId,
+      );
+      expect(
+        viewer.commands.where((value) => value.$1 == 'remoteSelection'),
+        isEmpty,
+      );
+      expect(
+        viewer.commands
+            .where((value) => value.$1 == 'remoteCursor')
+            .single
+            .$2['position'],
+        {'x': 2},
+      );
+      coordinator.dispose();
+      await tester.pump();
+      await viewer.close();
+    },
+  );
+
+  testWidgets(
+    'stale HTTP participant and snapshot cannot restore a departed client',
+    (tester) async {
+      final api =
+          _Api()..blockedSnapshots = Completer<List<BimPresenceEnvelope>>();
+      final viewer = _Viewer();
+      final coordinator = _coordinator(api, viewer);
+      await coordinator.join(session);
+      viewer.emit('presenceSubscribed');
+      await tester.pump();
+      viewer.emit('presence', _event('leave', 8, {}).toJson());
+      api.blockedSnapshots!.complete([
+        _event('cursor', 6, {'x': 1}),
+      ]);
+      await tester.pump();
+      api.participants = [
+        const BimParticipant(
+          clientId: 'second-device',
+          userId: 7,
+          name: 'Анна',
+          maxSequence: 4,
+        ),
+      ];
+      viewer.emit('presenceSubscribed');
+      await tester.pump();
+      expect(coordinator.currentState.participants, isEmpty);
+      expect(
+        viewer.commands.where((value) => value.$1 == 'remoteCursor'),
+        isEmpty,
+      );
+      api.participants = [
+        const BimParticipant(
+          clientId: 'second-device',
+          userId: 7,
+          name: 'Анна',
+          maxSequence: 9,
+        ),
+      ];
+      viewer.emit('presenceSubscribed');
+      await tester.pump();
+      expect(coordinator.currentState.participants.single.maxSequence, 9);
+      coordinator.dispose();
+      await tester.pump();
+      await viewer.close();
+    },
+  );
+
+  testWidgets(
+    'legacy member leave blocks late activity per client until confirmed rejoin',
+    (tester) async {
+      final api =
+          _Api()
+            ..participants = [
+              leader,
+              const BimParticipant(
+                clientId: 'third-device',
+                userId: 7,
+                name: 'Анна',
+                maxSequence: 4,
+              ),
+            ];
+      final viewer = _Viewer();
+      final coordinator = _coordinator(api, viewer);
+      await coordinator.join(session);
+      viewer.emit('presenceSubscribed');
+      await tester.pump();
+      viewer.emit('presence', _event('cursor', 4, {'x': 1}).toJson());
+      viewer.emit(
+        'presence',
+        _event('heartbeat', 4, {}, clientId: 'third-device').toJson(),
+      );
+      viewer.emit('presenceMemberLeft', {'client_id': leader.clientId});
+      viewer.emit('presence', _event('cursor', 5, {'x': 2}).toJson());
+      await tester.pump();
+      expect(
+        coordinator.currentState.participants.map((value) => value.clientId),
+        ['third-device'],
+      );
+      expect(
+        viewer.commands.where((value) => value.$1 == 'remoteCursor').length,
+        1,
+      );
+      api.participants = [
+        const BimParticipant(
+          clientId: 'second-device',
+          userId: 7,
+          name: 'Анна',
+          maxSequence: 6,
+        ),
+        const BimParticipant(
+          clientId: 'third-device',
+          userId: 7,
+          name: 'Анна',
+          maxSequence: 4,
+        ),
+      ];
+      viewer.emit('presenceSubscribed');
+      await tester.pump();
+      viewer.emit('presence', _event('cursor', 7, {'x': 3}).toJson());
+      await tester.pump();
+      expect(coordinator.currentState.participants.length, 2);
+      expect(
+        viewer.commands.where((value) => value.$1 == 'remoteCursor').length,
+        2,
+      );
+      coordinator.dispose();
+      await tester.pump();
+      await viewer.close();
+    },
+  );
+
+  testWidgets('new session clears leave sequence barrier', (tester) async {
+    final api = _Api();
+    final viewer = _Viewer();
+    final coordinator = _coordinator(api, viewer);
+    await coordinator.join(session);
+    viewer.emit('presenceSubscribed');
+    await tester.pump();
+    viewer.emit('presence', _event('leave', 8, {}).toJson());
+    await tester.pump();
+    await coordinator.leave();
+    await coordinator.join(session);
+    viewer.emit('presenceSubscribed');
+    await tester.pump();
+    viewer.emit('presence', _event('cursor', 1, {'x': 1}).toJson());
+    await tester.pump();
+    expect(
+      viewer.commands.where((value) => value.$1 == 'remoteCursor').length,
+      1,
+    );
+    coordinator.dispose();
+    await tester.pump();
+    await viewer.close();
+  });
+
+  testWidgets('pending HTTP omission cannot erase newer live rejoin', (
+    tester,
+  ) async {
+    final api = _Api()..blockedHeartbeat = Completer<List<BimParticipant>>();
+    final viewer = _Viewer();
+    final coordinator = _coordinator(api, viewer);
+    await coordinator.join(session);
+    viewer.emit('presenceSubscribed');
+    await tester.pump();
+    viewer.emit('presence', _event('leave', 8, {}).toJson());
+    viewer.emit('presence', _event('heartbeat', 9, {}).toJson());
+    api.blockedHeartbeat!.complete([]);
+    await tester.pump();
+    expect(
+      coordinator.currentState.participants.single.clientId,
+      leader.clientId,
+    );
+    coordinator.dispose();
+    await tester.pump();
+    await viewer.close();
+  });
+
+  testWidgets('delayed HTTP row is fresh when received locally', (
+    tester,
+  ) async {
+    var now = DateTime.utc(2026, 10, 2, 9);
+    final api = _Api()..blockedHeartbeat = Completer<List<BimParticipant>>();
+    final viewer = _Viewer();
+    final coordinator = _coordinator(api, viewer, now: () => now);
+    await coordinator.join(session);
+    viewer.emit('presenceSubscribed');
+    await tester.pump();
+    now = now.add(const Duration(seconds: 46));
+    api.blockedHeartbeat!.complete([
+      BimParticipant(
+        clientId: leader.clientId,
+        userId: leader.userId,
+        name: leader.name,
+        lastSeenAt: DateTime.utc(2026, 10, 2, 9),
+        maxSequence: 4,
+      ),
+    ]);
+    await tester.pump();
+    expect(
+      coordinator.currentState.participants.single.clientId,
+      leader.clientId,
+    );
+    coordinator.dispose();
+    await tester.pump();
+    await viewer.close();
+  });
+
+  testWidgets(
+    'activity from client A does not suppress stable client B snapshot',
+    (tester) async {
+      final api =
+          _Api()
+            ..participants = [
+              leader,
+              const BimParticipant(
+                clientId: 'third-device',
+                userId: 7,
+                name: 'Борис',
+              ),
+            ]
+            ..blockedSnapshots = Completer<List<BimPresenceEnvelope>>();
+      final viewer = _Viewer();
+      final coordinator = _coordinator(api, viewer);
+      await coordinator.join(session);
+      viewer.emit('presenceSubscribed');
+      await tester.pump();
+      viewer.emit('presence', _event('cursor', 9, {'x': 1}).toJson());
+      api.blockedSnapshots!.complete([
+        _event('select', 5, {
+          'model_version_id': 10,
+          'element_id': 42,
+        }, clientId: 'third-device'),
+      ]);
+      await tester.pump();
+      expect(
+        viewer.commands
+            .where((value) => value.$1 == 'remoteSelection')
+            .single
+            .$2['client_id'],
+        'third-device',
+      );
+      coordinator.dispose();
+      await tester.pump();
+      await viewer.close();
+    },
+  );
+
+  testWidgets(
+    'live sender color remains stable after HTTP participant update',
+    (tester) async {
+      final api = _Api();
+      final viewer = _Viewer();
+      final coordinator = _coordinator(api, viewer);
+      await coordinator.join(session);
+      viewer.emit('presenceSubscribed');
+      await tester.pump();
+      viewer.emit(
+        'presence',
+        _event(
+          'cursor',
+          1,
+          {'x': 1},
+          clientId: 'third-device',
+          senderColor: '#c2410c',
+        ).toJson(),
+      );
+      await tester.pump();
+      expect(coordinator.currentState.participants.last.color, '#c2410c');
+      api.participants = [
+        leader,
+        const BimParticipant(
+          clientId: 'third-device',
+          userId: 7,
+          name: 'Анна',
+          color: '#c2410c',
+          maxSequence: 1,
+        ),
+      ];
+      viewer.emit('presenceSubscribed');
+      await tester.pump();
+      expect(coordinator.currentState.participants.last.color, '#c2410c');
+      expect(
+        viewer.commands
+            .where((value) => value.$1 == 'remoteCursor')
+            .single
+            .$2['color'],
+        '#c2410c',
+      );
+      coordinator.dispose();
+      await tester.pump();
+      await viewer.close();
+    },
+  );
+
+  testWidgets(
     'own selection cancels a slow remote full view before it can overwrite the current view',
     (tester) async {
       final api = _Api();
@@ -490,20 +816,25 @@ void main() {
   );
 }
 
-BimSessionCoordinator _coordinator(_Api api, _Viewer viewer) =>
-    BimSessionCoordinator(
-      api: api,
-      viewer: viewer,
-      userId: 7,
-      userName: 'Анна',
-      clientId: 'own',
-    );
+BimSessionCoordinator _coordinator(
+  _Api api,
+  _Viewer viewer, {
+  DateTime Function()? now,
+}) => BimSessionCoordinator(
+  api: api,
+  viewer: viewer,
+  userId: 7,
+  userName: 'Анна',
+  clientId: 'own',
+  now: now,
+);
 
 BimPresenceEnvelope _event(
   String type,
   int sequence,
   Map<String, dynamic> payload, {
   String clientId = 'second-device',
+  String? senderColor,
 }) => BimPresenceEnvelope(
   sessionId: 4,
   modelSetRevisionId: 9,
@@ -512,6 +843,7 @@ BimPresenceEnvelope _event(
   type: type,
   senderId: 7,
   senderName: 'Анна',
+  senderColor: senderColor,
   occurredAt: DateTime.utc(2026),
   payload: payload,
 );
@@ -584,6 +916,7 @@ class _Api implements BimSessionApi {
   Completer<void>? blockedCursorClear;
   Completer<void>? blockedCursorHit;
   Completer<List<BimPresenceEnvelope>>? blockedSnapshots;
+  Completer<List<BimParticipant>>? blockedHeartbeat;
   final BimViewState view = {
     'schema_version': 1,
     'model_set_revision_id': 9,
@@ -641,7 +974,9 @@ class _Api implements BimSessionApi {
     required int sequence,
   }) async {
     ++calls;
-    return participants;
+    return blockedHeartbeat == null
+        ? participants
+        : await blockedHeartbeat!.future;
   }
 
   @override

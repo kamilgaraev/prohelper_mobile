@@ -44,6 +44,12 @@ class BimSessionCoordinator extends StateNotifier<BimSessionState> {
   final _cursorPending = <Map<String, dynamic>>[];
   final _sending = <String>{};
   final _lastSequence = <String, Map<String, int>>{};
+  final _maxLiveSequence = <String, int>{};
+  final _leaveSequence = <String, int>{};
+  final _legacyDeparted = <String>{};
+  final _activityEpochByClient = <String, int>{};
+  final _lastConfirmedAt = <String, DateTime>{};
+  int _activityEpoch = 0;
   final _eventTimers = <String, Timer>{};
   Timer? _heartbeatTimer;
   Timer? _viewTimer;
@@ -154,6 +160,12 @@ class BimSessionCoordinator extends StateNotifier<BimSessionState> {
     _cursorPending.clear();
     _sending.clear();
     _lastSequence.clear();
+    _maxLiveSequence.clear();
+    _leaveSequence.clear();
+    _legacyDeparted.clear();
+    _activityEpochByClient.clear();
+    _lastConfirmedAt.clear();
+    _activityEpoch = 0;
     if (!_disposed) state = const BimSessionState();
     await _safeCommand('cancelRemoteView');
     await _safeCommand('sessionStop');
@@ -318,7 +330,11 @@ class BimSessionCoordinator extends StateNotifier<BimSessionState> {
         }
       case 'presenceMemberLeft':
         final departedClient = (payload['client_id'] ?? '').toString();
-        if (departedClient.isNotEmpty) _removeParticipant(departedClient);
+        if (departedClient.isNotEmpty &&
+            !_leaveSequence.containsKey(departedClient)) {
+          _legacyDeparted.add(departedClient);
+          _removeParticipant(departedClient);
+        }
         unawaited(_heartbeat(_generation));
       case 'presence':
       case 'presenceEvent':
@@ -354,11 +370,15 @@ class BimSessionCoordinator extends StateNotifier<BimSessionState> {
     await _heartbeat(generation);
     if (!_current(generation)) return;
     try {
+      final snapshotEpoch = _activityEpoch;
       final snapshots = await _api.fetchSnapshots(state.session!.id);
       if (!_current(generation)) return;
       for (final snapshot in snapshots) {
         if (!_current(generation)) return;
-        await _receive(snapshot);
+        if ((_activityEpochByClient[snapshot.clientId] ?? 0) > snapshotEpoch) {
+          continue;
+        }
+        await _receive(snapshot, snapshot: true);
       }
       if (!_current(generation)) return;
       for (final type in _pending.keys.toList()) {
@@ -379,13 +399,16 @@ class BimSessionCoordinator extends StateNotifier<BimSessionState> {
   Future<void> _heartbeat(int generation) async {
     if (!_current(generation) || _heartbeatRunning) return;
     _heartbeatRunning = true;
+    final requestEpoch = _activityEpoch;
     try {
       final participants = await _api.heartbeat(
         state.session!.id,
         clientId: clientId,
         sequence: ++_sequence,
       );
-      if (_current(generation)) _updateParticipants(participants);
+      if (_current(generation)) {
+        _updateParticipants(participants, requestEpoch: requestEpoch);
+      }
     } catch (error) {
       if (_current(generation)) state = state.copyWith(error: error);
     } finally {
@@ -393,20 +416,68 @@ class BimSessionCoordinator extends StateNotifier<BimSessionState> {
     }
   }
 
-  void _updateParticipants(List<BimParticipant> participants) {
+  void _updateParticipants(
+    List<BimParticipant> participants, {
+    int? requestEpoch,
+  }) {
     if (_disposed) return;
-    final cutoff = _now().subtract(const Duration(seconds: 45));
-    final active =
+    final receivedAt = _now();
+    final cutoff = receivedAt.subtract(const Duration(seconds: 45));
+    final incoming =
         participants
             .where(
               (participant) =>
                   participant.clientId.isNotEmpty &&
-                  (participant.lastSeenAt == null ||
-                      !participant.lastSeenAt!.isBefore(cutoff)),
+                  (participant.maxSequence ?? 0) >
+                      (_leaveSequence[participant.clientId] ?? -1) &&
+                  (!_legacyDeparted.contains(participant.clientId) ||
+                      (participant.maxSequence != null &&
+                          participant.maxSequence! >
+                              (_maxLiveSequence[participant.clientId] ?? 0))),
             )
             .toList();
+    final active = <BimParticipant>[
+      for (final participant in incoming)
+        if (requestEpoch != null &&
+            (_activityEpochByClient[participant.clientId] ?? 0) >
+                requestEpoch &&
+            state.participants.any(
+              (value) => value.clientId == participant.clientId,
+            ))
+          state.participants.firstWhere(
+            (value) => value.clientId == participant.clientId,
+          )
+        else
+          participant,
+    ];
+    if (requestEpoch != null) {
+      for (final previous in state.participants) {
+        if ((_activityEpochByClient[previous.clientId] ?? 0) > requestEpoch &&
+            !(_lastConfirmedAt[previous.clientId] ??
+                    DateTime.fromMillisecondsSinceEpoch(0))
+                .isBefore(cutoff) &&
+            !active.any((value) => value.clientId == previous.clientId)) {
+          active.add(previous);
+        }
+      }
+    }
+    for (final participant in incoming) {
+      _lastConfirmedAt[participant.clientId] = receivedAt;
+      final sequence = participant.maxSequence;
+      if (sequence != null) {
+        if (sequence > (_maxLiveSequence[participant.clientId] ?? 0)) {
+          _maxLiveSequence[participant.clientId] = sequence;
+        }
+        _legacyDeparted.remove(participant.clientId);
+      }
+    }
     for (final participant in state.participants) {
       if (!active.any((value) => value.clientId == participant.clientId)) {
+        _lastConfirmedAt.remove(participant.clientId);
+        _leaveSequence[participant.clientId] = max(
+          _maxLiveSequence[participant.clientId] ?? 0,
+          _leaveSequence[participant.clientId] ?? 0,
+        );
         unawaited(
           _safeCommand('clearRemote', {'client_id': participant.clientId}),
         );
@@ -422,7 +493,6 @@ class BimSessionCoordinator extends StateNotifier<BimSessionState> {
   }
 
   void _removeParticipant(String departedClient) {
-    _lastSequence.remove(departedClient);
     _updateParticipants(
       state.participants
           .where((value) => value.clientId != departedClient)
@@ -431,7 +501,10 @@ class BimSessionCoordinator extends StateNotifier<BimSessionState> {
     unawaited(_safeCommand('clearRemote', {'client_id': departedClient}));
   }
 
-  Future<void> _receive(BimPresenceEnvelope event) async {
+  Future<void> _receive(
+    BimPresenceEnvelope event, {
+    bool snapshot = false,
+  }) async {
     final session = state.session;
     if (_disposed ||
         !_online ||
@@ -442,12 +515,55 @@ class BimSessionCoordinator extends StateNotifier<BimSessionState> {
         event.clientId == clientId) {
       return;
     }
+    final departedAt = _leaveSequence[event.clientId] ?? 0;
+    if (event.type == 'leave') {
+      if (event.sequence <= departedAt ||
+          event.sequence <= (_maxLiveSequence[event.clientId] ?? 0)) {
+        return;
+      }
+      _leaveSequence[event.clientId] = event.sequence;
+      _lastConfirmedAt.remove(event.clientId);
+      _activityEpochByClient[event.clientId] = ++_activityEpoch;
+      _removeParticipant(event.clientId);
+      return;
+    }
+    if (event.sequence <= departedAt ||
+        _legacyDeparted.contains(event.clientId)) {
+      return;
+    }
+    if (snapshot &&
+        !state.participants.any((value) => value.clientId == event.clientId)) {
+      return;
+    }
     final sequences = _lastSequence.putIfAbsent(
       event.clientId,
       () => <String, int>{},
     );
     if (event.sequence <= (sequences[event.type] ?? 0)) return;
     sequences[event.type] = event.sequence;
+    if (event.sequence > (_maxLiveSequence[event.clientId] ?? 0)) {
+      _maxLiveSequence[event.clientId] = event.sequence;
+    }
+    if (!snapshot) {
+      _activityEpochByClient[event.clientId] = ++_activityEpoch;
+      _lastConfirmedAt[event.clientId] = _now();
+      if (!state.participants.any(
+        (value) => value.clientId == event.clientId,
+      )) {
+        state = state.copyWith(
+          participants: List.unmodifiable([
+            ...state.participants,
+            BimParticipant(
+              clientId: event.clientId,
+              userId: event.senderId,
+              name: event.senderName,
+              color: event.senderColor ?? '#3b82f6',
+              maxSequence: event.sequence,
+            ),
+          ]),
+        );
+      }
+    }
     final participant =
         state.participants
             .where((value) => value.clientId == event.clientId)
@@ -459,6 +575,8 @@ class BimSessionCoordinator extends StateNotifier<BimSessionState> {
     };
     try {
       switch (event.type) {
+        case 'heartbeat':
+          break;
         case 'camera':
           if (state.followingClientId == event.clientId &&
               !state.followLoading) {
