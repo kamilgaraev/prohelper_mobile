@@ -11,6 +11,7 @@ import '../../projects/domain/projects_provider.dart';
 import '../data/bim_models.dart';
 import '../data/bim_repository.dart';
 import '../domain/bim_provider.dart';
+import '../domain/bim_issue_capture.dart';
 import '../offline/bim_offline_provider.dart';
 import '../realtime/bim_realtime_section.dart';
 import '../viewer/bim_viewer_surface.dart';
@@ -715,9 +716,9 @@ class _BimViewerScreenState extends ConsumerState<BimViewerScreen> {
     }
   });
   Future<void> _createIssue() => _run(() async {
-    final frame = await _controller.captureViewSnapshot();
+    final frame = await captureBimIssueContext(_controller);
     final view = frame.viewState;
-    final snapshot = frame.bytes;
+    final snapshot = frame.snapshot;
     final selections =
         bimMaps(view['selection'])
             .map(
@@ -768,6 +769,7 @@ class _BimViewerScreenState extends ConsumerState<BimViewerScreen> {
               versionId: versionId,
               contextPayload: contextPayload,
               snapshot: snapshot,
+              snapshotUnavailable: snapshot == null,
               offline: _offline || _networkOffline,
             ),
       ),

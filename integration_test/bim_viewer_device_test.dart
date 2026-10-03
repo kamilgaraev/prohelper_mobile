@@ -10,6 +10,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:prohelpers_mobile/features/design_management/viewer/bim_viewer_surface.dart';
+import 'package:prohelpers_mobile/features/design_management/domain/bim_issue_capture.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
 import '../test/helpers/mobile_integration_test_helpers.dart';
@@ -201,6 +202,53 @@ void main() {
       final png = await _device(tester, () => _verifyPng(frame.bytes));
       report['png'] = png;
       report['full_state_restore'] = true;
+      await _device(
+        tester,
+        () => webview.platform.params.controller.runJavaScript('''
+          window.__mostOriginalToBlob = HTMLCanvasElement.prototype.toBlob;
+          window.__mostOriginalFetch = window.fetch;
+        '''),
+      );
+      for (final mode in ['null', 'encode', 'upload']) {
+        await _device(
+          tester,
+          () => webview.platform.params.controller.runJavaScript('''
+            HTMLCanvasElement.prototype.toBlob = window.__mostOriginalToBlob;
+            window.fetch = window.__mostOriginalFetch;
+            if ('$mode' === 'null') HTMLCanvasElement.prototype.toBlob = function(callback) { callback(null); };
+            if ('$mode' === 'encode') HTMLCanvasElement.prototype.toBlob = function() { throw new Error('PNG encoding failure'); };
+            if ('$mode' === 'upload') window.fetch = function(input, init) {
+              if (String(input).includes('/snapshots/')) return Promise.reject(new TypeError('Snapshot upload failure'));
+              return window.__mostOriginalFetch.call(this, input, init);
+            };
+          '''),
+        );
+        final capture = await _device(
+          tester,
+          () => captureBimIssueContext(controller),
+        );
+        expect(capture.snapshot, isNull);
+        _expectState(capture.viewState, portable);
+      }
+      await _device(
+        tester,
+        () => webview.platform.params.controller.runJavaScript('''
+          HTMLCanvasElement.prototype.toBlob = window.__mostOriginalToBlob;
+          window.fetch = window.__mostOriginalFetch;
+        '''),
+      );
+      final recovered = await _device(
+        tester,
+        () => captureBimIssueContext(controller),
+      );
+      expect(recovered.snapshot, isNotNull);
+      _expectState(recovered.viewState, portable);
+      report['snapshot_failure_context_preserved'] = [
+        'null',
+        'encode',
+        'upload',
+      ];
+      report['snapshot_capture_recovered'] = true;
       await _device(tester, controller.showAll);
       await _device(tester, controller.clearSections);
       await _device(tester, () => controller.setCameraPreset('top'));

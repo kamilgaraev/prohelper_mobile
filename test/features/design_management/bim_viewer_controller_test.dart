@@ -6,6 +6,28 @@ import 'package:prohelpers_mobile/features/design_management/viewer/bim_viewer_c
 
 void main() {
   test(
+    'handles a JavaScript failure before the delivery callback finishes',
+    () async {
+      final response = Completer<Map<String, dynamic>>();
+      final delivery = Completer<void>();
+      final command = sendBimViewerCommand(
+        () => delivery.future,
+        response.future,
+      );
+      final rejected = expectLater(
+        command,
+        throwsA(isA<BimViewerCommandException>()),
+      );
+      response.completeError(
+        const BimViewerCommandException('snapshot_unavailable'),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      delivery.complete();
+      await rejected;
+    },
+  );
+
+  test(
     'typed commands preserve binary snapshots and full view state',
     () async {
       final controller = BimViewerController();

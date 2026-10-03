@@ -195,7 +195,7 @@ void main() {
       isNull,
     );
   });
-  testWidgets('issue creation validation preserves version and view context', (
+  testWidgets('issue without snapshot preserves version and view context', (
     tester,
   ) async {
     final repository = _Repository();
@@ -205,6 +205,7 @@ void main() {
         const BimIssueEditorScreen(
           projectId: 9,
           versionId: 55,
+          snapshotUnavailable: true,
           contextPayload: {
             'camera': {'section_planes': []},
             'elements': [
@@ -215,6 +216,10 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    expect(
+      find.textContaining('Не удалось сделать снимок модели.'),
+      findsOneWidget,
+    );
     await tester.scrollUntilVisible(
       find.text('Создать замечание'),
       300,

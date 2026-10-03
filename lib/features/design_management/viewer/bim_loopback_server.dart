@@ -77,6 +77,15 @@ class BimLoopbackServer {
     return bytes;
   }
 
+  void discardSnapshot(Uri uri) {
+    if (uri.origin != baseUri.origin || !uri.path.startsWith(baseUri.path)) {
+      throw ArgumentError('Invalid snapshot URL');
+    }
+    final path = uri.path.substring(baseUri.path.length);
+    _uploads.remove(path);
+    _snapshots.remove(path);
+  }
+
   bool _validPath(String path) =>
       path.isNotEmpty &&
       !path.startsWith('/') &&
