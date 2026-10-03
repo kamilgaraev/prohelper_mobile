@@ -220,6 +220,7 @@ class BimIssueEditorScreen extends ConsumerStatefulWidget {
     required this.versionId,
     required this.contextPayload,
     this.snapshot,
+    this.snapshotUnavailable = false,
     this.offline = false,
     this.draft,
   });
@@ -227,6 +228,7 @@ class BimIssueEditorScreen extends ConsumerStatefulWidget {
   final int versionId;
   final BimJson contextPayload;
   final Uint8List? snapshot;
+  final bool snapshotUnavailable;
   final bool offline;
   final BimIssueDraft? draft;
   @override
@@ -298,6 +300,12 @@ class _BimIssueEditorScreenState extends ConsumerState<BimIssueEditorScreen> {
             Text(
               'Версия ${widget.versionId}${widget.contextPayload['bim_element_id'] == null ? '' : ' · Элемент ${widget.contextPayload['bim_element_id']}'}',
             ),
+            if (widget.snapshotUnavailable) ...[
+              const SizedBox(height: 12),
+              const Text(
+                'Не удалось сделать снимок модели. Замечание сохранится с привязкой к выбранным элементам и текущему виду. Можно прикрепить фотографию.',
+              ),
+            ],
             const SizedBox(height: 12),
             TextFormField(
               key: const ValueKey('bim-issue-title'),

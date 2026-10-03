@@ -19,6 +19,36 @@ void main() {
     await server.close();
   });
 
+  test('receives a PNG through the one-time snapshot upload', () async {
+    final url = server.registerSnapshot('capture');
+    final png = [137, 80, 78, 71, 13, 10, 26, 10, 1, 2, 3];
+    final request = await client.postUrl(url);
+    request.add(png);
+    final response = await request.close();
+    expect(response.statusCode, 201);
+    await response.drain<void>();
+    expect(server.takeSnapshot(url), png);
+    server.discardSnapshot(url);
+    expect(() => server.takeSnapshot(url), throwsStateError);
+  });
+
+  test('failed captures revoke their unused upload URL', () async {
+    final url = server.registerSnapshot('failed');
+    server.discardSnapshot(url);
+    final request = await client.postUrl(url);
+    request.add([137, 80, 78, 71, 13, 10, 26, 10]);
+    final response = await request.close();
+    expect(response.statusCode, 405);
+    await response.drain<void>();
+    expect(() => server.takeSnapshot(url), throwsStateError);
+    expect(
+      () => server.discardSnapshot(
+        Uri.parse('http://127.0.0.1:1/snapshots/failed.png'),
+      ),
+      throwsArgumentError,
+    );
+  });
+
   test(
     'serves only registered resources under the viewer capability',
     () async {

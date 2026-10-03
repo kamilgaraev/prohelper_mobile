@@ -2,11 +2,46 @@ import 'dart:async';
 import 'dart:typed_data';
 
 typedef BimViewerViewState = Map<String, dynamic>;
+
+class BimViewerCommandException implements Exception {
+  const BimViewerCommandException(this.code);
+
+  final String code;
+
+  bool get isSnapshotFailure => const {
+    'snapshot_unavailable',
+    'snapshot_capture_failed',
+    'snapshot_upload_failed',
+  }.contains(code);
+
+  @override
+  String toString() => switch (code) {
+    'realtime_tls_required' =>
+      'Для совместной сессии требуется защищённое соединение с сервером.',
+    'snapshot_unavailable' ||
+    'snapshot_capture_failed' ||
+    'snapshot_upload_failed' =>
+      'Не удалось сделать снимок модели. Попробуйте ещё раз.',
+    _ => 'Не удалось выполнить действие с моделью. Попробуйте ещё раз.',
+  };
+}
+
 typedef BimViewerCommandSender =
     Future<Map<String, dynamic>> Function(
       String type,
       Map<String, dynamic> payload,
     );
+
+Future<Map<String, dynamic>> sendBimViewerCommand(
+  Future<void> Function() send,
+  Future<Map<String, dynamic>> response,
+) async {
+  final results = await Future.wait([
+    response,
+    Future<void>.sync(send).then((_) => <String, dynamic>{}),
+  ], eagerError: true).timeout(const Duration(minutes: 3));
+  return results.first;
+}
 
 class BimViewerBinarySource {
   const BimViewerBinarySource({

@@ -231,11 +231,7 @@ class _BimViewerSurfaceState extends ConsumerState<BimViewerSurface>
         if (pending != null && !pending.isCompleted) {
           if (event['error'] != null) {
             pending.completeError(
-              StateError(
-                event['error'] == 'realtime_tls_required'
-                    ? 'Для совместной сессии требуется защищённое соединение с сервером.'
-                    : 'Viewer command failed',
-              ),
+              BimViewerCommandException('${event['error']}'),
             );
           } else {
             pending.complete(
@@ -342,14 +338,16 @@ class _BimViewerSurfaceState extends ConsumerState<BimViewerSurface>
     final completer = Completer<Map<String, dynamic>>();
     _pending[id] = completer;
     try {
-      await _send({
-        'schema_version': 1,
-        'kind': 'command',
-        'id': id,
-        'type': type,
-        'payload': payload,
-      });
-      return await completer.future.timeout(const Duration(minutes: 3));
+      return await sendBimViewerCommand(
+        () => _send({
+          'schema_version': 1,
+          'kind': 'command',
+          'id': id,
+          'type': type,
+          'payload': payload,
+        }),
+        completer.future,
+      );
     } finally {
       _pending.remove(id);
     }
@@ -365,14 +363,18 @@ class _BimViewerSurfaceState extends ConsumerState<BimViewerSurface>
 
   Future<Uint8List> _captureSnapshot() async {
     final url = _server.registerSnapshot('capture-${++_requestId}');
-    final result = await _command('captureSnapshot', {
-      'upload_url': url.toString(),
-    });
-    final state = result['camera'];
-    if (state is Map) {
-      widget.controller.recordSnapshotState(Map<String, dynamic>.from(state));
+    try {
+      final result = await _command('captureSnapshot', {
+        'upload_url': url.toString(),
+      });
+      final state = result['camera'];
+      if (state is Map) {
+        widget.controller.recordSnapshotState(Map<String, dynamic>.from(state));
+      }
+      return _server.takeSnapshot(url);
+    } finally {
+      if (!_closed) _server.discardSnapshot(url);
     }
-    return _server.takeSnapshot(url);
   }
 
   void _fail(String message) {
