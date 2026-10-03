@@ -19,7 +19,9 @@ class OperatorShiftScreen extends ConsumerWidget {
             ? null
             : state.shiftReports
                 .where(
-                  (item) => item.assetId == asset.id && item.status == 'draft',
+                  (item) =>
+                      item.assetId == asset.id &&
+                      (item.status == 'draft' || item.status == 'completed'),
                 )
                 .firstOrNull;
     final blockedShift =

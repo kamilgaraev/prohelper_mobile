@@ -31,6 +31,7 @@ class _RecordingTimeTrackingRepository extends TimeTrackingRepository {
   final List<String?> approvalReasons = [];
   Object? approvalError;
   Completer<void>? approvalCompleter;
+  int dailySummaryFetches = 0;
 
   @override
   Future<List<TimeEntryModel>> fetchPendingApprovals({
@@ -58,6 +59,7 @@ class _RecordingTimeTrackingRepository extends TimeTrackingRepository {
   }) async {
     loadedDate = date;
     loadedProjectId = projectId;
+    dailySummaryFetches++;
 
     return DailyTimeSummaryModel(
       date: date,
@@ -140,6 +142,18 @@ class _RecordingTimeTrackingRepository extends TimeTrackingRepository {
     correctedHours = hoursWorked;
     this.correctionReason = correctionReason;
     return _entry;
+  }
+}
+
+class _RecordingTimeTrackingNotifier extends TimeTrackingNotifier {
+  _RecordingTimeTrackingNotifier(super.repository);
+
+  int loadCalls = 0;
+
+  @override
+  Future<void> loadDailySummary() {
+    loadCalls++;
+    return super.loadDailySummary();
   }
 }
 
@@ -259,7 +273,11 @@ void main() {
       ..address = 'Площадка 1';
   }
 
-  Widget buildApp(Widget child, _RecordingTimeTrackingRepository repository) {
+  Widget buildApp(
+    Widget child,
+    _RecordingTimeTrackingRepository repository, {
+    TimeTrackingNotifier? notifier,
+  }) {
     return ProviderScope(
       overrides: [
         projectsProvider.overrideWith(
@@ -267,7 +285,7 @@ void main() {
         ),
         timeTrackingRepositoryProvider.overrideWithValue(repository),
         timeTrackingProvider.overrideWith(
-          (ref) => TimeTrackingNotifier(repository),
+          (ref) => notifier ?? TimeTrackingNotifier(repository),
         ),
       ],
       child: MaterialApp(home: child),
@@ -298,6 +316,29 @@ void main() {
     expect(find.text('Монтаж опалубки'), findsOneWidget);
     expect(find.text('Проверка геометрии'), findsOneWidget);
     expect(find.text('5.50 ч'), findsOneWidget);
+  });
+
+  testWidgets('refreshes daily summary after approving an entry', (tester) async {
+    final repository = _RecordingTimeTrackingRepository()
+      ..approvalCompleter = Completer<void>();
+    final notifier = _RecordingTimeTrackingNotifier(repository);
+    useLargeSurface(tester);
+
+    await tester.pumpWidget(
+      buildApp(const TimeTrackingScreen(), repository, notifier: notifier),
+    );
+    await pumpUi(tester);
+    final initialFetches = repository.dailySummaryFetches;
+    final initialLoadCalls = notifier.loadCalls;
+
+    await tester.tap(find.widgetWithText(FilledButton, 'Подтвердить'));
+    await tester.pump();
+    expect(repository.approvalReasons, [null]);
+    repository.approvalCompleter!.complete();
+    await pumpUi(tester);
+
+    expect(notifier.loadCalls, greaterThan(initialLoadCalls));
+    expect(repository.dailySummaryFetches, greaterThan(initialFetches));
   });
 
   testWidgets(
