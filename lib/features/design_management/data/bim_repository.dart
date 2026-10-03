@@ -90,6 +90,19 @@ class BimRepository {
       await _request('POST', '/model-versions/$id/viewer/preparation'),
     ),
   );
+  Future<BimPreparedViewer> viewerForOpening(
+    int id, {
+    bool Function()? isActive,
+  }) async {
+    final prepared = await viewer(id);
+    if (prepared.needsUpdate &&
+        prepared.canPrepare &&
+        (isActive?.call() ?? true)) {
+      return prepare(id);
+    }
+    return prepared;
+  }
+
   Future<BimJson> element(int id, int expressId) async =>
       MobileApiResponse.dataMap(
         await _request('GET', '/model-versions/$id/elements/$expressId'),

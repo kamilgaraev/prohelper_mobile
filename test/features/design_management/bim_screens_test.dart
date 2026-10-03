@@ -10,12 +10,83 @@ import 'package:prohelpers_mobile/features/design_management/data/bim_repository
 import 'package:prohelpers_mobile/features/design_management/domain/bim_provider.dart';
 import 'package:prohelpers_mobile/features/design_management/offline/bim_offline_provider.dart';
 import 'package:prohelpers_mobile/features/design_management/presentation/bim_catalog_screen.dart';
+import 'package:prohelpers_mobile/features/design_management/presentation/bim_viewer_screen.dart';
 import 'package:prohelpers_mobile/features/design_management/presentation/bim_issue_screens.dart';
 import 'package:prohelpers_mobile/features/projects/data/project_model.dart';
 import 'package:prohelpers_mobile/features/projects/data/projects_repository.dart';
 import 'package:prohelpers_mobile/features/projects/domain/projects_provider.dart';
 
 void main() {
+  testWidgets(
+    'viewer automatically checks preparation and stops after failure',
+    (tester) async {
+      final repository =
+          _Repository()
+            ..viewers = [
+              const BimPreparedViewer(versionId: 55, status: 'queued'),
+              const BimPreparedViewer(versionId: 55, status: 'failed'),
+            ];
+      await tester.pumpWidget(
+        _host(
+          repository,
+          const BimViewerScreen(projectId: 9, title: 'АР', versionIds: [55]),
+        ),
+      );
+      await tester.pump();
+      expect(find.text('Модель ожидает подготовки.'), findsOneWidget);
+      await tester.pump(const Duration(seconds: 3));
+      await tester.pump();
+      expect(find.text('Не удалось подготовить модель.'), findsOneWidget);
+      expect(repository.viewerReads, 2);
+      await tester.pump(const Duration(seconds: 6));
+      expect(repository.viewerReads, 2);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
+  testWidgets('viewer cancels preparation polling when closed', (tester) async {
+    final repository =
+        _Repository()
+          ..viewers = [
+            const BimPreparedViewer(versionId: 55, status: 'processing'),
+          ];
+    await tester.pumpWidget(
+      _host(
+        repository,
+        const BimViewerScreen(projectId: 9, title: 'АР', versionIds: [55]),
+      ),
+    );
+    await tester.pump();
+    expect(repository.viewerReads, 1);
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(seconds: 6));
+    expect(repository.viewerReads, 1);
+  });
+  testWidgets('ready model does not request another preparation', (
+    tester,
+  ) async {
+    final repository =
+        _Repository()
+          ..catalog = const BimPage(
+            items: [
+              BimModelVersion(
+                id: 55,
+                title: 'АР',
+                status: 'ready',
+                actions: [
+                  BimAction(key: 'prepare_viewer', label: 'Подготовить'),
+                ],
+              ),
+            ],
+          );
+    await tester.pumpWidget(
+      _host(repository, const BimCatalogScreen(projectId: 9)),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Готова к просмотру'), findsOneWidget);
+    expect(find.text('Подготовить к просмотру'), findsNothing);
+    expect(find.text('Открыть'), findsOneWidget);
+  });
   testWidgets('catalog shows forbidden and preserves offline entry', (
     tester,
   ) async {
@@ -269,6 +340,16 @@ class _Repository extends BimRepository {
   bool failSnapshotOnce = false;
   int creates = 0;
   int snapshots = 0;
+  int viewerReads = 0;
+  List<BimPreparedViewer> viewers = [];
+  @override
+  Future<BimPreparedViewer> viewer(int id) async {
+    final index =
+        viewerReads < viewers.length ? viewerReads : viewers.length - 1;
+    viewerReads++;
+    return viewers[index];
+  }
+
   BimJson? payload;
   final snapshotKeys = <String?>[];
   BimPage<BimModelVersion> catalog = const BimPage(items: []);

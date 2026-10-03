@@ -136,6 +136,13 @@ class BimPreparedViewer {
   final int sizeBytes;
   final BimJson raw;
   bool get ready => status == 'ready' && url != null;
+  bool get processing => status == 'queued' || status == 'processing';
+  bool get needsUpdate =>
+      status == 'missing' &&
+      bimMap(bimMap(raw['derivative'])['metadata'])['is_stale'] == true;
+  bool get canPrepare => bimMaps(raw['available_actions']).any(
+    (action) => action['key'] == 'prepare_viewer' && action['enabled'] == true,
+  );
   factory BimPreparedViewer.fromJson(int versionId, BimJson json) {
     final derivative = bimMap(json['derivative']);
     final source = derivative.isEmpty ? json : derivative;

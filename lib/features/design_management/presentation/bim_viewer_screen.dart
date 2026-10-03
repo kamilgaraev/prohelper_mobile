@@ -67,6 +67,8 @@ class _BimViewerScreenState extends ConsumerState<BimViewerScreen> {
   String? _error;
   List<BimPreparedViewer> _pending = [];
   int _propertyRequest = 0;
+  int _loadGeneration = 0;
+  Timer? _preparationPoll;
   @override
   void initState() {
     super.initState();
@@ -84,28 +86,45 @@ class _BimViewerScreenState extends ConsumerState<BimViewerScreen> {
 
   @override
   void dispose() {
+    _loadGeneration++;
+    _preparationPoll?.cancel();
     _viewerEvents?.cancel();
     _controller.dispose();
     super.dispose();
   }
 
-  Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-      _permissionDenied = false;
-    });
+  bool _isCurrentLoad(int generation) =>
+      mounted &&
+      generation == _loadGeneration &&
+      ref.read(projectsProvider).selectedProject?.serverId == widget.projectId;
+
+  Future<void> _load({bool refresh = false}) async {
+    if (!mounted) return;
+    _preparationPoll?.cancel();
+    final generation = ++_loadGeneration;
+    if (!refresh) {
+      setState(() {
+        _loading = true;
+        _error = null;
+        _permissionDenied = false;
+      });
+    }
     try {
       final models = <BimViewerModel>[];
       final pending = <BimPreparedViewer>[];
       var offline = widget.preferOffline;
       var canCreateIssue = false;
       for (final id in widget.versionIds) {
-        if (!mounted) return;
+        if (!_isCurrentLoad(generation)) return;
         BimPreparedViewer? prepared;
         if (!widget.preferOffline) {
           try {
-            prepared = await ref.read(bimRepositoryProvider).viewer(id);
+            prepared = await ref
+                .read(bimRepositoryProvider)
+                .viewerForOpening(
+                  id,
+                  isActive: () => _isCurrentLoad(generation),
+                );
           } on ApiException catch (error) {
             if (error.statusCode != null) rethrow;
             offline = true;
@@ -165,7 +184,7 @@ class _BimViewerScreenState extends ConsumerState<BimViewerScreen> {
           );
         }
       }
-      if (!mounted) return;
+      if (!_isCurrentLoad(generation)) return;
       setState(() {
         _offline = offline;
         _canCreateIssue = canCreateIssue && widget.canCreateIssue;
@@ -178,9 +197,17 @@ class _BimViewerScreenState extends ConsumerState<BimViewerScreen> {
                 )
                 : null;
         _loading = false;
+        _error = null;
       });
+      if (!offline &&
+          !_networkOffline &&
+          pending.any((model) => model.processing)) {
+        _preparationPoll = Timer(const Duration(seconds: 3), () {
+          if (_isCurrentLoad(generation)) _load(refresh: true);
+        });
+      }
     } catch (error) {
-      if (!mounted) return;
+      if (!_isCurrentLoad(generation)) return;
       setState(() {
         _loading = false;
         _error = UserMessage.fromError(error);
@@ -271,7 +298,7 @@ class _BimViewerScreenState extends ConsumerState<BimViewerScreen> {
                 value: pending.progress > 0 ? pending.progress / 100 : null,
               ),
             if (pending.failure != null) Text(pending.failure!),
-            if (widget.canPrepare && pending.status != 'unsupported')
+            if (pending.canPrepare && pending.status != 'unsupported')
               FilledButton(
                 onPressed:
                     _busy || _networkOffline
