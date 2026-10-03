@@ -8,6 +8,91 @@ import 'package:prohelpers_mobile/features/design_management/data/bim_models.dar
 import 'package:prohelpers_mobile/features/design_management/data/bim_repository.dart';
 
 void main() {
+  test('cancelled opening cannot start preparation', () async {
+    final methods = <String>[];
+    final repository = _repository((request) {
+      methods.add(request.method);
+      return {
+        'success': true,
+        'data': {
+          'derivative': {
+            'status': 'missing',
+            'metadata': {'is_stale': true},
+          },
+          'available_actions': [
+            {'key': 'prepare_viewer', 'enabled': true},
+          ],
+        },
+      };
+    });
+    await repository.viewerForOpening(55, isActive: () => false);
+    expect(methods, ['GET']);
+  });
+  test(
+    'opening an outdated model upgrades its shared preparation once',
+    () async {
+      final requests = <RequestOptions>[];
+      final repository = _repository((request) {
+        requests.add(request);
+        return {
+          'success': true,
+          'data': {
+            'derivative': {
+              'status': request.method == 'POST' ? 'queued' : 'missing',
+              'metadata': {'is_stale': request.method != 'POST'},
+            },
+            'available_actions': [
+              {'key': 'prepare_viewer', 'enabled': true},
+            ],
+          },
+        };
+      });
+      final result = await repository.viewerForOpening(55);
+      expect(result.status, 'queued');
+      expect(requests.map((request) => request.method), ['GET', 'POST']);
+      expect(
+        requests.last.path,
+        '/design-management/model-versions/55/viewer/preparation',
+      );
+    },
+  );
+
+  test(
+    'opening does not prepare ready, new, failed or unauthorized models',
+    () async {
+      for (final scenario in [
+        {
+          'status': 'ready',
+          'stale': false,
+          'allowed': true,
+          'url': 'https://files.test/model.frag',
+        },
+        {'status': 'missing', 'stale': false, 'allowed': true},
+        {'status': 'failed', 'stale': true, 'allowed': true},
+        {'status': 'missing', 'stale': true, 'allowed': false},
+      ]) {
+        final methods = <String>[];
+        final repository = _repository((request) {
+          methods.add(request.method);
+          return {
+            'success': true,
+            'data': {
+              'derivative': {
+                'status': scenario['status'],
+                'download_url': scenario['url'],
+                'metadata': {'is_stale': scenario['stale']},
+              },
+              'available_actions': [
+                {'key': 'prepare_viewer', 'enabled': scenario['allowed']},
+              ],
+            },
+          };
+        });
+        await repository.viewerForOpening(55);
+        expect(methods, ['GET'], reason: '$scenario');
+      }
+    },
+  );
   test('assignee search uses canonical search parameter', () async {
     RequestOptions? captured;
     final repository = _repository((request) {

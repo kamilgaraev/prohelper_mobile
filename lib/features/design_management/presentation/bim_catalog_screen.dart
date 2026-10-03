@@ -248,7 +248,8 @@ class _BimCatalogScreenState extends ConsumerState<BimCatalogScreen> {
                         icon: const Icon(Icons.view_in_ar_outlined),
                         label: const Text('Открыть'),
                       ),
-                      if (item.can('prepare_viewer') || item.can('prepare'))
+                      if (!item.ready &&
+                          (item.can('prepare_viewer') || item.can('prepare')))
                         TextButton(
                           onPressed:
                               _busy || !_online ? null : () => _prepare(item),
