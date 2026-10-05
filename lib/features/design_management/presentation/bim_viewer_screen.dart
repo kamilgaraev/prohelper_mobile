@@ -9,6 +9,7 @@ import '../../../core/widgets/app_loading_state.dart';
 import '../../../core/widgets/app_permission_state.dart';
 import '../../projects/domain/projects_provider.dart';
 import '../data/bim_models.dart';
+import 'bim_properties_panel.dart';
 import '../data/bim_repository.dart';
 import '../domain/bim_provider.dart';
 import '../domain/bim_issue_capture.dart';
@@ -523,23 +524,12 @@ class _BimViewerScreenState extends ConsumerState<BimViewerScreen> {
                       const Text(
                         'Свойства недоступны. Выберите элемент повторно.',
                       ),
-                    ..._propertyWidgets(_properties ?? {}, ''),
+                    BimPropertiesPanel(properties: _properties ?? {}),
                   ],
                 ),
           ),
         ),
   );
-  List<Widget> _propertyWidgets(BimJson json, String prefix) => [
-    for (final entry in json.entries)
-      if (entry.value is Map)
-        ..._propertyWidgets(bimMap(entry.value), '$prefix${entry.key} · ')
-      else
-        ListTile(
-          contentPadding: EdgeInsets.zero,
-          title: Text('$prefix${entry.key}'),
-          subtitle: SelectableText('${entry.value ?? '—'}'),
-        ),
-  ];
   Future<void> _run(Future<void> Function() operation) async {
     if (_busy) return;
     setState(() => _busy = true);

@@ -11,6 +11,7 @@ import 'bim_offline_record.dart';
 import 'bim_offline_store.dart';
 import 'bim_offline_transport.dart';
 import '../data/bim_models.dart';
+import '../data/bim_property_presentation.dart';
 
 class BimOfflineService {
   BimOfflineService({
@@ -821,7 +822,12 @@ class BimOfflineService {
       _guard(scope, epoch);
       bytes.add(chunk);
     }
-    return jsonDecode(utf8.decode(bytes.takeBytes())) as Map<String, dynamic>;
+    final payload = jsonDecode(utf8.decode(bytes.takeBytes())) as BimJson;
+    final display = bimLocalizedDisplay(
+      payload,
+      bimMap(manifest.json['localization']),
+    );
+    return {...payload, if (display != null) 'display': display};
   }
 
   Future<List<BimIssueDraft>> drafts() async {

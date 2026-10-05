@@ -131,6 +131,11 @@ class _Transport implements BimOfflineTransport {
         'size': properties.length,
         'mime': 'application/x-ndjson',
       },
+      'localization': {
+        'schema_version': 1,
+        'locale': 'ru',
+        'labels': {'expressid': 'Номер элемента IFC', 'name': 'Название'},
+      },
     });
   }
 
@@ -282,6 +287,8 @@ void main() {
       expect(bytes, transport.geometry.sublist(65000, 67000));
       final properties = await service.elementProperties(7, 42);
       expect(properties!['name'], 'Стена');
+      expect(properties['display']['locale'], 'ru');
+      expect(properties['display']['fields'][0]['label'], 'Номер элемента IFC');
       expect(store.elements.single.expressId, 42);
       final record = store.values.values.single;
       final encrypted = await File(record.propertiesPath).readAsBytes();
