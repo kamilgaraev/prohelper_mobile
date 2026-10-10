@@ -127,6 +127,21 @@ class ConstructionJournalDetailScreen extends ConsumerWidget {
                           state.journal!.name,
                           style: AppTypography.h2(context),
                         ),
+                        if (state.journal!.performingOrganizationName !=
+                            null) ...[
+                          const SizedBox(height: 6),
+                          Text(
+                            'Компания: ${state.journal!.performingOrganizationName}',
+                            style: AppTypography.bodyMedium(context),
+                          ),
+                        ],
+                        if (state.journal!.approvalContextMessage != null) ...[
+                          const SizedBox(height: 6),
+                          Text(
+                            state.journal!.approvalContextMessage!,
+                            style: AppTypography.bodyMedium(context),
+                          ),
+                        ],
                         const SizedBox(height: 6),
                         Text(
                           'Журнал №${state.journal!.journalNumber.isEmpty ? '-' : state.journal!.journalNumber}',
@@ -183,6 +198,13 @@ class ConstructionJournalDetailScreen extends ConsumerWidget {
                                           (_) => JournalEntryFormScreen(
                                             journalId: journalId,
                                             projectId: projectId,
+                                            submissionBlocker:
+                                                state.journal!.submissionBlocked
+                                                    ? state
+                                                            .journal!
+                                                            .approvalContextMessage ??
+                                                        'Настройте порядок согласования компаний проекта перед отправкой записи.'
+                                                    : null,
                                           ),
                                     ),
                                   );

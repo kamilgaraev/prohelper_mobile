@@ -1,4 +1,4 @@
-﻿class WorkflowTaskEntryModel {
+class WorkflowTaskEntryModel {
   const WorkflowTaskEntryModel({
     required this.id,
     required this.action,
@@ -163,9 +163,11 @@ class WorkflowTaskModel {
     return 'Выполненная работа #$id';
   }
 
-  bool get canApprove => availableActions.contains('approve');
-  bool get canReject => availableActions.contains('reject');
-  bool get canRequestChanges => availableActions.contains('request_changes');
+  bool get isJournalWork => workOriginType == 'journal';
+  bool get canApprove => !isJournalWork && availableActions.contains('approve');
+  bool get canReject => !isJournalWork && availableActions.contains('reject');
+  bool get canRequestChanges =>
+      !isJournalWork && availableActions.contains('request_changes');
   bool get canComment => availableActions.contains('comment');
 
   factory WorkflowTaskModel.fromJson(Map<String, dynamic> json) {

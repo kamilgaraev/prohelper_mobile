@@ -198,6 +198,13 @@ class _JournalEntryDetailScreenState
                       ] else
                         Row(children: [Expanded(child: titleAndDate), status]),
                       const SizedBox(height: 16),
+                      if (entry.performingOrganizationName != null) ...[
+                        Text(
+                          'Компания: ${entry.performingOrganizationName}',
+                          style: AppTypography.bodyMedium(context),
+                        ),
+                        const SizedBox(height: 8),
+                      ],
                       Text(
                         entry.workDescription,
                         style: AppTypography.bodyMedium(context),
@@ -258,6 +265,26 @@ class _JournalEntryDetailScreenState
             ],
             const SizedBox(height: 16),
             _WorkVolumesReadOnlyCard(volumes: entry.workVolumes),
+            if (entry.approvalHistory.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              _FieldResourcesCard(
+                title: 'История согласования',
+                lines:
+                    entry.approvalHistory
+                        .map(
+                          (event) => [
+                            event.eventLabel,
+                            if (event.actorName != null) event.actorName!,
+                            if (event.actorOrganizationName != null)
+                              event.actorOrganizationName!,
+                            if (event.occurredAt != null)
+                              _formatDate(event.occurredAt!),
+                            if (event.reason != null) event.reason!,
+                          ].join(' · '),
+                        )
+                        .toList(),
+              ),
+            ],
             if (entry.weatherConditions != null) ...[
               const SizedBox(height: 16),
               _FieldResourcesCard(
@@ -280,7 +307,7 @@ class _JournalEntryDetailScreenState
                     entry.workers
                         .map(
                           (worker) =>
-                              '${worker.specialty}: ${worker.workersCount} чел.${worker.hoursWorked == null ? '' : ', ${worker.hoursWorked} ч'}',
+                              '${worker.specialty}: ${worker.workersCount} чел.${worker.hoursWorked == null ? '' : ', ${worker.hoursWorked} ч на человека'}',
                         )
                         .toList(),
               ),
@@ -293,7 +320,7 @@ class _JournalEntryDetailScreenState
                     entry.equipment
                         .map(
                           (item) =>
-                              '${item.name}: ${item.quantity} ед.${item.hoursUsed == null ? '' : ', ${item.hoursUsed} моточ.'}',
+                              '${item.name}: ${item.quantity} ед.${item.hoursUsed == null ? '' : ', ${item.hoursUsed} ч на единицу техники'}',
                         )
                         .toList(),
               ),
@@ -589,16 +616,29 @@ class _WorkVolumesReadOnlyCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      volume.title!,
+                      volume.title ??
+                          volume.workName ??
+                          volume.estimateItem?.name ??
+                          'Работа',
                       style: AppTypography.bodyMedium(
                         context,
                       ).copyWith(fontWeight: FontWeight.w700),
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      '${volume.quantity} ${volume.measurementUnitName}',
+                      '${volume.quantity} ${volume.measurementUnitName ?? volume.estimateItem?.measurementUnit?.displayName ?? '-'}',
                       style: AppTypography.caption(context),
                     ),
+                    if (volume.estimateItem?.estimatePlannedQuantity != null)
+                      Text(
+                        'План по смете: ${volume.estimateItem!.estimatePlannedQuantity}',
+                        style: AppTypography.caption(context),
+                      ),
+                    if (volume.estimateItem?.contractAgreedQuantity != null)
+                      Text(
+                        'Согласовано по договору: ${volume.estimateItem!.contractAgreedQuantity}',
+                        style: AppTypography.caption(context),
+                      ),
                     if ((volume.notes ?? '').trim().isNotEmpty) ...[
                       const SizedBox(height: 2),
                       Text(

@@ -1,7 +1,16 @@
-﻿import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_test/flutter_test.dart';
 import 'package:prohelpers_mobile/features/workflow_management/data/workflow_task_model.dart';
 
 void main() {
+  test('journal facts cannot expose ordinary approval actions', () {
+    final task = WorkflowTaskModel.fromJson(
+      _workflowTaskJson()..['work_origin_type'] = 'journal',
+    );
+    expect(task.isJournalWork, isTrue);
+    expect(task.canApprove, isFalse);
+    expect(task.canReject, isFalse);
+    expect(task.canRequestChanges, isFalse);
+  });
   test('parses workflow list contract with status history and actions', () {
     final result = WorkflowTaskListResult.fromJson({
       'items': [_workflowTaskJson()],

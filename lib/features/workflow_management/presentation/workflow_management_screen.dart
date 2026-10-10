@@ -744,6 +744,13 @@ class _WorkflowTaskCard extends StatelessWidget {
                 ),
             ],
           ),
+          if (task.isJournalWork) ...[
+            const SizedBox(height: 8),
+            Text(
+              'Согласуйте исходную запись в журнале работ.',
+              style: AppTypography.bodyMedium(context),
+            ),
+          ],
           if (task.notes != null) ...[
             const SizedBox(height: 8),
             Text(
@@ -888,6 +895,11 @@ class _WorkflowTaskDetail extends StatelessWidget {
           const SizedBox(height: 16),
           if (task.projectLabel != null)
             _DetailLine(label: 'Объект', value: task.projectLabel!),
+          if (task.isJournalWork)
+            const _DetailLine(
+              label: 'Согласование',
+              value: 'Откройте исходную запись в журнале работ',
+            ),
           if (task.contractLabel != null)
             _DetailLine(label: 'Договор', value: task.contractLabel!),
           if (task.contractorLabel != null)
