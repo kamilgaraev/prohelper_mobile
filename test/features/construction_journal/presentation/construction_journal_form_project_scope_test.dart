@@ -239,7 +239,13 @@ void main() {
     await tester.scrollUntilVisible(
       find.text('Сохранить черновик'),
       400,
-      scrollable: find.byType(Scrollable).last,
+      scrollable:
+          find
+              .descendant(
+                of: find.byType(JournalEntryFormScreen),
+                matching: find.byType(Scrollable),
+              )
+              .first,
     );
     final save =
         tester

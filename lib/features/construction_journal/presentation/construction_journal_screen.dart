@@ -234,6 +234,14 @@ class _ConstructionJournalScreenState
                                 journal.name,
                                 style: AppTypography.h2(context),
                               ),
+                              if (journal.performingOrganizationName !=
+                                  null) ...[
+                                const SizedBox(height: 6),
+                                Text(
+                                  'Компания: ${journal.performingOrganizationName}',
+                                  style: AppTypography.bodyMedium(context),
+                                ),
+                              ],
                               const SizedBox(height: 6),
                               Text(
                                 'Журнал №${journal.journalNumber.isEmpty ? '-' : journal.journalNumber}',

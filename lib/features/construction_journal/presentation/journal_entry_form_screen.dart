@@ -12,6 +12,7 @@ import '../../projects/domain/projects_provider.dart';
 import '../data/construction_journal_models.dart';
 import '../data/construction_journal_repository.dart';
 import '../data/journal_entry_operation_recovery.dart';
+import '../domain/journal_resource_suggestions.dart';
 
 class JournalEntryFormScreen extends ConsumerStatefulWidget {
   const JournalEntryFormScreen({
@@ -19,11 +20,13 @@ class JournalEntryFormScreen extends ConsumerStatefulWidget {
     required this.journalId,
     this.projectId,
     this.initialEntry,
+    this.submissionBlocker,
   });
 
   final int journalId;
   final int? projectId;
   final ConstructionJournalEntryModel? initialEntry;
+  final String? submissionBlocker;
 
   @override
   ConsumerState<JournalEntryFormScreen> createState() =>
@@ -46,6 +49,7 @@ class _JournalEntryFormScreenState
   final List<_MaterialUsageInput> _materials = [];
   final List<_WorkerInput> _workers = [];
   final List<_EquipmentInput> _equipment = [];
+  final Set<String> _dismissedSuggestions = {};
   DateTime? _entryDate;
   ConstructionJournalEntryFormOptions? _options;
   int? _selectedEstimateId;
@@ -67,6 +71,10 @@ class _JournalEntryFormScreenState
   int? _boundProjectId;
 
   bool get _isEdit => widget.initialEntry != null;
+  bool get _canSubmit =>
+      widget.submissionBlocker == null &&
+      (!_isEdit ||
+          widget.initialEntry!.hasAction(ConstructionJournalActionKeys.submit));
 
   bool get _isBoundProjectCurrent =>
       _boundProjectId == null ||
@@ -291,6 +299,9 @@ class _JournalEntryFormScreenState
 
   void _restorePayload(Map<String, dynamic> payload) {
     _entryDate = DateTime.tryParse(payload['entry_date']?.toString() ?? '');
+    _selectedEstimateId = int.tryParse(
+      payload['estimate_id']?.toString() ?? '',
+    );
     _descriptionController.text = payload['work_description']?.toString() ?? '';
     _problemsController.text =
         payload['problems_description']?.toString() ?? '';
@@ -439,6 +450,13 @@ class _JournalEntryFormScreenState
         controller: _formScrollController,
         padding: const EdgeInsets.all(16),
         children: [
+          if (widget.submissionBlocker != null) ...[
+            Text(
+              widget.submissionBlocker!,
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+            const SizedBox(height: 12),
+          ],
           if (_syncStatusText != null)
             Card(
               color: Theme.of(context).colorScheme.surfaceContainerHighest,
@@ -556,6 +574,7 @@ class _JournalEntryFormScreenState
                       _isSaving ||
                               _isRestoring ||
                               _mustReviewBeforeRetry ||
+                              !_canSubmit ||
                               projectChanged
                           ? null
                           : () => _save(isDraft: false),
@@ -625,11 +644,16 @@ class _JournalEntryFormScreenState
         ),
         const SizedBox(height: 8),
         if (_selectedEstimateId != null) _buildEstimateItemPicker(),
+        TextButton.icon(
+          onPressed: () => setState(() => _workVolumes.add(_WorkVolumeInput())),
+          icon: const Icon(Icons.add_rounded),
+          label: const Text('Добавить работу без сметы'),
+        ),
         if (_workVolumes.isEmpty)
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 8),
             child: Text(
-              'Список работ пуст. Выберите позицию из утвержденной сметы.',
+              'Выберите позицию сметы или добавьте работу без сметы.',
             ),
           ),
         ..._workVolumes.asMap().entries.map(
@@ -638,10 +662,19 @@ class _JournalEntryFormScreenState
             child: _WorkVolumeCard(
               input: entry.value,
               workTypes: _workTypes,
-              onChanged: () => setState(() {}),
+              measurementUnits:
+                  _options?.measurementUnits.isNotEmpty == true
+                      ? _options!.measurementUnits
+                      : {
+                        for (final type in _workTypes)
+                          if (type.measurementUnit != null)
+                            type.measurementUnit!.id: type.measurementUnit!,
+                      }.values.toList(),
+              onChanged: () => setState(_refreshResourceSuggestions),
               onRemove: () {
                 setState(() {
                   _workVolumes.removeAt(entry.key).dispose();
+                  _refreshResourceSuggestions();
                 });
               },
             ),
@@ -723,10 +756,15 @@ class _JournalEntryFormScreenState
               .map(
                 (entry) => _WorkerCard(
                   input: entry.value,
+                  onChanged: () => setState(() {}),
                   onRemove:
-                      () => setState(
-                        () => _workers.removeAt(entry.key).dispose(),
-                      ),
+                      () => setState(() {
+                        final input = _workers.removeAt(entry.key);
+                        if (input.suggestionKey != null) {
+                          _dismissedSuggestions.add(input.suggestionKey!);
+                        }
+                        input.dispose();
+                      }),
                 ),
               )
               .toList(),
@@ -746,10 +784,15 @@ class _JournalEntryFormScreenState
               .map(
                 (entry) => _EquipmentCard(
                   input: entry.value,
+                  onChanged: () => setState(() {}),
                   onRemove:
-                      () => setState(
-                        () => _equipment.removeAt(entry.key).dispose(),
-                      ),
+                      () => setState(() {
+                        final input = _equipment.removeAt(entry.key);
+                        if (input.suggestionKey != null) {
+                          _dismissedSuggestions.add(input.suggestionKey!);
+                        }
+                        input.dispose();
+                      }),
                 ),
               )
               .toList(),
@@ -825,7 +868,11 @@ class _JournalEntryFormScreenState
               input: entry.value,
               onRemove: () {
                 setState(() {
-                  _materials.removeAt(entry.key).dispose();
+                  final input = _materials.removeAt(entry.key);
+                  if (input.suggestionKey != null) {
+                    _dismissedSuggestions.add(input.suggestionKey!);
+                  }
+                  input.dispose();
                 });
               },
             ),
@@ -934,6 +981,19 @@ class _JournalEntryFormScreenState
       if (mounted) {
         setState(() {
           _options = options;
+          for (final volume in _workVolumes) {
+            final items = options.estimates
+                .expand((estimate) => estimate.items)
+                .where((item) => item.id == volume.estimateItemId);
+            if (items.isNotEmpty) {
+              volume.estimateItem ??= items.first;
+              volume.sourceLabel = volume.estimateItem!.displayName;
+              volume.measurementUnitId ??=
+                  volume.estimateItem!.measurementUnitId;
+              volume.measurementUnitName ??=
+                  volume.estimateItem!.measurementUnit?.displayName;
+            }
+          }
           _formOptionsError = null;
         });
       }
@@ -962,6 +1022,12 @@ class _JournalEntryFormScreenState
     }
 
     final item = selected.first;
+    if (_workVolumes.any((volume) => volume.estimateItemId == item.id)) {
+      _showMessage(
+        'Эта позиция уже добавлена. Измените её фактическое количество.',
+      );
+      return;
+    }
     setState(() {
       _workVolumes.add(
         _WorkVolumeInput.fromEstimateItem(
@@ -980,6 +1046,130 @@ class _JournalEntryFormScreenState
 
     final found = _workTypes.where((workType) => workType.id == id);
     return found.isEmpty ? null : found.first;
+  }
+
+  void _refreshResourceSuggestions() {
+    final suggestions = journalResourceSuggestions([
+      for (final volume in _workVolumes)
+        if (volume.estimateItem != null && volume.suggestionsEnabled)
+          (
+            item: volume.estimateItem!,
+            quantity: _parseDecimal(volume.quantityController.text) ?? 0,
+          ),
+    ]);
+    final active = suggestions.map((item) => item.key).toSet();
+    _materials.removeWhere((item) {
+      if (item.suggestionKey != null &&
+          !active.contains(item.suggestionKey) &&
+          canUpdateJournalSuggestion(
+            item.quantityController.text,
+            item.lastSuggestion,
+          )) {
+        item.dispose();
+        return true;
+      }
+      return false;
+    });
+    _workers.removeWhere((item) {
+      if (item.suggestionKey != null &&
+          !active.contains(item.suggestionKey) &&
+          canUpdateJournalSuggestion(
+            item.hoursController.text,
+            item.lastSuggestion,
+          )) {
+        item.dispose();
+        return true;
+      }
+      return false;
+    });
+    _equipment.removeWhere((item) {
+      if (item.suggestionKey != null &&
+          !active.contains(item.suggestionKey) &&
+          canUpdateJournalSuggestion(
+            item.hoursController.text,
+            item.lastSuggestion,
+          )) {
+        item.dispose();
+        return true;
+      }
+      return false;
+    });
+    for (final suggestion in suggestions) {
+      if (_dismissedSuggestions.contains(suggestion.key)) continue;
+      final resource = suggestion.resource;
+      final quantity = journalSuggestedQuantity(suggestion.quantity);
+      switch (resource.resourceType) {
+        case 'material':
+          if (resource.measurementUnit == null) continue;
+          final existing = _materials.where(
+            (item) =>
+                item.suggestionKey == suggestion.key ||
+                (item.estimateItemId == resource.estimateItemId &&
+                    item.materialId == resource.materialId &&
+                    item.materialName == resource.name),
+          );
+          if (existing.isEmpty) {
+            _materials.add(
+              _MaterialUsageInput(
+                materialId: resource.materialId,
+                estimateItemId: resource.estimateItemId,
+                projectMaterialDeliveryId: null,
+                custodyWarehouseId: null,
+                materialName: resource.name,
+                measurementUnit: resource.measurementUnit?.displayName ?? '-',
+                quantity: quantity,
+                suggestionKey: suggestion.key,
+              ),
+            );
+          } else {
+            existing.first.updateSuggestion(quantity);
+          }
+        case 'labor':
+          final existing = _workers.where(
+            (item) =>
+                item.suggestionKey == suggestion.key ||
+                (item.estimateItemId == resource.estimateItemId &&
+                    item.specialtyController.text == resource.name),
+          );
+          if (existing.isEmpty) {
+            _workers.add(
+              _WorkerInput(
+                estimateItemId: resource.estimateItemId,
+                specialty: resource.name,
+                count: '',
+                totalNormHours: suggestion.quantity,
+                isGeneratedSuggestion: true,
+                suggestionKey: suggestion.key,
+              ),
+            );
+          } else {
+            existing.first.updateSuggestion(suggestion.quantity);
+          }
+        case 'machine':
+        case 'machinery':
+        case 'equipment':
+          final existing = _equipment.where(
+            (item) =>
+                item.suggestionKey == suggestion.key ||
+                (item.estimateItemId == resource.estimateItemId &&
+                    item.nameController.text == resource.name),
+          );
+          if (existing.isEmpty) {
+            _equipment.add(
+              _EquipmentInput(
+                estimateItemId: resource.estimateItemId,
+                name: resource.name,
+                quantity: '',
+                totalNormHours: suggestion.quantity,
+                isGeneratedSuggestion: true,
+                suggestionKey: suggestion.key,
+              ),
+            );
+          } else {
+            existing.first.updateSuggestion(suggestion.quantity);
+          }
+      }
+    }
   }
 
   void _addProjectMaterial(int? deliveryId) {
@@ -1002,6 +1192,13 @@ class _JournalEntryFormScreenState
   }
 
   Future<void> _save({required bool isDraft}) async {
+    if (!isDraft && !_canSubmit) {
+      _showMessage(
+        widget.submissionBlocker ??
+            'Сохраните изменения и проверьте доступные действия записи.',
+      );
+      return;
+    }
     if (_isSaving || _isRestoring) return;
     if (!_isBoundProjectCurrent) {
       _showMessage('Выбран другой объект. Закройте форму и откройте её снова.');
@@ -1069,12 +1266,18 @@ class _JournalEntryFormScreenState
       _showMessage('Укажите количество для каждого выбранного материала.');
       return;
     }
-    if (workers.length != _workers.length) {
-      _showMessage('Заполните специальность, количество и часы работников.');
+    if (workers.length !=
+        _workers.where((worker) => !worker.isIncompleteSuggestion).length) {
+      _showMessage(
+        'Укажите специальность и количество работников. Часы, если указаны, должны быть неотрицательными.',
+      );
       return;
     }
-    if (equipment.length != _equipment.length) {
-      _showMessage('Заполните название, количество и часы работы техники.');
+    if (equipment.length !=
+        _equipment.where((item) => !item.isIncompleteSuggestion).length) {
+      _showMessage(
+        'Укажите название и количество техники. Часы, если указаны, должны быть неотрицательными.',
+      );
       return;
     }
 
@@ -1306,7 +1509,8 @@ class _JournalEntryFormScreenState
             return null;
           }
 
-          if (volume.estimateItemId == null && volume.workTypeId == null) {
+          if (volume.estimateItemId == null &&
+              volume.nameController.text.trim().isEmpty) {
             return null;
           }
 
@@ -1322,6 +1526,16 @@ class _JournalEntryFormScreenState
             quantity: quantity,
             measurementUnitId: volume.measurementUnitId,
             notes: volume.notesController.text,
+            workName:
+                volume.estimateItemId == null
+                    ? volume.nameController.text.trim()
+                    : null,
+            title:
+                volume.estimateItemId == null
+                    ? volume.nameController.text.trim()
+                    : volume.sourceLabel,
+            measurementUnitName: volume.measurementUnitName,
+            estimateItem: volume.estimateItem,
           );
         })
         .whereType<ConstructionJournalWorkVolumeModel>()
@@ -1340,6 +1554,7 @@ class _JournalEntryFormScreenState
           }
 
           return ConstructionJournalMaterialUsageModel(
+            id: material.id,
             materialId: material.materialId,
             estimateItemId: material.estimateItemId,
             projectMaterialDeliveryId: material.projectMaterialDeliveryId,
@@ -1370,14 +1585,15 @@ class _JournalEntryFormScreenState
 
   List<ConstructionJournalWorkerModel> _normalizedWorkers() =>
       _workers
+          .where((worker) => !worker.isIncompleteSuggestion)
           .map((worker) {
             final count = int.tryParse(worker.countController.text.trim());
             final hours = _parseDecimal(worker.hoursController.text);
             if (worker.specialtyController.text.trim().isEmpty ||
                 count == null ||
                 count < 1 ||
-                hours == null ||
-                hours < 0) {
+                (worker.hoursController.text.trim().isNotEmpty &&
+                    (hours == null || !hours.isFinite || hours < 0))) {
               return null;
             }
             return ConstructionJournalWorkerModel(
@@ -1393,14 +1609,15 @@ class _JournalEntryFormScreenState
 
   List<ConstructionJournalEquipmentModel> _normalizedEquipment() =>
       _equipment
+          .where((item) => !item.isIncompleteSuggestion)
           .map((item) {
             final quantity = int.tryParse(item.quantityController.text.trim());
             final hours = _parseDecimal(item.hoursController.text);
             if (item.nameController.text.trim().isEmpty ||
                 quantity == null ||
                 quantity < 1 ||
-                hours == null ||
-                hours < 0) {
+                (item.hoursController.text.trim().isNotEmpty &&
+                    (hours == null || !hours.isFinite || hours < 0))) {
               return null;
             }
             return ConstructionJournalEquipmentModel(
@@ -1429,12 +1646,14 @@ class _WorkVolumeCard extends StatelessWidget {
   const _WorkVolumeCard({
     required this.input,
     required this.workTypes,
+    required this.measurementUnits,
     required this.onChanged,
     required this.onRemove,
   });
 
   final _WorkVolumeInput input;
   final List<ConstructionJournalWorkTypeOption> workTypes;
+  final List<ConstructionJournalMeasurementUnitRef> measurementUnits;
   final VoidCallback onChanged;
   final VoidCallback onRemove;
 
@@ -1447,6 +1666,16 @@ class _WorkVolumeCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            if (input.estimateItemId == null) ...[
+              TextField(
+                controller: input.nameController,
+                decoration: const InputDecoration(
+                  labelText: 'Наименование работы',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 8),
+            ],
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -1497,6 +1726,34 @@ class _WorkVolumeCard extends StatelessWidget {
                 style: Theme.of(context).textTheme.bodySmall,
               ),
             ],
+            if (input.estimateItem?.estimatePlannedQuantity != null)
+              Text(
+                'План по смете: ${_formatMaterialQuantity(input.estimateItem!.estimatePlannedQuantity!)} ${input.measurementUnitName ?? ''}',
+              ),
+            if (input.estimateItem?.contractAgreedQuantity != null)
+              Text(
+                'Согласовано по договору: ${_formatMaterialQuantity(input.estimateItem!.contractAgreedQuantity!)} ${input.measurementUnitName ?? ''}',
+              ),
+            if (input.estimateItem != null &&
+                (double.tryParse(
+                          input.quantityController.text.replaceAll(',', '.'),
+                        ) ??
+                        0) >
+                    0)
+              for (final suggestion in journalResourceSuggestions([
+                (
+                  item: input.estimateItem!,
+                  quantity:
+                      double.tryParse(
+                        input.quantityController.text.replaceAll(',', '.'),
+                      ) ??
+                      0,
+                ),
+              ]))
+                Text(
+                  'По норме: ${suggestion.resource.name} — ${journalSuggestedQuantity(suggestion.quantity)} ${suggestion.resource.measurementUnit?.displayName ?? 'единица не указана'}',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
             const SizedBox(height: 8),
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1505,6 +1762,7 @@ class _WorkVolumeCard extends StatelessWidget {
                   flex: 2,
                   child: TextField(
                     controller: input.quantityController,
+                    onChanged: (_) => onChanged(),
                     keyboardType: const TextInputType.numberWithOptions(
                       decimal: true,
                     ),
@@ -1519,13 +1777,52 @@ class _WorkVolumeCard extends StatelessWidget {
                 ),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: InputDecorator(
-                    decoration: const InputDecoration(
-                      labelText: 'Ед. изм.',
-                      border: OutlineInputBorder(),
-                    ),
-                    child: Text(input.measurementUnitName ?? '-'),
-                  ),
+                  child:
+                      input.estimateItemId == null
+                          ? DropdownButtonFormField<int>(
+                            key: ValueKey(
+                              '${identityHashCode(input)}:${input.measurementUnitId}',
+                            ),
+                            isExpanded: true,
+                            initialValue:
+                                measurementUnits.any(
+                                      (unit) =>
+                                          unit.id == input.measurementUnitId,
+                                    )
+                                    ? input.measurementUnitId
+                                    : null,
+                            decoration: const InputDecoration(
+                              labelText: 'Ед. изм.',
+                              border: OutlineInputBorder(),
+                            ),
+                            items:
+                                measurementUnits
+                                    .map(
+                                      (unit) => DropdownMenuItem(
+                                        value: unit.id,
+                                        child: Text(unit.displayName),
+                                      ),
+                                    )
+                                    .toList(),
+                            onChanged: (value) {
+                              final selected = measurementUnits.where(
+                                (unit) => unit.id == value,
+                              );
+                              input.measurementUnitId = value;
+                              input.measurementUnitName =
+                                  selected.isEmpty
+                                      ? null
+                                      : selected.first.displayName;
+                              onChanged();
+                            },
+                          )
+                          : InputDecorator(
+                            decoration: const InputDecoration(
+                              labelText: 'Ед. изм.',
+                              border: OutlineInputBorder(),
+                            ),
+                            child: Text(input.measurementUnitName ?? '-'),
+                          ),
                 ),
               ],
             ),
@@ -1552,9 +1849,13 @@ class _WorkVolumeInput {
     this.measurementUnitId,
     this.measurementUnitName,
     this.sourceLabel,
+    this.estimateItem,
+    this.suggestionsEnabled = false,
+    String workName = '',
     String quantity = '',
     String notes = '',
-  }) : quantityController = TextEditingController(text: quantity),
+  }) : nameController = TextEditingController(text: workName),
+       quantityController = TextEditingController(text: quantity),
        notesController = TextEditingController(text: notes);
 
   final int? id;
@@ -1563,6 +1864,9 @@ class _WorkVolumeInput {
   int? measurementUnitId;
   String? measurementUnitName;
   String? sourceLabel;
+  ConstructionJournalEstimateItemOption? estimateItem;
+  final bool suggestionsEnabled;
+  final TextEditingController nameController;
   final TextEditingController quantityController;
   final TextEditingController notesController;
 
@@ -1572,8 +1876,14 @@ class _WorkVolumeInput {
       estimateItemId: model.estimateItemId,
       workTypeId: model.workTypeId,
       measurementUnitId: model.measurementUnitId,
-      measurementUnitName: model.measurementUnitName,
+      measurementUnitName:
+          model.measurementUnitName ??
+          model.estimateItem?.measurementUnit?.displayName,
       sourceLabel: model.title,
+      workName:
+          model.workName ??
+          (model.estimateItemId == null ? model.title ?? '' : ''),
+      estimateItem: model.estimateItem,
       quantity: model.quantity == 0 ? '' : model.quantity.toString(),
       notes: model.notes ?? '',
     );
@@ -1591,8 +1901,10 @@ class _WorkVolumeInput {
       measurementUnitId: item.measurementUnitId ?? workType?.measurementUnitId,
       measurementUnitName: measurementUnit?.displayName,
       sourceLabel: item.displayName,
+      estimateItem: item,
+      suggestionsEnabled: true,
       quantity: '',
-      notes: 'Позиция сметы: ${item.positionNumber ?? item.name}',
+      notes: '',
     );
   }
 
@@ -1608,6 +1920,7 @@ class _WorkVolumeInput {
   }
 
   void dispose() {
+    nameController.dispose();
     quantityController.dispose();
     notesController.dispose();
   }
@@ -1691,10 +2004,15 @@ class _MaterialUsageCard extends StatelessWidget {
 }
 
 class _WorkerCard extends StatelessWidget {
-  const _WorkerCard({required this.input, required this.onRemove});
+  const _WorkerCard({
+    required this.input,
+    required this.onRemove,
+    required this.onChanged,
+  });
 
   final _WorkerInput input;
   final VoidCallback onRemove;
+  final VoidCallback onChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -1727,14 +2045,26 @@ class _WorkerCard extends StatelessWidget {
                     input.countController,
                     'Количество',
                     decimal: false,
+                    onChanged: (_) {
+                      input.updateHoursForCount();
+                      onChanged();
+                    },
                   ),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: _compactNumberField(input.hoursController, 'Часы'),
+                  child: _compactNumberField(
+                    input.hoursController,
+                    'Часов на человека',
+                  ),
                 ),
               ],
             ),
+            if (input.totalNormHours != null)
+              Text(
+                'По норме всего: ${journalSuggestedQuantity(input.totalNormHours!)} чел.-ч',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
           ],
         ),
       ),
@@ -1743,10 +2073,15 @@ class _WorkerCard extends StatelessWidget {
 }
 
 class _EquipmentCard extends StatelessWidget {
-  const _EquipmentCard({required this.input, required this.onRemove});
+  const _EquipmentCard({
+    required this.input,
+    required this.onRemove,
+    required this.onChanged,
+  });
 
   final _EquipmentInput input;
   final VoidCallback onRemove;
+  final VoidCallback onChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -1783,14 +2118,26 @@ class _EquipmentCard extends StatelessWidget {
                     input.quantityController,
                     'Количество',
                     decimal: false,
+                    onChanged: (_) {
+                      input.updateHoursForCount();
+                      onChanged();
+                    },
                   ),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: _compactNumberField(input.hoursController, 'Моточасы'),
+                  child: _compactNumberField(
+                    input.hoursController,
+                    'Часов на единицу техники',
+                  ),
                 ),
               ],
             ),
+            if (input.totalNormHours != null)
+              Text(
+                'По норме всего: ${journalSuggestedQuantity(input.totalNormHours!)} маш.-ч',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
           ],
         ),
       ),
@@ -1802,9 +2149,11 @@ Widget _compactNumberField(
   TextEditingController controller,
   String label, {
   bool decimal = true,
+  ValueChanged<String>? onChanged,
 }) {
   return TextField(
     controller: controller,
+    onChanged: onChanged,
     keyboardType: TextInputType.numberWithOptions(decimal: decimal),
     inputFormatters: [
       FilteringTextInputFormatter.allow(
@@ -1819,18 +2168,47 @@ class _WorkerInput {
   _WorkerInput({
     this.id,
     this.estimateItemId,
+    this.suggestionKey,
+    this.totalNormHours,
+    this.isGeneratedSuggestion = false,
     String specialty = '',
     String count = '1',
     String hours = '',
   }) : specialtyController = TextEditingController(text: specialty),
        countController = TextEditingController(text: count),
-       hoursController = TextEditingController(text: hours);
+       hoursController = TextEditingController(text: hours),
+       lastSuggestion = suggestionKey == null ? null : hours;
 
   final int? id;
   final int? estimateItemId;
+  final String? suggestionKey;
+  String? lastSuggestion;
+  double? totalNormHours;
+  final bool isGeneratedSuggestion;
+  bool get isIncompleteSuggestion =>
+      isGeneratedSuggestion &&
+      (countController.text.trim().isEmpty ||
+          hoursController.text.trim().isEmpty);
   final TextEditingController specialtyController;
   final TextEditingController countController;
   final TextEditingController hoursController;
+
+  void updateSuggestion(double value) {
+    totalNormHours = value;
+    updateHoursForCount();
+  }
+
+  void updateHoursForCount() {
+    final total = totalNormHours;
+    if (total == null) return;
+    if (canUpdateJournalSuggestion(hoursController.text, lastSuggestion)) {
+      final value = journalNormHoursPerUnit(total, countController.text) ?? '';
+      hoursController.text = value;
+      lastSuggestion = value;
+    } else {
+      lastSuggestion = null;
+    }
+  }
 
   factory _WorkerInput.fromModel(ConstructionJournalWorkerModel model) =>
       _WorkerInput(
@@ -1852,6 +2230,9 @@ class _EquipmentInput {
   _EquipmentInput({
     this.id,
     this.estimateItemId,
+    this.suggestionKey,
+    this.totalNormHours,
+    this.isGeneratedSuggestion = false,
     String name = '',
     String type = '',
     String quantity = '1',
@@ -1859,14 +2240,41 @@ class _EquipmentInput {
   }) : nameController = TextEditingController(text: name),
        typeController = TextEditingController(text: type),
        quantityController = TextEditingController(text: quantity),
-       hoursController = TextEditingController(text: hours);
+       hoursController = TextEditingController(text: hours),
+       lastSuggestion = suggestionKey == null ? null : hours;
 
   final int? id;
   final int? estimateItemId;
+  final String? suggestionKey;
+  String? lastSuggestion;
+  double? totalNormHours;
+  final bool isGeneratedSuggestion;
+  bool get isIncompleteSuggestion =>
+      isGeneratedSuggestion &&
+      (quantityController.text.trim().isEmpty ||
+          hoursController.text.trim().isEmpty);
   final TextEditingController nameController;
   final TextEditingController typeController;
   final TextEditingController quantityController;
   final TextEditingController hoursController;
+
+  void updateSuggestion(double value) {
+    totalNormHours = value;
+    updateHoursForCount();
+  }
+
+  void updateHoursForCount() {
+    final total = totalNormHours;
+    if (total == null) return;
+    if (canUpdateJournalSuggestion(hoursController.text, lastSuggestion)) {
+      final value =
+          journalNormHoursPerUnit(total, quantityController.text) ?? '';
+      hoursController.text = value;
+      lastSuggestion = value;
+    } else {
+      lastSuggestion = null;
+    }
+  }
 
   factory _EquipmentInput.fromModel(ConstructionJournalEquipmentModel model) =>
       _EquipmentInput(
@@ -1888,8 +2296,10 @@ class _EquipmentInput {
 
 class _MaterialUsageInput {
   _MaterialUsageInput({
+    this.id,
     required this.materialId,
     this.estimateItemId,
+    this.suggestionKey,
     required this.projectMaterialDeliveryId,
     required this.custodyWarehouseId,
     required this.materialName,
@@ -1897,16 +2307,29 @@ class _MaterialUsageInput {
     String quantity = '',
     String notes = '',
   }) : quantityController = TextEditingController(text: quantity),
-       notesController = TextEditingController(text: notes);
+       notesController = TextEditingController(text: notes),
+       lastSuggestion = suggestionKey == null ? null : quantity;
 
+  final int? id;
   final int? materialId;
   final int? estimateItemId;
+  final String? suggestionKey;
+  String? lastSuggestion;
   final int? projectMaterialDeliveryId;
   final int? custodyWarehouseId;
   final String materialName;
   final String measurementUnit;
   final TextEditingController quantityController;
   final TextEditingController notesController;
+
+  void updateSuggestion(String value) {
+    if (canUpdateJournalSuggestion(quantityController.text, lastSuggestion)) {
+      quantityController.text = value;
+      lastSuggestion = value;
+    } else {
+      lastSuggestion = null;
+    }
+  }
 
   factory _MaterialUsageInput.fromProjectMaterial(
     ConstructionJournalProjectMaterialOption material,
@@ -1930,6 +2353,7 @@ class _MaterialUsageInput {
     ConstructionJournalMaterialUsageModel material,
   ) {
     return _MaterialUsageInput(
+      id: material.id,
       materialId: material.materialId,
       estimateItemId: material.estimateItemId,
       projectMaterialDeliveryId: material.projectMaterialDeliveryId,
