@@ -11,6 +11,50 @@ import 'package:prohelpers_mobile/core/storage/secure_storage_service.dart';
 import 'package:prohelpers_mobile/features/auth/domain/auth_session_provider.dart';
 
 void main() {
+  test(
+    'refresh waits for a pending offline save and keeps its new token',
+    () async {
+      final storage = _BlockingOfflineStorage()..token = 'expired-token';
+      final refreshReturned = Completer<void>();
+      final adapter = _AuthHttpAdapter();
+      adapter.respond = (options) async {
+        if (options.path == '/auth/refresh') {
+          refreshReturned.complete();
+          return _AdapterResponse(
+            statusCode: 200,
+            body: '{"data":{"token":"fresh-token"}}',
+          );
+        }
+        return _AdapterResponse(
+          statusCode:
+              options.headers['Authorization'] == 'Bearer expired-token'
+                  ? 401
+                  : 200,
+          body: '{}',
+        );
+      };
+      final container = _container(adapter, storage);
+      addTearDown(container.dispose);
+      addTearDown(() {
+        if (!storage.allowSave.isCompleted) storage.allowSave.complete();
+      });
+      final dio = container.read(dioProvider)..httpClientAdapter = adapter;
+      final save = storage.mutateAuth(
+        () => storage.saveOfflineAuth({'token': 'expired-token'}),
+      );
+      await storage.saveStarted.future;
+      final request = dio.get<dynamic>('/protected');
+      await refreshReturned.future;
+      await pumpEventQueue();
+
+      expect(storage.token, 'expired-token');
+      storage.allowSave.complete();
+      await save;
+      expect((await request).statusCode, 200);
+      expect(storage.offlineAuth?['token'], 'fresh-token');
+    },
+  );
+
   for (final refreshStatus in [200, 503]) {
     test(
       'concurrent unauthorized requests share refresh with status $refreshStatus',
@@ -498,6 +542,7 @@ ProviderContainer _container(
 
 class _MemorySecureStorage extends SecureStorageService {
   String? token;
+  Map<String, dynamic>? offlineAuth;
 
   @override
   Future<void> saveToken(String token) async {
@@ -510,11 +555,29 @@ class _MemorySecureStorage extends SecureStorageService {
   @override
   Future<void> clearToken() async {
     token = null;
+    offlineAuth = null;
   }
 
   @override
-  Future<void> rebindOfflineAuthToken(String token) async {
-    this.token = token;
+  Future<void> saveOfflineAuth(Map<String, dynamic> value) async {
+    offlineAuth = Map<String, dynamic>.from(value);
+  }
+
+  @override
+  Future<Map<String, dynamic>?> getOfflineAuth() async => offlineAuth;
+}
+
+class _BlockingOfflineStorage extends _MemorySecureStorage {
+  final saveStarted = Completer<void>();
+  final allowSave = Completer<void>();
+
+  @override
+  Future<void> saveOfflineAuth(Map<String, dynamic> value) async {
+    if (!saveStarted.isCompleted) {
+      saveStarted.complete();
+      await allowSave.future;
+    }
+    await super.saveOfflineAuth(value);
   }
 }
 

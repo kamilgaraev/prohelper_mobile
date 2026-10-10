@@ -11,6 +11,13 @@ final secureStorageProvider = Provider<SecureStorageService>(
 
 class SecureStorageService {
   final _storage = const FlutterSecureStorage();
+  Future<void> _authMutationQueue = Future<void>.value();
+
+  Future<T> mutateAuth<T>(Future<T> Function() mutation) {
+    final next = _authMutationQueue.then((_) => mutation());
+    _authMutationQueue = next.then<void>((_) {}, onError: (Object _) {});
+    return next;
+  }
 
   static const _tokenKey = 'auth_token';
   static const _selectedProjectIdKey = 'selected_project_id';
