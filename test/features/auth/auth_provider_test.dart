@@ -141,6 +141,29 @@ class _BlockingVerificationRepository extends _FakeAuthRepository {
   }
 }
 
+class _RefreshingAuthRepository extends _FakeAuthRepository {
+  _RefreshingAuthRepository(this.storage);
+
+  final _MemoryStorage storage;
+
+  @override
+  Future<User> getMe({String? token}) async {
+    storage.token = 'refreshed-token';
+    await storage.rebindOfflineAuthToken('refreshed-token');
+    return super.getMe(token: token);
+  }
+}
+
+class _BackgroundFailureRepository extends _FakeAuthRepository {
+  @override
+  Future<User> getMe({String? token}) async {
+    if (getMeCalls > 0) {
+      throw const ApiException('Нет сети.');
+    }
+    return super.getMe(token: token);
+  }
+}
+
 class _BlockingClearStorage extends _MemoryStorage {
   final clearStarted = Completer<void>();
   final allowClear = Completer<void>();
@@ -164,6 +187,67 @@ class _BlockingClearStorage extends _MemoryStorage {
 }
 
 void main() {
+  test('refreshed startup session restores after an offline restart', () async {
+    final storage = _MemoryStorage();
+    final notifier = AuthNotifier(
+      _RefreshingAuthRepository(storage),
+      storage,
+      autoCheckAuth: false,
+      isDefinitelyOffline: () async => false,
+    );
+    addTearDown(notifier.dispose);
+
+    await notifier.checkAuth();
+
+    expect(storage.offlineAuth?['token'], 'refreshed-token');
+    final restored = AuthNotifier(
+      _FakeAuthRepository(),
+      storage,
+      autoCheckAuth: false,
+      isDefinitelyOffline: () async => true,
+    );
+    addTearDown(restored.dispose);
+    await restored.checkAuth();
+
+    expect(restored.state, isA<AuthAuthenticated>());
+    expect(restored.state.user?.email, 'foreman@example.test');
+    expect((restored.state as AuthAuthenticated).isOnlineVerified, false);
+  });
+
+  test(
+    'background verification cannot cancel the startup offline save',
+    () async {
+      final storage = _MemoryStorage();
+      final notifier = AuthNotifier(
+        _BackgroundFailureRepository(),
+        storage,
+        autoCheckAuth: false,
+        isDefinitelyOffline: () async => false,
+      );
+      addTearDown(notifier.dispose);
+      Future<bool>? verification;
+      notifier.addListener((state) {
+        if (state is AuthAuthenticated && verification == null) {
+          verification = notifier.verifyOnlineForQueue();
+        }
+      });
+
+      await notifier.checkAuth();
+      expect(await verification, false);
+
+      expect(storage.offlineAuth?['user']['email'], 'foreman@example.test');
+      final restored = AuthNotifier(
+        _FakeAuthRepository(),
+        storage,
+        autoCheckAuth: false,
+        isDefinitelyOffline: () async => true,
+      );
+      addTearDown(restored.dispose);
+      await restored.checkAuth();
+      expect(restored.state, isA<AuthAuthenticated>());
+    },
+  );
+
   test(
     'same-session parallel online verification shares one request and accepts both callers',
     () async {
