@@ -29,7 +29,7 @@ class AuthRepository {
       final data = MobileApiResponse.dataMap(response.data);
       final token = _requiredString(data, 'token');
 
-      await _storage.saveToken(token);
+      await _storage.mutateAuth(() => _storage.saveToken(token));
 
       return await getMe(token: token);
     } on DioException catch (error) {
@@ -63,7 +63,7 @@ class AuthRepository {
 
       final data = MobileApiResponse.dataMap(response.data);
       final token = _requiredString(data, 'token');
-      await _storage.saveToken(token);
+      await _storage.mutateAuth(() => _storage.saveToken(token));
 
       return await getMe();
     } on DioException catch (error) {
@@ -167,11 +167,12 @@ class AuthRepository {
         rethrow;
       }
     } finally {
-      final currentToken = _normalizeToken(await _storage.getToken());
-
-      if (currentToken == tokenSnapshot) {
-        await _storage.clearToken();
-      }
+      await _storage.mutateAuth(() async {
+        final currentToken = _normalizeToken(await _storage.getToken());
+        if (currentToken == tokenSnapshot) {
+          await _storage.clearToken();
+        }
+      });
     }
   }
 
