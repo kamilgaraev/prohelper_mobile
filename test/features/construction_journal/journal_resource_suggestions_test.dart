@@ -4,6 +4,161 @@ import 'package:prohelpers_mobile/features/construction_journal/domain/journal_r
 
 void main() {
   test(
+    'missing norm stays unknown while explicit zero is known without actual suggestions',
+    () {
+      final missing = ConstructionJournalEstimateResource.fromJson({
+        'id': -206,
+        'resource_type': 'labor',
+        'name': 'Ресурс',
+      });
+      final zero = ConstructionJournalEstimateResource.fromJson({
+        'id': -207,
+        'resource_type': 'labor',
+        'name': 'Ресурс с нулевой нормой',
+        'quantity_per_unit': 0,
+      });
+      expect(missing.quantityPerUnit, isNull);
+      expect(missing.hasKnownNorm, isFalse);
+      expect(zero.hasKnownNorm, isTrue);
+      expect(zero.quantityPerUnit, 0);
+    },
+  );
+  test('verified Excel resources retain small quantities for actual 0.035', () {
+    final item = ConstructionJournalEstimateItemOption.fromJson({
+      'id': 19,
+      'name': 'Работа',
+      'measurement_unit_id': 6,
+      'resources': [
+        {
+          'id': -201,
+          'source_key': 'estimate_item:201',
+          'resource_type': 'labor',
+          'name': 'Труд рабочих',
+          'quantity_per_unit': 121,
+          'unit_name': 'чел.-ч',
+        },
+        {
+          'id': -202,
+          'source_key': 'estimate_item:202',
+          'resource_type': 'equipment',
+          'name': 'Кран',
+          'quantity_per_unit': 4.11,
+          'unit_name': 'маш.-ч',
+        },
+        {
+          'id': -203,
+          'source_key': 'estimate_item:203',
+          'resource_type': 'material',
+          'name': 'Вода',
+          'quantity_per_unit': 0.3,
+          'unit_name': 'м3',
+        },
+        {
+          'id': -204,
+          'source_key': 'estimate_item:204',
+          'resource_type': 'material',
+          'name': 'Древесина',
+          'quantity_per_unit': 0.016,
+          'unit_name': 'м3',
+        },
+        {
+          'id': -205,
+          'source_key': 'estimate_item:205',
+          'resource_type': 'material',
+          'name': 'Поковки',
+          'quantity_per_unit': 0.0023,
+          'unit_name': 'т',
+        },
+      ],
+    });
+    final suggestions = journalResourceSuggestions([
+      (item: item, quantity: 0.035),
+    ]);
+    expect(
+      suggestions.map((value) => journalSuggestedQuantity(value.quantity)),
+      ['4.235', '0.14385', '0.0105', '0.00056', '0.0000805'],
+    );
+    expect(suggestions.last.resource.displayUnit, 'т');
+    expect(journalResourceBasisMatches(item, 6), isTrue);
+    expect(journalResourceBasisMatches(item, 7), isFalse);
+    expect(journalResourceBasisMatches(item, null), isFalse);
+  });
+
+  test(
+    'unknown norm retains composition and nullable metadata without actual suggestions',
+    () {
+      final item = ConstructionJournalEstimateItemOption.fromJson({
+        'id': 19,
+        'name': 'Работа',
+        'resources': [
+          {
+            'id': -205,
+            'source_key': 'estimate_item:205',
+            'resource_type': 'material',
+            'name': 'Поковки',
+            'quantity_per_unit': null,
+            'total_quantity': 10,
+            'unit_name': 'т',
+          },
+          {
+            'id': -205,
+            'source_key': 'estimate_item:205',
+            'resource_type': 'material',
+            'name': 'Поковки',
+            'quantity_per_unit': null,
+          },
+        ],
+      });
+      expect(
+        journalResourceSuggestions([(item: item, quantity: 0.035)]),
+        isEmpty,
+      );
+      final composition = journalResourceComposition(item.resources);
+      expect(composition.length, 1);
+      expect(composition.single.hasKnownNorm, isFalse);
+      expect(composition.single.totalQuantity, 10);
+      final reopened = ConstructionJournalEstimateResource.fromJson(
+        composition.single.toJson(),
+      );
+      expect(reopened.quantityPerUnit, isNull);
+      expect(reopened.sourceKey, 'estimate_item:205');
+      expect(reopened.displayUnit, 'т');
+    },
+  );
+
+  test(
+    'source namespace avoids collisions and fallback units cannot be added together',
+    () {
+      final item = ConstructionJournalEstimateItemOption.fromJson({
+        'id': 19,
+        'name': 'Работа',
+        'resources': [
+          {
+            'id': 1,
+            'source_key': 'estimate_item_resource:1',
+            'resource_type': 'material',
+            'name': 'Металл',
+            'quantity_per_unit': 2,
+            'unit_name': 'кг',
+          },
+          {
+            'id': 1,
+            'source_key': 'estimate_item:1',
+            'resource_type': 'material',
+            'name': 'Металл',
+            'quantity_per_unit': 0.5,
+            'unit_name': 'т',
+          },
+        ],
+      });
+      final suggestions = journalResourceSuggestions([
+        (item: item, quantity: 3),
+      ]);
+      expect(suggestions.length, 2);
+      expect(suggestions.map((value) => value.quantity), [6, 1.5]);
+    },
+  );
+  test(
     'saved material row id remains separate from material estimate and delivery ids',
     () {
       final material = ConstructionJournalMaterialUsageModel.fromJson({

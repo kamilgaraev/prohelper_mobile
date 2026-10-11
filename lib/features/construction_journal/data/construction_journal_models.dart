@@ -12,6 +12,7 @@ abstract final class ConstructionJournalActionKeys {
   static const close = 'close';
   static const archive = 'archive';
   static const reopen = 'reopen';
+  static const uploadAttachment = 'upload_attachment';
 }
 
 class ConstructionJournalActionModel {
@@ -55,6 +56,7 @@ const _journalActionLabels = <String, String>{
   'close': 'Закрыть',
   'archive': 'В архив',
   'reopen': 'Открыть снова',
+  'upload_attachment': 'Добавить фото',
 };
 
 extension ConstructionJournalActionListX
@@ -362,23 +364,35 @@ class ConstructionJournalEstimateResource {
     this.measurementUnit,
     this.estimateItemId,
     this.materialId,
+    this.sourceKey,
+    this.unitName,
   });
 
   final int id;
   final String resourceType;
   final String name;
-  final double quantityPerUnit;
+  final double? quantityPerUnit;
   final double? totalQuantity;
   final int? measurementUnitId;
   final ConstructionJournalMeasurementUnitRef? measurementUnit;
   final int? estimateItemId;
   final int? materialId;
+  final String? sourceKey;
+  final String? unitName;
+
+  String? get displayUnit => measurementUnit?.displayName ?? unitName;
+  bool get hasKnownNorm =>
+      quantityPerUnit != null &&
+      quantityPerUnit!.isFinite &&
+      quantityPerUnit! >= 0;
 
   Map<String, dynamic> toJson() => {
     'id': id,
     'resource_type': resourceType,
     'name': name,
     'quantity_per_unit': quantityPerUnit,
+    'source_key': sourceKey,
+    'unit_name': unitName,
     'total_quantity': totalQuantity,
     'measurement_unit_id': measurementUnitId,
     'measurementUnit':
@@ -404,7 +418,9 @@ class ConstructionJournalEstimateResource {
       id: _requiredInt(json, 'id'),
       resourceType: _requiredString(json, 'resource_type'),
       name: _requiredString(json, 'name'),
-      quantityPerUnit: _asNullableDouble(json['quantity_per_unit']) ?? 0,
+      quantityPerUnit: _asNullableDouble(json['quantity_per_unit']),
+      sourceKey: _asNullableString(json['source_key']),
+      unitName: _asNullableString(json['unit_name']),
       totalQuantity: _asNullableDouble(json['total_quantity']),
       measurementUnitId: _asNullableInt(json['measurement_unit_id']),
       measurementUnit:
@@ -1054,6 +1070,68 @@ class ConstructionJournalApprovalEvent {
   );
 }
 
+class ConstructionJournalAttachment {
+  const ConstructionJournalAttachment({
+    required this.id,
+    required this.fileName,
+    this.mimeType,
+    this.size,
+    this.createdAt,
+    this.uploadedByName,
+    this.uploadedById,
+    this.uploadedByOrganizationId,
+  });
+
+  final String id;
+  final String fileName;
+  final String? mimeType;
+  final int? size;
+  final String? createdAt;
+  final String? uploadedByName;
+  final int? uploadedById;
+  final int? uploadedByOrganizationId;
+
+  factory ConstructionJournalAttachment.fromJson(Map<String, dynamic> json) =>
+      ConstructionJournalAttachment(
+        id: _requiredString(json, 'id'),
+        fileName: _requiredString(json, 'file_name'),
+        mimeType: _asNullableString(json['mime_type']),
+        size: _asNullableInt(json['size']),
+        createdAt: _asNullableString(json['created_at']),
+        uploadedById: _asNullableInt(
+          _optionalMap(json['uploaded_by'], 'uploaded_by')?['id'],
+        ),
+        uploadedByOrganizationId: _asNullableInt(
+          _optionalMap(json['uploaded_by'], 'uploaded_by')?['organization_id'],
+        ),
+        uploadedByName: _asNullableString(
+          _optionalMap(json['uploaded_by'], 'uploaded_by')?['name'],
+        ),
+      );
+}
+
+class ConstructionJournalAttachmentDownload {
+  const ConstructionJournalAttachmentDownload({
+    required this.url,
+    this.expiresAt,
+  });
+  final Uri url;
+  final String? expiresAt;
+
+  factory ConstructionJournalAttachmentDownload.fromJson(
+    Map<String, dynamic> json,
+  ) {
+    final url = Uri.tryParse(_requiredString(json, 'url'));
+    if (url == null || url.scheme != 'https' || url.host.isEmpty) {
+      throw const FormatException('Не удалось получить ссылку на фото.');
+    }
+    return ConstructionJournalAttachmentDownload(
+      url: url,
+      expiresAt: _asNullableString(json['expires_at']),
+    );
+  }
+}
+
 class ConstructionJournalEntryModel {
   const ConstructionJournalEntryModel({
     required this.id,
@@ -1083,6 +1161,7 @@ class ConstructionJournalEntryModel {
     this.weatherConditions,
     this.performingOrganizationName,
     this.approvalHistory = const [],
+    this.attachments = const [],
   });
 
   final int id;
@@ -1105,6 +1184,7 @@ class ConstructionJournalEntryModel {
   final ConstructionJournalWeatherModel? weatherConditions;
   final String? performingOrganizationName;
   final List<ConstructionJournalApprovalEvent> approvalHistory;
+  final List<ConstructionJournalAttachment> attachments;
   final List<ConstructionJournalWorkVolumeModel> workVolumes;
   final List<ConstructionJournalWorkerModel> workers;
   final List<ConstructionJournalEquipmentModel> equipment;
@@ -1126,6 +1206,11 @@ class ConstructionJournalEntryModel {
     );
 
     return ConstructionJournalEntryModel(
+      attachments:
+          _optionalList(
+            json,
+            'attachments',
+          ).map(ConstructionJournalAttachment.fromJson).toList(),
       performingOrganizationName: _asNullableString(
         _optionalMap(
           _optionalMap(json['journal'], 'journal')?['performingOrganization'],

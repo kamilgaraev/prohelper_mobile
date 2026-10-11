@@ -21,6 +21,8 @@ class _RecordingWorkflowRepository extends WorkflowRepository {
   String? loadedSearch;
   int? fetchedTaskId;
   WorkflowTaskModel? detailOverride;
+  WorkflowTaskModel? listOverride;
+  int? submittedTaskId;
   int? approvedTaskId;
   int? changesTaskId;
   String? approvedComment;
@@ -44,7 +46,7 @@ class _RecordingWorkflowRepository extends WorkflowRepository {
     loadedSearch = search;
 
     return WorkflowTaskListResult(
-      items: const [_task],
+      items: [listOverride ?? _task],
       meta: const WorkflowTaskListMeta(
         currentPage: 1,
         perPage: 20,
@@ -72,6 +74,13 @@ class _RecordingWorkflowRepository extends WorkflowRepository {
     approvedTaskId = id;
     approvedComment = comment;
     return _task;
+  }
+
+  @override
+  Future<WorkflowTaskModel> submitTask(int id) async {
+    submittedTaskId = id;
+    detailOverride = listOverride = _resubmitTask(reviewed: true);
+    return detailOverride!;
   }
 
   @override
@@ -136,6 +145,44 @@ const _task = WorkflowTaskModel(
   statusHistory: [],
   createdAt: '2026-05-22T08:00:00Z',
   updatedAt: '2026-05-22T10:00:00Z',
+);
+
+WorkflowTaskModel _resubmitTask({bool reviewed = false}) => WorkflowTaskModel(
+  id: 17,
+  organizationId: 4,
+  projectId: 9,
+  workName: 'Исправленная работа',
+  status: reviewed ? 'in_review' : 'rejected',
+  statusLabel: reviewed ? 'На проверке' : 'Отклонено',
+  availableActions: reviewed ? [] : ['submit'],
+  workflowSummary: WorkflowSummaryModel(
+    status: reviewed ? 'in_review' : 'rejected',
+    stage: reviewed ? 'in_review' : 'rejected',
+    stageLabel: reviewed ? 'На проверке' : 'Отклонено',
+    availableActions: reviewed ? [] : ['submit'],
+  ),
+  comments: [],
+  statusHistory: [
+    const WorkflowTaskEntryModel(
+      id: 'history-confirm',
+      action: 'confirm',
+      fromStatus: 'in_review',
+      toStatus: 'confirmed',
+      userId: 8,
+      createdAt: '2026-10-10T09:00:00Z',
+    ),
+    if (reviewed)
+      const WorkflowTaskEntryModel(
+        id: 'history-submit',
+        action: 'submit',
+        fromStatus: 'rejected',
+        toStatus: 'in_review',
+        userId: 8,
+        createdAt: '2026-10-11T09:00:00Z',
+      ),
+  ],
+  createdAt: '2026-10-10T08:00:00Z',
+  updatedAt: '2026-10-11T09:00:00Z',
 );
 
 const _detailTask = WorkflowTaskModel(
@@ -250,6 +297,38 @@ void main() {
     tester.view.physicalSize = const Size(1100, 1200);
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
+  }
+
+  for (final detail in [false, true]) {
+    testWidgets(
+      'server resubmit action works in ${detail ? 'detail' : 'list'} and renders canonical history',
+      (tester) async {
+        final repository =
+            _RecordingWorkflowRepository()
+              ..listOverride = _resubmitTask()
+              ..detailOverride = _resubmitTask();
+        useLargeSurface(tester);
+        await tester.pumpWidget(
+          buildApp(
+            detail
+                ? const WorkflowTaskDetailScreen(taskId: 17)
+                : const WorkflowManagementScreen(),
+            repository,
+          ),
+        );
+        await pumpUi(tester);
+        await tester.tap(
+          find.widgetWithText(FilledButton, 'Отправить на повторную проверку'),
+        );
+        await pumpUi(tester);
+        await tester.tap(find.widgetWithText(FilledButton, 'Отправить'));
+        await pumpUi(tester);
+        expect(repository.submittedTaskId, 17);
+        expect(find.text('На проверке'), findsWidgets);
+        if (detail) expect(find.text('Отправлено на проверку'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      },
+    );
   }
 
   void usePhoneViewport(WidgetTester tester) {

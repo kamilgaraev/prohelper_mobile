@@ -2,6 +2,83 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:prohelpers_mobile/features/workflow_management/data/workflow_task_model.dart';
 
 void main() {
+  test(
+    'prefers additive workflow fields while legacy response remains readable',
+    () {
+      final payload = _workflowTaskJson();
+      final legacyHistory = Map<String, dynamic>.from(
+        (payload['status_history'] as List).single as Map,
+      )..['action'] = 'approve';
+      payload['status_history'] = [legacyHistory];
+      payload['workflow_actions'] = ['submit'];
+      payload['workflow_status_history'] = [
+        Map<String, dynamic>.from(legacyHistory)..['action'] = 'confirm',
+        Map<String, dynamic>.from(legacyHistory)
+          ..['id'] = 'submit-event'
+          ..['action'] = 'submit',
+      ];
+      final current = WorkflowTaskModel.fromJson(payload);
+      expect(current.canSubmit, isTrue);
+      expect(current.canApprove, isFalse);
+      expect(current.statusHistory.map((event) => event.action), [
+        'confirm',
+        'submit',
+      ]);
+      payload.remove('workflow_actions');
+      payload.remove('workflow_status_history');
+      final legacy = WorkflowTaskModel.fromJson(payload);
+      expect(legacy.canSubmit, isFalse);
+      expect(legacy.canApprove, isTrue);
+      expect(legacy.statusHistory.single.action, 'approve');
+    },
+  );
+
+  test(
+    'explicit empty current workflow fields override legacy permissions and history',
+    () {
+      final payload =
+          _workflowTaskJson()
+            ..['workflow_actions'] = []
+            ..['workflow_status_history'] = [];
+      final task = WorkflowTaskModel.fromJson(payload);
+      expect(task.availableActions, isEmpty);
+      expect(task.statusHistory, isEmpty);
+      expect(task.canApprove, isFalse);
+    },
+  );
+  test(
+    'accepts canonical admin confirm history without permitting confirm mutation',
+    () {
+      final payload = _workflowTaskJson();
+      (payload['status_history'] as List).first['action'] = 'confirm';
+      final task = WorkflowTaskModel.fromJson(payload);
+      expect(task.statusHistory.single.action, 'confirm');
+      expect(task.canApprove, isTrue);
+      payload['available_actions'] = ['confirm'];
+      expect(() => WorkflowTaskModel.fromJson(payload), throwsFormatException);
+    },
+  );
+
+  test(
+    'server submit capability and canonical history preserve the existing statuses',
+    () {
+      final payload =
+          _workflowTaskJson()
+            ..['available_actions'] = ['submit']
+            ..['status'] = 'rejected'
+            ..['status_label'] = 'Отклонено';
+      (payload['status_history'] as List).first['action'] = 'submit';
+      final summary = payload['workflow_summary'] as Map<String, dynamic>;
+      summary['available_actions'] = ['submit'];
+      summary['next_action'] = 'submit';
+      final task = WorkflowTaskModel.fromJson(payload);
+      expect(task.canSubmit, isTrue);
+      expect(task.status, 'rejected');
+      expect(task.statusHistory.single.action, 'submit');
+      payload['work_origin_type'] = 'journal';
+      expect(WorkflowTaskModel.fromJson(payload).canSubmit, isFalse);
+    },
+  );
   test('journal facts cannot expose ordinary approval actions', () {
     final task = WorkflowTaskModel.fromJson(
       _workflowTaskJson()..['work_origin_type'] = 'journal',

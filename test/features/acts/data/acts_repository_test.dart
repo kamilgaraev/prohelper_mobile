@@ -1,11 +1,58 @@
 import 'dart:convert';
 import 'dart:typed_data';
+import 'dart:io';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:prohelpers_mobile/features/acts/data/acts_repository.dart';
+import 'package:prohelpers_mobile/features/acts/data/act_model.dart';
+import 'package:prohelpers_mobile/features/design_management/data/design_package_file_service.dart';
 
 void main() {
+  test(
+    'file download stays on authenticated API origin and ignores supplied URLs',
+    () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'most-act-file-test-',
+      );
+      addTearDown(() => directory.delete(recursive: true));
+      late RequestOptions request;
+      final dio = Dio(
+        BaseOptions(
+          baseUrl: 'https://api.example.test/api/v1/mobile',
+          headers: {'Authorization': 'Bearer test-token'},
+        ),
+      );
+      dio.httpClientAdapter = _JsonAdapter((options) {
+        request = options;
+        return {'test': 'binary-content'};
+      });
+      final service = DesignPackageFileService(
+        client: dio,
+        temporaryDirectory: () async => directory,
+      );
+      final file =
+          ActModel.fromJson({
+            'id': 4,
+            'files': [
+              {
+                'id': 7,
+                'name': 'act.pdf',
+                'download_url': 'https://other-origin.test/unsafe',
+              },
+            ],
+          }).files.single;
+      final path = await ActsRepository(
+        dio,
+        fileService: service,
+      ).downloadFile(4, file);
+      expect(request.path, '/acts/4/files/7');
+      expect(request.uri.origin, 'https://api.example.test');
+      expect(request.headers['Authorization'], 'Bearer test-token');
+      expect(await File(path).exists(), isTrue);
+      await service.deleteDownloaded(path);
+    },
+  );
   test('lists project acts with filters and parses paginated items', () async {
     late RequestOptions request;
     final dio = Dio(BaseOptions(baseUrl: 'https://api.example.test'));
