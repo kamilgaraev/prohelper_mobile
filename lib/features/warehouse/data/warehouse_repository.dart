@@ -83,10 +83,15 @@ class WarehouseRepository extends SyncQueueAwareRepository {
     }
   }
 
-  Future<List<WarehouseBalanceModel>> fetchBalances(int warehouseId) async {
+  Future<List<WarehouseBalanceModel>> fetchBalances(
+    int warehouseId, {
+    String search = '',
+  }) async {
     try {
+      final query = search.trim();
       final response = await _dio.get(
         '/warehouse/warehouses/$warehouseId/balances',
+        queryParameters: query.isEmpty ? null : {'search': query},
       );
       final payload = _extractList(response.data);
 

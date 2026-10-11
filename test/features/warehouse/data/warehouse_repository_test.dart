@@ -7,6 +7,21 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:prohelpers_mobile/features/warehouse/data/warehouse_repository.dart';
 
 void main() {
+  test('sends a trimmed balance search and omits an empty filter', () async {
+    final requests = <RequestOptions>[];
+    final dio = Dio(BaseOptions(baseUrl: 'https://api.prohelper.test'))
+      ..httpClientAdapter = _JsonAdapter((options) {
+        requests.add(options);
+        return {'success': true, 'data': []};
+      });
+    final repository = WarehouseRepository(dio);
+    await repository.fetchBalances(8, search: '  CEM-500  ');
+    await repository.fetchBalances(8, search: '  ');
+    expect(requests.first.queryParameters, {'search': 'CEM-500'});
+    expect(requests.last.queryParameters, isEmpty);
+    expect(requests.first.path, '/warehouse/warehouses/8/balances');
+  });
+
   test('loads nonempty balance and project-delivery mobile resources', () async {
     final requests = <RequestOptions>[];
     final dio = Dio(BaseOptions(baseUrl: 'https://api.prohelper.test'))

@@ -31,12 +31,21 @@ class _FakeWarehouseRepository extends WarehouseRepository {
   Object? writeOffError;
   Completer<void>? writeOffCompleter;
   final List<_WriteOffAttempt> writeOffAttempts = [];
+  final List<String> balanceSearches = [];
 
   @override
   Future<WarehouseSummaryModel> fetchWarehouseSummary() async => summary;
 
   @override
-  Future<List<WarehouseBalanceModel>> fetchBalances(int warehouseId) async {
+  Future<List<WarehouseBalanceModel>> fetchBalances(
+    int warehouseId, {
+    String search = '',
+  }) async {
+    balanceSearches.add(search);
+    if (search.isNotEmpty &&
+        !'цемент м500 cem-500'.contains(search.toLowerCase())) {
+      return [];
+    }
     return [
       WarehouseBalanceModel(
         warehouseId: 1,
@@ -274,6 +283,40 @@ WarehouseSummaryModel _summaryWithMovementQuantity(double quantity) {
 }
 
 void main() {
+  testWidgets(
+    'searches warehouse balances after debounce and clears the filter',
+    (tester) async {
+      final repository = _FakeWarehouseRepository();
+      await _pumpWarehouseScreen(
+        tester,
+        repository: repository,
+        mediaPicker: _FakeMediaPicker(),
+      );
+      final balancesButton = find.text('Остатки').last;
+      await _ensureVisible(tester, balancesButton);
+      await tester.tap(balancesButton);
+      await tester.pumpAndSettle();
+      final search = find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField &&
+            widget.decoration?.labelText == 'Поиск остатков',
+      );
+      expect(repository.balanceSearches, ['']);
+      await tester.enterText(search, '  unknown  ');
+      await tester.pump(const Duration(milliseconds: 349));
+      expect(repository.balanceSearches, ['']);
+      await tester.pump(const Duration(milliseconds: 2));
+      await tester.pumpAndSettle();
+      expect(repository.balanceSearches, ['', 'unknown']);
+      expect(find.text('Ничего не найдено'), findsOneWidget);
+      await tester.tap(find.byTooltip('Очистить поиск'));
+      await tester.pumpAndSettle();
+      expect(repository.balanceSearches, ['', 'unknown', '']);
+      expect(find.text('Ничего не найдено'), findsNothing);
+      expect(find.text('Цемент М500'), findsWidgets);
+    },
+  );
+
   testWidgets('keeps thousandth precision for movement and balance', (
     tester,
   ) async {
