@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -84,6 +85,8 @@ class _Transport implements BimOfflineTransport {
   bool deny = false;
   bool loseCreateResponse = false;
   bool loseAttachmentResponse = false;
+  int? createFailureStatus;
+  int? attachmentFailureStatus;
   Completer<void>? downloadStarted;
   Completer<void>? allowDownload;
   int? blockVersion;
@@ -194,6 +197,15 @@ class _Transport implements BimOfflineTransport {
   ) async {
     createKeys.add(key);
     createPayloads.add(jsonEncode(payload));
+    if (createFailureStatus != null) {
+      throw DioException(
+        requestOptions: RequestOptions(),
+        response: Response(
+          requestOptions: RequestOptions(),
+          statusCode: createFailureStatus,
+        ),
+      );
+    }
     final receipt = created.putIfAbsent(key, () {
       createResources++;
       return BimIssueReceipt(100, 1);
@@ -217,6 +229,15 @@ class _Transport implements BimOfflineTransport {
     await bytes().drain<void>();
     attachmentKeys.add(key);
     attachmentRevisions.add(revision);
+    if (attachmentFailureStatus != null) {
+      throw DioException(
+        requestOptions: RequestOptions(),
+        response: Response(
+          requestOptions: RequestOptions(),
+          statusCode: attachmentFailureStatus,
+        ),
+      );
+    }
     final result = attached.putIfAbsent(key, () {
       attachmentResources++;
       return revision + 1;
@@ -267,6 +288,240 @@ void main() {
     service.dispose();
     await directory.delete(recursive: true);
   });
+
+  test(
+    'online submission persists before request and targeted retry survives restart',
+    () async {
+      final other = await service.createDraft(
+        versionId: 8,
+        payload: {'project_id': 1, 'title': 'other'},
+      );
+      final draft = await service.createDraft(
+        versionId: 7,
+        payload: {'project_id': 1, 'title': 'online'},
+      );
+      transport.loseCreateResponse = true;
+      await service.syncDraft(draft.localId);
+      expect(transport.createResources, 1);
+      expect(
+        (await service.drafts())
+            .firstWhere((item) => item.localId == other.localId)
+            .attempted,
+        false,
+      );
+      service.dispose();
+      service = create();
+      await service.syncDraft(draft.localId);
+      expect(transport.createResources, 1);
+      expect(transport.createKeys.toSet().length, 1);
+      expect(transport.createPayloads.toSet().length, 1);
+      expect(
+        (await service.drafts())
+            .firstWhere((item) => item.localId == draft.localId)
+            .status,
+        'completed',
+      );
+    },
+  );
+
+  test(
+    'first definitive 422 supports encrypted inspection and editable clone with new keys',
+    () async {
+      final source = File('${directory.path}/proof.png');
+      final bytes = [137, 80, 78, 71];
+      await source.writeAsBytes(bytes);
+      final draft = await service.createDraft(
+        versionId: 7,
+        payload: {'project_id': 1, 'title': 'bad'},
+        attachments: [
+          BimDraftAttachmentInput(
+            path: source.path,
+            filename: 'proof.png',
+            mime: 'image/png',
+          ),
+        ],
+      );
+      transport.createFailureStatus = 422;
+      await service.syncDraft(draft.localId);
+      final rejected = (await service.drafts()).single;
+      expect(rejected.status, 'needs_review');
+      expect(rejected.rejectedBeforeCreate, true);
+      expect(rejected.removable, true);
+      expect(
+        await service.draftAttachmentBytes(
+          draft.localId,
+          rejected.attachments.single['key'] as String,
+        ),
+        bytes,
+      );
+      service.dispose();
+      service = create();
+      final cloned = await service.cloneRejectedDraft(draft.localId);
+      expect(cloned.localId, isNot(draft.localId));
+      expect(cloned.editable, true);
+      expect(
+        cloned.attachments.single['key'],
+        isNot(rejected.attachments.single['key']),
+      );
+      expect(
+        await service.draftAttachmentBytes(
+          cloned.localId,
+          cloned.attachments.single['key'] as String,
+        ),
+        bytes,
+      );
+      await service.updateDraft(
+        cloned.localId,
+        payload: {'project_id': 1, 'title': 'fixed'},
+      );
+      transport.createFailureStatus = null;
+      await service.syncDraft(cloned.localId);
+      expect(transport.createResources, 1);
+      expect(transport.createKeys.first, isNot(transport.createKeys.last));
+      expect(transport.attachmentResources, 1);
+    },
+  );
+
+  test(
+    'definitively rejected draft can be discarded without losing other drafts',
+    () async {
+      final rejected = await service.createDraft(
+        versionId: 7,
+        payload: {'title': 'bad'},
+      );
+      final other = await service.createDraft(
+        versionId: 8,
+        payload: {'title': 'retain'},
+      );
+      transport.createFailureStatus = 422;
+      await service.syncDraft(rejected.localId);
+      await service.removeDraft(rejected.localId);
+      expect((await service.drafts()).single.localId, other.localId);
+    },
+  );
+
+  test(
+    '422 after lost acknowledgement cannot clone or discard ambiguous operation',
+    () async {
+      final draft = await service.createDraft(
+        versionId: 7,
+        payload: {'project_id': 1, 'title': 'uncertain'},
+      );
+      transport.loseCreateResponse = true;
+      await service.syncDraft(draft.localId);
+      service.dispose();
+      service = create();
+      transport.createFailureStatus = 422;
+      await service.syncDraft(draft.localId);
+      expect((await service.drafts()).single.rejectedBeforeCreate, false);
+      expect((await service.drafts()).single.removable, false);
+      await expectLater(service.removeDraft(draft.localId), throwsStateError);
+      await expectLater(
+        service.cloneRejectedDraft(draft.localId),
+        throwsStateError,
+      );
+      transport.createFailureStatus = null;
+      await service.syncDraft(draft.localId);
+      expect(transport.createResources, 1);
+      expect(transport.createKeys.toSet().length, 1);
+      expect((await service.drafts()).single.status, 'completed');
+    },
+  );
+
+  test(
+    'attachment conflict preserves server acknowledgement and frozen retry through restart',
+    () async {
+      final source = File('${directory.path}/snapshot.png');
+      await source.writeAsBytes([137, 80, 78, 71]);
+      final draft = await service.createDraft(
+        versionId: 7,
+        payload: {'title': 'conflict'},
+        attachments: [
+          BimDraftAttachmentInput(
+            path: source.path,
+            filename: 'snapshot.png',
+            mime: 'image/png',
+            kind: 'snapshot',
+          ),
+        ],
+      );
+      transport.attachmentFailureStatus = 409;
+      await service.syncDraft(draft.localId);
+      final conflict = (await service.drafts()).single;
+      expect(conflict.serverId, 100);
+      expect(conflict.status, 'conflict');
+      expect(conflict.removable, true);
+      service.dispose();
+      service = create();
+      transport.attachmentFailureStatus = null;
+      await service.syncDraft(draft.localId);
+      expect(transport.createResources, 1);
+      expect(transport.attachmentKeys.toSet().length, 1);
+      expect(transport.attachmentRevisions, [1, 1]);
+      expect((await service.drafts()).single.status, 'completed');
+    },
+  );
+
+  test(
+    'native snapshot and photo remain durable with separate keys after lost attachment response',
+    () async {
+      final source = File('${directory.path}/photo.png');
+      await source.writeAsBytes([137, 80, 78, 71]);
+      final snapshot = Uint8List.fromList([137, 80, 78, 71, 1]);
+      final draft = await service.createDraft(
+        versionId: 7,
+        payload: {'project_id': 1, 'title': 'online snapshot'},
+        snapshot: snapshot,
+        attachments: [
+          BimDraftAttachmentInput(
+            path: source.path,
+            filename: 'photo.png',
+            mime: 'image/png',
+          ),
+        ],
+      );
+      transport.loseAttachmentResponse = true;
+      await service.syncDraft(draft.localId);
+      await source.delete();
+      service.dispose();
+      service = create();
+      final restored = (await service.drafts()).single;
+      final snapshotAttachment = restored.attachments.firstWhere(
+        (item) => item['kind'] == 'snapshot',
+      );
+      expect(
+        await service.draftAttachmentBytes(
+          restored.localId,
+          snapshotAttachment['key'] as String,
+        ),
+        snapshot,
+      );
+      await service.syncDraft(draft.localId);
+      expect(transport.createResources, 1);
+      expect(transport.attachmentResources, 2);
+      expect(transport.attachmentKeys[0], transport.attachmentKeys[1]);
+      expect(transport.attachmentKeys[1], isNot(transport.attachmentKeys[2]));
+      expect((await service.drafts()).single.status, 'completed');
+    },
+  );
+
+  test(
+    'known server acknowledgement allows discarding local attachment queue only',
+    () async {
+      final draft = await service.createDraft(
+        versionId: 7,
+        payload: {'title': 'confirmed'},
+        snapshot: Uint8List.fromList([137, 80, 78, 71]),
+      );
+      transport.attachmentFailureStatus = 409;
+      await service.syncDraft(draft.localId);
+      expect((await service.drafts()).single.serverId, 100);
+      await service.removeDraft(draft.localId);
+      expect(await service.drafts(), isEmpty);
+      expect(transport.createResources, 1);
+      expect(transport.created.values.single.id, 100);
+    },
+  );
 
   test(
     'download resumes after service restart; geometry stays encrypted; index reads properties',

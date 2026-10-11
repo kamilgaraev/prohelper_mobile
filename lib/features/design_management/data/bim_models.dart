@@ -253,6 +253,12 @@ class BimIssue {
     this.snapshotUrl,
     this.photos = const [],
     this.assigneeId,
+    this.assigneeName,
+    this.authorName,
+    this.dueDate,
+    this.severity = 'minor',
+    this.blockingReason,
+    this.history = const [],
     this.blocking = false,
   });
   final int id;
@@ -266,6 +272,12 @@ class BimIssue {
   final Uri? snapshotUrl;
   final List<BimJson> photos;
   final int? assigneeId;
+  final String? assigneeName;
+  final String? authorName;
+  final DateTime? dueDate;
+  final String severity;
+  final String? blockingReason;
+  final List<BimIssueHistoryEntry> history;
   final bool blocking;
   String get statusLabel => switch (status) {
     'open' => 'Открыто',
@@ -293,6 +305,32 @@ class BimIssue {
     assigneeId:
         json['assignee_id'] == null ? null : bimInt(json['assignee_id']),
     blocking: json['is_blocking'] == true,
+    assigneeName: bimMap(json['assignee'])['name'] as String?,
+    authorName: bimMap(json['author'])['name'] as String?,
+    dueDate: DateTime.tryParse('${json['due_date'] ?? ''}'),
+    severity: '${json['severity'] ?? 'minor'}',
+    blockingReason: json['blocking_reason'] as String?,
+    history:
+        bimMaps(json['history']).map(BimIssueHistoryEntry.fromJson).toList(),
+  );
+}
+
+class BimIssueHistoryEntry {
+  const BimIssueHistoryEntry({
+    required this.status,
+    this.comment,
+    this.author,
+    this.changedAt,
+  });
+  final String status;
+  final String? comment;
+  final String? author;
+  final DateTime? changedAt;
+  factory BimIssueHistoryEntry.fromJson(BimJson json) => BimIssueHistoryEntry(
+    status: '${json['to_status'] ?? ''}',
+    comment: json['comment'] as String?,
+    author: json['author'] as String?,
+    changedAt: DateTime.tryParse('${json['changed_at'] ?? ''}'),
   );
 }
 

@@ -846,10 +846,12 @@ class BimOfflineService {
           payload: content['payload'] as Map<String, dynamic>,
           attachments:
               (content['attachments'] as List).cast<Map<String, dynamic>>(),
-          attempted: record.attempted,
+          attempted: record.attempted || content['create_uncertain'] == true,
           status: record.status,
           serverId: record.serverId,
           lastError: record.lastError,
+          rejectedBeforeCreate:
+              record.serverId == null && content['create_rejected'] == true,
         ),
       );
     }
@@ -860,13 +862,18 @@ class BimOfflineService {
     required int versionId,
     required Map<String, dynamic> payload,
     List<BimDraftAttachmentInput> attachments = const [],
+    Uint8List? snapshot,
   }) async {
-    final snapshot = jsonDecode(jsonEncode(payload)) as Map<String, dynamic>;
+    final frozenPayload =
+        jsonDecode(jsonEncode(payload)) as Map<String, dynamic>;
+    final frozenSnapshot =
+        snapshot == null ? null : Uint8List.fromList(snapshot);
     return _mutate(
       () => _createDraft(
         versionId: versionId,
-        payload: snapshot,
+        payload: frozenPayload,
         attachments: List<BimDraftAttachmentInput>.of(attachments),
+        snapshot: frozenSnapshot,
       ),
     );
   }
@@ -875,10 +882,15 @@ class BimOfflineService {
     required int versionId,
     required Map<String, dynamic> payload,
     required List<BimDraftAttachmentInput> attachments,
+    Uint8List? snapshot,
   }) async {
     final scope = _scope();
     final epoch = _epoch;
     await _access(scope, epoch);
+    if (snapshot != null &&
+        (snapshot.isEmpty || snapshot.length > 10 * 1024 * 1024)) {
+      throw StateError('Снимок модели должен быть не больше 10 МБ.');
+    }
     final localId = _randomKey();
     final key = '$scope:draft:$localId';
     final record =
@@ -920,10 +932,36 @@ class BimOfflineService {
         });
         _guard(scope, epoch);
       }
+      if (snapshot != null) {
+        final attachmentKey = _randomKey();
+        final context = '$key:attachment:$attachmentKey';
+        final path = await files.streamPath(
+          ownerIdentity: _owner(scope),
+          context: context,
+        );
+        staged.add({
+          'key': attachmentKey,
+          'path': path,
+          'context': context,
+          'size': snapshot.length,
+          'filename': 'snapshot.png',
+          'mime': 'image/png',
+          'kind': 'snapshot',
+        });
+        await files.appendEncryptedStream(
+          ownerIdentity: _owner(scope),
+          context: context,
+          encryptedPath: path,
+          totalLength: snapshot.length,
+          source: Stream.value(snapshot),
+        );
+        _guard(scope, epoch);
+      }
       await _writeDraft(record, {
         'payload': {...payload, 'model_version_id': versionId},
         'attachments': staged,
         'idempotency_key': _randomKey(),
+        'create_uncertain': false,
       });
       _guard(scope, epoch);
       await store.put(record);
@@ -951,6 +989,105 @@ class BimOfflineService {
     return _mutate(() => _updateDraft(localId, payload: snapshot));
   }
 
+  Future<Uint8List> draftAttachmentBytes(
+    String localId,
+    String attachmentKey,
+  ) async {
+    final scope = _scope();
+    final epoch = _epoch;
+    await _access(scope, epoch);
+    final record = await store.get('$scope:draft:$localId');
+    if (record == null) throw StateError('Замечание не найдено.');
+    final content = await _readDraft(record);
+    final attachment =
+        (content['attachments'] as List)
+            .cast<Map<String, dynamic>>()
+            .where((item) => item['key'] == attachmentKey)
+            .firstOrNull;
+    if (attachment == null) throw StateError('Вложение не найдено.');
+    final bytes = BytesBuilder(copy: false);
+    await for (final chunk in files.decryptStream(
+      ownerIdentity: _owner(scope),
+      encryptedPath: attachment['path'] as String,
+      context: attachment['context'] as String,
+      totalLength: attachment['size'] as int,
+    )) {
+      _guard(scope, epoch);
+      bytes.add(chunk);
+    }
+    return bytes.takeBytes();
+  }
+
+  Future<BimIssueDraft> cloneRejectedDraft(String localId) => _mutate(() async {
+    final scope = _scope();
+    final epoch = _epoch;
+    await _access(scope, epoch);
+    final original = await store.get('$scope:draft:$localId');
+    if (original == null) throw StateError('Замечание не найдено.');
+    final content = await _readDraft(original);
+    if (original.serverId != null || content['create_rejected'] != true) {
+      throw StateError(
+        'Сначала подтвердите результат отправки. Повторите отправку с прежним ключом.',
+      );
+    }
+    final newId = _randomKey();
+    final record =
+        BimOfflineRecord()
+          ..scope = scope
+          ..key = '$scope:draft:$newId'
+          ..kind = 'draft'
+          ..versionId = original.versionId
+          ..status = 'queued';
+    final staged = <Map<String, dynamic>>[];
+    try {
+      for (final item
+          in (content['attachments'] as List).cast<Map<String, dynamic>>()) {
+        final attachmentKey = _randomKey();
+        final context = '${record.key}:attachment:$attachmentKey';
+        final path = await files.streamPath(
+          ownerIdentity: _owner(scope),
+          context: context,
+        );
+        staged.add({
+          ...item,
+          'key': attachmentKey,
+          'path': path,
+          'context': context,
+        });
+        await files.appendEncryptedStream(
+          ownerIdentity: _owner(scope),
+          context: context,
+          encryptedPath: path,
+          totalLength: item['size'] as int,
+          source: files.decryptStream(
+            ownerIdentity: _owner(scope),
+            encryptedPath: item['path'] as String,
+            context: item['context'] as String,
+            totalLength: item['size'] as int,
+          ),
+        );
+        _guard(scope, epoch);
+      }
+      await _writeDraft(record, {
+        'payload': content['payload'],
+        'attachments': staged,
+        'idempotency_key': _randomKey(),
+        'create_uncertain': false,
+      });
+      _guard(scope, epoch);
+      await store.put(record);
+    } catch (_) {
+      for (final item in staged) {
+        await files.deleteStagedUpload(item['path'] as String);
+      }
+      if (record.encryptedPath.isNotEmpty) await _deleteRecord(record);
+      rethrow;
+    }
+    await _deleteDraft(original);
+    _notify();
+    return (await drafts()).firstWhere((item) => item.localId == newId);
+  });
+
   Future<void> _updateDraft(
     String localId, {
     required Map<String, dynamic> payload,
@@ -960,12 +1097,12 @@ class BimOfflineService {
     await _access(scope, epoch);
     final record = await store.get('$scope:draft:$localId');
     if (record == null) throw StateError('Замечание не найдено.');
-    if (record.attempted) {
+    final content = await _readDraft(record);
+    if (record.attempted || content['create_uncertain'] == true) {
       throw StateError(
         'Замечание уже отправлялось. Содержание зафиксировано для безопасного повтора.',
       );
     }
-    final content = await _readDraft(record);
     content['payload'] = {...payload, 'model_version_id': record.versionId};
     await _writeDraft(record, content);
     _guard(scope, epoch);
@@ -978,10 +1115,19 @@ class BimOfflineService {
   }
 
   Future<void> _removeDraft(String localId) async {
+    if (_syncTask != null) {
+      throw StateError('Дождитесь завершения отправки перед удалением.');
+    }
     final scope = _scope();
     final record = await store.get('$scope:draft:$localId');
     if (record == null) return;
-    if (record.attempted && record.status != 'completed') {
+    final content = await _readDraft(record);
+    final rejected =
+        record.serverId == null && content['create_rejected'] == true;
+    if ((record.attempted || content['create_uncertain'] == true) &&
+        record.serverId == null &&
+        record.status != 'completed' &&
+        !rejected) {
       throw StateError(
         'Отправляемое замечание можно удалить при выходе после подтверждения.',
       );
@@ -1043,7 +1189,19 @@ class BimOfflineService {
         _syncTask = null;
         _syncToken = null;
       });
-  Future<void> _sync(bool force) async {
+  Future<void> syncDraft(String localId) async {
+    while (_syncTask != null) {
+      await _syncTask;
+    }
+    final task = _sync(true, localId: localId);
+    _syncTask = task.whenComplete(() {
+      _syncTask = null;
+      _syncToken = null;
+    });
+    await _syncTask;
+  }
+
+  Future<void> _sync(bool force, {String? localId}) async {
     final scope = _scope();
     final epoch = _epoch;
     final token = CancelToken();
@@ -1051,15 +1209,21 @@ class BimOfflineService {
     await _access(scope, epoch, onlineRequired: true);
     final records = await store.records(scope);
     for (final record in records.where(
-      (item) => item.kind == 'draft' && item.status != 'completed',
+      (item) =>
+          item.kind == 'draft' &&
+          item.status != 'completed' &&
+          (localId == null || item.key == '$scope:draft:$localId'),
     )) {
       _guard(scope, epoch);
-      if (record.status == 'blocked' ||
-          record.status == 'conflict' ||
-          record.status == 'needs_review' ||
-          (!force && record.nextAttemptAt?.isAfter(clock()) == true)) {
+      if (localId == null &&
+          (record.status == 'blocked' ||
+              record.status == 'conflict' ||
+              record.status == 'needs_review' ||
+              (!force && record.nextAttemptAt?.isAfter(clock()) == true))) {
         continue;
       }
+      bool createMayExist = record.attempted;
+      bool sendingCreate = false;
       try {
         await transport.manifest(record.versionId, token);
         _guard(scope, epoch);
@@ -1069,7 +1233,15 @@ class BimOfflineService {
           record.encryptedPath = latest.encryptedPath;
           record.geometryBytes = latest.geometryBytes;
           final content = await _readDraft(record);
+          createMayExist =
+              content['create_uncertain'] == true ||
+              (content['create_uncertain'] == null && record.attempted);
           record.attempted = true;
+          if (record.serverId == null) {
+            content['create_uncertain'] = true;
+            content['create_rejected'] = false;
+            await _writeDraft(record, content);
+          }
           record.status = 'sending';
           record.attempts++;
           record.lastError = null;
@@ -1078,6 +1250,7 @@ class BimOfflineService {
         });
         _notify();
         if (record.serverId == null) {
+          sendingCreate = true;
           final receipt = await transport.createIssue(
             content['payload'] as Map<String, dynamic>,
             content['idempotency_key'] as String,
@@ -1087,6 +1260,7 @@ class BimOfflineService {
           record.serverId = receipt.id;
           record.serverRevision = receipt.revision;
           await store.put(record);
+          sendingCreate = false;
         }
         for (final item
             in (content['attachments'] as List).cast<Map<String, dynamic>>()) {
@@ -1128,6 +1302,14 @@ class BimOfflineService {
         if (token.isCancelled) return;
         final status =
             error is DioException ? error.response?.statusCode : null;
+        if (sendingCreate && status == 422 && !createMayExist) {
+          await _mutate(() async {
+            final content = await _readDraft(record);
+            content['create_uncertain'] = false;
+            content['create_rejected'] = true;
+            await _writeDraft(record, content);
+          });
+        }
         record.status =
             _denied(error)
                 ? 'blocked'

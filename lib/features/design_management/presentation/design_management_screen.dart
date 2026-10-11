@@ -262,6 +262,23 @@ class _DesignPackageDetailScreenState
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
       children: [
         _InfoCard(package: package),
+        OutlinedButton.icon(
+          onPressed:
+              !_projectContextCurrent(package)
+                  ? null
+                  : () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder:
+                          (_) => BimCatalogScreen(
+                            projectId: package.projectId!,
+                            packageId: package.id,
+                            packageTitle: package.title,
+                          ),
+                    ),
+                  ),
+          icon: const Icon(Icons.view_in_ar_outlined),
+          label: const Text('Модели этого пакета'),
+        ),
         if (package.result.isNotEmpty) ...[
           const SizedBox(height: 12),
           _SectionCard(

@@ -5,7 +5,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:path_provider/path_provider.dart';
+
 import '../../../core/error/user_message.dart';
 import '../../../core/network/api_exception.dart';
 import '../../../core/widgets/app_error_state.dart';
@@ -123,6 +123,7 @@ class _BimIssuesScreenState extends ConsumerState<BimIssuesScreen> {
                       return Column(
                         children: [
                           DropdownButtonFormField<String>(
+                            key: ValueKey('issue-status-$_status'),
                             initialValue: _status,
                             decoration: const InputDecoration(
                               labelText: 'Статус',
@@ -166,10 +167,27 @@ class _BimIssuesScreenState extends ConsumerState<BimIssuesScreen> {
                               ),
                             ),
                           if (_page?.items.isEmpty ?? true)
-                            const Padding(
+                            Padding(
                               padding: EdgeInsets.symmetric(vertical: 32),
-                              child: Text(
-                                'Замечаний пока нет. Создайте замечание из просмотра модели.',
+                              child: Column(
+                                children: [
+                                  Text(
+                                    _status == null
+                                        ? 'Замечаний пока нет. Создайте замечание из просмотра модели.'
+                                        : 'Нет замечаний по выбранным условиям.',
+                                  ),
+                                  if (_status != null)
+                                    TextButton(
+                                      onPressed: () {
+                                        setState(() {
+                                          _status = null;
+                                          _page = null;
+                                        });
+                                        _load();
+                                      },
+                                      child: const Text('Сбросить фильтры'),
+                                    ),
+                                ],
                               ),
                             ),
                         ],
@@ -241,10 +259,6 @@ class _BimIssueEditorScreenState extends ConsumerState<BimIssueEditorScreen> {
   late final TextEditingController _title;
   late final TextEditingController _description;
   final _photos = <XFile>[];
-  final _photoKeys = <String, String>{};
-  final _uploadedPhotos = <String>{};
-  String _createKey = _operationKey();
-  final _snapshotKey = _operationKey();
   BimJson? _assignee;
   DateTime? _dueDate;
   String _severity = 'minor';
@@ -253,9 +267,7 @@ class _BimIssueEditorScreenState extends ConsumerState<BimIssueEditorScreen> {
   bool _createAttempted = false;
   bool get _online => ref.read(bimOnlineProvider).valueOrNull ?? false;
   bool get _draftOnly => _saveAsDraft || (!_online && !_createAttempted);
-  bool _snapshotUploaded = false;
-  BimIssue? _created;
-  BimJson? _createPayload;
+  BimIssueDraft? _submittedDraft;
   late bool _saveAsDraft;
   @override
   void initState() {
@@ -268,6 +280,8 @@ class _BimIssueEditorScreenState extends ConsumerState<BimIssueEditorScreen> {
     _severity = '${payload['severity'] ?? 'minor'}';
     _dueDate = DateTime.tryParse('${payload['due_date'] ?? ''}');
     _saveAsDraft = widget.offline || widget.draft != null;
+    _submittedDraft = widget.draft;
+    _createAttempted = widget.draft?.attempted ?? false;
     if (payload['assignee_id'] != null) {
       _assignee = {
         'id': payload['assignee_id'],
@@ -415,7 +429,7 @@ class _BimIssueEditorScreenState extends ConsumerState<BimIssueEditorScreen> {
                         IconButton(
                           tooltip: 'Убрать фото',
                           onPressed:
-                              _saving || _uploadedPhotos.contains(photo.path)
+                              _saving || _createAttempted
                                   ? null
                                   : () => setState(() => _photos.remove(photo)),
                           icon: const Icon(Icons.close),
@@ -426,14 +440,18 @@ class _BimIssueEditorScreenState extends ConsumerState<BimIssueEditorScreen> {
                 if (widget.draft == null)
                   OutlinedButton.icon(
                     onPressed:
-                        _saving ? null : () => _pickPhoto(ImageSource.camera),
+                        _saving || _createAttempted
+                            ? null
+                            : () => _pickPhoto(ImageSource.camera),
                     icon: const Icon(Icons.photo_camera_outlined),
                     label: const Text('Сделать фото'),
                   ),
                 if (widget.draft == null)
                   OutlinedButton.icon(
                     onPressed:
-                        _saving ? null : () => _pickPhoto(ImageSource.gallery),
+                        _saving || _createAttempted
+                            ? null
+                            : () => _pickPhoto(ImageSource.gallery),
                     icon: const Icon(Icons.photo_library_outlined),
                     label: const Text('Из галереи'),
                   ),
@@ -456,9 +474,13 @@ class _BimIssueEditorScreenState extends ConsumerState<BimIssueEditorScreen> {
                   'Замечание сохранится на устройстве. Перед отправкой можно изменить текст.',
                 ),
               ),
-            if (_created != null)
+            if (_submittedDraft?.serverId != null)
               Text(
-                'Замечание №${_created!.id} создано. Повторите отправку оставшихся вложений.',
+                'Замечание №${_submittedDraft!.serverId} создано. Оставшиеся вложения сохранены на устройстве.',
+              ),
+            if (_submittedDraft != null && _createAttempted)
+              const Text(
+                'Отправка сохранена. Можно закрыть экран и продолжить во вкладке «На устройстве».',
               ),
             if (!_online && _createAttempted)
               const Text('Для завершения отправки подключитесь к интернету.'),
@@ -480,7 +502,7 @@ class _BimIssueEditorScreenState extends ConsumerState<BimIssueEditorScreen> {
               child: Text(
                 _saving
                     ? 'Сохраняем'
-                    : _created != null
+                    : _submittedDraft?.serverId != null
                     ? 'Отправить вложения'
                     : _draftOnly
                     ? 'Сохранить черновик'
@@ -517,7 +539,6 @@ class _BimIssueEditorScreenState extends ConsumerState<BimIssueEditorScreen> {
       if (mounted && photo != null) {
         setState(() {
           _photos.add(photo);
-          _photoKeys[photo.path] = _operationKey();
         });
       }
     } catch (error) {
@@ -551,94 +572,48 @@ class _BimIssueEditorScreenState extends ConsumerState<BimIssueEditorScreen> {
       _error = null;
     });
     try {
-      if (_draftOnly && _created == null) {
-        final service = await ref.read(bimOfflineServiceProvider.future);
-        if (widget.draft != null) {
-          await service.updateDraft(widget.draft!.localId, payload: _payload());
-        } else {
-          File? temporary;
-          try {
-            final attachments = <BimDraftAttachmentInput>[
-              for (final photo in _photos)
-                BimDraftAttachmentInput(
-                  path: photo.path,
-                  filename: photo.name,
-                  mime: photo.mimeType ?? 'image/jpeg',
-                  kind: 'photo',
-                ),
-            ];
-            if (widget.snapshot != null) {
-              final directory = await getTemporaryDirectory();
-              temporary = File('${directory.path}/bim-${_operationKey()}.png');
-              await temporary.writeAsBytes(widget.snapshot!, flush: true);
-              attachments.add(
-                BimDraftAttachmentInput(
-                  path: temporary.path,
-                  filename: 'snapshot.png',
-                  mime: 'image/png',
-                  kind: 'snapshot',
-                ),
-              );
-            }
-            await service.createDraft(
-              versionId: widget.versionId,
-              payload: _payload(),
-              attachments: attachments,
-            );
-          } finally {
-            if (temporary != null && await temporary.exists()) {
-              await temporary.delete();
-            }
-          }
-        }
-      } else {
-        final repository = ref.read(bimRepositoryProvider);
-        _createPayload ??= _payload();
-        _createAttempted = true;
-        _created ??= await repository.createIssue(
-          widget.projectId,
-          _createPayload!,
-          idempotencyKey: _createKey,
+      final service = await ref.read(bimOfflineServiceProvider.future);
+      if (_submittedDraft == null) {
+        _submittedDraft = await service.createDraft(
+          versionId: widget.versionId,
+          payload: _payload(),
+          snapshot: widget.snapshot,
+          attachments: [
+            for (final photo in _photos)
+              BimDraftAttachmentInput(
+                path: photo.path,
+                filename: photo.name,
+                mime: photo.mimeType ?? 'image/jpeg',
+                kind: 'photo',
+              ),
+          ],
         );
-        if (ref.read(projectsProvider).selectedProject?.serverId !=
-            widget.projectId) {
-          throw const ApiException(
-            'Объект изменился. Откройте замечание заново.',
-          );
-        }
-        if (widget.snapshot != null && !_snapshotUploaded) {
-          _created = await repository.attachSnapshot(
-            _created!,
-            widget.snapshot!,
-            idempotencyKey: _snapshotKey,
-          );
-          _snapshotUploaded = true;
-        }
-        for (final photo in _photos) {
-          if (ref.read(projectsProvider).selectedProject?.serverId !=
-              widget.projectId) {
-            throw const ApiException(
-              'Объект изменился. Откройте замечание заново.',
+      } else if (!_createAttempted) {
+        await service.updateDraft(
+          _submittedDraft!.localId,
+          payload: _payload(),
+        );
+      }
+      if (!_draftOnly) {
+        _createAttempted = true;
+        await service.syncDraft(_submittedDraft!.localId);
+        _submittedDraft = (await service.drafts()).firstWhere(
+          (draft) => draft.localId == _submittedDraft!.localId,
+        );
+        if (_submittedDraft!.status != 'completed') {
+          if (mounted) {
+            setState(
+              () =>
+                  _error =
+                      _submittedDraft!.lastError ??
+                      'Отправка сохранена на устройстве. Повторите её после проверки соединения.',
             );
           }
-          if (_uploadedPhotos.contains(photo.path)) continue;
-          _created = await repository.attachPhoto(
-            _created!,
-            photo.path,
-            idempotencyKey: _photoKeys[photo.path],
-          );
-          _uploadedPhotos.add(photo.path);
+          return;
         }
       }
       if (mounted) Navigator.pop(context);
     } catch (error) {
-      if (_created == null &&
-          error is ApiException &&
-          [400, 422].contains(error.statusCode)) {
-        _createAttempted = false;
-        _createPayload = null;
-        _createKey = _operationKey();
-      }
       if (mounted) {
         setState(
           () =>
@@ -653,6 +628,238 @@ class _BimIssueEditorScreenState extends ConsumerState<BimIssueEditorScreen> {
     }
   }
 }
+
+class BimDraftReviewScreen extends ConsumerStatefulWidget {
+  const BimDraftReviewScreen({
+    super.key,
+    required this.projectId,
+    required this.draft,
+  });
+  final int projectId;
+  final BimIssueDraft draft;
+  @override
+  ConsumerState<BimDraftReviewScreen> createState() =>
+      _BimDraftReviewScreenState();
+}
+
+class _BimDraftReviewScreenState extends ConsumerState<BimDraftReviewScreen> {
+  late BimIssueDraft _draft = widget.draft;
+  bool _busy = false;
+  String? _error;
+  final Map<String, Future<Uint8List>> _attachments = {};
+
+  Future<void> _run(Future<void> Function() action) async {
+    if (_busy) return;
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      if (ref.read(projectsProvider).selectedProject?.serverId !=
+          widget.projectId) {
+        throw const ApiException(
+          'Объект изменился. Откройте замечание заново.',
+        );
+      }
+      await action();
+    } catch (error) {
+      if (mounted) setState(() => _error = UserMessage.fromError(error));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _retry() => _run(() async {
+    final service = await ref.read(bimOfflineServiceProvider.future);
+    await service.syncDraft(_draft.localId);
+    final updated = (await service.drafts()).firstWhere(
+      (item) => item.localId == _draft.localId,
+    );
+    if (mounted) setState(() => _draft = updated);
+  });
+
+  Future<void> _clone() => _run(() async {
+    final service = await ref.read(bimOfflineServiceProvider.future);
+    final editable = await service.cloneRejectedDraft(_draft.localId);
+    if (!mounted) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder:
+            (_) => BimIssueEditorScreen(
+              projectId: widget.projectId,
+              versionId: editable.versionId,
+              contextPayload: editable.payload,
+              draft: editable,
+              offline: true,
+            ),
+      ),
+    );
+    if (mounted) Navigator.pop(context);
+  });
+
+  Future<void> _remove() => _run(() async {
+    final accepted = await showDialog<bool>(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: Text(
+              _draft.serverId == null
+                  ? 'Удалить неотправленное замечание?'
+                  : 'Удалить очередь вложений?',
+            ),
+            content: Text(
+              _draft.serverId == null
+                  ? 'Текст и сохранённые вложения будут удалены с устройства.'
+                  : 'Замечание №${_draft.serverId} уже создано на сервере и останется там. Неотправленные вложения будут удалены с устройства.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Отмена'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('Удалить'),
+              ),
+            ],
+          ),
+    );
+    if (accepted != true) return;
+    final service = await ref.read(bimOfflineServiceProvider.future);
+    await service.removeDraft(_draft.localId);
+    if (mounted) Navigator.pop(context);
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final online = ref.watch(bimOnlineProvider).valueOrNull ?? false;
+    final selected = ref.watch(
+      projectsProvider.select((state) => state.selectedProject?.serverId),
+    );
+    return Scaffold(
+      appBar: AppBar(title: const Text('Сохранённое замечание')),
+      body:
+          selected != widget.projectId
+              ? const AppPermissionState(
+                title: 'Объект изменился',
+                description: 'Откройте замечания выбранного объекта заново.',
+              )
+              : ListView(
+                padding: const EdgeInsets.all(16),
+                children: [
+                  Text(
+                    '${_draft.payload['title'] ?? 'Замечание'}',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                  Text('${_draft.payload['description'] ?? ''}'),
+                  Text(
+                    'Важность: ${_severityLabel('${_draft.payload['severity'] ?? 'minor'}')}',
+                  ),
+                  if (_draft.payload['due_date'] != null)
+                    Text('Срок: ${_draft.payload['due_date']}'),
+                  if (_draft.lastError != null)
+                    Text(
+                      _draft.lastError!,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                    ),
+                  if (_draft.status == 'completed')
+                    const Text('Замечание и все вложения отправлены.'),
+                  if (_draft.rejectedBeforeCreate)
+                    const Text(
+                      'Сервер отклонил создание замечания. Исправьте черновик или удалите его.',
+                    )
+                  else if (_draft.status != 'completed')
+                    const Text(
+                      'Результат отправки требует проверки. Повторная отправка продолжит сохранённую операцию без создания копии. Содержание и вложения остаются на устройстве.',
+                    ),
+                  for (final attachment in _draft.attachments)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: FutureBuilder<Uint8List>(
+                        future: _attachments.putIfAbsent(
+                          attachment['key'] as String,
+                          () async {
+                            final service = await ref.read(
+                              bimOfflineServiceProvider.future,
+                            );
+                            return service.draftAttachmentBytes(
+                              _draft.localId,
+                              attachment['key'] as String,
+                            );
+                          },
+                        ),
+                        builder:
+                            (context, snapshot) =>
+                                snapshot.hasData
+                                    ? Image.memory(
+                                      snapshot.requireData,
+                                      height: 180,
+                                      fit: BoxFit.contain,
+                                    )
+                                    : snapshot.hasError
+                                    ? const Text(
+                                      'Вложение недоступно. Повторите открытие замечания.',
+                                    )
+                                    : const Center(
+                                      child: CircularProgressIndicator(),
+                                    ),
+                      ),
+                    ),
+                  if (_draft.serverId != null && online)
+                    OutlinedButton(
+                      onPressed:
+                          _busy
+                              ? null
+                              : () => Navigator.of(context).push(
+                                MaterialPageRoute<void>(
+                                  builder:
+                                      (_) => BimIssueDetailScreen(
+                                        id: _draft.serverId!,
+                                      ),
+                                ),
+                              ),
+                      child: const Text('Открыть замечание на сервере'),
+                    ),
+                  if (_draft.status != 'completed')
+                    FilledButton(
+                      onPressed: _busy || !online ? null : _retry,
+                      child: const Text('Повторить отправку'),
+                    ),
+                  if (_draft.rejectedBeforeCreate)
+                    OutlinedButton(
+                      onPressed: _busy ? null : _clone,
+                      child: const Text('Исправить черновик'),
+                    ),
+                  if (_draft.removable)
+                    TextButton(
+                      onPressed: _busy ? null : _remove,
+                      child: const Text('Удалить с устройства'),
+                    ),
+                  if (_error != null)
+                    Text(
+                      _error!,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                    ),
+                  if (_busy) const LinearProgressIndicator(),
+                ],
+              ),
+    );
+  }
+}
+
+String _severityLabel(String value) => switch (value) {
+  'critical' => 'Критическая',
+  'major' => 'Высокая',
+  'minor' => 'Обычная',
+  _ => 'Не указана',
+};
+
+String _date(DateTime value) =>
+    '${value.day.toString().padLeft(2, '0')}.${value.month.toString().padLeft(2, '0')}.${value.year}';
 
 class BimIssueDetailScreen extends ConsumerStatefulWidget {
   const BimIssueDetailScreen({super.key, required this.id});
@@ -722,9 +929,48 @@ class _BimIssueDetailScreenState extends ConsumerState<BimIssueDetailScreen> {
                         Chip(label: Text(issue.statusLabel)),
                         if (issue.blocking)
                           const Text('Замечание блокирует выпуск документации'),
+                        if (issue.blocking &&
+                            issue.blockingReason?.isNotEmpty == true)
+                          Text('Причина блокировки: ${issue.blockingReason}'),
                         Text(issue.description),
+                        Text('Важность: ${_severityLabel(issue.severity)}'),
+                        if (issue.dueDate != null)
+                          Text('Срок устранения: ${_date(issue.dueDate!)}'),
+                        if (issue.authorName?.isNotEmpty == true)
+                          Text('Автор: ${issue.authorName}'),
                         if (issue.assigneeId != null)
-                          Text('Исполнитель: ${issue.assigneeId}'),
+                          Text(
+                            'Исполнитель: ${issue.assigneeName ?? 'Имя недоступно'}',
+                          ),
+                        if (issue.history.isNotEmpty) ...[
+                          const SizedBox(height: 12),
+                          Text(
+                            'История замечания',
+                            style: Theme.of(context).textTheme.titleMedium,
+                          ),
+                          for (final entry in issue.history)
+                            ListTile(
+                              contentPadding: EdgeInsets.zero,
+                              title: Text(
+                                BimIssue(
+                                  id: issue.id,
+                                  projectId: issue.projectId,
+                                  revision: issue.revision,
+                                  title: issue.title,
+                                  status: entry.status,
+                                ).statusLabel,
+                              ),
+                              subtitle: Text(
+                                [
+                                  if (entry.author != null) entry.author!,
+                                  if (entry.changedAt != null)
+                                    _date(entry.changedAt!.toLocal()),
+                                  if (entry.comment?.isNotEmpty == true)
+                                    entry.comment!,
+                                ].join('\n'),
+                              ),
+                            ),
+                        ],
                         if (issue.snapshotUrl != null)
                           Padding(
                             padding: const EdgeInsets.symmetric(vertical: 12),

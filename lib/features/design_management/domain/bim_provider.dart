@@ -37,10 +37,11 @@ class BimCatalogState {
 }
 
 class BimCatalogNotifier extends StateNotifier<BimCatalogState> {
-  BimCatalogNotifier(this.repository, this.projectId)
+  BimCatalogNotifier(this.repository, this.projectId, {this.packageId})
     : super(const BimCatalogState());
   final BimRepository repository;
   final int projectId;
+  final int? packageId;
   int _request = 0;
   Future<void> load({
     String? query,
@@ -59,7 +60,12 @@ class BimCatalogNotifier extends StateNotifier<BimCatalogState> {
     );
     try {
       final results = await Future.wait<dynamic>([
-        repository.versions(projectId, query: search, status: filter),
+        repository.versions(
+          projectId,
+          query: search,
+          status: filter,
+          packageId: packageId,
+        ),
         repository.sets(projectId),
       ]);
       if (!mounted || request != _request) return;
@@ -105,6 +111,7 @@ class BimCatalogNotifier extends StateNotifier<BimCatalogState> {
         page: page.page + 1,
         query: current.query,
         status: current.status,
+        packageId: packageId,
       );
       if (!mounted || request != _request) return;
       state = BimCatalogState(
@@ -168,6 +175,14 @@ final bimCatalogProvider = StateNotifierProvider.autoDispose
     .family<BimCatalogNotifier, BimCatalogState, int>(
       (ref, projectId) =>
           BimCatalogNotifier(ref.read(bimRepositoryProvider), projectId),
+    );
+final bimPackageCatalogProvider = StateNotifierProvider.autoDispose
+    .family<BimCatalogNotifier, BimCatalogState, (int, int)>(
+      (ref, scope) => BimCatalogNotifier(
+        ref.read(bimRepositoryProvider),
+        scope.$1,
+        packageId: scope.$2,
+      ),
     );
 final bimViewerProvider = FutureProvider.autoDispose
     .family<BimPreparedViewer, int>(
