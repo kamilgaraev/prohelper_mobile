@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
@@ -1340,6 +1342,9 @@ class _WarehouseBalancesSheet extends ConsumerStatefulWidget {
 class _WarehouseBalancesSheetState
     extends ConsumerState<_WarehouseBalancesSheet> {
   late Future<List<WarehouseBalanceModel>> _balancesFuture;
+  final _searchController = TextEditingController();
+  Timer? _searchDebounce;
+  var _searchQuery = '';
   var _isWritingOff = false;
 
   @override
@@ -1351,7 +1356,28 @@ class _WarehouseBalancesSheetState
   Future<List<WarehouseBalanceModel>> _loadBalances() {
     return ref
         .read(warehouseRepositoryProvider)
-        .fetchBalances(widget.warehouse.id);
+        .fetchBalances(widget.warehouse.id, search: _searchQuery);
+  }
+
+  @override
+  void dispose() {
+    _searchDebounce?.cancel();
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  void _searchBalances(String value) {
+    _searchDebounce?.cancel();
+    setState(() => _searchQuery = value.trim());
+    if (_searchQuery.isEmpty) {
+      _refreshBalances();
+      return;
+    }
+    _searchDebounce = Timer(const Duration(milliseconds: 350), () {
+      if (mounted) {
+        _refreshBalances();
+      }
+    });
   }
 
   Future<void> _refreshBalances() async {
@@ -1459,6 +1485,32 @@ class _WarehouseBalancesSheetState
               ],
             ),
             const SizedBox(height: 12),
+            TextField(
+              controller: _searchController,
+              onChanged: _searchBalances,
+              textInputAction: TextInputAction.search,
+              onSubmitted: (_) {
+                _searchDebounce?.cancel();
+                _refreshBalances();
+              },
+              decoration: InputDecoration(
+                labelText: 'Поиск остатков',
+                hintText: 'Название или код материала',
+                prefixIcon: const Icon(Icons.search_rounded),
+                suffixIcon:
+                    _searchController.text.isEmpty
+                        ? null
+                        : IconButton(
+                          tooltip: 'Очистить поиск',
+                          icon: const Icon(Icons.clear_rounded),
+                          onPressed: () {
+                            _searchController.clear();
+                            _searchBalances('');
+                          },
+                        ),
+              ),
+            ),
+            const SizedBox(height: 12),
             Expanded(
               child: FutureBuilder<List<WarehouseBalanceModel>>(
                 future: _balancesFuture,
@@ -1488,11 +1540,16 @@ class _WarehouseBalancesSheetState
                   }
 
                   if (balances.isEmpty) {
-                    return const AppEmptyState(
+                    return AppEmptyState(
                       icon: Icons.inventory_2_outlined,
-                      title: 'На складе пока нет остатков',
+                      title:
+                          _searchQuery.isEmpty
+                              ? 'На складе пока нет остатков'
+                              : 'Ничего не найдено',
                       description:
-                          'После первого прихода позиции появятся здесь.',
+                          _searchQuery.isEmpty
+                              ? 'После первого прихода позиции появятся здесь.'
+                              : 'Попробуйте другое название или код материала.',
                     );
                   }
 
