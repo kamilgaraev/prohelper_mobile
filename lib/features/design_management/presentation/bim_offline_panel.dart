@@ -5,7 +5,6 @@ import '../../../core/error/user_message.dart';
 import '../../../core/widgets/app_error_state.dart';
 import '../../../core/widgets/app_loading_state.dart';
 import '../data/bim_models.dart';
-import '../domain/bim_provider.dart';
 import '../offline/bim_offline_models.dart';
 import '../offline/bim_offline_provider.dart';
 import '../offline/bim_offline_service.dart';
@@ -119,7 +118,6 @@ class _BimOfflinePanelState extends ConsumerState<BimOfflinePanel> {
 
   @override
   Widget build(BuildContext context) {
-    final online = ref.watch(bimOnlineProvider).valueOrNull ?? false;
     if (_loading) {
       return const AppLoadingState(message: 'Читаем сохранённые модели');
     }
@@ -341,19 +339,21 @@ class _BimOfflinePanelState extends ConsumerState<BimOfflinePanel> {
                               ),
                             )
                             .then((_) => _reload())
-                        : draft.serverId != null && online
-                        ? () => Navigator.of(context).push(
-                          MaterialPageRoute<void>(
-                            builder:
-                                (_) =>
-                                    BimIssueDetailScreen(id: draft.serverId!),
-                          ),
-                        )
-                        : null,
+                        : () => Navigator.of(context)
+                            .push(
+                              MaterialPageRoute<void>(
+                                builder:
+                                    (_) => BimDraftReviewScreen(
+                                      projectId: widget.projectId,
+                                      draft: draft,
+                                    ),
+                              ),
+                            )
+                            .then((_) => _reload()),
                 trailing: IconButton(
                   tooltip: 'Удалить черновик',
                   icon: const Icon(Icons.delete_outline),
-                  onPressed: () => _removeDraft(draft),
+                  onPressed: draft.removable ? () => _removeDraft(draft) : null,
                 ),
               ),
             ),

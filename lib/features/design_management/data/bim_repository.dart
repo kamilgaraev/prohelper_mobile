@@ -68,6 +68,7 @@ class BimRepository {
     int page = 1,
     String query = '',
     String? status,
+    int? packageId,
   }) => _list(
     '/project-model-versions',
     BimModelVersion.fromJson,
@@ -76,6 +77,7 @@ class BimRepository {
     filters: {
       if (query.trim().isNotEmpty) 'search': query.trim(),
       if (status != null) 'status': status,
+      if (packageId != null) 'package_id': packageId,
     },
   );
   Future<BimPreparedViewer> viewer(int id) async => BimPreparedViewer.fromJson(

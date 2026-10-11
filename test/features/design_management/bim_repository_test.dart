@@ -8,6 +8,74 @@ import 'package:prohelpers_mobile/features/design_management/data/bim_models.dar
 import 'package:prohelpers_mobile/features/design_management/data/bim_repository.dart';
 
 void main() {
+  test(
+    'catalog sends scoped package filter and preserves package title',
+    () async {
+      final repository = _repository((request) {
+        expect(request.path, '/design-management/project-model-versions');
+        expect(request.queryParameters['package_id'], 42);
+        expect(request.queryParameters['search'], 'Корпус 2');
+        return {
+          'success': true,
+          'data': [
+            {
+              'id': 55,
+              'title': 'Стены',
+              'model_title': 'АР',
+              'package_id': 42,
+              'package_title': 'Корпус 2',
+              'derivative_status': 'ready',
+            },
+          ],
+          'meta': {'current_page': 1, 'last_page': 1, 'total': 1},
+        };
+      });
+      final page = await repository.versions(
+        9,
+        packageId: 42,
+        query: 'Корпус 2',
+      );
+      expect(page.items.single.packageTitle, 'Корпус 2');
+      expect(page.items.single.packageId, 42);
+    },
+  );
+
+  test(
+    'issue parses workflow evidence and tolerates absent optional metadata',
+    () {
+      final issue = BimIssue.fromJson({
+        'id': 6,
+        'project_id': 9,
+        'revision': 1,
+        'title': 'Коллизия',
+        'status': 'open',
+        'assignee_id': 2,
+        'assignee': {'id': 2, 'name': 'Анна'},
+        'author': {'id': 3, 'name': 'Иван'},
+        'due_date': '2026-10-15',
+        'severity': 'major',
+        'blocking_reason': 'Не исправлено',
+        'history': [
+          {
+            'to_status': 'resolved',
+            'comment': 'Проверено',
+            'author': 'Анна',
+            'changed_at': '2026-10-11T10:00:00Z',
+          },
+        ],
+      });
+      expect(issue.assigneeName, 'Анна');
+      expect(issue.authorName, 'Иван');
+      expect(issue.dueDate, DateTime(2026, 10, 15));
+      expect(issue.severity, 'major');
+      expect(issue.blockingReason, 'Не исправлено');
+      expect(issue.history.single.comment, 'Проверено');
+      final legacy = BimIssue.fromJson({'id': 6});
+      expect(legacy.history, isEmpty);
+      expect(legacy.assigneeName, isNull);
+      expect(legacy.dueDate, isNull);
+    },
+  );
   test('cancelled opening cannot start preparation', () async {
     final methods = <String>[];
     final repository = _repository((request) {

@@ -15,22 +15,32 @@ import 'bim_offline_panel.dart';
 import 'bim_viewer_screen.dart';
 
 class BimCatalogScreen extends ConsumerStatefulWidget {
-  const BimCatalogScreen({super.key, required this.projectId});
+  const BimCatalogScreen({
+    super.key,
+    required this.projectId,
+    this.packageId,
+    this.packageTitle,
+  });
   final int projectId;
+  final int? packageId;
+  final String? packageTitle;
   @override
   ConsumerState<BimCatalogScreen> createState() => _BimCatalogScreenState();
 }
 
 class _BimCatalogScreenState extends ConsumerState<BimCatalogScreen> {
   final _search = TextEditingController();
+  AutoDisposeStateNotifierProvider<BimCatalogNotifier, BimCatalogState>
+  get _catalog =>
+      widget.packageId == null
+          ? bimCatalogProvider(widget.projectId)
+          : bimPackageCatalogProvider((widget.projectId, widget.packageId!));
   bool _busy = false;
   bool get _online => ref.read(bimOnlineProvider).valueOrNull ?? false;
   @override
   void initState() {
     super.initState();
-    Future.microtask(
-      () => ref.read(bimCatalogProvider(widget.projectId).notifier).load(),
-    );
+    Future.microtask(() => ref.read(_catalog.notifier).load());
   }
 
   @override
@@ -42,7 +52,7 @@ class _BimCatalogScreenState extends ConsumerState<BimCatalogScreen> {
   @override
   Widget build(BuildContext context) {
     ref.watch(bimOnlineProvider);
-    final state = ref.watch(bimCatalogProvider(widget.projectId));
+    final state = ref.watch(_catalog);
     final selected = ref.watch(
       projectsProvider.select((value) => value.selectedProject?.serverId),
     );
@@ -57,7 +67,11 @@ class _BimCatalogScreenState extends ConsumerState<BimCatalogScreen> {
       length: 3,
       child: Scaffold(
         appBar: AppBar(
-          title: const Text('BIM-модели'),
+          title: Text(
+            widget.packageTitle == null
+                ? 'BIM-модели'
+                : 'Модели: ${widget.packageTitle}',
+          ),
           actions: [
             IconButton(
               tooltip: 'Замечания',
@@ -95,8 +109,7 @@ class _BimCatalogScreenState extends ConsumerState<BimCatalogScreen> {
     );
   }
 
-  Future<void> _reload() =>
-      ref.read(bimCatalogProvider(widget.projectId).notifier).load();
+  Future<void> _reload() => ref.read(_catalog.notifier).load();
   Widget? _initialState(BimCatalogState state) {
     if (state.loading && state.versions == null) {
       return const AppLoadingState(message: 'Загружаем модели');
@@ -140,19 +153,16 @@ class _BimCatalogScreenState extends ConsumerState<BimCatalogScreen> {
                       icon: const Icon(Icons.search),
                       onPressed:
                           () => ref
-                              .read(
-                                bimCatalogProvider(widget.projectId).notifier,
-                              )
+                              .read(_catalog.notifier)
                               .load(query: _search.text),
                     ),
                   ),
                   onSubmitted:
-                      (value) => ref
-                          .read(bimCatalogProvider(widget.projectId).notifier)
-                          .load(query: value),
+                      (value) => ref.read(_catalog.notifier).load(query: value),
                 ),
                 const SizedBox(height: 8),
                 DropdownButtonFormField<String>(
+                  key: ValueKey('model-status-${state.status}'),
                   initialValue: state.status,
                   decoration: const InputDecoration(
                     labelText: 'Подготовка модели',
@@ -178,7 +188,7 @@ class _BimCatalogScreenState extends ConsumerState<BimCatalogScreen> {
                   ],
                   onChanged:
                       (value) => ref
-                          .read(bimCatalogProvider(widget.projectId).notifier)
+                          .read(_catalog.notifier)
                           .load(status: value, clearStatus: value == null),
                 ),
                 const SizedBox(height: 16),
@@ -191,10 +201,29 @@ class _BimCatalogScreenState extends ConsumerState<BimCatalogScreen> {
                     ),
                   ),
                 if (versions?.items.isEmpty ?? true)
-                  const Padding(
+                  Padding(
                     padding: EdgeInsets.symmetric(vertical: 32),
-                    child: Text(
-                      'Модели не найдены. Модели добавляют в документацию на сайте МОСТ.',
+                    child: Column(
+                      children: [
+                        Text(
+                          state.query.trim().isNotEmpty || state.status != null
+                              ? 'Нет моделей по выбранным условиям.'
+                              : widget.packageId != null
+                              ? 'В этом пакете пока нет моделей.'
+                              : 'Модели не найдены. Модели добавляют в документацию на сайте МОСТ.',
+                        ),
+                        if (state.query.trim().isNotEmpty ||
+                            state.status != null)
+                          TextButton(
+                            onPressed: () {
+                              _search.clear();
+                              ref
+                                  .read(_catalog.notifier)
+                                  .load(query: '', clearStatus: true);
+                            },
+                            child: const Text('Сбросить фильтры'),
+                          ),
+                      ],
                     ),
                   ),
               ],
@@ -207,13 +236,7 @@ class _BimCatalogScreenState extends ConsumerState<BimCatalogScreen> {
                       state.loadingMore
                           ? null
                           : () =>
-                              ref
-                                  .read(
-                                    bimCatalogProvider(
-                                      widget.projectId,
-                                    ).notifier,
-                                  )
-                                  .loadMoreVersions(),
+                              ref.read(_catalog.notifier).loadMoreVersions(),
                   child: Text(state.loadingMore ? 'Загружаем' : 'Показать ещё'),
                 )
                 : const SizedBox.shrink();
@@ -370,12 +393,7 @@ class _BimCatalogScreenState extends ConsumerState<BimCatalogScreen> {
               onPressed:
                   state.loadingMore
                       ? null
-                      : () =>
-                          ref
-                              .read(
-                                bimCatalogProvider(widget.projectId).notifier,
-                              )
-                              .loadMoreSets(),
+                      : () => ref.read(_catalog.notifier).loadMoreSets(),
               child: const Text('Показать ещё'),
             ),
         ],

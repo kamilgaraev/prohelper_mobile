@@ -120,6 +120,7 @@ class BimIssueDraft {
     required this.status,
     this.serverId,
     this.lastError,
+    this.rejectedBeforeCreate = false,
   });
   final String localId;
   final int versionId;
@@ -129,7 +130,13 @@ class BimIssueDraft {
   final String status;
   final int? serverId;
   final String? lastError;
+  final bool rejectedBeforeCreate;
   bool get editable => !attempted;
+  bool get removable =>
+      !attempted ||
+      rejectedBeforeCreate ||
+      serverId != null ||
+      status == 'completed';
 }
 
 class BimLocalVersion {

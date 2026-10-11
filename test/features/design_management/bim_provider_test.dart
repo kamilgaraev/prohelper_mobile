@@ -98,6 +98,7 @@ class _FakeRepository extends BimRepository {
     int page = 1,
     String query = '',
     String? status,
+    int? packageId,
   }) => loader(page, query);
   @override
   Future<BimPage<BimModelSet>> sets(int projectId, {int page = 1}) async =>
