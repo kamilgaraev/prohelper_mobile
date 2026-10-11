@@ -552,6 +552,12 @@ class _JournalEntryFormScreenState
             label: 'Замечания по качеству',
             maxLines: 3,
           ),
+          if (!_isEdit) ...[
+            const SizedBox(height: 12),
+            const Text(
+              'Фото можно добавить после сохранения черновика. Откройте сохранённую запись в журнале и нажмите «Добавить фото».',
+            ),
+          ],
           const SizedBox(height: 24),
           Row(
             children: [
@@ -1051,7 +1057,12 @@ class _JournalEntryFormScreenState
   void _refreshResourceSuggestions() {
     final suggestions = journalResourceSuggestions([
       for (final volume in _workVolumes)
-        if (volume.estimateItem != null && volume.suggestionsEnabled)
+        if (volume.estimateItem != null &&
+            volume.suggestionsEnabled &&
+            journalResourceBasisMatches(
+              volume.estimateItem!,
+              volume.measurementUnitId,
+            ))
           (
             item: volume.estimateItem!,
             quantity: _parseDecimal(volume.quantityController.text) ?? 0,
@@ -1071,24 +1082,38 @@ class _JournalEntryFormScreenState
       return false;
     });
     _workers.removeWhere((item) {
+      if (item.suggestionKey != null && !active.contains(item.suggestionKey)) {
+        item.totalNormHours = null;
+      }
       if (item.suggestionKey != null &&
           !active.contains(item.suggestionKey) &&
           canUpdateJournalSuggestion(
             item.hoursController.text,
             item.lastSuggestion,
           )) {
+        if (item.countController.text.trim().isNotEmpty) {
+          item.clearAutomaticHours();
+          return false;
+        }
         item.dispose();
         return true;
       }
       return false;
     });
     _equipment.removeWhere((item) {
+      if (item.suggestionKey != null && !active.contains(item.suggestionKey)) {
+        item.totalNormHours = null;
+      }
       if (item.suggestionKey != null &&
           !active.contains(item.suggestionKey) &&
           canUpdateJournalSuggestion(
             item.hoursController.text,
             item.lastSuggestion,
           )) {
+        if (item.quantityController.text.trim().isNotEmpty) {
+          item.clearAutomaticHours();
+          return false;
+        }
         item.dispose();
         return true;
       }
@@ -1100,12 +1125,13 @@ class _JournalEntryFormScreenState
       final quantity = journalSuggestedQuantity(suggestion.quantity);
       switch (resource.resourceType) {
         case 'material':
-          if (resource.measurementUnit == null) continue;
+          if (resource.displayUnit == null) continue;
           final existing = _materials.where(
             (item) =>
                 item.suggestionKey == suggestion.key ||
                 (item.estimateItemId == resource.estimateItemId &&
                     item.materialId == resource.materialId &&
+                    item.measurementUnit == resource.displayUnit &&
                     item.materialName == resource.name),
           );
           if (existing.isEmpty) {
@@ -1116,7 +1142,7 @@ class _JournalEntryFormScreenState
                 projectMaterialDeliveryId: null,
                 custodyWarehouseId: null,
                 materialName: resource.name,
-                measurementUnit: resource.measurementUnit?.displayName ?? '-',
+                measurementUnit: resource.displayUnit!,
                 quantity: quantity,
                 suggestionKey: suggestion.key,
               ),
@@ -1735,6 +1761,10 @@ class _WorkVolumeCard extends StatelessWidget {
                 'Согласовано по договору: ${_formatMaterialQuantity(input.estimateItem!.contractAgreedQuantity!)} ${input.measurementUnitName ?? ''}',
               ),
             if (input.estimateItem != null &&
+                journalResourceBasisMatches(
+                  input.estimateItem!,
+                  input.measurementUnitId,
+                ) &&
                 (double.tryParse(
                           input.quantityController.text.replaceAll(',', '.'),
                         ) ??
@@ -1751,9 +1781,40 @@ class _WorkVolumeCard extends StatelessWidget {
                 ),
               ]))
                 Text(
-                  'По норме: ${suggestion.resource.name} — ${journalSuggestedQuantity(suggestion.quantity)} ${suggestion.resource.measurementUnit?.displayName ?? 'единица не указана'}',
+                  'По норме: ${suggestion.resource.name} — ${journalSuggestedQuantity(suggestion.quantity)} ${suggestion.resource.displayUnit ?? 'единица не указана'}',
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
+            if (input.estimateItem != null) ...[
+              if (!journalResourceBasisMatches(
+                input.estimateItem!,
+                input.measurementUnitId,
+              ))
+                Text(
+                  'Расчёт ресурсов доступен в единице сметной позиции',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              for (final resource in journalResourceComposition(
+                input.estimateItem!.resources,
+              ))
+                if (!resource.hasKnownNorm)
+                  Text(
+                    '${resource.name}${resource.displayUnit == null ? '' : ' (${resource.displayUnit})'}: норма не указана. Расход не рассчитан, укажите его вручную.',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  )
+                else if (!journalResourceBasisMatches(
+                  input.estimateItem!,
+                  input.measurementUnitId,
+                ))
+                  Text(
+                    'Состав: ${resource.name}${resource.displayUnit == null ? '' : ' (${resource.displayUnit})'}',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  )
+                else if (resource.quantityPerUnit == 0)
+                  Text(
+                    'По норме: ${resource.name} — 0 ${resource.displayUnit ?? ''}',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+            ],
             const SizedBox(height: 8),
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -2198,6 +2259,12 @@ class _WorkerInput {
     updateHoursForCount();
   }
 
+  void clearAutomaticHours() {
+    hoursController.clear();
+    lastSuggestion = '';
+    totalNormHours = null;
+  }
+
   void updateHoursForCount() {
     final total = totalNormHours;
     if (total == null) return;
@@ -2261,6 +2328,12 @@ class _EquipmentInput {
   void updateSuggestion(double value) {
     totalNormHours = value;
     updateHoursForCount();
+  }
+
+  void clearAutomaticHours() {
+    hoursController.clear();
+    lastSuggestion = '';
+    totalNormHours = null;
   }
 
   void updateHoursForCount() {

@@ -13,6 +13,265 @@ import 'package:prohelpers_mobile/features/construction_journal/presentation/jou
 
 void main() {
   testWidgets(
+    'actual 0.035 shows verified child norms and preserves manual values and headcounts',
+    (tester) async {
+      Map<String, dynamic>? payload;
+      await _pumpJournalForm(
+        tester,
+        width: 390,
+        textScale: 1,
+        includeLongEstimateOptions: true,
+        resourcesOverride: _verifiedResources(),
+        estimateUnitOverride: _estimateBasisUnit,
+        onEntryCreate: (value) => payload = value,
+      );
+      final actualQuantity = await _selectResourceWork(tester, '0.035');
+      expect(
+        find.textContaining('По норме: Поковки — 0.0000805 т'),
+        findsOneWidget,
+      );
+      final workerHours = _textField('Часов на человека');
+      await tester.scrollUntilVisible(
+        workerHours,
+        250,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.pumpAndSettle();
+      final workerCount = _countInCard(workerHours);
+      expect(tester.widget<TextField>(workerCount).controller!.text, isEmpty);
+      await tester.enterText(workerCount, '3');
+      await tester.pumpAndSettle();
+      expect(
+        tester.widget<TextField>(workerHours).controller!.text,
+        '1.41166667',
+      );
+      await tester.enterText(workerHours, '3');
+      final machineHours = _textField('Часов на единицу техники');
+      await tester.scrollUntilVisible(
+        machineHours,
+        250,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.pumpAndSettle();
+      final machineCount = _countInCard(machineHours);
+      expect(tester.widget<TextField>(machineCount).controller!.text, isEmpty);
+      await tester.enterText(machineCount, '2');
+      await tester.pumpAndSettle();
+      expect(
+        tester.widget<TextField>(machineHours).controller!.text,
+        '0.071925',
+      );
+      await tester.scrollUntilVisible(
+        find.text('Вода'),
+        250,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.pumpAndSettle();
+      final water = find.descendant(
+        of:
+            find
+                .ancestor(of: find.text('Вода'), matching: find.byType(Card))
+                .first,
+        matching: _textField('Списано в работу'),
+      );
+      await tester.enterText(water, '0.02');
+      await tester.scrollUntilVisible(
+        find.text('Объемы выполненных работ'),
+        -350,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.pumpAndSettle();
+      await tester.enterText(actualQuantity, '');
+      await tester.pumpAndSettle();
+      await tester.enterText(actualQuantity, '0.035');
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        workerHours,
+        250,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.pumpAndSettle();
+      expect(tester.widget<TextField>(workerCount).controller!.text, '3');
+      expect(tester.widget<TextField>(workerHours).controller!.text, '3');
+      await tester.scrollUntilVisible(
+        machineHours,
+        250,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.pumpAndSettle();
+      expect(tester.widget<TextField>(machineCount).controller!.text, '2');
+      expect(
+        tester.widget<TextField>(machineHours).controller!.text,
+        '0.071925',
+      );
+      await tester.scrollUntilVisible(
+        find.text('Сохранить черновик'),
+        350,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Сохранить черновик'));
+      await tester.pumpAndSettle();
+      final materials = (payload!['materials'] as List).cast<Map>();
+      expect(
+        materials.firstWhere(
+          (row) => row['material_name'] == 'Поковки',
+        )['quantity'],
+        0.0000805,
+      );
+      expect(
+        materials.firstWhere(
+          (row) => row['material_name'] == 'Вода',
+        )['quantity'],
+        0.02,
+      );
+      expect(
+        materials.firstWhere(
+          (row) => row['material_name'] == 'Древесина',
+        )['quantity'],
+        0.00056,
+      );
+      expect((payload!['workers'] as List).single['workers_count'], 3);
+      expect((payload!['workers'] as List).single['hours_worked'], 3);
+      expect((payload!['equipment'] as List).single['quantity'], 2);
+      expect((payload!['work_volumes'] as List).single['quantity'], 0.035);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'unknown norm shows composition once and cannot create actual rows from planned quantity',
+    (tester) async {
+      Map<String, dynamic>? payload;
+      const unknown = {
+        'id': -205,
+        'source_key': 'estimate_item:205',
+        'resource_type': 'material',
+        'name': 'Поковки',
+        'quantity_per_unit': null,
+        'total_quantity': 100,
+        'unit_name': 'т',
+      };
+      await _pumpJournalForm(
+        tester,
+        width: 390,
+        textScale: 1,
+        includeLongEstimateOptions: true,
+        resourcesOverride: [unknown, unknown],
+        estimateUnitOverride: _estimateBasisUnit,
+        onEntryCreate: (value) => payload = value,
+      );
+      await _selectResourceWork(tester, '0.035');
+      expect(
+        find.textContaining('Поковки (т): норма не указана'),
+        findsOneWidget,
+      );
+      await tester.scrollUntilVisible(
+        find.text('Сохранить черновик'),
+        350,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Сохранить черновик'));
+      await tester.pumpAndSettle();
+      expect(payload!['materials'], isEmpty);
+      expect(payload!['workers'], isEmpty);
+      expect(payload!['equipment'], isEmpty);
+      expect((payload!['work_volumes'] as List).single['quantity'], 0.035);
+    },
+  );
+
+  testWidgets(
+    'different actual unit shows composition only and keeps saved actuals',
+    (tester) async {
+      Map<String, dynamic>? payload;
+      final item = ConstructionJournalEstimateItemOption.fromJson({
+        'id': 19,
+        'estimate_id': 301,
+        'name': 'Работа',
+        'measurement_unit_id': 6,
+        'measurementUnit': _estimateBasisUnit,
+        'resources': _verifiedResources(),
+      });
+      final entry = ConstructionJournalEntryModel(
+        id: 42,
+        journalId: 7,
+        estimateId: 301,
+        entryDate: '2026-10-11',
+        entryNumber: 1,
+        workDescription: 'Монтаж',
+        status: 'draft',
+        statusLabel: 'Черновик',
+        workflowState: 'ready',
+        workVolumes: [
+          ConstructionJournalWorkVolumeModel(
+            id: 91,
+            estimateItemId: 19,
+            quantity: 0.035,
+            measurementUnitId: 7,
+            measurementUnitName: 'м²',
+            title: 'Работа',
+            estimateItem: item,
+          ),
+        ],
+        workers: const [
+          ConstructionJournalWorkerModel(
+            id: 92,
+            specialty: 'Монтажник',
+            workersCount: 3,
+          ),
+        ],
+        materials: const [
+          ConstructionJournalMaterialUsageModel(
+            id: 93,
+            materialName: 'Поковки',
+            quantity: 0.0001,
+            measurementUnit: 'т',
+          ),
+        ],
+        blockers: [],
+        availableActions: const [
+          ConstructionJournalActionModel(
+            action: 'update',
+            label: 'Редактировать',
+          ),
+        ],
+      );
+      await _pumpJournalForm(
+        tester,
+        width: 390,
+        textScale: 1,
+        initialEntry: entry,
+        onEntryCreate: (value) => payload = value,
+      );
+      await tester.scrollUntilVisible(
+        find.text('Расчёт ресурсов доступен в единице сметной позиции'),
+        250,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Состав: Поковки (т)'), findsOneWidget);
+      expect(find.textContaining('По норме: Поковки —'), findsNothing);
+      await tester.scrollUntilVisible(
+        find.text('Сохранить черновик'),
+        350,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Сохранить черновик'));
+      await tester.pumpAndSettle();
+      expect((payload!['workers'] as List).single['workers_count'], 3);
+      expect((payload!['workers'] as List).single['hours_worked'], isNull);
+      expect((payload!['materials'] as List).single['quantity'], 0.0001);
+      expect(
+        (payload!['work_volumes'] as List).single['measurement_unit_id'],
+        7,
+      );
+      expect((payload!['work_volumes'] as List).single['quantity'], 0.035);
+    },
+  );
+
+  testWidgets(
     'notes edit preserves saved resource ids counts and explicitly absent hours',
     (tester) async {
       Map<String, dynamic>? payload;
@@ -254,6 +513,7 @@ void main() {
           400,
           scrollable: find.byType(Scrollable).first,
         );
+        await tester.pumpAndSettle();
         await tester.tap(find.text('Сохранить черновик'));
         await tester.pumpAndSettle();
         final material = (payload!['materials'] as List).single as Map;
@@ -1044,6 +1304,8 @@ Future<void> _pumpJournalForm(
   bool includeResources = false,
   String? submissionBlocker,
   ConstructionJournalEntryModel? initialEntry,
+  List<Map<String, dynamic>>? resourcesOverride,
+  Map<String, dynamic>? estimateUnitOverride,
   void Function(Map<String, dynamic>)? onEntryCreate,
 }) async {
   tester.view.physicalSize = Size(width, 1000);
@@ -1123,6 +1385,8 @@ Future<void> _pumpJournalForm(
                   data: _formOptionsResponse(
                     includeLongEstimateOptions,
                     includeResources: includeResources,
+                    resourcesOverride: resourcesOverride,
+                    estimateUnitOverride: estimateUnitOverride,
                   ),
                 ),
               );
@@ -1160,9 +1424,106 @@ Future<void> _pumpJournalForm(
   await tester.pumpAndSettle();
 }
 
+Finder _textField(String label) => find.byWidgetPredicate(
+  (widget) => widget is TextField && widget.decoration?.labelText == label,
+);
+
+Finder _countInCard(Finder hours) => find.descendant(
+  of: find.ancestor(of: hours, matching: find.byType(Card)).first,
+  matching: _textField('Количество'),
+);
+
+Future<Finder> _selectResourceWork(WidgetTester tester, String quantity) async {
+  await tester.tap(find.text('Дата записи'));
+  await tester.pumpAndSettle();
+  await tester.tap(find.text('OK'));
+  await tester.pumpAndSettle();
+  await tester.enterText(_textField('Описание работ'), 'Монтаж');
+  await tester.tap(find.text('Смета'));
+  await tester.pumpAndSettle();
+  await tester.tap(find.text('СМ-2026-0003 - Журнал производства работ').last);
+  await tester.pumpAndSettle();
+  await tester.scrollUntilVisible(
+    find.text('Позиция сметы'),
+    250,
+    scrollable: find.byType(Scrollable).first,
+  );
+  await tester.pumpAndSettle();
+  await tester.tap(find.text('Позиция сметы'));
+  await tester.pumpAndSettle();
+  await tester.tap(
+    find.textContaining(
+      'Устройство монолитной железобетонной фундаментной плиты',
+    ),
+  );
+  await tester.pumpAndSettle();
+  await tester.tap(find.text('Добавить из сметы'));
+  await tester.pumpAndSettle();
+  final actual = _textField('Количество').first;
+  await tester.enterText(actual, quantity);
+  await tester.pumpAndSettle();
+  return actual;
+}
+
+const _estimateBasisUnit = {
+  'id': 6,
+  'name': '100 квадратных метров',
+  'short_name': '100 м²',
+};
+
+List<Map<String, dynamic>> _verifiedResources() => [
+  {
+    'id': -201,
+    'source_key': 'estimate_item:201',
+    'estimate_item_id': 201,
+    'resource_type': 'labor',
+    'name': 'Труд рабочих',
+    'quantity_per_unit': 121,
+    'unit_name': 'чел.-ч',
+  },
+  {
+    'id': -202,
+    'source_key': 'estimate_item:202',
+    'estimate_item_id': 202,
+    'resource_type': 'equipment',
+    'name': 'Кран',
+    'quantity_per_unit': 4.11,
+    'unit_name': 'маш.-ч',
+  },
+  {
+    'id': -203,
+    'source_key': 'estimate_item:203',
+    'estimate_item_id': 203,
+    'resource_type': 'material',
+    'name': 'Вода',
+    'quantity_per_unit': 0.3,
+    'unit_name': 'м3',
+  },
+  {
+    'id': -204,
+    'source_key': 'estimate_item:204',
+    'estimate_item_id': 204,
+    'resource_type': 'material',
+    'name': 'Древесина',
+    'quantity_per_unit': 0.016,
+    'unit_name': 'м3',
+  },
+  {
+    'id': -205,
+    'source_key': 'estimate_item:205',
+    'estimate_item_id': 205,
+    'resource_type': 'material',
+    'name': 'Поковки',
+    'quantity_per_unit': 0.0023,
+    'unit_name': 'т',
+  },
+];
+
 Map<String, dynamic> _formOptionsResponse(
   bool includeLongEstimateOptions, {
   bool includeResources = false,
+  List<Map<String, dynamic>>? resourcesOverride,
+  Map<String, dynamic>? estimateUnitOverride,
 }) {
   return {
     'data': {
@@ -1184,23 +1545,22 @@ Map<String, dynamic> _formOptionsResponse(
                       'quantity': 25.0,
                       'quantity_total': 25.0,
                       'work_type_id': 91,
-                      'measurement_unit_id': 6,
+                      'measurement_unit_id': estimateUnitOverride?['id'] ?? 6,
                       'workType': {
                         'id': 91,
                         'name': 'Арматурные работы',
                         'measurement_unit_id': null,
                         'measurementUnit': null,
                       },
-                      'measurementUnit': {
-                        'id': 6,
-                        'name': 'килограмм',
-                        'short_name': 'кг',
-                      },
+                      'measurementUnit':
+                          estimateUnitOverride ??
+                          {'id': 6, 'name': 'килограмм', 'short_name': 'кг'},
                       'contract_links': [],
                       'estimate_planned_quantity': 25,
                       'contract_agreed_quantity': 20,
                       'resources':
-                          includeResources
+                          resourcesOverride ??
+                          (includeResources
                               ? [
                                 {
                                   'id': 1,
@@ -1228,7 +1588,7 @@ Map<String, dynamic> _formOptionsResponse(
                                   'quantity_per_unit': 8,
                                 },
                               ]
-                              : [],
+                              : []),
                     },
                   ],
                 },

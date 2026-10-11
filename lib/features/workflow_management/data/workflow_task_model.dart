@@ -20,7 +20,7 @@ class WorkflowTaskEntryModel {
   factory WorkflowTaskEntryModel.fromJson(Map<String, dynamic> json) {
     return WorkflowTaskEntryModel(
       id: _requiredString(json, 'id'),
-      action: _requiredStringIn(json, 'action', _workflowActions),
+      action: _requiredStringIn(json, 'action', _workflowHistoryActions),
       fromStatus: _requiredStringIn(json, 'from_status', _workflowStatuses),
       toStatus: _requiredStringIn(json, 'to_status', _workflowStatuses),
       userId: _requiredInt(json, 'user_id'),
@@ -164,6 +164,7 @@ class WorkflowTaskModel {
   }
 
   bool get isJournalWork => workOriginType == 'journal';
+  bool get canSubmit => !isJournalWork && availableActions.contains('submit');
   bool get canApprove => !isJournalWork && availableActions.contains('approve');
   bool get canReject => !isJournalWork && availableActions.contains('reject');
   bool get canRequestChanges =>
@@ -219,7 +220,9 @@ class WorkflowTaskModel {
               : _requiredString(json, 'status_label')),
       availableActions: _requiredStringListIn(
         json,
-        'available_actions',
+        json['workflow_actions'] is List
+            ? 'workflow_actions'
+            : 'available_actions',
         _workflowActions,
       ),
       workflowSummary: WorkflowSummaryModel.fromJson(
@@ -233,7 +236,9 @@ class WorkflowTaskModel {
       statusHistory:
           _requiredMapList(
             json,
-            'status_history',
+            json['workflow_status_history'] is List
+                ? 'workflow_status_history'
+                : 'status_history',
           ).map(WorkflowTaskEntryModel.fromJson).toList(),
       createdAt: _requiredString(json, 'created_at'),
       updatedAt: _requiredString(json, 'updated_at'),
@@ -504,7 +509,14 @@ const _workflowStatuses = {
   'rejected',
 };
 
-const _workflowActions = {'approve', 'reject', 'request_changes', 'comment'};
+const _workflowActions = {
+  'approve',
+  'reject',
+  'request_changes',
+  'comment',
+  'submit',
+};
+const _workflowHistoryActions = {..._workflowActions, 'confirm'};
 
 const _workflowOrigins = {'manual', 'schedule', 'journal'};
 

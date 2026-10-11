@@ -4,9 +4,17 @@ import '../../../core/network/api_exception.dart';
 import '../../../core/network/dio_client.dart';
 import '../../../core/network/mobile_api_response.dart';
 import 'act_model.dart';
+import '../../design_management/data/design_package_file_service.dart';
+
+final actFileServiceProvider = Provider<DesignPackageFileService>(
+  (ref) => DesignPackageFileService(client: ref.read(dioProvider)),
+);
 
 final actsRepositoryProvider = Provider<ActsRepository>(
-  (ref) => ActsRepository(ref.read(dioProvider)),
+  (ref) => ActsRepository(
+    ref.read(dioProvider),
+    fileService: ref.read(actFileServiceProvider),
+  ),
 );
 
 class ActPage {
@@ -21,8 +29,11 @@ class ActPage {
 }
 
 class ActsRepository {
-  ActsRepository(this._dio);
+  ActsRepository(Dio dio, {DesignPackageFileService? fileService})
+    : _dio = dio,
+      _fileService = fileService ?? DesignPackageFileService(client: dio);
   final Dio _dio;
+  final DesignPackageFileService _fileService;
   static const _base = '/acts';
 
   Future<ActPage> list({
@@ -70,6 +81,11 @@ class ActsRepository {
       throw ApiException.fromDio(error);
     }
   }
+
+  Future<String> downloadFile(int actId, ActFile file) => _fileService.download(
+    Uri(path: '$_base/$actId/files/${file.id}'),
+    file.name,
+  );
 
   Future<Map<String, dynamic>> confirmField({
     required int id,

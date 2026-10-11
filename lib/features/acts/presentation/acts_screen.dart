@@ -8,6 +8,7 @@ import '../../../core/network/api_exception.dart';
 import '../../../core/storage/secure_storage_service.dart';
 import '../../auth/domain/auth_provider.dart';
 import '../../../core/widgets/pro_card.dart';
+import '../../../core/widgets/app_empty_state.dart';
 import '../../projects/domain/projects_provider.dart';
 import '../data/act_model.dart';
 import '../data/acts_repository.dart';
@@ -162,11 +163,32 @@ class _ActDetailScreenState extends ConsumerState<ActDetailScreen> {
   ActModel? _act;
   bool _loading = true;
   String? _error;
+  int? _projectId;
+  Object? _boundActor;
+  int? _openingFile;
   @override
   void initState() {
     super.initState();
+    _projectId = ref.read(projectsProvider).selectedProject?.serverId;
+    _boundActor = _actorContext;
     _load();
   }
+
+  Object get _actorContext {
+    final auth = ref.read(authProvider);
+    return (
+      user: auth.user?.serverId,
+      organization: auth.user?.currentOrganizationId,
+      session: auth is AuthAuthenticated ? auth.sessionIdentity : null,
+    );
+  }
+
+  bool get _contextCurrent =>
+      mounted &&
+      _projectId != null &&
+      ref.read(projectsProvider).selectedProject?.serverId == _projectId &&
+      _act?.projectId == _projectId &&
+      _boundActor == _actorContext;
 
   Future<void> _load() async {
     try {
@@ -190,7 +212,23 @@ class _ActDetailScreenState extends ConsumerState<ActDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final projectId = ref.watch(
+      projectsProvider.select((state) => state.selectedProject?.serverId),
+    );
+    ref.watch(authProvider);
     final act = _act;
+    if (projectId != _projectId ||
+        _boundActor != _actorContext ||
+        (act?.projectId != null && act!.projectId != _projectId)) {
+      return const Scaffold(
+        appBar: null,
+        body: AppEmptyState(
+          icon: Icons.apartment_outlined,
+          title: 'Объект или организация изменились',
+          description: 'Откройте акт из списка выбранного объекта.',
+        ),
+      );
+    }
     return Scaffold(
       appBar: AppBar(title: const Text('Акт')),
       body:
@@ -219,19 +257,65 @@ class _ActDetailScreenState extends ConsumerState<ActDetailScreen> {
                       ],
                     ),
                   ),
+                  const SizedBox(height: 16),
+                  ProCard(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Файлы акта',
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                        if (act.files.isEmpty)
+                          const Padding(
+                            padding: EdgeInsets.only(top: 8),
+                            child: Text('Файлы пока не приложены.'),
+                          ),
+                        for (final file in act.files)
+                          ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            leading: const Icon(Icons.description_outlined),
+                            title: Text(file.name),
+                            trailing:
+                                _openingFile == file.id
+                                    ? const SizedBox(
+                                      width: 20,
+                                      height: 20,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      ),
+                                    )
+                                    : const Icon(Icons.open_in_new_outlined),
+                            onTap:
+                                act.canViewFiles &&
+                                        _contextCurrent &&
+                                        _openingFile == null
+                                    ? () => _openFile(act, file)
+                                    : null,
+                          ),
+                        if (act.files.isNotEmpty && !act.canViewFiles)
+                          const Text(
+                            'Просмотр файлов недоступен для текущего пользователя.',
+                          ),
+                      ],
+                    ),
+                  ),
                   const Padding(
                     padding: EdgeInsets.only(top: 18),
                     child: Text(
-                      'Полевое подтверждение фиксирует приёмку текущим пользователем и не заменяет юридическую подпись акта.',
+                      'Полевая проверка сохраняет подтверждение пользователя. Она не изменяет статус акта и не заменяет юридическую подпись.',
                     ),
                   ),
                   if (act.canFieldConfirm)
                     Padding(
                       padding: const EdgeInsets.only(top: 12),
                       child: FilledButton.icon(
-                        onPressed: _confirm,
+                        onPressed:
+                            _contextCurrent && _openingFile == null
+                                ? _confirm
+                                : null,
                         icon: const Icon(Icons.draw_outlined),
-                        label: const Text('Подтвердить приёмку'),
+                        label: const Text('Зафиксировать проверку'),
                       ),
                     ),
                   if (_error != null)
@@ -242,18 +326,53 @@ class _ActDetailScreenState extends ConsumerState<ActDetailScreen> {
   }
 
   Future<void> _confirm() async {
+    if (!_contextCurrent || _act?.canFieldConfirm != true) return;
     final accepted = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
-      builder: (_) => _FieldConfirmationSheet(actId: widget.id),
+      builder:
+          (_) => _FieldConfirmationSheet(
+            actId: widget.id,
+            isContextCurrent:
+                () => _contextCurrent && _act?.canFieldConfirm == true,
+          ),
     );
     if (accepted == true && mounted) Navigator.pop(context, true);
+  }
+
+  Future<void> _openFile(ActModel act, ActFile file) async {
+    if (!_contextCurrent || !act.canViewFiles || _openingFile != null) return;
+    final service = ref.read(actFileServiceProvider);
+    String? path;
+    setState(() => _openingFile = file.id);
+    try {
+      path = await ref.read(actsRepositoryProvider).downloadFile(act.id, file);
+      if (!_contextCurrent) return;
+      final opened = await service.openLocalFile(path);
+      if (!_contextCurrent) return;
+      if (!opened) {
+        throw const ApiException(
+          'Не удалось открыть файл. Проверьте приложение для просмотра документов.',
+        );
+      }
+      service.scheduleCleanup(path);
+      path = null;
+    } catch (error) {
+      if (_contextCurrent) setState(() => _error = _message(error));
+    } finally {
+      if (path != null) await service.deleteDownloaded(path);
+      if (mounted) setState(() => _openingFile = null);
+    }
   }
 }
 
 class _FieldConfirmationSheet extends ConsumerStatefulWidget {
-  const _FieldConfirmationSheet({required this.actId});
+  const _FieldConfirmationSheet({
+    required this.actId,
+    required this.isContextCurrent,
+  });
   final int actId;
+  final bool Function() isContextCurrent;
   @override
   ConsumerState<_FieldConfirmationSheet> createState() =>
       _FieldConfirmationSheetState();
@@ -278,12 +397,12 @@ class _FieldConfirmationSheetState
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            'Полевое подтверждение приёмки',
+            'Полевая проверка акта',
             style: Theme.of(context).textTheme.titleLarge,
           ),
           const SizedBox(height: 8),
           const Text(
-            'Поставьте подпись на экране. Она будет сохранена как отдельное подтверждение пользователя и времени.',
+            'Поставьте подпись на экране. Она будет сохранена как подтверждение проверки с указанием пользователя и времени.',
           ),
           const SizedBox(height: 12),
           SizedBox(height: 190, child: _SignaturePad(key: _padKey)),
@@ -301,34 +420,38 @@ class _FieldConfirmationSheetState
             ),
           FilledButton(
             onPressed: _saving ? null : _save,
-            child: Text(_saving ? 'Сохраняем…' : 'Зафиксировать приёмку'),
+            child: Text(_saving ? 'Сохраняем…' : 'Сохранить проверку'),
           ),
         ],
       ),
     ),
   );
   Future<void> _save() async {
+    if (!widget.isContextCurrent()) return;
     final image = await _padKey.currentState?.pngBase64();
     if (image == null) {
       setState(() => _error = 'Добавьте подпись в поле');
       return;
     }
+    if (!mounted || !widget.isContextCurrent()) return;
     if (!await _hasNetwork()) {
       setState(() => _error = 'Для фиксации приёмки подключитесь к интернету.');
       return;
     }
+    if (!mounted || !widget.isContextCurrent()) return;
     setState(() {
       _saving = true;
       _error = null;
     });
     final storage = ref.read(secureStorageProvider);
     final fingerprint =
-        'act:${widget.actId}:user:${ref.read(authProvider).user?.serverId ?? 0}';
+        'act:${widget.actId}:user:${ref.read(authProvider).user?.serverId ?? 0}:organization:${ref.read(authProvider).user?.currentOrganizationId ?? 0}';
     try {
       final key = await storage.getOrCreateOperationKey(
         namespace: 'act-field-confirmation',
         fingerprint: fingerprint,
       );
+      if (!mounted || !widget.isContextCurrent()) return;
       await ref
           .read(actsRepositoryProvider)
           .confirmField(

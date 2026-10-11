@@ -19,16 +19,14 @@ List<JournalResourceSuggestion> journalResourceSuggestions(
   final suggestions = <String, JournalResourceSuggestion>{};
   for (final work in works) {
     if (!work.quantity.isFinite || work.quantity <= 0) continue;
-    final seen = <int>{};
-    for (final resource in work.item.resources) {
-      if (!seen.add(resource.id) ||
-          !resource.quantityPerUnit.isFinite ||
-          resource.quantityPerUnit <= 0) {
+    for (final resource in journalResourceComposition(work.item.resources)) {
+      final norm = resource.quantityPerUnit;
+      if (!resource.hasKnownNorm || norm == null || norm <= 0) {
         continue;
       }
       final key =
-          '${resource.resourceType}:${resource.estimateItemId ?? ''}:${resource.materialId ?? ''}:${resource.measurementUnitId ?? resource.measurementUnit?.id ?? ''}:${resource.name}';
-      final quantity = resource.quantityPerUnit * work.quantity;
+          '${resource.resourceType}:${resource.estimateItemId ?? ''}:${resource.materialId ?? ''}:${resource.measurementUnitId ?? resource.measurementUnit?.id ?? resource.unitName ?? ''}:${resource.name}';
+      final quantity = norm * work.quantity;
       suggestions[key] = JournalResourceSuggestion(
         key: key,
         resource: resource,
@@ -40,7 +38,29 @@ List<JournalResourceSuggestion> journalResourceSuggestions(
 }
 
 String journalSuggestedQuantity(double quantity) =>
-    quantity.toStringAsFixed(6).replaceFirst(RegExp(r'\.?0+$'), '');
+    quantity.toStringAsFixed(8).replaceFirst(RegExp(r'\.?0+$'), '');
+
+List<ConstructionJournalEstimateResource> journalResourceComposition(
+  Iterable<ConstructionJournalEstimateResource> resources,
+) {
+  final seen = <String>{};
+  return resources
+      .where((resource) {
+        final source = resource.sourceKey?.trim();
+        return seen.add(
+          source == null || source.isEmpty ? 'resource:${resource.id}' : source,
+        );
+      })
+      .toList(growable: false);
+}
+
+bool journalResourceBasisMatches(
+  ConstructionJournalEstimateItemOption item,
+  int? measurementUnitId,
+) {
+  final basis = item.measurementUnitId ?? item.measurementUnit?.id;
+  return basis != null && measurementUnitId == basis;
+}
 
 bool canUpdateJournalSuggestion(String current, String? previous) =>
     previous != null && current == previous;

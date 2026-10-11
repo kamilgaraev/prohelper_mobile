@@ -1,4 +1,4 @@
-﻿import 'package:dio/dio.dart';
+import 'package:dio/dio.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/network/api_exception.dart';
@@ -116,6 +116,20 @@ class WorkflowRepository {
         },
       );
 
+      return WorkflowTaskModel.fromJson(
+        MobileApiResponse.dataMap(response.data),
+      );
+    } on DioException catch (error) {
+      throw ApiException.fromDio(error);
+    }
+  }
+
+  Future<WorkflowTaskModel> submitTask(int id) async {
+    try {
+      final response = await _dio.post(
+        '/workflow-management/tasks/$id/submit',
+        data: <String, dynamic>{},
+      );
       return WorkflowTaskModel.fromJson(
         MobileApiResponse.dataMap(response.data),
       );

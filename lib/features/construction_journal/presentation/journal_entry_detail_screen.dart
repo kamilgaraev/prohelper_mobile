@@ -15,6 +15,9 @@ import '../data/construction_journal_models.dart';
 import '../data/construction_journal_repository.dart';
 import '../domain/construction_journal_provider.dart';
 import '../../projects/domain/projects_provider.dart';
+import '../../auth/domain/auth_provider.dart';
+import '../../design_management/data/design_package_file_service.dart';
+import '../data/journal_photo_picker.dart';
 import 'journal_entry_form_screen.dart';
 
 class JournalEntryDetailScreen extends ConsumerStatefulWidget {
@@ -38,6 +41,7 @@ class _JournalEntryDetailScreenState
     extends ConsumerState<JournalEntryDetailScreen> {
   String? _activeAction;
   int? _projectId;
+  Object? _boundActor;
 
   @override
   void initState() {
@@ -45,7 +49,20 @@ class _JournalEntryDetailScreenState
     _projectId =
         widget.projectId ??
         ref.read(projectsProvider).selectedProject?.serverId;
+    _boundActor = _actorContext;
   }
+
+  Object get _actorContext {
+    final auth = ref.read(authProvider);
+    return (
+      user: auth.user?.serverId,
+      organization: auth.user?.currentOrganizationId,
+      session: auth is AuthAuthenticated ? auth.sessionIdentity : null,
+    );
+  }
+
+  bool _attachmentContextCurrent(Object actor) =>
+      _isProjectCurrent && actor == _actorContext && actor == _boundActor;
 
   bool get _isProjectCurrent =>
       mounted &&
@@ -63,6 +80,7 @@ class _JournalEntryDetailScreenState
       },
     );
     final navigator = Navigator.of(context);
+    ref.watch(authProvider);
     final scaffoldMessenger = ScaffoldMessenger.of(context);
     final journalId = widget.journalId;
     final entryId = widget.entryId;
@@ -115,6 +133,7 @@ class _JournalEntryDetailScreenState
     }
 
     final entry = state.entry!;
+    final attachmentsContextCurrent = _attachmentContextCurrent(_boundActor!);
     if (entry.id != entryId || entry.journalId != journalId) {
       return const Scaffold(
         body: AppEmptyState(
@@ -265,6 +284,71 @@ class _JournalEntryDetailScreenState
             ],
             const SizedBox(height: 16),
             _WorkVolumesReadOnlyCard(volumes: entry.workVolumes),
+            const SizedBox(height: 16),
+            IndustrialCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Фото записи', style: AppTypography.h2(context)),
+                  if (!attachmentsContextCurrent)
+                    const Padding(
+                      padding: EdgeInsets.only(top: 8),
+                      child: Text(
+                        'Объект или организация изменились. Откройте запись заново.',
+                      ),
+                    ),
+                  if (attachmentsContextCurrent && entry.attachments.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.only(top: 8),
+                      child: Text('Фото пока нет.'),
+                    ),
+                  if (attachmentsContextCurrent)
+                    for (final attachment in entry.attachments)
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: const Icon(Icons.image_outlined),
+                        title: Text(attachment.fileName),
+                        subtitle:
+                            attachment.uploadedByName == null
+                                ? null
+                                : Text(attachment.uploadedByName!),
+                        trailing: const Icon(Icons.open_in_new_outlined),
+                        onTap:
+                            _activeAction == null &&
+                                    entry.hasAction(
+                                      ConstructionJournalActionKeys.view,
+                                    ) &&
+                                    _attachmentContextCurrent(_boundActor!)
+                                ? () => _openAttachment(entry, attachment)
+                                : null,
+                      ),
+                  if (attachmentsContextCurrent &&
+                      entry.hasAction(
+                        ConstructionJournalActionKeys.uploadAttachment,
+                      ))
+                    OutlinedButton.icon(
+                      onPressed:
+                          _activeAction == null &&
+                                  !state.fromCache &&
+                                  !state.hasDirtyLocal &&
+                                  _attachmentContextCurrent(_boundActor!)
+                              ? () => _uploadAttachment(entry, notifier)
+                              : null,
+                      icon: const Icon(Icons.add_a_photo_outlined),
+                      label: const Text('Добавить фото'),
+                    ),
+                  if (entry.hasAction(
+                        ConstructionJournalActionKeys.uploadAttachment,
+                      ) &&
+                      (state.fromCache || state.hasDirtyLocal))
+                    const Text(
+                      'Для загрузки фото обновите запись при подключении к интернету.',
+                    ),
+                  if (_activeAction?.startsWith('attachment') == true)
+                    const LinearProgressIndicator(),
+                ],
+              ),
+            ),
             if (entry.approvalHistory.isNotEmpty) ...[
               const SizedBox(height: 16),
               _FieldResourcesCard(
@@ -515,6 +599,84 @@ class _JournalEntryDetailScreenState
     } finally {
       if (mounted) setState(() => _activeAction = null);
     }
+  }
+
+  Future<void> _uploadAttachment(
+    ConstructionJournalEntryModel entry,
+    ConstructionJournalEntryDetailNotifier notifier,
+  ) async {
+    if (!entry.hasAction(ConstructionJournalActionKeys.uploadAttachment)) {
+      return;
+    }
+    final actor = _actorContext;
+    if (!_attachmentContextCurrent(actor)) return;
+    final camera = await showModalBottomSheet<bool>(
+      context: context,
+      builder:
+          (sheetContext) => SafeArea(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.photo_camera_outlined),
+                  title: const Text('Снять фото'),
+                  onTap: () => Navigator.pop(sheetContext, true),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.photo_library_outlined),
+                  title: const Text('Выбрать фото'),
+                  onTap: () => Navigator.pop(sheetContext, false),
+                ),
+              ],
+            ),
+          ),
+    );
+    if (camera == null || !_attachmentContextCurrent(actor)) return;
+    await _runAction('attachment_upload', () async {
+      final path = await ref
+          .read(journalPhotoPickerProvider)
+          .pick(camera: camera);
+      if (path == null || !_attachmentContextCurrent(actor)) return;
+      await ref
+          .read(constructionJournalRepositoryProvider)
+          .uploadAttachment(entry.id, path);
+      if (!_attachmentContextCurrent(actor)) return;
+      await notifier.load();
+    });
+  }
+
+  Future<void> _openAttachment(
+    ConstructionJournalEntryModel entry,
+    ConstructionJournalAttachment attachment,
+  ) async {
+    final actor = _actorContext;
+    if (!_attachmentContextCurrent(actor) ||
+        !entry.hasAction(ConstructionJournalActionKeys.view)) {
+      return;
+    }
+    await _runAction('attachment_open', () async {
+      final service = ref.read(designPackageFileServiceProvider);
+      String? path;
+      try {
+        final grant = await ref
+            .read(constructionJournalRepositoryProvider)
+            .attachmentDownload(entry.id, attachment.id);
+        if (!_attachmentContextCurrent(actor)) return;
+        path = await service.download(grant.url, attachment.fileName);
+        if (!_attachmentContextCurrent(actor)) return;
+        final opened = await service.openLocalFile(path);
+        if (!_attachmentContextCurrent(actor)) return;
+        if (!opened) {
+          throw const FormatException(
+            'Не удалось открыть фото. Проверьте приложение для просмотра изображений.',
+          );
+        }
+        service.scheduleCleanup(path);
+        path = null;
+      } finally {
+        if (path != null) await service.deleteDownloaded(path);
+      }
+    });
   }
 
   Widget _actionIcon(String action, IconData icon) =>

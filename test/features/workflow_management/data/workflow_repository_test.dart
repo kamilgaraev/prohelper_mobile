@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -7,6 +7,32 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:prohelpers_mobile/features/workflow_management/data/workflow_repository.dart';
 
 void main() {
+  test(
+    'resubmit posts an empty body and uses the authoritative server response',
+    () async {
+      late RequestOptions request;
+      final dio = Dio();
+      final payload =
+          _workflowTaskJson()
+            ..['status'] = 'in_review'
+            ..['status_label'] = 'На проверке';
+      dio.interceptors.add(
+        InterceptorsWrapper(
+          onRequest: (options, handler) {
+            request = options;
+            handler.resolve(
+              Response(requestOptions: options, data: {'data': payload}),
+            );
+          },
+        ),
+      );
+      final task = await WorkflowRepository(dio).submitTask(17);
+      expect(request.path, '/workflow-management/tasks/17/submit');
+      expect(request.method, 'POST');
+      expect(request.data, isEmpty);
+      expect(task.status, 'in_review');
+    },
+  );
   test('fetches every workflow task page in order', () async {
     final pages = <int>[];
     final dio = Dio(BaseOptions(baseUrl: 'https://api.example.test'));

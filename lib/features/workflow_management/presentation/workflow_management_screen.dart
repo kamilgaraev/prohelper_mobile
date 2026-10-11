@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/error/user_message.dart';
+import '../../../core/network/api_exception.dart';
+import '../../auth/domain/auth_provider.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../core/widgets/app_empty_state.dart';
@@ -119,6 +121,12 @@ class _WorkflowManagementScreenState
                               padding: const EdgeInsets.only(bottom: 12),
                               child: _WorkflowTaskCard(
                                 task: task,
+                                onSubmit:
+                                    () => _submitAction(
+                                      context,
+                                      task,
+                                      _WorkflowAction.submit,
+                                    ),
                                 onOpen: () => _openDetail(task),
                                 onApprove:
                                     () => _submitAction(
@@ -282,6 +290,14 @@ class _WorkflowTaskDetailScreenState
                     const SizedBox(height: 16),
                     _WorkflowActionPanel(
                       task: task,
+                      onSubmit:
+                          () => _showWorkflowActionSheet(
+                            context: context,
+                            ref: ref,
+                            task: task,
+                            action: _WorkflowAction.submit,
+                            onDone: _reload,
+                          ),
                       onApprove:
                           () => _showWorkflowActionSheet(
                             context: context,
@@ -334,6 +350,7 @@ Future<void> _showWorkflowActionSheet({
   VoidCallback? onDone,
 }) async {
   final controller = TextEditingController();
+  final actor = _workflowActorContext(ref);
   var submitting = false;
   String? actionError;
 
@@ -361,14 +378,15 @@ Future<void> _showWorkflowActionSheet({
                     const SizedBox(height: 8),
                     Text(task.title, style: AppTypography.bodyLarge(context)),
                     const SizedBox(height: 12),
-                    TextField(
-                      controller: controller,
-                      minLines: 3,
-                      maxLines: 5,
-                      decoration: InputDecoration(
-                        labelText: _inputLabel(action),
+                    if (action != _WorkflowAction.submit)
+                      TextField(
+                        controller: controller,
+                        minLines: 3,
+                        maxLines: 5,
+                        decoration: InputDecoration(
+                          labelText: _inputLabel(action),
+                        ),
                       ),
-                    ),
                     if (actionError != null) ...[
                       const SizedBox(height: 8),
                       Text(
@@ -406,6 +424,19 @@ Future<void> _showWorkflowActionSheet({
                                   );
 
                                   switch (action) {
+                                    case _WorkflowAction.submit:
+                                      if (!task.canSubmit ||
+                                          _workflowActorContext(ref) != actor ||
+                                          ref
+                                                  .read(projectsProvider)
+                                                  .selectedProject
+                                                  ?.serverId !=
+                                              task.projectId) {
+                                        throw const ApiException(
+                                          'Объект или организация изменились. Откройте работу заново.',
+                                        );
+                                      }
+                                      await notifier.submitTask(task.id);
                                     case _WorkflowAction.approve:
                                       await notifier.approveTask(
                                         task.id,
@@ -668,6 +699,7 @@ class _WorkflowFilterPanelState extends State<_WorkflowFilterPanel> {
 class _WorkflowTaskCard extends StatelessWidget {
   const _WorkflowTaskCard({
     required this.task,
+    required this.onSubmit,
     required this.onOpen,
     required this.onApprove,
     required this.onReject,
@@ -676,6 +708,7 @@ class _WorkflowTaskCard extends StatelessWidget {
   });
 
   final WorkflowTaskModel task;
+  final VoidCallback onSubmit;
   final VoidCallback onOpen;
   final VoidCallback onApprove;
   final VoidCallback onReject;
@@ -783,6 +816,17 @@ class _WorkflowTaskCard extends StatelessWidget {
                     onPressed: onApprove,
                     icon: const Icon(Icons.check_rounded),
                     label: const Text('Согласовать'),
+                  ),
+                ),
+              if (task.canSubmit)
+                _WorkflowCardActionButton(
+                  semanticsLabel:
+                      'Отправить на повторную проверку: $actionContext',
+                  onTap: onSubmit,
+                  child: FilledButton.icon(
+                    onPressed: onSubmit,
+                    icon: const Icon(Icons.send_outlined),
+                    label: const Text('Отправить на повторную проверку'),
                   ),
                 ),
               if (task.canReject)
@@ -990,6 +1034,7 @@ class _WorkflowCardActionButton extends StatelessWidget {
 class _WorkflowActionPanel extends StatelessWidget {
   const _WorkflowActionPanel({
     required this.task,
+    required this.onSubmit,
     required this.onApprove,
     required this.onReject,
     required this.onRequestChanges,
@@ -997,6 +1042,7 @@ class _WorkflowActionPanel extends StatelessWidget {
   });
 
   final WorkflowTaskModel task;
+  final VoidCallback onSubmit;
   final VoidCallback onApprove;
   final VoidCallback onReject;
   final VoidCallback onRequestChanges;
@@ -1014,6 +1060,16 @@ class _WorkflowActionPanel extends StatelessWidget {
       spacing: 8,
       runSpacing: 8,
       children: [
+        if (task.canSubmit)
+          _WorkflowCardActionButton(
+            semanticsLabel: 'Отправить на повторную проверку: $actionContext',
+            onTap: onSubmit,
+            child: FilledButton.icon(
+              onPressed: onSubmit,
+              icon: const Icon(Icons.send_outlined),
+              label: const Text('Отправить на повторную проверку'),
+            ),
+          ),
         if (task.canApprove)
           _WorkflowCardActionButton(
             semanticsLabel: 'Согласовать: $actionContext',
@@ -1187,7 +1243,8 @@ class _WorkflowEntryRow extends StatelessWidget {
 
 IconData _entryIcon(String action) {
   return switch (action) {
-    'approve' => Icons.check_circle_outline_rounded,
+    'submit' => Icons.send_outlined,
+    'approve' || 'confirm' => Icons.check_circle_outline_rounded,
     'reject' => Icons.cancel_outlined,
     'request_changes' => Icons.edit_note_rounded,
     'comment' => Icons.chat_bubble_outline_rounded,
@@ -1197,7 +1254,8 @@ IconData _entryIcon(String action) {
 
 String _entryLabel(WorkflowTaskEntryModel entry) {
   return switch (entry.action) {
-    'approve' => 'Согласовано',
+    'submit' => 'Отправлено на проверку',
+    'approve' || 'confirm' => 'Согласовано',
     'reject' => 'Отклонено',
     'request_changes' => 'Запрошены изменения',
     'comment' => 'Комментарий',
@@ -1236,6 +1294,7 @@ String _moneyText(double value) {
 
 String _actionTitle(_WorkflowAction action) {
   return switch (action) {
+    _WorkflowAction.submit => 'Отправить на повторную проверку',
     _WorkflowAction.approve => 'Согласовать работу',
     _WorkflowAction.reject => 'Отклонить работу',
     _WorkflowAction.requestChanges => 'Запросить изменения',
@@ -1245,6 +1304,7 @@ String _actionTitle(_WorkflowAction action) {
 
 String _actionButton(_WorkflowAction action) {
   return switch (action) {
+    _WorkflowAction.submit => 'Отправить',
     _WorkflowAction.approve => 'Согласовать',
     _WorkflowAction.reject => 'Отклонить',
     _WorkflowAction.requestChanges => 'Отправить',
@@ -1254,6 +1314,7 @@ String _actionButton(_WorkflowAction action) {
 
 String _inputLabel(_WorkflowAction action) {
   return switch (action) {
+    _WorkflowAction.submit => 'Комментарий',
     _WorkflowAction.approve => 'Комментарий',
     _WorkflowAction.reject => 'Причина',
     _WorkflowAction.requestChanges => 'Что нужно изменить',
@@ -1263,6 +1324,7 @@ String _inputLabel(_WorkflowAction action) {
 
 IconData _actionIcon(_WorkflowAction action) {
   return switch (action) {
+    _WorkflowAction.submit => Icons.send_outlined,
     _WorkflowAction.approve => Icons.check_rounded,
     _WorkflowAction.reject => Icons.close_rounded,
     _WorkflowAction.requestChanges => Icons.edit_note_rounded,
@@ -1272,6 +1334,7 @@ IconData _actionIcon(_WorkflowAction action) {
 
 bool _requiresText(_WorkflowAction action) {
   return switch (action) {
+    _WorkflowAction.submit => false,
     _WorkflowAction.approve => false,
     _WorkflowAction.reject ||
     _WorkflowAction.requestChanges ||
@@ -1281,6 +1344,7 @@ bool _requiresText(_WorkflowAction action) {
 
 String _requiredTextMessage(_WorkflowAction action) {
   return switch (action) {
+    _WorkflowAction.submit => 'Отправить на проверку',
     _WorkflowAction.reject => 'Укажите причину отклонения',
     _WorkflowAction.requestChanges => 'Укажите, что нужно изменить',
     _WorkflowAction.comment => 'Введите комментарий',
@@ -1288,7 +1352,16 @@ String _requiredTextMessage(_WorkflowAction action) {
   };
 }
 
-enum _WorkflowAction { approve, reject, requestChanges, comment }
+enum _WorkflowAction { approve, reject, requestChanges, comment, submit }
+
+Object _workflowActorContext(WidgetRef ref) {
+  final auth = ref.read(authProvider);
+  return (
+    user: auth.user?.serverId,
+    organization: auth.user?.currentOrganizationId,
+    session: auth is AuthAuthenticated ? auth.sessionIdentity : null,
+  );
+}
 
 class _WorkflowFilterOption {
   const _WorkflowFilterOption(this.value, this.label);

@@ -154,6 +154,12 @@ class WorkflowNotifier extends StateNotifier<WorkflowState> {
     return updated;
   }
 
+  Future<WorkflowTaskModel> submitTask(int id) async {
+    final updated = await _repository.submitTask(id);
+    await loadTasks();
+    return updated;
+  }
+
   Future<WorkflowTaskModel> rejectTask({
     required int id,
     required String reason,

@@ -2,6 +2,22 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:prohelpers_mobile/features/construction_journal/data/construction_journal_models.dart';
 
 void main() {
+  test(
+    'entry attachments are optional in legacy snapshots and contain metadata only',
+    () {
+      final payload = _entryPayload();
+      expect(
+        ConstructionJournalEntryModel.fromJson(payload).attachments,
+        isEmpty,
+      );
+      payload['attachments'] = [
+        {'id': 'photo-uuid', 'file_name': 'site.png'},
+      ];
+      final entry = ConstructionJournalEntryModel.fromJson(payload);
+      expect(entry.attachments.single.id, 'photo-uuid');
+      expect(entry.attachments.single.uploadedByName, isNull);
+    },
+  );
   test('parses journal with readable status label and action objects', () {
     final journal = ConstructionJournalModel.fromJson(_journalPayload());
 

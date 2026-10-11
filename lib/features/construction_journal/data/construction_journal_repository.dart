@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:math';
+import 'dart:io';
 
 import 'package:dio/dio.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -206,6 +207,47 @@ class ConstructionJournalRepository extends SyncQueueAwareRepository {
     return ConstructionJournalEntryModel.fromJson(
       await fetchEntryDetailPayload(entryId),
     );
+  }
+
+  Future<void> uploadAttachment(int entryId, String path) async {
+    final file = File(path);
+    if (await file.length() > 10 * 1024 * 1024) {
+      throw const ApiException('Размер фото не должен превышать 10 МиБ.');
+    }
+    final extension = path.split('.').last.toLowerCase();
+    if (!const ['jpg', 'jpeg', 'png', 'webp'].contains(extension)) {
+      throw const ApiException('Выберите фото JPEG, PNG или WebP.');
+    }
+    try {
+      await _dio.post(
+        '/journal-entries/$entryId/attachments',
+        data: FormData.fromMap({'file': await MultipartFile.fromFile(path)}),
+      );
+    } on DioException catch (error) {
+      throw ApiException.fromDio(
+        error,
+        fallbackMessage: 'Не удалось добавить фото.',
+      );
+    }
+  }
+
+  Future<ConstructionJournalAttachmentDownload> attachmentDownload(
+    int entryId,
+    String attachmentId,
+  ) async {
+    try {
+      final response = await _dio.get(
+        '/journal-entries/$entryId/attachments/${Uri.encodeComponent(attachmentId)}/download',
+      );
+      return ConstructionJournalAttachmentDownload.fromJson(
+        _extractMap(MobileApiResponse.payload(response.data)),
+      );
+    } on DioException catch (error) {
+      throw ApiException.fromDio(
+        error,
+        fallbackMessage: 'Не удалось открыть фото.',
+      );
+    }
   }
 
   Future<Map<String, dynamic>> fetchEntryDetailPayload(int entryId) async {
