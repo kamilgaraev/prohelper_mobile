@@ -19,6 +19,7 @@ import '../../auth/domain/auth_provider.dart';
 import '../../design_management/data/design_package_file_service.dart';
 import '../data/journal_photo_picker.dart';
 import 'journal_entry_form_screen.dart';
+import 'include_journal_entry_dialog.dart';
 
 class JournalEntryDetailScreen extends ConsumerStatefulWidget {
   const JournalEntryDetailScreen({
@@ -272,6 +273,46 @@ class _JournalEntryDetailScreenState
               const SizedBox(height: 16),
               _BlockersCard(blockers: entry.blockers),
             ],
+            if (entry.sourceEntry != null) ...[
+              const SizedBox(height: 16),
+              IndustrialCard(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Принятая запись из журнала ${entry.sourceEntry!.organizationName ?? 'подчинённой компании'}',
+                      style: AppTypography.h2(context),
+                    ),
+                    Text(
+                      'Журнал №${entry.sourceEntry!.journalNumber ?? entry.sourceEntry!.journalId}, запись №${entry.sourceEntry!.entryNumber} от ${entry.sourceEntry!.entryDate ?? '—'}. Проверил: ${entry.sourceEntry!.approvedByName ?? '—'}. Факты сохранены без повторного учёта.',
+                    ),
+                    if (entry.originEntry != null &&
+                        entry.originEntry!.id != entry.sourceEntry!.id)
+                      Text(
+                        'Первичный исполнитель: ${entry.originEntry!.organizationName ?? '—'}, запись №${entry.originEntry!.entryNumber}.',
+                      ),
+                    if (entry.reportComment?.isNotEmpty == true)
+                      Text('Комментарий к отчёту: ${entry.reportComment}'),
+                    TextButton(
+                      onPressed:
+                          projectMatches
+                              ? () => navigator.push(
+                                MaterialPageRoute(
+                                  builder:
+                                      (_) => JournalEntryDetailScreen(
+                                        journalId: entry.sourceEntry!.journalId,
+                                        entryId: entry.sourceEntry!.id,
+                                        projectId: _projectId,
+                                      ),
+                                ),
+                              )
+                              : null,
+                      child: const Text('Открыть источник и документы'),
+                    ),
+                  ],
+                ),
+              ),
+            ],
             if (entry.completedWorks.isNotEmpty) ...[
               const SizedBox(height: 16),
               _FieldResourcesCard(
@@ -460,6 +501,105 @@ class _JournalEntryDetailScreenState
                     icon: const Icon(Icons.edit_outlined),
                     label: const Text('Редактировать'),
                   ),
+                if (entry.hasAction(
+                  ConstructionJournalActionKeys.includeInJournal,
+                ))
+                  FilledButton.icon(
+                    onPressed:
+                        _activeAction == null &&
+                                projectMatches &&
+                                attachmentsContextCurrent
+                            ? () async {
+                              final report = await showDialog<
+                                ConstructionJournalEntryModel
+                              >(
+                                context: context,
+                                barrierDismissible: false,
+                                builder:
+                                    (_) => IncludeJournalEntryDialog(
+                                      sourceId: entryId,
+                                      isContextCurrent:
+                                          () => _attachmentContextCurrent(
+                                            _boundActor!,
+                                          ),
+                                    ),
+                              );
+                              if (report != null &&
+                                  mounted &&
+                                  _attachmentContextCurrent(_boundActor!)) {
+                                await navigator.push(
+                                  MaterialPageRoute(
+                                    builder:
+                                        (_) => JournalEntryDetailScreen(
+                                          journalId: report.journalId,
+                                          entryId: report.id,
+                                          projectId: _projectId,
+                                        ),
+                                  ),
+                                );
+                                if (mounted && _isProjectCurrent) {
+                                  await notifier.load();
+                                }
+                              }
+                            }
+                            : null,
+                    icon: const Icon(Icons.playlist_add),
+                    label: const Text('Включить в свой журнал'),
+                  ),
+                if (entry.hasAction(ConstructionJournalActionKeys.updateReport))
+                  OutlinedButton(
+                    onPressed:
+                        _activeAction == null &&
+                                projectMatches &&
+                                attachmentsContextCurrent
+                            ? () async {
+                              final controller = TextEditingController(
+                                text: entry.reportComment,
+                              );
+                              final comment = await showDialog<String>(
+                                context: context,
+                                builder:
+                                    (dialogContext) => AlertDialog(
+                                      title: const Text('Комментарий к отчёту'),
+                                      content: TextField(
+                                        controller: controller,
+                                        maxLength: 4000,
+                                        minLines: 2,
+                                        maxLines: 4,
+                                      ),
+                                      actions: [
+                                        TextButton(
+                                          onPressed:
+                                              () =>
+                                                  Navigator.pop(dialogContext),
+                                          child: const Text('Отмена'),
+                                        ),
+                                        FilledButton(
+                                          onPressed:
+                                              () => Navigator.pop(
+                                                dialogContext,
+                                                controller.text,
+                                              ),
+                                          child: const Text('Сохранить'),
+                                        ),
+                                      ],
+                                    ),
+                              );
+                              controller.dispose();
+                              if (comment != null) {
+                                await _runAction('update_report', () async {
+                                  await ref
+                                      .read(
+                                        constructionJournalRepositoryProvider,
+                                      )
+                                      .updateReportComment(entryId, comment);
+                                  await notifier.load();
+                                });
+                              }
+                            }
+                            : null,
+                    child: const Text('Комментарий к отчёту'),
+                  ),
                 if (entry.hasAction(ConstructionJournalActionKeys.submit))
                   ElevatedButton.icon(
                     onPressed:
@@ -584,7 +724,9 @@ class _JournalEntryDetailScreenState
     String action,
     Future<void> Function() perform,
   ) async {
-    if (_activeAction != null || !_isProjectCurrent) return false;
+    if (_activeAction != null || !_attachmentContextCurrent(_boundActor!)) {
+      return false;
+    }
     setState(() => _activeAction = action);
     try {
       await perform();

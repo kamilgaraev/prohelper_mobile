@@ -54,6 +54,7 @@ class _JournalEntryFormScreenState
   ConstructionJournalEntryFormOptions? _options;
   int? _selectedEstimateId;
   int? _selectedEstimateItemId;
+  int? _selectedEstimateSectionId;
   bool _isLoadingOptions = false;
   String? _formOptionsError;
   bool _isSaving = false;
@@ -108,7 +109,9 @@ class _JournalEntryFormScreenState
 
   List<ConstructionJournalEstimateItemOption> get _selectedEstimateItems {
     final estimate = _estimates.where((item) => item.id == _selectedEstimateId);
-    return estimate.isEmpty ? const [] : estimate.first.items;
+    return estimate.isEmpty
+        ? const []
+        : estimate.first.itemsInSection(_selectedEstimateSectionId);
   }
 
   @override
@@ -512,6 +515,10 @@ class _JournalEntryFormScreenState
             ),
           ],
           _buildEstimateSelector(),
+          if (_selectedEstimateId != null) ...[
+            const SizedBox(height: 12),
+            _buildEstimateSectionSelector(),
+          ],
           const SizedBox(height: 12),
           _buildField(
             controller: _descriptionController,
@@ -618,9 +625,44 @@ class _JournalEntryFormScreenState
       onChanged: (value) {
         setState(() {
           _selectedEstimateId = value;
+          _selectedEstimateSectionId = null;
           _selectedEstimateItemId = null;
         });
       },
+    );
+  }
+
+  Widget _buildEstimateSectionSelector() {
+    final estimate =
+        _estimates.where((item) => item.id == _selectedEstimateId).firstOrNull;
+    if (estimate == null) return const SizedBox.shrink();
+    return DropdownButtonFormField<int>(
+      key: ValueKey('section-$_selectedEstimateId-$_selectedEstimateSectionId'),
+      initialValue: _selectedEstimateSectionId ?? 0,
+      isExpanded: true,
+      decoration: const InputDecoration(
+        labelText: 'Раздел сметы',
+        helperText: 'Фильтр списка работ. Добавленные работы сохраняются.',
+        border: OutlineInputBorder(),
+      ),
+      items: [
+        const DropdownMenuItem(value: 0, child: Text('Все разделы')),
+        for (final section in estimate.sections)
+          DropdownMenuItem(
+            value: section.id,
+            child: Text(
+              estimate.sectionLabel(section),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        if (estimate.items.any((item) => item.estimateSectionId == null))
+          const DropdownMenuItem(value: -1, child: Text('Без раздела')),
+      ],
+      onChanged:
+          (value) => setState(() {
+            _selectedEstimateSectionId = value == 0 ? null : value;
+            _selectedEstimateItemId = null;
+          }),
     );
   }
 

@@ -13,6 +13,7 @@ import 'package:prohelpers_mobile/features/auth/presentation/widgets/logout_conf
 import 'package:prohelpers_mobile/features/auth/presentation/widgets/user_profile_bottom_sheet.dart';
 import 'package:prohelpers_mobile/features/projects/domain/projects_provider.dart';
 import 'package:prohelpers_mobile/features/projects/presentation/widgets/project_card.dart';
+import 'project_hierarchy_screen.dart';
 import '../../design_management/offline/bim_context_change_dialog.dart';
 
 class ProjectSelectionScreen extends ConsumerStatefulWidget {
@@ -203,15 +204,35 @@ class _ProjectSelectionScreenState
           }
 
           final project = state.projects[index ~/ 2];
-          return ProjectCard(
-            project: project,
-            isSelected: state.selectedProject?.serverId == project.serverId,
-            onTap: () {
-              ref.read(projectsProvider.notifier).selectProject(project);
-              if (Navigator.canPop(context)) {
-                Navigator.pop(context);
-              }
-            },
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              ProjectCard(
+                project: project,
+                isSelected: state.selectedProject?.serverId == project.serverId,
+                onTap: () {
+                  ref.read(projectsProvider.notifier).selectProject(project);
+                  if (Navigator.canPop(context)) {
+                    Navigator.pop(context);
+                  }
+                },
+              ),
+              TextButton.icon(
+                onPressed: () {
+                  ref.read(projectsProvider.notifier).selectProject(project);
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder:
+                          (_) => ProjectHierarchyScreen(
+                            projectId: project.serverId,
+                          ),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.account_tree_outlined),
+                label: const Text('Иерархия организаций'),
+              ),
+            ],
           );
         }, childCount: state.projects.length * 2 - 1),
       );

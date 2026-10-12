@@ -209,6 +209,57 @@ class ConstructionJournalRepository extends SyncQueueAwareRepository {
     );
   }
 
+  Future<List<JournalReportingTarget>> reportingTargets(int entryId) async {
+    try {
+      final response = await _dio.get(
+        '/journal-entries/$entryId/reporting-targets',
+      );
+      return _extractList(
+        MobileApiResponse.payload(response.data),
+      ).map(JournalReportingTarget.fromJson).toList();
+    } on DioException catch (error) {
+      throw ApiException.fromDio(
+        error,
+        fallbackMessage: 'Не удалось загрузить ваши журналы.',
+      );
+    }
+  }
+
+  Future<ConstructionJournalEntryModel> includeInJournal(
+    int entryId,
+    int targetJournalId,
+    String comment,
+  ) async {
+    try {
+      final response = await _dio.post(
+        '/journal-entries/$entryId/include-in-journal',
+        data: {'target_journal_id': targetJournalId, 'comment': comment.trim()},
+      );
+      return ConstructionJournalEntryModel.fromJson(
+        _extractMap(MobileApiResponse.payload(response.data)),
+      );
+    } on DioException catch (error) {
+      throw ApiException.fromDio(
+        error,
+        fallbackMessage: 'Не удалось включить запись. Можно повторить запрос.',
+      );
+    }
+  }
+
+  Future<void> updateReportComment(int entryId, String comment) async {
+    try {
+      await _dio.put(
+        '/journal-entries/$entryId',
+        data: {'quality_notes': comment},
+      );
+    } on DioException catch (error) {
+      throw ApiException.fromDio(
+        error,
+        fallbackMessage: 'Не удалось сохранить комментарий.',
+      );
+    }
+  }
+
   Future<void> uploadAttachment(int entryId, String path) async {
     final file = File(path);
     if (await file.length() > 10 * 1024 * 1024) {
