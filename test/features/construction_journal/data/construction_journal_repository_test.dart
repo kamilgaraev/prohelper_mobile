@@ -7,6 +7,45 @@ import 'package:prohelpers_mobile/core/network/api_exception.dart';
 import 'package:prohelpers_mobile/features/construction_journal/data/construction_journal_repository.dart';
 
 void main() {
+  test(
+    'report requests send source and target ids without factual copies',
+    () async {
+      final calls = <RequestOptions>[];
+      final dio = Dio(BaseOptions(baseUrl: 'https://api.example.test'));
+      dio.httpClientAdapter = _JsonAdapter((options) {
+        calls.add(options);
+        return _envelope(
+          options.method == 'GET'
+              ? [
+                {'id': 8, 'name': 'Мой журнал'},
+              ]
+              : {
+                'id': 29,
+                'journal_id': 8,
+                'entry_date': '2026-10-11',
+                'entry_number': 1,
+                'work_description': 'Принятые работы',
+                'status': 'draft',
+                'status_label': 'Черновик',
+                'workflow_state': 'ready',
+                'workVolumes': [],
+                'workers': [],
+                'equipment': [],
+                'materials': [],
+                'blockers': [],
+                'available_actions': [],
+              },
+        );
+      });
+      final repository = ConstructionJournalRepository(dio);
+      expect((await repository.reportingTargets(17)).single.id, 8);
+      expect((await repository.includeInJournal(17, 8, 'Отчёт')).journalId, 8);
+      expect(calls[1].path, '/journal-entries/17/include-in-journal');
+      expect(calls[1].data, {'target_journal_id': 8, 'comment': 'Отчёт'});
+      await repository.updateReportComment(29, 'Исправлено');
+      expect(calls.last.data, {'quality_notes': 'Исправлено'});
+    },
+  );
   test('accepts a journal with no entries', () async {
     final dio = Dio(BaseOptions(baseUrl: 'https://api.example.test'));
     dio.httpClientAdapter = _JsonAdapter((options) {
@@ -155,7 +194,7 @@ void main() {
   });
 }
 
-Map<String, dynamic> _envelope(Map<String, dynamic> data) => {
+Map<String, dynamic> _envelope(Object data) => {
   'success': true,
   'message': null,
   'data': data,

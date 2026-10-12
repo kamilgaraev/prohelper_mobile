@@ -2,6 +2,8 @@ abstract final class ConstructionJournalActionKeys {
   static const view = 'view';
   static const create = 'create';
   static const update = 'update';
+  static const updateReport = 'update_report';
+  static const includeInJournal = 'include_in_journal';
   static const delete = 'delete';
   static const export = 'export';
   static const createEntry = 'create_entry';
@@ -244,6 +246,7 @@ class ConstructionJournalEstimateItemOption {
     required this.quantityTotal,
     required this.contractLinks,
     this.positionNumber,
+    this.estimateSectionId,
     this.workTypeId,
     this.measurementUnitId,
     this.workType,
@@ -259,6 +262,7 @@ class ConstructionJournalEstimateItemOption {
   final String name;
   final String itemType;
   final String? positionNumber;
+  final int? estimateSectionId;
   final double? quantity;
   final double? quantityTotal;
   final int? workTypeId;
@@ -282,6 +286,7 @@ class ConstructionJournalEstimateItemOption {
     'name': name,
     'item_type': itemType,
     'position_number': positionNumber,
+    'estimate_section_id': estimateSectionId,
     'quantity': quantity,
     'quantity_total': quantityTotal,
     'work_type_id': workTypeId,
@@ -316,6 +321,7 @@ class ConstructionJournalEstimateItemOption {
       name: _requiredString(json, 'name'),
       itemType: _asNullableString(json['item_type']) ?? 'work',
       positionNumber: _asNullableString(json['position_number']),
+      estimateSectionId: _asNullableInt(json['estimate_section_id']),
       quantity: _asNullableDouble(json['quantity']),
       quantityTotal:
           _asNullableDouble(json['quantity_total']) ??
@@ -435,18 +441,68 @@ class ConstructionJournalEstimateResource {
   }
 }
 
+class ConstructionJournalEstimateSection {
+  const ConstructionJournalEstimateSection({
+    required this.id,
+    required this.name,
+    this.parentId,
+  });
+  final int id;
+  final String name;
+  final int? parentId;
+  factory ConstructionJournalEstimateSection.fromJson(
+    Map<String, dynamic> json,
+  ) => ConstructionJournalEstimateSection(
+    id: _requiredInt(json, 'id'),
+    name: _requiredString(json, 'name'),
+    parentId: _asNullableInt(json['parent_section_id']),
+  );
+}
+
 class ConstructionJournalEstimateOption {
   const ConstructionJournalEstimateOption({
     required this.id,
     required this.name,
     required this.items,
     this.number,
+    this.sections = const [],
   });
 
   final int id;
   final String name;
   final String? number;
   final List<ConstructionJournalEstimateItemOption> items;
+  final List<ConstructionJournalEstimateSection> sections;
+
+  List<ConstructionJournalEstimateItemOption> itemsInSection(int? sectionId) {
+    if (sectionId == null) return items;
+    if (sectionId == -1) {
+      return items.where((item) => item.estimateSectionId == null).toList();
+    }
+    final ids = <int>{sectionId};
+    bool changed;
+    do {
+      final before = ids.length;
+      for (final section in sections) {
+        if (ids.contains(section.parentId)) ids.add(section.id);
+      }
+      changed = before != ids.length;
+    } while (changed);
+    return items.where((item) => ids.contains(item.estimateSectionId)).toList();
+  }
+
+  String sectionLabel(ConstructionJournalEstimateSection section) {
+    final names = <String>[section.name];
+    final visited = <int>{section.id};
+    var parentId = section.parentId;
+    while (parentId != null && visited.add(parentId)) {
+      final parent = sections.where((item) => item.id == parentId).firstOrNull;
+      if (parent == null) break;
+      names.insert(0, parent.name);
+      parentId = parent.parentId;
+    }
+    return names.join(' / ');
+  }
 
   String get displayName {
     final estimateNumber = number?.trim();
@@ -462,6 +518,11 @@ class ConstructionJournalEstimateOption {
       id: _requiredInt(json, 'id'),
       name: _requiredString(json, 'name'),
       number: _asNullableString(json['number']),
+      sections:
+          _optionalList(
+            json,
+            'sections',
+          ).map(ConstructionJournalEstimateSection.fromJson).toList(),
       items:
           _requiredList(
             json,
@@ -1132,6 +1193,57 @@ class ConstructionJournalAttachmentDownload {
   }
 }
 
+class JournalEntrySource {
+  const JournalEntrySource({
+    required this.id,
+    required this.journalId,
+    required this.entryNumber,
+    this.journalNumber,
+    this.entryDate,
+    this.organizationName,
+    this.approvedByName,
+  });
+  final int id;
+  final int journalId;
+  final int entryNumber;
+  final String? journalNumber;
+  final String? entryDate;
+  final String? organizationName;
+  final String? approvedByName;
+  factory JournalEntrySource.fromJson(Map<String, dynamic> json) =>
+      JournalEntrySource(
+        id: _requiredInt(json, 'id'),
+        journalId: _requiredInt(json, 'journal_id'),
+        entryNumber: _requiredInt(json, 'entry_number'),
+        journalNumber: _asNullableString(json['journal_number']),
+        entryDate: _asNullableString(json['entry_date']),
+        organizationName: _asNullableString(json['organization_name']),
+        approvedByName: _asNullableString(json['approved_by_name']),
+      );
+}
+
+class JournalReportingTarget {
+  const JournalReportingTarget({
+    required this.id,
+    required this.name,
+    this.number,
+    this.contractNumber,
+  });
+  final int id;
+  final String name;
+  final String? number;
+  final String? contractNumber;
+  factory JournalReportingTarget.fromJson(Map<String, dynamic> json) =>
+      JournalReportingTarget(
+        id: _requiredInt(json, 'id'),
+        name: _requiredString(json, 'name'),
+        number: _asNullableString(json['journal_number']),
+        contractNumber: _asNullableString(json['contract_number']),
+      );
+  String get label =>
+      '$name · №${number ?? id}${contractNumber == null ? '' : ' · Договор $contractNumber'}';
+}
+
 class ConstructionJournalEntryModel {
   const ConstructionJournalEntryModel({
     required this.id,
@@ -1162,6 +1274,9 @@ class ConstructionJournalEntryModel {
     this.performingOrganizationName,
     this.approvalHistory = const [],
     this.attachments = const [],
+    this.sourceEntry,
+    this.originEntry,
+    this.reportComment,
   });
 
   final int id;
@@ -1192,6 +1307,9 @@ class ConstructionJournalEntryModel {
   final List<ConstructionJournalBlockerModel> blockers;
   final List<ConstructionJournalActionModel> availableActions;
   final List<ConstructionJournalRelatedWorkModel> completedWorks;
+  final JournalEntrySource? sourceEntry;
+  final JournalEntrySource? originEntry;
+  final String? reportComment;
 
   bool hasAction(String action) {
     return availableActions.hasAction(action);
@@ -1206,6 +1324,15 @@ class ConstructionJournalEntryModel {
     );
 
     return ConstructionJournalEntryModel(
+      sourceEntry:
+          json['source_entry'] == null
+              ? null
+              : JournalEntrySource.fromJson(_requiredMap(json, 'source_entry')),
+      originEntry:
+          json['origin_entry'] == null
+              ? null
+              : JournalEntrySource.fromJson(_requiredMap(json, 'origin_entry')),
+      reportComment: _asNullableString(json['report_comment']),
       attachments:
           _optionalList(
             json,

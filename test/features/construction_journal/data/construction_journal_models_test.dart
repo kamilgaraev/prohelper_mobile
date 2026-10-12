@@ -3,6 +3,61 @@ import 'package:prohelpers_mobile/features/construction_journal/data/constructio
 
 void main() {
   test(
+    'estimate section filter includes descendants, keeps unassigned and terminates cycles',
+    () {
+      final estimate = ConstructionJournalEstimateOption.fromJson({
+        'id': 1,
+        'name': 'Смета',
+        'sections': [
+          {'id': 10, 'name': 'Фундамент', 'parent_section_id': null},
+          {'id': 11, 'name': 'Бетон', 'parent_section_id': 10},
+          {'id': 12, 'name': 'Бетон', 'parent_section_id': null},
+          {'id': 20, 'name': 'Цикл А', 'parent_section_id': 21},
+          {'id': 21, 'name': 'Цикл Б', 'parent_section_id': 20},
+        ],
+        'items': [
+          for (final section in [10, 11, 12, null, 20])
+            {
+              'id': section ?? 99,
+              'name': 'Работа',
+              'estimate_section_id': section,
+              'estimate_id': 1,
+            },
+        ],
+      });
+      expect(estimate.itemsInSection(10).map((item) => item.id), [10, 11]);
+      expect(estimate.itemsInSection(-1).single.id, 99);
+      expect(estimate.itemsInSection(null).length, 5);
+      expect(estimate.itemsInSection(20).single.id, 20);
+      expect(estimate.sectionLabel(estimate.sections[1]), 'Фундамент / Бетон');
+      expect(estimate.items.first.toJson()['estimate_section_id'], 10);
+      expect(estimate.sectionLabel(estimate.sections[3]), 'Цикл Б / Цикл А');
+    },
+  );
+  test(
+    'report provenance and comment survive parsing without becoming editable facts',
+    () {
+      final payload = _entryPayload();
+      payload['source_entry'] = {
+        'id': 9,
+        'journal_id': 3,
+        'entry_number': 7,
+        'organization_name': 'Субподрядчик',
+        'approved_by_name': 'Прораб',
+      };
+      payload['report_comment'] = 'Отчёт подрядчика';
+      payload['available_actions'] = [
+        {'action': 'update_report', 'label': 'Комментарий к отчёту'},
+        {'action': 'include_in_journal', 'label': 'Включить в свой журнал'},
+      ];
+      final report = ConstructionJournalEntryModel.fromJson(payload);
+      expect(report.sourceEntry!.id, 9);
+      expect(report.reportComment, 'Отчёт подрядчика');
+      expect(report.hasAction('update'), false);
+      expect(report.hasAction('update_report'), true);
+    },
+  );
+  test(
     'entry attachments are optional in legacy snapshots and contain metadata only',
     () {
       final payload = _entryPayload();

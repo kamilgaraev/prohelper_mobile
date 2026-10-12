@@ -13,6 +13,103 @@ import 'package:prohelpers_mobile/features/construction_journal/presentation/jou
 
 void main() {
   testWidgets(
+    'section filter limits picker and switching estimate resets filter without removing added work',
+    (tester) async {
+      await _pumpJournalForm(
+        tester,
+        width: 390,
+        textScale: 1,
+        formOptionsOverride: {
+          'data': {
+            'estimates': [
+              {
+                'id': 301,
+                'name': 'Смета А',
+                'sections': [
+                  {'id': 10, 'name': 'Фундамент'},
+                  {'id': 11, 'name': 'Бетон', 'parent_section_id': 10},
+                  {'id': 12, 'name': 'Кровля'},
+                ],
+                'items': [
+                  {
+                    'id': 19,
+                    'estimate_id': 301,
+                    'name': 'Бетонирование',
+                    'estimate_section_id': 11,
+                    'quantity': 5,
+                  },
+                  {
+                    'id': 20,
+                    'estimate_id': 301,
+                    'name': 'Монтаж кровли',
+                    'estimate_section_id': 12,
+                    'quantity': 7,
+                  },
+                ],
+              },
+              {
+                'id': 302,
+                'name': 'Смета Б',
+                'sections': [],
+                'items': [
+                  {
+                    'id': 21,
+                    'estimate_id': 302,
+                    'name': 'Монтаж окон',
+                    'quantity': 2,
+                  },
+                ],
+              },
+            ],
+            'work_types': [],
+            'project_materials': [],
+          },
+        },
+      );
+      await tester.tap(find.text('Смета'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Смета А').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Все разделы'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Фундамент').last);
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.text('Позиция сметы'),
+        250,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.tap(find.text('Позиция сметы'));
+      await tester.pumpAndSettle();
+      expect(find.text('Монтаж кровли'), findsNothing);
+      await tester.tap(find.text('Бетонирование').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Добавить из сметы'));
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.text('Смета'),
+        -300,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.tap(find.text('Смета'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Смета Б').last);
+      await tester.pumpAndSettle();
+      expect(find.text('Все разделы'), findsOneWidget);
+      await tester.scrollUntilVisible(
+        find.text('Позиция сметы'),
+        250,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.tap(find.text('Позиция сметы'));
+      await tester.pumpAndSettle();
+      expect(find.text('Монтаж окон'), findsOneWidget);
+      await tester.tap(find.text('Монтаж окон').last);
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Бетонирование'), findsWidgets);
+    },
+  );
+  testWidgets(
     'actual 0.035 shows verified child norms and preserves manual values and headcounts',
     (tester) async {
       Map<String, dynamic>? payload;
@@ -1307,6 +1404,7 @@ Future<void> _pumpJournalForm(
   List<Map<String, dynamic>>? resourcesOverride,
   Map<String, dynamic>? estimateUnitOverride,
   void Function(Map<String, dynamic>)? onEntryCreate,
+  Map<String, dynamic>? formOptionsOverride,
 }) async {
   tester.view.physicalSize = Size(width, 1000);
   tester.view.devicePixelRatio = 1;
@@ -1382,12 +1480,14 @@ Future<void> _pumpJournalForm(
               handler.resolve(
                 Response(
                   requestOptions: options,
-                  data: _formOptionsResponse(
-                    includeLongEstimateOptions,
-                    includeResources: includeResources,
-                    resourcesOverride: resourcesOverride,
-                    estimateUnitOverride: estimateUnitOverride,
-                  ),
+                  data:
+                      formOptionsOverride ??
+                      _formOptionsResponse(
+                        includeLongEstimateOptions,
+                        includeResources: includeResources,
+                        resourcesOverride: resourcesOverride,
+                        estimateUnitOverride: estimateUnitOverride,
+                      ),
                 ),
               );
             },
