@@ -5,11 +5,46 @@ class JournalResourceSuggestion {
     required this.key,
     required this.resource,
     required this.quantity,
+    this.contractId,
   });
 
   final String key;
   final ConstructionJournalEstimateResource resource;
   final double quantity;
+  final int? contractId;
+}
+
+List<JournalResourceSuggestion> journalContractResourceSuggestions(
+  Iterable<
+    ({
+      ConstructionJournalEstimateItemOption item,
+      double quantity,
+      int? contractId,
+    })
+  >
+  works,
+) {
+  final groups =
+      <
+        int?,
+        List<({ConstructionJournalEstimateItemOption item, double quantity})>
+      >{};
+  for (final work in works) {
+    (groups[work.contractId] ??= []).add((
+      item: work.item,
+      quantity: work.quantity,
+    ));
+  }
+  return [
+    for (final group in groups.entries)
+      for (final suggestion in journalResourceSuggestions(group.value))
+        JournalResourceSuggestion(
+          key: 'contract:${group.key ?? 'unassigned'}:${suggestion.key}',
+          resource: suggestion.resource,
+          quantity: suggestion.quantity,
+          contractId: group.key,
+        ),
+  ];
 }
 
 List<JournalResourceSuggestion> journalResourceSuggestions(

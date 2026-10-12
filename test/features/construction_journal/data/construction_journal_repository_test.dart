@@ -7,6 +7,91 @@ import 'package:prohelpers_mobile/core/network/api_exception.dart';
 import 'package:prohelpers_mobile/features/construction_journal/data/construction_journal_repository.dart';
 
 void main() {
+  test('keeps contract filters on every journal entries page', () async {
+    for (final unassigned in [false, true]) {
+      final calls = <RequestOptions>[];
+      final dio = Dio(BaseOptions(baseUrl: 'https://api.example.test'));
+      dio.httpClientAdapter = _JsonAdapter((options) {
+        calls.add(options);
+        if (options.path == '/construction-journals/77') {
+          return _envelope({'id': 77, 'project_id': 15, 'name': 'Журнал'});
+        }
+        final page = options.queryParameters['page'] as int;
+        return _entriesEnvelope(
+          page: page,
+          lastPage: 2,
+          total: 2,
+          items: [
+            {'id': page},
+          ],
+        );
+      });
+      await ConstructionJournalRepository(dio).fetchJournalDetailPayload(
+        77,
+        contractId: unassigned ? null : 4,
+        unassignedOnly: unassigned,
+      );
+      final queries = calls
+          .where((call) => call.path.endsWith('/entries'))
+          .map((call) => call.queryParameters);
+      expect(queries, hasLength(2));
+      for (final query in queries) {
+        expect(
+          query,
+          containsPair(
+            unassigned ? 'unassigned_only' : 'contract_id',
+            unassigned ? 1 : 4,
+          ),
+        );
+        expect(
+          query.containsKey(unassigned ? 'contract_id' : 'unassigned_only'),
+          isFalse,
+        );
+      }
+    }
+  });
+
+  test('late contract removal sends an explicit null and the reason', () async {
+    final calls = <RequestOptions>[];
+    final dio = Dio(BaseOptions(baseUrl: 'https://api.example.test'));
+    dio.httpClientAdapter = _JsonAdapter((options) {
+      calls.add(options);
+      return _envelope({
+        'id': 29,
+        'journal_id': 8,
+        'entry_date': '2026-10-12',
+        'entry_number': 1,
+        'work_description': 'Работы',
+        'status': 'approved',
+        'status_label': 'Подтверждено',
+        'workflow_state': 'ready',
+        'workVolumes': [],
+        'workers': [],
+        'equipment': [],
+        'materials': [],
+        'available_actions': [],
+        'blockers': [],
+      });
+    });
+    await ConstructionJournalRepository(dio).assignRowContract(
+      journalId: 8,
+      entryId: 29,
+      rowType: 'work-volumes',
+      rowId: 10,
+      contractId: null,
+      reason: '  Исправлена привязка  ',
+    );
+    expect(calls.single.method, 'PATCH');
+    expect(
+      calls.single.path,
+      '/construction-journals/8/entries/29/rows/work-volumes/10/contract',
+    );
+    expect(calls.single.data, {
+      'contract_id': null,
+      'reason': 'Исправлена привязка',
+    });
+  });
+
   test(
     'report requests send source and target ids without factual copies',
     () async {

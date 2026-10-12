@@ -20,6 +20,7 @@ import '../../design_management/data/design_package_file_service.dart';
 import '../data/journal_photo_picker.dart';
 import 'journal_entry_form_screen.dart';
 import 'include_journal_entry_dialog.dart';
+import 'journal_contract_assignment_dialog.dart';
 
 class JournalEntryDetailScreen extends ConsumerStatefulWidget {
   const JournalEntryDetailScreen({
@@ -599,6 +600,49 @@ class _JournalEntryDetailScreenState
                             }
                             : null,
                     child: const Text('Комментарий к отчёту'),
+                  ),
+                if (entry.hasAction(
+                  ConstructionJournalActionKeys.assignContract,
+                ))
+                  OutlinedButton.icon(
+                    onPressed:
+                        _activeAction == null &&
+                                projectMatches &&
+                                entry.journalId == journalId
+                            ? () => _runAction('assign_contract', () async {
+                              final actor = _actorContext;
+                              final changed = await showDialog<bool>(
+                                context: context,
+                                barrierDismissible: false,
+                                builder:
+                                    (
+                                      context,
+                                    ) => JournalContractAssignmentDialog(
+                                      entry: entry,
+                                      repository: ref.read(
+                                        constructionJournalRepositoryProvider,
+                                      ),
+                                      isContextCurrent:
+                                          () =>
+                                              _attachmentContextCurrent(actor),
+                                    ),
+                              );
+                              if (changed == true &&
+                                  _attachmentContextCurrent(actor)) {
+                                await notifier.load();
+                                await ref
+                                    .read(
+                                      constructionJournalDetailProvider((
+                                        journalId: journalId,
+                                        projectId: projectId,
+                                      )).notifier,
+                                    )
+                                    .load();
+                              }
+                            })
+                            : null,
+                    icon: const Icon(Icons.link),
+                    label: const Text('Назначить договор строке'),
                   ),
                 if (entry.hasAction(ConstructionJournalActionKeys.submit))
                   ElevatedButton.icon(

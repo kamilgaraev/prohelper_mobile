@@ -13,6 +13,7 @@ import '../data/construction_journal_models.dart';
 import '../data/construction_journal_repository.dart';
 import '../data/journal_entry_operation_recovery.dart';
 import '../domain/journal_resource_suggestions.dart';
+import 'journal_row_contract_picker.dart';
 
 class JournalEntryFormScreen extends ConsumerStatefulWidget {
   const JournalEntryFormScreen({
@@ -604,7 +605,7 @@ class _JournalEntryFormScreenState
   Widget _buildEstimateSelector() {
     return DropdownButtonFormField<int>(
       isExpanded: true,
-      value:
+      initialValue:
           _estimates.any((estimate) => estimate.id == _selectedEstimateId)
               ? _selectedEstimateId
               : null,
@@ -682,6 +683,42 @@ class _JournalEntryFormScreenState
     );
   }
 
+  Widget _contractRow(
+    _ContractAssignableInput input,
+    Widget child, {
+    ConstructionJournalEstimateItemOption? estimateItem,
+  }) {
+    Map<String, dynamic>? link;
+    if (estimateItem != null && input.contractId != null) {
+      for (final candidate in estimateItem.contractLinks) {
+        if (candidate['contract_id'] == input.contractId) link = candidate;
+      }
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        child,
+        const SizedBox(height: 8),
+        JournalRowContractPicker(
+          contractId: input.contractId,
+          contractNumber: input.contractNumber,
+          contracts: _options?.contracts ?? const [],
+          helperText:
+              link == null
+                  ? null
+                  : 'Согласовано: ${link['agreed_quantity'] ?? 'не задано'}; остаток: ${link['remaining_quantity'] ?? 'не задан'}',
+          onChanged:
+              (value) => setState(() {
+                input.contractId = value;
+                input.contractAssignmentSpecified = true;
+                input.contractAssignmentModified = true;
+                if (input is _WorkVolumeInput) _refreshResourceSuggestions();
+              }),
+        ),
+      ],
+    );
+  }
+
   Widget _buildWorkVolumes() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -707,24 +744,28 @@ class _JournalEntryFormScreenState
         ..._workVolumes.asMap().entries.map(
           (entry) => Padding(
             padding: const EdgeInsets.only(top: 8),
-            child: _WorkVolumeCard(
-              input: entry.value,
-              workTypes: _workTypes,
-              measurementUnits:
-                  _options?.measurementUnits.isNotEmpty == true
-                      ? _options!.measurementUnits
-                      : {
-                        for (final type in _workTypes)
-                          if (type.measurementUnit != null)
-                            type.measurementUnit!.id: type.measurementUnit!,
-                      }.values.toList(),
-              onChanged: () => setState(_refreshResourceSuggestions),
-              onRemove: () {
-                setState(() {
-                  _workVolumes.removeAt(entry.key).dispose();
-                  _refreshResourceSuggestions();
-                });
-              },
+            child: _contractRow(
+              entry.value,
+              _WorkVolumeCard(
+                input: entry.value,
+                workTypes: _workTypes,
+                measurementUnits:
+                    _options?.measurementUnits.isNotEmpty == true
+                        ? _options!.measurementUnits
+                        : {
+                          for (final type in _workTypes)
+                            if (type.measurementUnit != null)
+                              type.measurementUnit!.id: type.measurementUnit!,
+                        }.values.toList(),
+                onChanged: () => setState(_refreshResourceSuggestions),
+                onRemove: () {
+                  setState(() {
+                    _workVolumes.removeAt(entry.key).dispose();
+                    _refreshResourceSuggestions();
+                  });
+                },
+              ),
+              estimateItem: entry.value.estimateItem,
             ),
           ),
         ),
@@ -802,17 +843,20 @@ class _JournalEntryFormScreenState
               .asMap()
               .entries
               .map(
-                (entry) => _WorkerCard(
-                  input: entry.value,
-                  onChanged: () => setState(() {}),
-                  onRemove:
-                      () => setState(() {
-                        final input = _workers.removeAt(entry.key);
-                        if (input.suggestionKey != null) {
-                          _dismissedSuggestions.add(input.suggestionKey!);
-                        }
-                        input.dispose();
-                      }),
+                (entry) => _contractRow(
+                  entry.value,
+                  _WorkerCard(
+                    input: entry.value,
+                    onChanged: () => setState(() {}),
+                    onRemove:
+                        () => setState(() {
+                          final input = _workers.removeAt(entry.key);
+                          if (input.suggestionKey != null) {
+                            _dismissedSuggestions.add(input.suggestionKey!);
+                          }
+                          input.dispose();
+                        }),
+                  ),
                 ),
               )
               .toList(),
@@ -830,17 +874,20 @@ class _JournalEntryFormScreenState
               .asMap()
               .entries
               .map(
-                (entry) => _EquipmentCard(
-                  input: entry.value,
-                  onChanged: () => setState(() {}),
-                  onRemove:
-                      () => setState(() {
-                        final input = _equipment.removeAt(entry.key);
-                        if (input.suggestionKey != null) {
-                          _dismissedSuggestions.add(input.suggestionKey!);
-                        }
-                        input.dispose();
-                      }),
+                (entry) => _contractRow(
+                  entry.value,
+                  _EquipmentCard(
+                    input: entry.value,
+                    onChanged: () => setState(() {}),
+                    onRemove:
+                        () => setState(() {
+                          final input = _equipment.removeAt(entry.key);
+                          if (input.suggestionKey != null) {
+                            _dismissedSuggestions.add(input.suggestionKey!);
+                          }
+                          input.dispose();
+                        }),
+                  ),
                 ),
               )
               .toList(),
@@ -912,17 +959,20 @@ class _JournalEntryFormScreenState
         ..._materials.asMap().entries.map(
           (entry) => Padding(
             padding: const EdgeInsets.only(top: 8),
-            child: _MaterialUsageCard(
-              input: entry.value,
-              onRemove: () {
-                setState(() {
-                  final input = _materials.removeAt(entry.key);
-                  if (input.suggestionKey != null) {
-                    _dismissedSuggestions.add(input.suggestionKey!);
-                  }
-                  input.dispose();
-                });
-              },
+            child: _contractRow(
+              entry.value,
+              _MaterialUsageCard(
+                input: entry.value,
+                onRemove: () {
+                  setState(() {
+                    final input = _materials.removeAt(entry.key);
+                    if (input.suggestionKey != null) {
+                      _dismissedSuggestions.add(input.suggestionKey!);
+                    }
+                    input.dispose();
+                  });
+                },
+              ),
             ),
           ),
         ),
@@ -935,7 +985,7 @@ class _JournalEntryFormScreenState
     required List<ConstructionJournalProjectMaterialOption> materials,
   }) {
     return DropdownButtonFormField<int>(
-      value: null,
+      initialValue: null,
       decoration: InputDecoration(
         labelText: label,
         border: const OutlineInputBorder(),
@@ -960,7 +1010,7 @@ class _JournalEntryFormScreenState
       children: [
         DropdownButtonFormField<int>(
           isExpanded: true,
-          value:
+          initialValue:
               _selectedEstimateItems.any(
                     (item) => item.id == _selectedEstimateItemId,
                   )
@@ -1070,12 +1120,6 @@ class _JournalEntryFormScreenState
     }
 
     final item = selected.first;
-    if (_workVolumes.any((volume) => volume.estimateItemId == item.id)) {
-      _showMessage(
-        'Эта позиция уже добавлена. Измените её фактическое количество.',
-      );
-      return;
-    }
     setState(() {
       _workVolumes.add(
         _WorkVolumeInput.fromEstimateItem(
@@ -1097,7 +1141,7 @@ class _JournalEntryFormScreenState
   }
 
   void _refreshResourceSuggestions() {
-    final suggestions = journalResourceSuggestions([
+    final suggestions = journalContractResourceSuggestions([
       for (final volume in _workVolumes)
         if (volume.estimateItem != null &&
             volume.suggestionsEnabled &&
@@ -1107,11 +1151,15 @@ class _JournalEntryFormScreenState
             ))
           (
             item: volume.estimateItem!,
+            contractId: volume.contractId,
             quantity: _parseDecimal(volume.quantityController.text) ?? 0,
           ),
     ]);
     final active = suggestions.map((item) => item.key).toSet();
     _materials.removeWhere((item) {
+      if (item.contractAssignmentModified) {
+        return false;
+      }
       if (item.suggestionKey != null &&
           !active.contains(item.suggestionKey) &&
           canUpdateJournalSuggestion(
@@ -1124,6 +1172,9 @@ class _JournalEntryFormScreenState
       return false;
     });
     _workers.removeWhere((item) {
+      if (item.contractAssignmentModified) {
+        return false;
+      }
       if (item.suggestionKey != null && !active.contains(item.suggestionKey)) {
         item.totalNormHours = null;
       }
@@ -1143,6 +1194,9 @@ class _JournalEntryFormScreenState
       return false;
     });
     _equipment.removeWhere((item) {
+      if (item.contractAssignmentModified) {
+        return false;
+      }
       if (item.suggestionKey != null && !active.contains(item.suggestionKey)) {
         item.totalNormHours = null;
       }
@@ -1172,6 +1226,7 @@ class _JournalEntryFormScreenState
             (item) =>
                 item.suggestionKey == suggestion.key ||
                 (item.estimateItemId == resource.estimateItemId &&
+                    item.contractId == suggestion.contractId &&
                     item.materialId == resource.materialId &&
                     item.measurementUnit == resource.displayUnit &&
                     item.materialName == resource.name),
@@ -1179,6 +1234,7 @@ class _JournalEntryFormScreenState
           if (existing.isEmpty) {
             _materials.add(
               _MaterialUsageInput(
+                contractId: suggestion.contractId,
                 materialId: resource.materialId,
                 estimateItemId: resource.estimateItemId,
                 projectMaterialDeliveryId: null,
@@ -1197,11 +1253,13 @@ class _JournalEntryFormScreenState
             (item) =>
                 item.suggestionKey == suggestion.key ||
                 (item.estimateItemId == resource.estimateItemId &&
+                    item.contractId == suggestion.contractId &&
                     item.specialtyController.text == resource.name),
           );
           if (existing.isEmpty) {
             _workers.add(
               _WorkerInput(
+                contractId: suggestion.contractId,
                 estimateItemId: resource.estimateItemId,
                 specialty: resource.name,
                 count: '',
@@ -1220,11 +1278,13 @@ class _JournalEntryFormScreenState
             (item) =>
                 item.suggestionKey == suggestion.key ||
                 (item.estimateItemId == resource.estimateItemId &&
+                    item.contractId == suggestion.contractId &&
                     item.nameController.text == resource.name),
           );
           if (existing.isEmpty) {
             _equipment.add(
               _EquipmentInput(
+                contractId: suggestion.contractId,
                 estimateItemId: resource.estimateItemId,
                 name: resource.name,
                 quantity: '',
@@ -1589,6 +1649,9 @@ class _JournalEntryFormScreenState
 
           return ConstructionJournalWorkVolumeModel(
             id: volume.id,
+            contractId: volume.contractId,
+            contractAssignmentSpecified: volume.contractAssignmentSpecified,
+            contractNumber: volume.contractNumber,
             estimateItemId: volume.estimateItemId,
             workTypeId: volume.workTypeId,
             quantity: quantity,
@@ -1623,6 +1686,9 @@ class _JournalEntryFormScreenState
 
           return ConstructionJournalMaterialUsageModel(
             id: material.id,
+            contractId: material.contractId,
+            contractAssignmentSpecified: material.contractAssignmentSpecified,
+            contractNumber: material.contractNumber,
             materialId: material.materialId,
             estimateItemId: material.estimateItemId,
             projectMaterialDeliveryId: material.projectMaterialDeliveryId,
@@ -1666,6 +1732,9 @@ class _JournalEntryFormScreenState
             }
             return ConstructionJournalWorkerModel(
               id: worker.id,
+              contractId: worker.contractId,
+              contractAssignmentSpecified: worker.contractAssignmentSpecified,
+              contractNumber: worker.contractNumber,
               estimateItemId: worker.estimateItemId,
               specialty: worker.specialtyController.text.trim(),
               workersCount: count,
@@ -1690,6 +1759,9 @@ class _JournalEntryFormScreenState
             }
             return ConstructionJournalEquipmentModel(
               id: item.id,
+              contractId: item.contractId,
+              contractAssignmentSpecified: item.contractAssignmentSpecified,
+              contractNumber: item.contractNumber,
               estimateItemId: item.estimateItemId,
               name: item.nameController.text.trim(),
               type: item.typeController.text.trim(),
@@ -1750,7 +1822,7 @@ class _WorkVolumeCard extends StatelessWidget {
                 Expanded(
                   child: DropdownButtonFormField<int>(
                     isExpanded: true,
-                    value:
+                    initialValue:
                         workTypes.any(
                               (workType) => workType.id == input.workTypeId,
                             )
@@ -1944,9 +2016,22 @@ class _WorkVolumeCard extends StatelessWidget {
   }
 }
 
-class _WorkVolumeInput {
+abstract interface class _ContractAssignableInput {
+  bool get contractAssignmentModified;
+  set contractAssignmentModified(bool value);
+  int? get contractId;
+  set contractId(int? value);
+  bool get contractAssignmentSpecified;
+  set contractAssignmentSpecified(bool value);
+  String? get contractNumber;
+}
+
+class _WorkVolumeInput implements _ContractAssignableInput {
   _WorkVolumeInput({
     this.id,
+    this.contractId,
+    this.contractAssignmentSpecified = true,
+    this.contractNumber,
     this.estimateItemId,
     this.workTypeId,
     this.measurementUnitId,
@@ -1962,6 +2047,14 @@ class _WorkVolumeInput {
        notesController = TextEditingController(text: notes);
 
   final int? id;
+  @override
+  int? contractId;
+  @override
+  bool contractAssignmentSpecified;
+  @override
+  bool contractAssignmentModified = false;
+  @override
+  String? contractNumber;
   int? estimateItemId;
   int? workTypeId;
   int? measurementUnitId;
@@ -1976,6 +2069,10 @@ class _WorkVolumeInput {
   factory _WorkVolumeInput.fromModel(ConstructionJournalWorkVolumeModel model) {
     return _WorkVolumeInput(
       id: model.id,
+      contractId: model.contractId,
+      contractAssignmentSpecified:
+          model.contractAssignmentSpecified || model.contractId != null,
+      contractNumber: model.contractNumber,
       estimateItemId: model.estimateItemId,
       workTypeId: model.workTypeId,
       measurementUnitId: model.measurementUnitId,
@@ -2000,6 +2097,7 @@ class _WorkVolumeInput {
 
     return _WorkVolumeInput(
       estimateItemId: item.id,
+      contractId: item.suggestedContractId,
       workTypeId: item.workTypeId,
       measurementUnitId: item.measurementUnitId ?? workType?.measurementUnitId,
       measurementUnitName: measurementUnit?.displayName,
@@ -2267,9 +2365,12 @@ Widget _compactNumberField(
   );
 }
 
-class _WorkerInput {
+class _WorkerInput implements _ContractAssignableInput {
   _WorkerInput({
     this.id,
+    this.contractId,
+    this.contractAssignmentSpecified = true,
+    this.contractNumber,
     this.estimateItemId,
     this.suggestionKey,
     this.totalNormHours,
@@ -2283,6 +2384,14 @@ class _WorkerInput {
        lastSuggestion = suggestionKey == null ? null : hours;
 
   final int? id;
+  @override
+  int? contractId;
+  @override
+  bool contractAssignmentSpecified;
+  @override
+  bool contractAssignmentModified = false;
+  @override
+  String? contractNumber;
   final int? estimateItemId;
   final String? suggestionKey;
   String? lastSuggestion;
@@ -2322,6 +2431,10 @@ class _WorkerInput {
   factory _WorkerInput.fromModel(ConstructionJournalWorkerModel model) =>
       _WorkerInput(
         id: model.id,
+        contractId: model.contractId,
+        contractAssignmentSpecified:
+            model.contractAssignmentSpecified || model.contractId != null,
+        contractNumber: model.contractNumber,
         estimateItemId: model.estimateItemId,
         specialty: model.specialty,
         count: model.workersCount.toString(),
@@ -2335,9 +2448,12 @@ class _WorkerInput {
   }
 }
 
-class _EquipmentInput {
+class _EquipmentInput implements _ContractAssignableInput {
   _EquipmentInput({
     this.id,
+    this.contractId,
+    this.contractAssignmentSpecified = true,
+    this.contractNumber,
     this.estimateItemId,
     this.suggestionKey,
     this.totalNormHours,
@@ -2353,6 +2469,14 @@ class _EquipmentInput {
        lastSuggestion = suggestionKey == null ? null : hours;
 
   final int? id;
+  @override
+  int? contractId;
+  @override
+  bool contractAssignmentSpecified;
+  @override
+  bool contractAssignmentModified = false;
+  @override
+  String? contractNumber;
   final int? estimateItemId;
   final String? suggestionKey;
   String? lastSuggestion;
@@ -2394,6 +2518,10 @@ class _EquipmentInput {
   factory _EquipmentInput.fromModel(ConstructionJournalEquipmentModel model) =>
       _EquipmentInput(
         id: model.id,
+        contractId: model.contractId,
+        contractAssignmentSpecified:
+            model.contractAssignmentSpecified || model.contractId != null,
+        contractNumber: model.contractNumber,
         estimateItemId: model.estimateItemId,
         name: model.name,
         type: model.type ?? '',
@@ -2409,9 +2537,12 @@ class _EquipmentInput {
   }
 }
 
-class _MaterialUsageInput {
+class _MaterialUsageInput implements _ContractAssignableInput {
   _MaterialUsageInput({
     this.id,
+    this.contractId,
+    this.contractAssignmentSpecified = true,
+    this.contractNumber,
     required this.materialId,
     this.estimateItemId,
     this.suggestionKey,
@@ -2426,6 +2557,14 @@ class _MaterialUsageInput {
        lastSuggestion = suggestionKey == null ? null : quantity;
 
   final int? id;
+  @override
+  int? contractId;
+  @override
+  bool contractAssignmentSpecified;
+  @override
+  bool contractAssignmentModified = false;
+  @override
+  String? contractNumber;
   final int? materialId;
   final int? estimateItemId;
   final String? suggestionKey;
@@ -2469,6 +2608,10 @@ class _MaterialUsageInput {
   ) {
     return _MaterialUsageInput(
       id: material.id,
+      contractId: material.contractId,
+      contractAssignmentSpecified:
+          material.contractAssignmentSpecified || material.contractId != null,
+      contractNumber: material.contractNumber,
       materialId: material.materialId,
       estimateItemId: material.estimateItemId,
       projectMaterialDeliveryId: material.projectMaterialDeliveryId,

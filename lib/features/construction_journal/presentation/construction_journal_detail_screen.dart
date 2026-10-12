@@ -17,8 +17,9 @@ import '../domain/construction_journal_provider.dart';
 import 'journal_entry_detail_screen.dart';
 import 'journal_entry_form_screen.dart';
 import 'journal_form_screen.dart';
+import '../../auth/domain/auth_provider.dart';
 
-class ConstructionJournalDetailScreen extends ConsumerWidget {
+class ConstructionJournalDetailScreen extends ConsumerStatefulWidget {
   const ConstructionJournalDetailScreen({
     super.key,
     required this.journalId,
@@ -29,15 +30,119 @@ class ConstructionJournalDetailScreen extends ConsumerWidget {
   final int projectId;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<ConstructionJournalDetailScreen> createState() =>
+      _ConstructionJournalDetailScreenState();
+}
+
+class _ConstructionJournalDetailScreenState
+    extends ConsumerState<ConstructionJournalDetailScreen> {
+  int get journalId => widget.journalId;
+  int get projectId => widget.projectId;
+  int _contractFilter = 0;
+  int _filterEpoch = 0;
+  bool _filterLoading = false;
+  String? _filterError;
+  ConstructionJournalDetailPayload? _filtered;
+  Future<ConstructionJournalEntryFormOptions>? _options;
+  Object? _boundActor;
+
+  Object get _actorContext {
+    final auth = ref.read(authProvider);
+    return (
+      user: auth.user?.serverId,
+      organization: auth.user?.currentOrganizationId,
+      session: auth is AuthAuthenticated ? auth.sessionIdentity : null,
+      journalId: journalId,
+      projectId: projectId,
+    );
+  }
+
+  Future<void> _setContractFilter(int value) async {
+    final epoch = ++_filterEpoch;
+    final actor = _actorContext;
+    setState(() {
+      _contractFilter = value;
+      _filtered = null;
+      _filterError = null;
+      _filterLoading = value != 0;
+    });
+    if (value == 0) return;
+    try {
+      final payload = await ref
+          .read(constructionJournalRepositoryProvider)
+          .fetchJournalDetail(
+            journalId,
+            contractId: value > 0 ? value : null,
+            unassignedOnly: value == -1,
+          );
+      if (mounted &&
+          epoch == _filterEpoch &&
+          actor == _actorContext &&
+          ref.read(projectsProvider).selectedProject?.serverId == projectId) {
+        setState(() => _filtered = payload);
+      }
+    } catch (_) {
+      if (mounted && epoch == _filterEpoch && actor == _actorContext) {
+        setState(
+          () =>
+              _filterError =
+                  'Не удалось применить фильтр. Проверьте подключение или выберите все записи.',
+        );
+      }
+    } finally {
+      if (mounted && epoch == _filterEpoch && actor == _actorContext) {
+        setState(() => _filterLoading = false);
+      }
+    }
+  }
+
+  Future<void> _reload() async {
+    if (!mounted ||
+        ref.read(projectsProvider).selectedProject?.serverId != projectId) {
+      return;
+    }
+    final actor = _actorContext;
+    await ref
+        .read(
+          constructionJournalDetailProvider((
+            journalId: journalId,
+            projectId: projectId,
+          )).notifier,
+        )
+        .load();
+    if (mounted && actor == _actorContext && _contractFilter != 0) {
+      await _setContractFilter(_contractFilter);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    ref.watch(authProvider);
+    if (_boundActor != _actorContext) {
+      _boundActor = _actorContext;
+      _filterEpoch++;
+      _contractFilter = 0;
+      _filtered = null;
+      _filterError = null;
+      _filterLoading = false;
+      _options = ref
+          .read(constructionJournalRepositoryProvider)
+          .fetchEntryFormOptions(journalId);
+    }
     final selectedProjectId = ref.watch(
       projectsProvider.select((state) => state.selectedProject?.serverId),
     );
     final scope = (journalId: journalId, projectId: projectId);
     final state = ref.watch(constructionJournalDetailProvider(scope));
-    final notifier = ref.read(
-      constructionJournalDetailProvider(scope).notifier,
-    );
+    final visibleEntries =
+        _contractFilter == 0
+            ? state.entries
+            : (_filtered?.entries ?? const <ConstructionJournalEntryModel>[]);
+    final visibleSummary =
+        _contractFilter == 0
+            ? state.entriesSummary
+            : (_filtered?.entriesSummary ?? const ConstructionJournalSummary());
+
     bool projectIsCurrent() =>
         ref.read(projectsProvider).selectedProject?.serverId == projectId;
     Future<void> transition(String action) async {
@@ -45,7 +150,7 @@ class ConstructionJournalDetailScreen extends ConsumerWidget {
       await ref
           .read(constructionJournalRepositoryProvider)
           .transitionJournal(journalId, action);
-      await notifier.load();
+      await _reload();
     }
 
     return Scaffold(
@@ -53,14 +158,14 @@ class ConstructionJournalDetailScreen extends ConsumerWidget {
         title: const Text('Карточка журнала'),
         actions: [
           IconButton(
-            onPressed: selectedProjectId == projectId ? notifier.load : null,
+            onPressed: selectedProjectId == projectId ? _reload : null,
             icon: const Icon(Icons.refresh_rounded),
           ),
         ],
       ),
       body: RefreshIndicator(
         onRefresh: () async {
-          if (projectIsCurrent()) await notifier.load();
+          if (projectIsCurrent()) await _reload();
         },
         child: CustomScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
@@ -85,7 +190,7 @@ class ConstructionJournalDetailScreen extends ConsumerWidget {
                 child: AppErrorState(
                   title: 'Не удалось загрузить журнал',
                   description: state.error,
-                  onRetry: notifier.load,
+                  onRetry: _reload,
                 ),
               )
             else if (state.journal == null)
@@ -210,7 +315,7 @@ class ConstructionJournalDetailScreen extends ConsumerWidget {
                                   );
 
                                   if (created == true && projectIsCurrent()) {
-                                    await notifier.load();
+                                    await _reload();
                                   }
                                 },
                                 icon: const Icon(Icons.add_rounded),
@@ -237,7 +342,7 @@ class ConstructionJournalDetailScreen extends ConsumerWidget {
                                   );
 
                                   if (updated == true && projectIsCurrent()) {
-                                    await notifier.load();
+                                    await _reload();
                                   }
                                 },
                                 icon: const Icon(Icons.edit_outlined),
@@ -309,7 +414,7 @@ class ConstructionJournalDetailScreen extends ConsumerWidget {
                       Expanded(
                         child: _MetricCard(
                           title: 'Всего записей',
-                          value: state.entriesSummary.totalEntries.toString(),
+                          value: visibleSummary.totalEntries.toString(),
                           color: Theme.of(context).colorScheme.primary,
                         ),
                       ),
@@ -317,8 +422,7 @@ class ConstructionJournalDetailScreen extends ConsumerWidget {
                       Expanded(
                         child: _MetricCard(
                           title: 'Утверждено',
-                          value:
-                              state.entriesSummary.approvedEntries.toString(),
+                          value: visibleSummary.approvedEntries.toString(),
                           color: AppColors.success,
                         ),
                       ),
@@ -335,7 +439,82 @@ class ConstructionJournalDetailScreen extends ConsumerWidget {
                   ),
                 ),
               ),
-              if (state.entries.isEmpty)
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                sliver: SliverToBoxAdapter(
+                  child: FutureBuilder<ConstructionJournalEntryFormOptions>(
+                    future: _options,
+                    builder:
+                        (context, snapshot) => Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            DropdownButtonFormField<int>(
+                              key: ValueKey(_contractFilter),
+                              initialValue: _contractFilter,
+                              isExpanded: true,
+                              decoration: const InputDecoration(
+                                labelText: 'Договор',
+                                border: OutlineInputBorder(),
+                              ),
+                              items: [
+                                const DropdownMenuItem(
+                                  value: 0,
+                                  child: Text(
+                                    'Все договоры и строки без договора',
+                                  ),
+                                ),
+                                const DropdownMenuItem(
+                                  value: -1,
+                                  child: Text('Без договора'),
+                                ),
+                                for (final contract
+                                    in snapshot.data?.contracts ??
+                                        const <
+                                          ConstructionJournalContractOption
+                                        >[])
+                                  DropdownMenuItem(
+                                    value: contract.id,
+                                    child: Text(
+                                      contract.label,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                              ],
+                              onChanged:
+                                  selectedProjectId != projectId ||
+                                          _filterLoading
+                                      ? null
+                                      : (value) {
+                                        if (value != null) {
+                                          _setContractFilter(value);
+                                        }
+                                      },
+                            ),
+                            if (snapshot.hasError)
+                              const Text(
+                                'Не удалось загрузить договоры проекта.',
+                              ),
+                            if (visibleSummary.unassignedRows != null)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 8),
+                                child: Text(
+                                  'Строк без договора: ${visibleSummary.unassignedRows}',
+                                ),
+                              ),
+                            if (_filterLoading) const LinearProgressIndicator(),
+                            if (_filterError != null)
+                              Text(
+                                _filterError!,
+                                style: TextStyle(
+                                  color: Theme.of(context).colorScheme.error,
+                                ),
+                              ),
+                          ],
+                        ),
+                  ),
+                ),
+              ),
+              if (visibleEntries.isEmpty)
                 const SliverFillRemaining(
                   hasScrollBody: false,
                   child: AppEmptyState(
@@ -350,7 +529,7 @@ class ConstructionJournalDetailScreen extends ConsumerWidget {
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
                   sliver: SliverList(
                     delegate: SliverChildBuilderDelegate((context, index) {
-                      final entry = state.entries[index];
+                      final entry = visibleEntries[index];
 
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 12),
@@ -358,12 +537,12 @@ class ConstructionJournalDetailScreen extends ConsumerWidget {
                           onTap:
                               !projectIsCurrent()
                                   ? null
-                                  : () {
+                                  : () async {
                                     if (!projectIsCurrent() ||
                                         state.journal?.projectId != projectId) {
                                       return;
                                     }
-                                    Navigator.of(context).push(
+                                    await Navigator.of(context).push(
                                       MaterialPageRoute(
                                         builder:
                                             (_) => JournalEntryDetailScreen(
@@ -373,6 +552,7 @@ class ConstructionJournalDetailScreen extends ConsumerWidget {
                                             ),
                                       ),
                                     );
+                                    await _reload();
                                   },
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -427,7 +607,7 @@ class ConstructionJournalDetailScreen extends ConsumerWidget {
                           ),
                         ),
                       );
-                    }, childCount: state.entries.length),
+                    }, childCount: visibleEntries.length),
                   ),
                 ),
             ],
