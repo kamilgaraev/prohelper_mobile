@@ -49,7 +49,7 @@ class _JournalRepository extends ConstructionJournalRepository {
   @override
   Future<ConstructionJournalModel> updateJournal({
     required int journalId,
-    required int contractId,
+    int? contractId,
     required String name,
     required String journalNumber,
     required String startDate,

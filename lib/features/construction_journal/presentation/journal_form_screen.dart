@@ -45,7 +45,7 @@ class _JournalFormScreenState extends ConsumerState<JournalFormScreen> {
         widget.initialJournal?.projectId ??
         ref.read(projectsProvider).selectedProject?.serverId;
     final projectId = _boundProjectId;
-    if (projectId != null) {
+    if (_isEdit && projectId != null && _contractId != null) {
       _contractsFuture = ref
           .read(constructionJournalRepositoryProvider)
           .fetchJournalFormOptions(projectId: projectId);
@@ -96,39 +96,40 @@ class _JournalFormScreenState extends ConsumerState<JournalFormScreen> {
             ),
           ),
           const SizedBox(height: 16),
-          FutureBuilder<List<ConstructionJournalContractOption>>(
-            future: _contractsFuture,
-            builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return const LinearProgressIndicator();
-              }
-              if (snapshot.hasError) {
-                return const Text('Не удалось загрузить договоры проекта.');
-              }
+          if (_isEdit && widget.initialJournal?.contractId != null)
+            FutureBuilder<List<ConstructionJournalContractOption>>(
+              future: _contractsFuture,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const LinearProgressIndicator();
+                }
+                if (snapshot.hasError) {
+                  return const Text('Не удалось загрузить договоры проекта.');
+                }
 
-              final contracts = snapshot.data ?? const [];
-              return DropdownButtonFormField<int>(
-                value:
-                    contracts.any((contract) => contract.id == _contractId)
-                        ? _contractId
-                        : null,
-                decoration: const InputDecoration(
-                  labelText: 'Договор проекта',
-                  border: OutlineInputBorder(),
-                ),
-                items:
-                    contracts
-                        .map(
-                          (contract) => DropdownMenuItem<int>(
-                            value: contract.id,
-                            child: Text(contract.label),
-                          ),
-                        )
-                        .toList(),
-                onChanged: (value) => setState(() => _contractId = value),
-              );
-            },
-          ),
+                final contracts = snapshot.data ?? const [];
+                return DropdownButtonFormField<int>(
+                  initialValue:
+                      contracts.any((contract) => contract.id == _contractId)
+                          ? _contractId
+                          : null,
+                  decoration: const InputDecoration(
+                    labelText: 'Договор проекта',
+                    border: OutlineInputBorder(),
+                  ),
+                  items:
+                      contracts
+                          .map(
+                            (contract) => DropdownMenuItem<int>(
+                              value: contract.id,
+                              child: Text(contract.label),
+                            ),
+                          )
+                          .toList(),
+                  onChanged: (value) => setState(() => _contractId = value),
+                );
+              },
+            ),
           const SizedBox(height: 16),
           ListTile(
             contentPadding: EdgeInsets.zero,
@@ -194,13 +195,6 @@ class _JournalFormScreenState extends ConsumerState<JournalFormScreen> {
       return;
     }
 
-    if (_contractId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Выберите договор проекта.')),
-      );
-      return;
-    }
-
     if (!_isEdit && projectId == null) {
       ScaffoldMessenger.of(
         context,
@@ -217,7 +211,7 @@ class _JournalFormScreenState extends ConsumerState<JournalFormScreen> {
       if (_isEdit) {
         await repository.updateJournal(
           journalId: widget.initialJournal!.id,
-          contractId: _contractId!,
+          contractId: _contractId,
           name: _nameController.text.trim(),
           journalNumber: _numberController.text.trim(),
           startDate: _startDate!.toIso8601String().split('T').first,
@@ -225,7 +219,7 @@ class _JournalFormScreenState extends ConsumerState<JournalFormScreen> {
       } else {
         await repository.createJournal(
           projectId: projectId!,
-          contractId: _contractId!,
+          contractId: null,
           name: _nameController.text.trim(),
           journalNumber: _numberController.text.trim(),
           startDate: _startDate!.toIso8601String().split('T').first,

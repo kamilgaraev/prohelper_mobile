@@ -93,9 +93,15 @@ class ConstructionJournalRepository extends SyncQueueAwareRepository {
   }
 
   Future<ConstructionJournalDetailPayload> fetchJournalDetail(
-    int journalId,
-  ) async {
-    final data = await fetchJournalDetailPayload(journalId);
+    int journalId, {
+    int? contractId,
+    bool unassignedOnly = false,
+  }) async {
+    final data = await fetchJournalDetailPayload(
+      journalId,
+      contractId: contractId,
+      unassignedOnly: unassignedOnly,
+    );
     return ConstructionJournalDetailPayload(
       journal: ConstructionJournalModel.fromJson(_extractMap(data['journal'])),
       entries:
@@ -113,7 +119,11 @@ class ConstructionJournalRepository extends SyncQueueAwareRepository {
     );
   }
 
-  Future<Map<String, dynamic>> fetchJournalDetailPayload(int journalId) async {
+  Future<Map<String, dynamic>> fetchJournalDetailPayload(
+    int journalId, {
+    int? contractId,
+    bool unassignedOnly = false,
+  }) async {
     try {
       final journalResponse = await _dio.get(
         '/construction-journals/$journalId',
@@ -131,7 +141,12 @@ class ConstructionJournalRepository extends SyncQueueAwareRepository {
       for (var page = 1; ; page++) {
         final entriesResponse = await _dio.get(
           '/construction-journals/$journalId/entries',
-          queryParameters: {'page': page, 'per_page': _journalEntriesPerPage},
+          queryParameters: {
+            'page': page,
+            'per_page': _journalEntriesPerPage,
+            if (contractId != null) 'contract_id': contractId,
+            if (unassignedOnly) 'unassigned_only': 1,
+          },
         );
         final pageData = _extractMap(
           MobileApiResponse.payload(entriesResponse.data),
@@ -207,6 +222,31 @@ class ConstructionJournalRepository extends SyncQueueAwareRepository {
     return ConstructionJournalEntryModel.fromJson(
       await fetchEntryDetailPayload(entryId),
     );
+  }
+
+  Future<ConstructionJournalEntryModel> assignRowContract({
+    required int journalId,
+    required int entryId,
+    required String rowType,
+    required int rowId,
+    required int? contractId,
+    required String reason,
+  }) async {
+    try {
+      final response = await _dio.patch(
+        '/construction-journals/$journalId/entries/$entryId/rows/$rowType/$rowId/contract',
+        data: {'contract_id': contractId, 'reason': reason.trim()},
+      );
+      return ConstructionJournalEntryModel.fromJson(
+        _extractMap(MobileApiResponse.payload(response.data)),
+      );
+    } on DioException catch (error) {
+      throw ApiException.fromDio(
+        error,
+        fallbackMessage:
+            'Не удалось изменить договор строки. Для этой операции требуется подключение.',
+      );
+    }
   }
 
   Future<List<JournalReportingTarget>> reportingTargets(int entryId) async {
@@ -340,7 +380,7 @@ class ConstructionJournalRepository extends SyncQueueAwareRepository {
 
   Future<ConstructionJournalModel> createJournal({
     required int projectId,
-    required int contractId,
+    int? contractId,
     required String name,
     required String journalNumber,
     required String startDate,
@@ -370,7 +410,7 @@ class ConstructionJournalRepository extends SyncQueueAwareRepository {
 
   Future<ConstructionJournalModel> updateJournal({
     required int journalId,
-    required int contractId,
+    int? contractId,
     required String name,
     required String journalNumber,
     required String startDate,

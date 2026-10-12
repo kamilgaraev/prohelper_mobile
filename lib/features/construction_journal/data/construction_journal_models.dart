@@ -9,6 +9,7 @@ abstract final class ConstructionJournalActionKeys {
   static const createEntry = 'create_entry';
   static const submit = 'submit';
   static const approve = 'approve';
+  static const assignContract = 'assign_contract';
   static const reject = 'reject';
   static const exportDailyReport = 'export_daily_report';
   static const close = 'close';
@@ -53,6 +54,7 @@ const _journalActionLabels = <String, String>{
   'create_entry': 'Создать запись',
   'submit': 'Отправить на согласование',
   'approve': 'Утвердить',
+  'assign_contract': 'Назначить договор строке',
   'reject': 'Отклонить',
   'export_daily_report': 'Сформировать дневной отчёт',
   'close': 'Закрыть',
@@ -101,6 +103,8 @@ class ConstructionJournalSummary {
     this.approvedEntries = 0,
     this.submittedEntries = 0,
     this.rejectedEntries = 0,
+    this.totalRows,
+    this.unassignedRows,
   });
 
   final int totalJournals;
@@ -111,6 +115,8 @@ class ConstructionJournalSummary {
   final int approvedEntries;
   final int submittedEntries;
   final int rejectedEntries;
+  final int? totalRows;
+  final int? unassignedRows;
 
   factory ConstructionJournalSummary.fromJournalListJson(
     Map<String, dynamic> json,
@@ -127,6 +133,8 @@ class ConstructionJournalSummary {
     Map<String, dynamic> json,
   ) {
     return ConstructionJournalSummary(
+      totalRows: _asNullableInt(json['total_rows']),
+      unassignedRows: _asNullableInt(json['unassigned_rows']),
       totalEntries: _requiredInt(json, 'total_entries'),
       approvedEntries: _requiredInt(json, 'approved_entries'),
       submittedEntries: _requiredInt(json, 'submitted_entries'),
@@ -253,6 +261,8 @@ class ConstructionJournalEstimateItemOption {
     this.measurementUnit,
     this.estimatePlannedQuantity,
     this.contractAgreedQuantity,
+    this.remainingQuantity,
+    this.suggestedContractId,
     this.contractCoverage,
     this.resources = const [],
   });
@@ -272,6 +282,8 @@ class ConstructionJournalEstimateItemOption {
   final List<Map<String, dynamic>> contractLinks;
   final double? estimatePlannedQuantity;
   final double? contractAgreedQuantity;
+  final double? remainingQuantity;
+  final int? suggestedContractId;
   final Map<String, dynamic>? contractCoverage;
   final List<ConstructionJournalEstimateResource> resources;
 
@@ -302,6 +314,8 @@ class ConstructionJournalEstimateItemOption {
     'contract_links': contractLinks,
     'estimate_planned_quantity': estimatePlannedQuantity,
     'contract_agreed_quantity': contractAgreedQuantity,
+    'remaining_quantity': remainingQuantity,
+    'suggested_contract_id': suggestedContractId,
     'contract_coverage': contractCoverage,
     'resources': resources.map((resource) => resource.toJson()).toList(),
   };
@@ -333,6 +347,8 @@ class ConstructionJournalEstimateItemOption {
       contractAgreedQuantity: _asNullableDouble(
         json['contract_agreed_quantity'],
       ),
+      remainingQuantity: _asNullableDouble(json['remaining_quantity']),
+      suggestedContractId: _asNullableInt(json['suggested_contract_id']),
       contractCoverage: _optionalMap(
         json['contract_coverage'],
         'contract_coverage',
@@ -538,17 +554,24 @@ class ConstructionJournalEntryFormOptions {
     required this.workTypes,
     required this.projectMaterials,
     this.measurementUnits = const [],
+    this.contracts = const [],
   });
 
   final List<ConstructionJournalEstimateOption> estimates;
   final List<ConstructionJournalWorkTypeOption> workTypes;
   final List<ConstructionJournalProjectMaterialOption> projectMaterials;
   final List<ConstructionJournalMeasurementUnitRef> measurementUnits;
+  final List<ConstructionJournalContractOption> contracts;
 
   factory ConstructionJournalEntryFormOptions.fromJson(
     Map<String, dynamic> json,
   ) {
     return ConstructionJournalEntryFormOptions(
+      contracts:
+          _optionalList(
+            json,
+            'contracts',
+          ).map(ConstructionJournalContractOption.fromJson).toList(),
       measurementUnits:
           _optionalList(
             json,
@@ -650,6 +673,9 @@ class ConstructionJournalProjectMaterialOption {
 class ConstructionJournalMaterialUsageModel {
   const ConstructionJournalMaterialUsageModel({
     this.id,
+    this.contractId,
+    this.contractAssignmentSpecified = false,
+    this.contractNumber,
     this.materialId,
     this.estimateItemId,
     this.projectMaterialDeliveryId,
@@ -661,6 +687,9 @@ class ConstructionJournalMaterialUsageModel {
   });
 
   final int? id;
+  final int? contractId;
+  final bool contractAssignmentSpecified;
+  final String? contractNumber;
   final int? materialId;
   final int? estimateItemId;
   final int? projectMaterialDeliveryId;
@@ -673,6 +702,9 @@ class ConstructionJournalMaterialUsageModel {
   Map<String, dynamic> toJson() {
     return {
       if (id != null) 'id': id,
+      if (contractAssignmentSpecified || contractId != null)
+        'contract_id': contractId,
+      if (contractNumber != null) 'contract_number': contractNumber,
       if (materialId != null) 'material_id': materialId,
       if (estimateItemId != null) 'estimate_item_id': estimateItemId,
       if (projectMaterialDeliveryId != null)
@@ -691,6 +723,12 @@ class ConstructionJournalMaterialUsageModel {
   ) {
     return ConstructionJournalMaterialUsageModel(
       id: _asNullableInt(json['id']),
+      contractId: _asNullableInt(json['contract_id']),
+      contractAssignmentSpecified: json.containsKey('contract_id'),
+      contractNumber: _asNullableString(
+        json['contract_number'] ??
+            _optionalMap(json['contract'], 'contract')?['number'],
+      ),
       materialId: _asNullableInt(json['material_id']),
       estimateItemId: _asNullableInt(json['estimate_item_id']),
       projectMaterialDeliveryId: _asNullableInt(
@@ -735,6 +773,9 @@ class ConstructionJournalWeatherModel {
 class ConstructionJournalWorkerModel {
   const ConstructionJournalWorkerModel({
     this.id,
+    this.contractId,
+    this.contractAssignmentSpecified = false,
+    this.contractNumber,
     this.estimateItemId,
     required this.specialty,
     required this.workersCount,
@@ -742,6 +783,9 @@ class ConstructionJournalWorkerModel {
   });
 
   final int? id;
+  final int? contractId;
+  final bool contractAssignmentSpecified;
+  final String? contractNumber;
   final int? estimateItemId;
   final String specialty;
   final int workersCount;
@@ -749,6 +793,9 @@ class ConstructionJournalWorkerModel {
 
   Map<String, dynamic> toJson() => {
     if (id != null) 'id': id,
+    if (contractAssignmentSpecified || contractId != null)
+      'contract_id': contractId,
+    if (contractNumber != null) 'contract_number': contractNumber,
     if (estimateItemId != null) 'estimate_item_id': estimateItemId,
     'specialty': specialty,
     'workers_count': workersCount,
@@ -758,6 +805,12 @@ class ConstructionJournalWorkerModel {
   factory ConstructionJournalWorkerModel.fromJson(Map<String, dynamic> json) {
     return ConstructionJournalWorkerModel(
       id: _asNullableInt(json['id']),
+      contractId: _asNullableInt(json['contract_id']),
+      contractAssignmentSpecified: json.containsKey('contract_id'),
+      contractNumber: _asNullableString(
+        json['contract_number'] ??
+            _optionalMap(json['contract'], 'contract')?['number'],
+      ),
       estimateItemId: _asNullableInt(json['estimate_item_id']),
       specialty: _requiredString(json, 'specialty'),
       workersCount: _requiredInt(json, 'workers_count'),
@@ -769,6 +822,9 @@ class ConstructionJournalWorkerModel {
 class ConstructionJournalEquipmentModel {
   const ConstructionJournalEquipmentModel({
     this.id,
+    this.contractId,
+    this.contractAssignmentSpecified = false,
+    this.contractNumber,
     this.estimateItemId,
     required this.name,
     this.type,
@@ -777,6 +833,9 @@ class ConstructionJournalEquipmentModel {
   });
 
   final int? id;
+  final int? contractId;
+  final bool contractAssignmentSpecified;
+  final String? contractNumber;
   final int? estimateItemId;
   final String name;
   final String? type;
@@ -785,6 +844,9 @@ class ConstructionJournalEquipmentModel {
 
   Map<String, dynamic> toJson() => {
     if (id != null) 'id': id,
+    if (contractAssignmentSpecified || contractId != null)
+      'contract_id': contractId,
+    if (contractNumber != null) 'contract_number': contractNumber,
     if (estimateItemId != null) 'estimate_item_id': estimateItemId,
     'equipment_name': name,
     if ((type ?? '').trim().isNotEmpty) 'equipment_type': type!.trim(),
@@ -797,6 +859,12 @@ class ConstructionJournalEquipmentModel {
   ) {
     return ConstructionJournalEquipmentModel(
       id: _asNullableInt(json['id']),
+      contractId: _asNullableInt(json['contract_id']),
+      contractAssignmentSpecified: json.containsKey('contract_id'),
+      contractNumber: _asNullableString(
+        json['contract_number'] ??
+            _optionalMap(json['contract'], 'contract')?['number'],
+      ),
       estimateItemId: _asNullableInt(json['estimate_item_id']),
       name: _requiredString(json, 'equipment_name'),
       type: _asNullableString(json['equipment_type']),
@@ -809,6 +877,9 @@ class ConstructionJournalEquipmentModel {
 class ConstructionJournalWorkVolumeModel {
   const ConstructionJournalWorkVolumeModel({
     this.id,
+    this.contractId,
+    this.contractAssignmentSpecified = false,
+    this.contractNumber,
     this.estimateItemId,
     this.workTypeId,
     required this.quantity,
@@ -821,6 +892,9 @@ class ConstructionJournalWorkVolumeModel {
   });
 
   final int? id;
+  final int? contractId;
+  final bool contractAssignmentSpecified;
+  final String? contractNumber;
   final int? estimateItemId;
   final int? workTypeId;
   final double quantity;
@@ -834,6 +908,9 @@ class ConstructionJournalWorkVolumeModel {
   Map<String, dynamic> toJson() {
     return {
       if (id != null) 'id': id,
+      if (contractAssignmentSpecified || contractId != null)
+        'contract_id': contractId,
+      if (contractNumber != null) 'contract_number': contractNumber,
       if (estimateItemId != null) 'estimate_item_id': estimateItemId,
       if (workTypeId != null) 'work_type_id': workTypeId,
       if (estimateItemId == null) 'estimate_item_id': null,
@@ -857,6 +934,12 @@ class ConstructionJournalWorkVolumeModel {
     );
     return ConstructionJournalWorkVolumeModel(
       id: _asNullableInt(json['id']),
+      contractId: _asNullableInt(json['contract_id']),
+      contractAssignmentSpecified: json.containsKey('contract_id'),
+      contractNumber: _asNullableString(
+        json['contract_number'] ??
+            _optionalMap(json['contract'], 'contract')?['number'],
+      ),
       estimateItemId: _asNullableInt(json['estimate_item_id']),
       workTypeId: _asNullableInt(json['work_type_id']),
       quantity: _requiredDouble(json, 'quantity'),

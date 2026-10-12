@@ -495,7 +495,11 @@ class _FakeJournalRepository extends ConstructionJournalRepository {
   }
 
   @override
-  Future<Map<String, dynamic>> fetchJournalDetailPayload(int journalId) async {
+  Future<Map<String, dynamic>> fetchJournalDetailPayload(
+    int journalId, {
+    int? contractId,
+    bool unassignedOnly = false,
+  }) async {
     detailFetchCount++;
     _throwIfFailed();
     return detailPayload ?? _detailPayload();
@@ -503,9 +507,15 @@ class _FakeJournalRepository extends ConstructionJournalRepository {
 
   @override
   Future<ConstructionJournalDetailPayload> fetchJournalDetail(
-    int journalId,
-  ) async {
-    final data = await fetchJournalDetailPayload(journalId);
+    int journalId, {
+    int? contractId,
+    bool unassignedOnly = false,
+  }) async {
+    final data = await fetchJournalDetailPayload(
+      journalId,
+      contractId: contractId,
+      unassignedOnly: unassignedOnly,
+    );
     return ConstructionJournalDetailPayload(
       journal: ConstructionJournalModel.fromJson(
         Map<String, dynamic>.from(data['journal'] as Map),
