@@ -5,15 +5,59 @@ import '../../../core/network/api_exception.dart';
 import '../../../core/network/dio_client.dart';
 import '../../../core/network/mobile_api_response.dart';
 import 'bim_models.dart';
+import 'drawing_annotations.dart';
+import 'drawing_sync_models.dart';
 
 final bimRepositoryProvider = Provider<BimRepository>(
   (ref) => BimRepository(ref.read(dioProvider)),
 );
 
-class BimRepository {
+class BimRepository implements DrawingStrokeApi {
   BimRepository(this.dio);
   final Dio dio;
   static const prefix = '/design-management';
+
+  @override
+  Future<DrawingStrokeDelta> drawingChanges(
+    int versionId,
+    int afterRevision,
+  ) async => DrawingStrokeDelta.fromJson(
+    MobileApiResponse.dataMap(
+      await _request(
+        'GET',
+        '/document-versions/$versionId/drawing-strokes',
+        query: {'after_revision': afterRevision},
+      ),
+    ),
+  );
+
+  @override
+  Future<SyncedDrawingStroke> createDrawingStroke(
+    int versionId,
+    String clientId,
+    DrawingAnnotations annotations,
+  ) async => SyncedDrawingStroke.fromJson(
+    MobileApiResponse.dataMap(
+      await _request(
+        'POST',
+        '/document-versions/$versionId/drawing-strokes',
+        data: {'client_id': clientId, 'annotations': annotations.toJson()},
+      ),
+    ),
+  );
+
+  @override
+  Future<SyncedDrawingStroke> deleteDrawingStroke(
+    int versionId,
+    String clientId,
+  ) async => SyncedDrawingStroke.fromJson(
+    MobileApiResponse.dataMap(
+      await _request(
+        'DELETE',
+        '/document-versions/$versionId/drawing-strokes/${Uri.encodeComponent(clientId)}',
+      ),
+    ),
+  );
 
   Future<dynamic> _request(
     String method,

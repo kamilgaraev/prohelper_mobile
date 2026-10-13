@@ -12,7 +12,9 @@ import '../data/bim_models.dart';
 import '../data/bim_repository.dart';
 import '../data/design_package_model.dart';
 import '../data/drawing_annotations.dart';
+import '../data/drawing_sync_models.dart';
 import '../domain/drawing_issues_provider.dart';
+import '../domain/drawing_sync_provider.dart';
 import 'drawing_layer.dart';
 
 class DrawingViewerScreen extends ConsumerStatefulWidget {
@@ -34,13 +36,13 @@ class DrawingViewerScreen extends ConsumerStatefulWidget {
       _DrawingViewerScreenState();
 }
 
-class _DrawingViewerScreenState extends ConsumerState<DrawingViewerScreen> {
+class _DrawingViewerScreenState extends ConsumerState<DrawingViewerScreen>
+    with WidgetsBindingObserver {
   final _pdf = PdfViewerController();
   late final _pdfDocument = PdfDocumentRefFile(
     widget.path,
     useProgressiveLoading: false,
   );
-  final _drafts = <int, List<DrawingStroke>>{};
   final _sizes = <int, Size>{};
   final _created = <BimIssue>[];
   DrawingTool? _tool;
@@ -49,6 +51,8 @@ class _DrawingViewerScreenState extends ConsumerState<DrawingViewerScreen> {
   bool _ready = false;
   bool _saving = false;
   bool _showSaved = true;
+  bool _showAuthors = true;
+  String? _commentError;
   bool _discard = false;
   bool _confirming = false;
   String? _saveKey;
@@ -59,9 +63,19 @@ class _DrawingViewerScreenState extends ConsumerState<DrawingViewerScreen> {
     projectId: widget.projectId,
     versionId: widget.file.id,
   );
+  DrawingSyncKey get _syncKey => (
+    projectId: widget.projectId,
+    versionId: widget.file.id,
+    sessionIdentity: widget.sessionIdentity,
+  );
+  DrawingSyncNotifier get _sync =>
+      ref.read(drawingSyncProvider(_syncKey).notifier);
+  bool get _canDraw =>
+      widget.file.canAnnotate &&
+      ref.read(drawingSyncProvider(_syncKey)).canAnnotate == true;
   bool get _dirty =>
       _lastTitle.isNotEmpty ||
-      _drafts.values.any((strokes) => strokes.isNotEmpty);
+      ref.read(drawingSyncProvider(_syncKey)).pending > 0;
   bool get _contextCurrent {
     final auth = ref.read(authProvider);
     return auth is AuthAuthenticated &&
@@ -73,9 +87,21 @@ class _DrawingViewerScreenState extends ConsumerState<DrawingViewerScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     if (!widget.file.isPdf) {
       _loadImageSize();
     }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (mounted) _sync.setForeground(state == AppLifecycleState.resumed);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
   }
 
   Future<void> _loadImageSize() async {
@@ -118,22 +144,81 @@ class _DrawingViewerScreenState extends ConsumerState<DrawingViewerScreen> {
       return;
     }
     _confirming = true;
+    var saving = false;
+    String? error;
     final discard = await showDialog<bool>(
       context: context,
       builder:
-          (context) => AlertDialog(
-            title: const Text('Закрыть без сохранения?'),
-            content: const Text('Несохранённые рисунки будут потеряны.'),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context, false),
-                child: const Text('Продолжить работу'),
-              ),
-              TextButton(
-                onPressed: () => Navigator.pop(context, true),
-                child: const Text('Закрыть без сохранения'),
-              ),
-            ],
+          (dialogContext) => StatefulBuilder(
+            builder:
+                (context, update) => AlertDialog(
+                  title: const Text('Завершить просмотр?'),
+                  content: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Перед выходом отправим оставшиеся рисунки и сохраним текст замечания.',
+                      ),
+                      if (error != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 12),
+                          child: Text(
+                            error!,
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.error,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed:
+                          saving
+                              ? null
+                              : () => Navigator.pop(dialogContext, false),
+                      child: const Text('Продолжить работу'),
+                    ),
+                    TextButton(
+                      onPressed:
+                          saving
+                              ? null
+                              : () => Navigator.pop(dialogContext, true),
+                      child: const Text('Закрыть без сохранения'),
+                    ),
+                    FilledButton(
+                      onPressed:
+                          saving
+                              ? null
+                              : () async {
+                                update(() {
+                                  saving = true;
+                                  error = null;
+                                });
+                                var saved = await _sync.flush();
+                                if (saved && _lastTitle.isNotEmpty) {
+                                  saved = await _save(reuseText: true);
+                                }
+                                if (!mounted || !dialogContext.mounted) return;
+                                if (saved) {
+                                  Navigator.pop(dialogContext, true);
+                                } else {
+                                  update(() {
+                                    saving = false;
+                                    error =
+                                        ref
+                                            .read(drawingSyncProvider(_syncKey))
+                                            .saveError ??
+                                        _commentError ??
+                                        'Не удалось сохранить изменения. Повторите попытку.';
+                                  });
+                                }
+                              },
+                      child: Text(saving ? 'Сохраняем…' : 'Сохранить и выйти'),
+                    ),
+                  ],
+                ),
           ),
     );
     _confirming = false;
@@ -145,20 +230,23 @@ class _DrawingViewerScreenState extends ConsumerState<DrawingViewerScreen> {
     }
   }
 
-  Future<void> _save() async {
-    if (_saving || !_ready || !_contextCurrent || !widget.file.canAnnotate) {
-      return;
+  Future<bool> _save({bool reuseText = false}) async {
+    if (_saving || !_ready || !_contextCurrent || !_canDraw) {
+      return false;
     }
     final page = _page;
     final size = _sizes[page];
-    if (size == null) return;
-    final text = await showDialog<String>(
-      context: context,
-      builder:
-          (context) =>
-              _DrawingIssueDialog(page: page, initialTitle: _lastTitle),
-    );
-    if (text == null || !mounted || !_contextCurrent) return;
+    if (size == null) return false;
+    final text =
+        reuseText
+            ? _lastTitle
+            : await showDialog<String>(
+              context: context,
+              builder:
+                  (context) =>
+                      _DrawingIssueDialog(page: page, initialTitle: _lastTitle),
+            );
+    if (text == null || !mounted || !_contextCurrent) return false;
     _lastTitle = text;
     final payload = {
       'title': text,
@@ -166,12 +254,7 @@ class _DrawingViewerScreenState extends ConsumerState<DrawingViewerScreen> {
       'package_id': widget.packageId,
       'version_id': widget.file.id,
       'annotations':
-          DrawingAnnotations.page(
-            page,
-            size.width,
-            size.height,
-            _drafts[page] ?? [],
-          ).toJson(),
+          DrawingAnnotations.page(page, size.width, size.height, []).toJson(),
     };
     final serialized = jsonEncode(payload);
     if (_savePayload != serialized) {
@@ -183,56 +266,88 @@ class _DrawingViewerScreenState extends ConsumerState<DrawingViewerScreen> {
             (_) => random.nextInt(256).toRadixString(16).padLeft(2, '0'),
           ).join();
     }
-    setState(() => _saving = true);
+    setState(() {
+      _saving = true;
+      _commentError = null;
+    });
     try {
       final issue = await ref
           .read(bimRepositoryProvider)
           .createIssue(widget.projectId, payload, idempotencyKey: _saveKey);
-      if (!mounted || !_contextCurrent) return;
+      if (!mounted || !_contextCurrent) return false;
       setState(() {
         _created.add(issue);
-        _drafts.remove(page);
         _tool = null;
         _saveKey = null;
         _savePayload = null;
         _lastTitle = '';
       });
       ref.invalidate(drawingIssuesProvider(_issueKey));
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Замечание и разметка сохранены')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Замечание сохранено')));
+      return true;
     } catch (error) {
-      if (mounted && _contextCurrent) AppErrorNotice.show(context, error);
+      if (mounted && _contextCurrent) {
+        _commentError =
+            'Не удалось сохранить замечание. Текст остаётся на экране.';
+        AppErrorNotice.show(context, error);
+      }
+      return false;
     } finally {
       if (mounted) setState(() => _saving = false);
     }
   }
 
-  Widget _layer(int pageNumber, Size size, List<BimIssue> issues) =>
-      DrawingLayer(
-        key: ValueKey(pageNumber),
-        size: size,
-        pageNumber: pageNumber,
-        tool: _saving ? null : _tool,
-        saved:
-            _showSaved
-                ? issues
-                    .map(
-                      (issue) => DrawingAnnotations.tryParse(
-                        issue.context['annotations'],
-                      ),
-                    )
-                    .whereType<DrawingAnnotations>()
-                    .where((value) => value.pageNumber == pageNumber)
-                    .toList()
-                : [],
-        drafts: _drafts[pageNumber] ?? [],
-        onStroke:
-            (page, stroke) => setState(() {
-              _drafts.putIfAbsent(page, () => []).add(stroke);
-              _page = page;
-            }),
-      );
+  Widget _layer(int pageNumber, Size size, List<BimIssue> issues) {
+    final shared =
+        ref
+            .read(drawingSyncProvider(_syncKey))
+            .items
+            .where((item) => item.annotations?.pageNumber == pageNumber)
+            .toList();
+    final authors = <String, SyncedDrawingStroke>{};
+    for (final item in shared) {
+      authors.putIfAbsent('${item.authorId ?? item.authorName}', () => item);
+    }
+    return DrawingLayer(
+      key: ValueKey(pageNumber),
+      size: size,
+      pageNumber: pageNumber,
+      tool: _saving || !_canDraw ? null : _tool,
+      saved: [
+        if (_showSaved)
+          ...issues
+              .map(
+                (issue) =>
+                    DrawingAnnotations.tryParse(issue.context['annotations']),
+              )
+              .whereType<DrawingAnnotations>()
+              .where((value) => value.pageNumber == pageNumber),
+        for (final item in shared)
+          if (_showSaved || item.pending) item.annotations!,
+      ],
+      labels:
+          _showSaved && _showAuthors
+              ? authors.values
+                  .map(
+                    (item) => DrawingAuthorLabel(
+                      item.authorName,
+                      item.annotations!.strokes.first.points.first,
+                    ),
+                  )
+                  .toList()
+              : [],
+      drafts: const [],
+      onStroke: (page, stroke) {
+        if (!_contextCurrent || !_canDraw) return;
+        _sync.add(
+          DrawingAnnotations.page(page, size.width, size.height, [stroke]),
+        );
+        setState(() => _page = page);
+      },
+    );
+  }
 
   Future<void> _showIssues(List<BimIssue> issues) async {
     await showModalBottomSheet<void>(
@@ -240,44 +355,135 @@ class _DrawingViewerScreenState extends ConsumerState<DrawingViewerScreen> {
       isScrollControlled: true,
       showDragHandle: true,
       builder:
-          (context) => SafeArea(
-            child: SizedBox(
-              height: MediaQuery.sizeOf(context).height * 0.65,
-              child:
-                  issues.isEmpty
-                      ? const Center(
-                        child: Text('Сохранённых замечаний пока нет'),
+          (context) => Consumer(
+            builder: (context, watch, _) {
+              watch.watch(authProvider);
+              watch.watch(projectsProvider);
+              if (!mounted || !_contextCurrent) {
+                return const SafeArea(
+                  child: Center(
+                    child: Text('Сеанс изменился. Откройте документ заново.'),
+                  ),
+                );
+              }
+              final shared = watch.watch(drawingSyncProvider(_syncKey)).items;
+              final groups = <String, List<SyncedDrawingStroke>>{};
+              for (final item in shared) {
+                final page = item.annotations?.pageNumber;
+                if (page != null) {
+                  groups
+                      .putIfAbsent(
+                        '${item.authorId ?? item.authorName}:$page',
+                        () => [],
                       )
-                      : ListView(
-                        children: [
-                          for (final issue in issues)
-                            ListTile(
-                              title: Text(issue.title),
-                              subtitle: Text(
-                                'Лист ${DrawingAnnotations.tryParse(issue.context['annotations'])!.pageNumber} · ${issue.statusLabel}',
+                      .add(item);
+                }
+              }
+              return SafeArea(
+                child: SizedBox(
+                  height: MediaQuery.sizeOf(context).height * 0.65,
+                  child: ListView(
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                'Разметка и замечания',
+                                style: Theme.of(context).textTheme.titleMedium,
                               ),
-                              onTap: () {
-                                final page =
-                                    DrawingAnnotations.tryParse(
-                                      issue.context['annotations'],
-                                    )!.pageNumber;
-                                Navigator.pop(context);
-                                if (!mounted || !_contextCurrent) return;
-                                setState(() {
-                                  _page = page;
-                                  _tool = null;
-                                  _showSaved = true;
-                                });
-                                if (widget.file.isPdf && _pdf.isReady) {
-                                  _pdf.goToPage(pageNumber: page);
-                                }
-                              },
                             ),
-                        ],
+                            IconButton(
+                              tooltip: 'Обновить разметку',
+                              onPressed: () {
+                                _sync.refresh();
+                                ref.invalidate(
+                                  drawingIssuesProvider(_issueKey),
+                                );
+                              },
+                              icon: const Icon(Icons.refresh),
+                            ),
+                          ],
+                        ),
                       ),
-            ),
+                      for (final drawings in groups.values)
+                        ListTile(
+                          leading: const CircleAvatar(
+                            child: Icon(Icons.person_outline),
+                          ),
+                          title: Text(drawings.first.authorName),
+                          subtitle: Text(
+                            'Лист ${drawings.first.annotations!.pageNumber} · ${_drawingTime(drawings.last.createdAt)}',
+                          ),
+                          trailing: Text('Штрихов: ${drawings.length}'),
+                          onTap:
+                              () => _openSheetPage(
+                                context,
+                                drawings.first.annotations!.pageNumber,
+                              ),
+                        ),
+                      if (groups.isEmpty)
+                        const Padding(
+                          padding: EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 8,
+                          ),
+                          child: Text('Сохранённых рисунков пока нет'),
+                        ),
+                      const Divider(),
+                      if (issues.isEmpty)
+                        const Padding(
+                          padding: EdgeInsets.all(16),
+                          child: Text('Сохранённых замечаний пока нет'),
+                        ),
+                      for (final issue in issues)
+                        ListTile(
+                          title: Text(issue.title),
+                          subtitle: Text(
+                            'Лист ${DrawingAnnotations.tryParse(issue.context['annotations'])!.pageNumber} · ${issue.authorName ?? 'Участник проекта'} · ${issue.statusLabel}',
+                          ),
+                          onTap: () {
+                            final page =
+                                DrawingAnnotations.tryParse(
+                                  issue.context['annotations'],
+                                )!.pageNumber;
+                            Navigator.pop(context);
+                            if (!mounted || !_contextCurrent) return;
+                            setState(() {
+                              _page = page;
+                              _tool = null;
+                              _showSaved = true;
+                            });
+                            if (widget.file.isPdf && _pdf.isReady) {
+                              _pdf.goToPage(pageNumber: page);
+                            }
+                          },
+                        ),
+                    ],
+                  ),
+                ),
+              );
+            },
           ),
     );
+  }
+
+  String _drawingTime(DateTime value) {
+    final local = value.toLocal();
+    return '${local.day.toString().padLeft(2, '0')}.${local.month.toString().padLeft(2, '0')} · ${local.hour.toString().padLeft(2, '0')}:${local.minute.toString().padLeft(2, '0')}';
+  }
+
+  void _openSheetPage(BuildContext sheetContext, int page) {
+    Navigator.pop(sheetContext);
+    if (!mounted || !_contextCurrent) return;
+    setState(() {
+      _page = page;
+      _tool = null;
+      _showSaved = true;
+      _showAuthors = true;
+    });
+    if (widget.file.isPdf && _pdf.isReady) _pdf.goToPage(pageNumber: page);
   }
 
   @override
@@ -285,6 +491,13 @@ class _DrawingViewerScreenState extends ConsumerState<DrawingViewerScreen> {
     ref.watch(authProvider);
     ref.watch(projectsProvider);
     final current = _contextCurrent;
+    final syncState = ref.watch(drawingSyncProvider(_syncKey));
+    final own =
+        syncState.items
+            .where(
+              (item) => item.annotations?.pageNumber == _page && item.canDelete,
+            )
+            .toList();
     final loaded =
         current
             ? ref.watch(drawingIssuesProvider(_issueKey))
@@ -313,7 +526,7 @@ class _DrawingViewerScreenState extends ConsumerState<DrawingViewerScreen> {
           actions: [
             IconButton(
               onPressed: current ? () => _showIssues(issues) : null,
-              tooltip: 'Замечания',
+              tooltip: 'Разметка и замечания',
               icon: const Icon(Icons.comment_outlined),
             ),
           ],
@@ -343,6 +556,22 @@ class _DrawingViewerScreenState extends ConsumerState<DrawingViewerScreen> {
                                 () => ref.invalidate(
                                   drawingIssuesProvider(_issueKey),
                                 ),
+                            child: const Text('Повторить'),
+                          ),
+                        ],
+                      ),
+                    if (syncState.saveError != null ||
+                        syncState.readError != null)
+                      MaterialBanner(
+                        content: Text(
+                          syncState.saveError ?? syncState.readError!,
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () {
+                              _sync.refresh();
+                              _sync.flush();
+                            },
                             child: const Text('Повторить'),
                           ),
                         ],
@@ -465,6 +694,47 @@ class _DrawingViewerScreenState extends ConsumerState<DrawingViewerScreen> {
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Row(
+                              children: [
+                                if (syncState.saving)
+                                  const SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                else
+                                  Icon(
+                                    syncState.saveError != null
+                                        ? Icons.cloud_off_outlined
+                                        : Icons.cloud_done_outlined,
+                                    size: 18,
+                                    color:
+                                        syncState.saveError != null
+                                            ? Theme.of(
+                                              context,
+                                            ).colorScheme.error
+                                            : Theme.of(
+                                              context,
+                                            ).colorScheme.primary,
+                                  ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    syncState.pending > 0
+                                        ? 'Не сохранено: ${syncState.pending}${syncState.saving ? ' · Отправляем…' : ''}'
+                                        : syncState.loading
+                                        ? 'Загружаем общую разметку…'
+                                        : syncState.readError != null
+                                        ? 'Обновление разметки недоступно'
+                                        : 'Рисунки сохранены',
+                                    style:
+                                        Theme.of(context).textTheme.labelSmall,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            Row(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
                                 IconButton(
@@ -512,6 +782,15 @@ class _DrawingViewerScreenState extends ConsumerState<DrawingViewerScreen> {
                                         : Icons.layers_outlined,
                                   ),
                                 ),
+                                IconButton(
+                                  tooltip: 'Подписи авторов',
+                                  isSelected: _showAuthors,
+                                  onPressed:
+                                      () => setState(
+                                        () => _showAuthors = !_showAuthors,
+                                      ),
+                                  icon: const Icon(Icons.person_outline),
+                                ),
                               ],
                             ),
                             if (widget.file.canAnnotate)
@@ -538,7 +817,7 @@ class _DrawingViewerScreenState extends ConsumerState<DrawingViewerScreen> {
                                         },
                                         isSelected: _tool == tool,
                                         onPressed:
-                                            !_ready || _saving
+                                            !_ready || _saving || !_canDraw
                                                 ? null
                                                 : () => setState(
                                                   () => _tool = tool,
@@ -553,20 +832,18 @@ class _DrawingViewerScreenState extends ConsumerState<DrawingViewerScreen> {
                                     IconButton(
                                       tooltip: 'Отменить штрих',
                                       onPressed:
-                                          (_drafts[_page]?.isNotEmpty ??
-                                                      false) &&
-                                                  !_saving
-                                              ? () => setState(
-                                                () =>
-                                                    _drafts[_page]!
-                                                        .removeLast(),
+                                          own.isNotEmpty && !_saving && _canDraw
+                                              ? () => _sync.remove(
+                                                own.last.clientId,
                                               )
                                               : null,
                                       icon: const Icon(Icons.undo),
                                     ),
                                     FilledButton(
                                       onPressed:
-                                          _ready && !_saving ? _save : null,
+                                          _ready && !_saving && _canDraw
+                                              ? _save
+                                              : null,
                                       child: Text(
                                         _saving ? 'Сохраняем…' : 'Замечание',
                                       ),

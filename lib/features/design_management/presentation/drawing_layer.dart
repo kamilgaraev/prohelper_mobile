@@ -3,6 +3,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import '../data/drawing_annotations.dart';
 
+class DrawingAuthorLabel {
+  const DrawingAuthorLabel(this.name, this.point);
+  final String name;
+  final DrawingPoint point;
+}
+
 class DrawingLayer extends StatefulWidget {
   const DrawingLayer({
     super.key,
@@ -12,12 +18,14 @@ class DrawingLayer extends StatefulWidget {
     required this.drafts,
     required this.onStroke,
     this.tool,
+    this.labels = const [],
   });
   final Size size;
   final int pageNumber;
   final List<DrawingAnnotations> saved;
   final List<DrawingStroke> drafts;
   final DrawingTool? tool;
+  final List<DrawingAuthorLabel> labels;
   final void Function(int pageNumber, DrawingStroke stroke) onStroke;
   @override
   State<DrawingLayer> createState() => _DrawingLayerState();
@@ -51,7 +59,15 @@ class _DrawingLayerState extends State<DrawingLayer> {
         [...widget.drafts, if (_stroke != null) _stroke!],
       );
       final paint = CustomPaint(
-        painter: _DrawingPainter([...widget.saved, draft]),
+        painter: _DrawingPainter(
+          [...widget.saved, draft],
+          widget.labels,
+          Theme.of(context).textTheme.labelMedium ??
+              const TextStyle(fontSize: 13),
+          Theme.of(context).colorScheme.surface,
+          Theme.of(context).colorScheme.outlineVariant,
+          MediaQuery.textScalerOf(context),
+        ),
         child: const SizedBox.expand(),
       );
       if (widget.tool == null) return IgnorePointer(child: paint);
@@ -120,8 +136,20 @@ class _DrawingLayerState extends State<DrawingLayer> {
 }
 
 class _DrawingPainter extends CustomPainter {
-  _DrawingPainter(this.annotations);
+  _DrawingPainter(
+    this.annotations,
+    this.labels,
+    this.labelStyle,
+    this.labelBackground,
+    this.labelBorder,
+    this.textScaler,
+  );
   final List<DrawingAnnotations> annotations;
+  final List<DrawingAuthorLabel> labels;
+  final TextStyle labelStyle;
+  final Color labelBackground;
+  final Color labelBorder;
+  final TextScaler textScaler;
   @override
   void paint(Canvas canvas, Size size) {
     for (final annotation in annotations) {
@@ -168,6 +196,40 @@ class _DrawingPainter extends CustomPainter {
             ..strokeJoin = StrokeJoin.round,
         );
       }
+    }
+    for (final label in labels) {
+      final text = TextPainter(
+        text: TextSpan(
+          text:
+              label.name.length > 26
+                  ? '${label.name.substring(0, 25)}…'
+                  : label.name,
+          style: labelStyle,
+        ),
+        textDirection: TextDirection.ltr,
+        textScaler: textScaler,
+      )..layout(maxWidth: math.max(1, size.width - 20));
+      final x =
+          (label.point.x * size.width + 6)
+              .clamp(4.0, math.max(4.0, size.width - text.width - 16))
+              .toDouble();
+      final y =
+          (label.point.y * size.height - text.height - 12)
+              .clamp(4.0, math.max(4.0, size.height - text.height - 12))
+              .toDouble();
+      final box = RRect.fromRectAndRadius(
+        Rect.fromLTWH(x, y, text.width + 12, text.height + 8),
+        const Radius.circular(4),
+      );
+      canvas.drawRRect(box, Paint()..color = labelBackground);
+      canvas.drawRRect(
+        box,
+        Paint()
+          ..color = labelBorder
+          ..style = PaintingStyle.stroke,
+      );
+      text.paint(canvas, Offset(x + 6, y + 4));
+      text.dispose();
     }
   }
 
