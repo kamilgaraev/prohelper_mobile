@@ -550,12 +550,15 @@ class ConstructionJournalEstimateOption {
 
 class ConstructionJournalEntryFormOptions {
   const ConstructionJournalEntryFormOptions({
+    this.canManageContracts = false,
     required this.estimates,
     required this.workTypes,
     required this.projectMaterials,
     this.measurementUnits = const [],
     this.contracts = const [],
   });
+
+  final bool canManageContracts;
 
   final List<ConstructionJournalEstimateOption> estimates;
   final List<ConstructionJournalWorkTypeOption> workTypes;
@@ -567,6 +570,7 @@ class ConstructionJournalEntryFormOptions {
     Map<String, dynamic> json,
   ) {
     return ConstructionJournalEntryFormOptions(
+      canManageContracts: json['can_manage_contracts'] == true,
       contracts:
           _optionalList(
             json,
@@ -1042,6 +1046,7 @@ class ConstructionJournalBlockerModel {
 
 class ConstructionJournalModel {
   const ConstructionJournalModel({
+    this.canManageContracts = false,
     required this.id,
     required this.projectId,
     required this.name,
@@ -1064,6 +1069,8 @@ class ConstructionJournalModel {
     this.approvalContextMessage,
     this.submissionBlocked = false,
   });
+
+  final bool canManageContracts;
 
   final int id;
   final int projectId;
@@ -1097,6 +1104,7 @@ class ConstructionJournalModel {
     final createdByPayload = _optionalMap(json['createdBy'], 'createdBy');
 
     return ConstructionJournalModel(
+      canManageContracts: json['can_manage_contracts'] == true,
       id: _requiredInt(json, 'id'),
       projectId: _requiredInt(json, 'project_id'),
       name: _requiredString(json, 'name'),
@@ -1329,6 +1337,7 @@ class JournalReportingTarget {
 
 class ConstructionJournalEntryModel {
   const ConstructionJournalEntryModel({
+    this.canManageContracts = false,
     required this.id,
     required this.journalId,
     required this.entryDate,
@@ -1361,6 +1370,8 @@ class ConstructionJournalEntryModel {
     this.originEntry,
     this.reportComment,
   });
+
+  final bool canManageContracts;
 
   final int id;
   final int journalId;
@@ -1407,6 +1418,7 @@ class ConstructionJournalEntryModel {
     );
 
     return ConstructionJournalEntryModel(
+      canManageContracts: json['can_manage_contracts'] == true,
       sourceEntry:
           json['source_entry'] == null
               ? null

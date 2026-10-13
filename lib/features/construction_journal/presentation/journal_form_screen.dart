@@ -96,7 +96,9 @@ class _JournalFormScreenState extends ConsumerState<JournalFormScreen> {
             ),
           ),
           const SizedBox(height: 16),
-          if (_isEdit && widget.initialJournal?.contractId != null)
+          if (_isEdit &&
+              widget.initialJournal?.canManageContracts == true &&
+              widget.initialJournal?.contractId != null)
             FutureBuilder<List<ConstructionJournalContractOption>>(
               future: _contractsFuture,
               builder: (context, snapshot) {
@@ -211,6 +213,7 @@ class _JournalFormScreenState extends ConsumerState<JournalFormScreen> {
       if (_isEdit) {
         await repository.updateJournal(
           journalId: widget.initialJournal!.id,
+          canManageContracts: widget.initialJournal!.canManageContracts,
           contractId: _contractId,
           name: _nameController.text.trim(),
           journalNumber: _numberController.text.trim(),

@@ -50,6 +50,7 @@ class _JournalRepository extends ConstructionJournalRepository {
   Future<ConstructionJournalModel> updateJournal({
     required int journalId,
     int? contractId,
+    bool canManageContracts = false,
     required String name,
     required String journalNumber,
     required String startDate,

@@ -688,6 +688,7 @@ class _JournalEntryFormScreenState
     Widget child, {
     ConstructionJournalEstimateItemOption? estimateItem,
   }) {
+    if (_options?.canManageContracts != true) return child;
     Map<String, dynamic>? link;
     if (estimateItem != null && input.contractId != null) {
       for (final candidate in estimateItem.contractLinks) {
@@ -1649,9 +1650,15 @@ class _JournalEntryFormScreenState
 
           return ConstructionJournalWorkVolumeModel(
             id: volume.id,
-            contractId: volume.contractId,
-            contractAssignmentSpecified: volume.contractAssignmentSpecified,
-            contractNumber: volume.contractNumber,
+            contractId:
+                _options?.canManageContracts == true ? volume.contractId : null,
+            contractAssignmentSpecified:
+                _options?.canManageContracts == true &&
+                volume.contractAssignmentSpecified,
+            contractNumber:
+                _options?.canManageContracts == true
+                    ? volume.contractNumber
+                    : null,
             estimateItemId: volume.estimateItemId,
             workTypeId: volume.workTypeId,
             quantity: quantity,
@@ -1686,9 +1693,17 @@ class _JournalEntryFormScreenState
 
           return ConstructionJournalMaterialUsageModel(
             id: material.id,
-            contractId: material.contractId,
-            contractAssignmentSpecified: material.contractAssignmentSpecified,
-            contractNumber: material.contractNumber,
+            contractId:
+                _options?.canManageContracts == true
+                    ? material.contractId
+                    : null,
+            contractAssignmentSpecified:
+                _options?.canManageContracts == true &&
+                material.contractAssignmentSpecified,
+            contractNumber:
+                _options?.canManageContracts == true
+                    ? material.contractNumber
+                    : null,
             materialId: material.materialId,
             estimateItemId: material.estimateItemId,
             projectMaterialDeliveryId: material.projectMaterialDeliveryId,
@@ -1732,9 +1747,17 @@ class _JournalEntryFormScreenState
             }
             return ConstructionJournalWorkerModel(
               id: worker.id,
-              contractId: worker.contractId,
-              contractAssignmentSpecified: worker.contractAssignmentSpecified,
-              contractNumber: worker.contractNumber,
+              contractId:
+                  _options?.canManageContracts == true
+                      ? worker.contractId
+                      : null,
+              contractAssignmentSpecified:
+                  _options?.canManageContracts == true &&
+                  worker.contractAssignmentSpecified,
+              contractNumber:
+                  _options?.canManageContracts == true
+                      ? worker.contractNumber
+                      : null,
               estimateItemId: worker.estimateItemId,
               specialty: worker.specialtyController.text.trim(),
               workersCount: count,
@@ -1759,9 +1782,15 @@ class _JournalEntryFormScreenState
             }
             return ConstructionJournalEquipmentModel(
               id: item.id,
-              contractId: item.contractId,
-              contractAssignmentSpecified: item.contractAssignmentSpecified,
-              contractNumber: item.contractNumber,
+              contractId:
+                  _options?.canManageContracts == true ? item.contractId : null,
+              contractAssignmentSpecified:
+                  _options?.canManageContracts == true &&
+                  item.contractAssignmentSpecified,
+              contractNumber:
+                  _options?.canManageContracts == true
+                      ? item.contractNumber
+                      : null,
               estimateItemId: item.estimateItemId,
               name: item.nameController.text.trim(),
               type: item.typeController.text.trim(),
@@ -1869,10 +1898,6 @@ class _WorkVolumeCard extends StatelessWidget {
             if (input.estimateItem?.estimatePlannedQuantity != null)
               Text(
                 'План по смете: ${_formatMaterialQuantity(input.estimateItem!.estimatePlannedQuantity!)} ${input.measurementUnitName ?? ''}',
-              ),
-            if (input.estimateItem?.contractAgreedQuantity != null)
-              Text(
-                'Согласовано по договору: ${_formatMaterialQuantity(input.estimateItem!.contractAgreedQuantity!)} ${input.measurementUnitName ?? ''}',
               ),
             if (input.estimateItem != null &&
                 journalResourceBasisMatches(

@@ -348,9 +348,10 @@ class _ConstructionJournalDetailScreenState
                                 icon: const Icon(Icons.edit_outlined),
                                 label: const Text('Редактировать'),
                               ),
-                            if (state.availableActions.hasAction(
-                              ConstructionJournalActionKeys.export,
-                            ))
+                            if (state.journal?.canManageContracts == true &&
+                                state.availableActions.hasAction(
+                                  ConstructionJournalActionKeys.export,
+                                ))
                               OutlinedButton.icon(
                                 onPressed: () async {
                                   if (!projectIsCurrent() ||
@@ -448,53 +449,55 @@ class _ConstructionJournalDetailScreenState
                         (context, snapshot) => Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            DropdownButtonFormField<int>(
-                              key: ValueKey(_contractFilter),
-                              initialValue: _contractFilter,
-                              isExpanded: true,
-                              decoration: const InputDecoration(
-                                labelText: 'Договор',
-                                border: OutlineInputBorder(),
-                              ),
-                              items: [
-                                const DropdownMenuItem(
-                                  value: 0,
-                                  child: Text(
-                                    'Все договоры и строки без договора',
-                                  ),
+                            if (snapshot.data?.canManageContracts == true)
+                              DropdownButtonFormField<int>(
+                                key: ValueKey(_contractFilter),
+                                initialValue: _contractFilter,
+                                isExpanded: true,
+                                decoration: const InputDecoration(
+                                  labelText: 'Договор',
+                                  border: OutlineInputBorder(),
                                 ),
-                                const DropdownMenuItem(
-                                  value: -1,
-                                  child: Text('Без договора'),
-                                ),
-                                for (final contract
-                                    in snapshot.data?.contracts ??
-                                        const <
-                                          ConstructionJournalContractOption
-                                        >[])
-                                  DropdownMenuItem(
-                                    value: contract.id,
+                                items: [
+                                  const DropdownMenuItem(
+                                    value: 0,
                                     child: Text(
-                                      contract.label,
-                                      overflow: TextOverflow.ellipsis,
+                                      'Все договоры и строки без договора',
                                     ),
                                   ),
-                              ],
-                              onChanged:
-                                  selectedProjectId != projectId ||
-                                          _filterLoading
-                                      ? null
-                                      : (value) {
-                                        if (value != null) {
-                                          _setContractFilter(value);
-                                        }
-                                      },
-                            ),
+                                  const DropdownMenuItem(
+                                    value: -1,
+                                    child: Text('Без договора'),
+                                  ),
+                                  for (final contract
+                                      in snapshot.data?.contracts ??
+                                          const <
+                                            ConstructionJournalContractOption
+                                          >[])
+                                    DropdownMenuItem(
+                                      value: contract.id,
+                                      child: Text(
+                                        contract.label,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                ],
+                                onChanged:
+                                    selectedProjectId != projectId ||
+                                            _filterLoading
+                                        ? null
+                                        : (value) {
+                                          if (value != null) {
+                                            _setContractFilter(value);
+                                          }
+                                        },
+                              ),
                             if (snapshot.hasError)
                               const Text(
                                 'Не удалось загрузить договоры проекта.',
                               ),
-                            if (visibleSummary.unassignedRows != null)
+                            if (snapshot.data?.canManageContracts == true &&
+                                visibleSummary.unassignedRows != null)
                               Padding(
                                 padding: const EdgeInsets.only(top: 8),
                                 child: Text(

@@ -669,48 +669,51 @@ class _BudgetHeader extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 12),
-          Flex(
-            direction: compact ? Axis.vertical : Axis.horizontal,
-            crossAxisAlignment:
-                compact ? CrossAxisAlignment.stretch : CrossAxisAlignment.start,
-            children: [
-              if (compact)
-                _MetricTile(
-                  label: 'Бюджет',
-                  value: _formatMoney(summary.budget.projectBudgetAmount),
-                  color: theme.colorScheme.primary,
-                )
-              else
-                Expanded(
-                  child: _MetricTile(
+          if (summary.budget.approvedEstimateAmount != null)
+            Flex(
+              direction: compact ? Axis.vertical : Axis.horizontal,
+              crossAxisAlignment:
+                  compact
+                      ? CrossAxisAlignment.stretch
+                      : CrossAxisAlignment.start,
+              children: [
+                if (compact)
+                  _MetricTile(
                     label: 'Бюджет',
                     value: _formatMoney(summary.budget.projectBudgetAmount),
                     color: theme.colorScheme.primary,
+                  )
+                else
+                  Expanded(
+                    child: _MetricTile(
+                      label: 'Бюджет',
+                      value: _formatMoney(summary.budget.projectBudgetAmount),
+                      color: theme.colorScheme.primary,
+                    ),
                   ),
-                ),
-              const SizedBox(width: 10, height: 10),
-              if (compact)
-                _MetricTile(
-                  label: 'Остаток',
-                  value: _formatMoney(summary.budget.budgetRemaining),
-                  color:
-                      (summary.budget.budgetRemaining ?? 0) < 0
-                          ? AppColors.error
-                          : AppColors.success,
-                )
-              else
-                Expanded(
-                  child: _MetricTile(
+                const SizedBox(width: 10, height: 10),
+                if (compact)
+                  _MetricTile(
                     label: 'Остаток',
                     value: _formatMoney(summary.budget.budgetRemaining),
                     color:
                         (summary.budget.budgetRemaining ?? 0) < 0
                             ? AppColors.error
                             : AppColors.success,
+                  )
+                else
+                  Expanded(
+                    child: _MetricTile(
+                      label: 'Остаток',
+                      value: _formatMoney(summary.budget.budgetRemaining),
+                      color:
+                          (summary.budget.budgetRemaining ?? 0) < 0
+                              ? AppColors.error
+                              : AppColors.success,
+                    ),
                   ),
-                ),
-            ],
-          ),
+              ],
+            ),
         ],
       ),
     );
@@ -733,16 +736,18 @@ class _BudgetSummaryStrip extends StatelessWidget {
         value: summary.totals.estimatesCount.toString(),
         color: Theme.of(context).colorScheme.primary,
       ),
-      _MetricTile(
-        label: 'Согласовано',
-        value: _formatMoney(summary.totals.approvedAmountWithVat),
-        color: AppColors.success,
-      ),
-      _MetricTile(
-        label: 'Изменения',
-        value: _formatMoney(summary.budget.pendingChangeDelta),
-        color: AppColors.warning,
-      ),
+      if (summary.totals.approvedAmountWithVat != null)
+        _MetricTile(
+          label: 'Согласовано',
+          value: _formatMoney(summary.totals.approvedAmountWithVat),
+          color: AppColors.success,
+        ),
+      if (summary.budget.pendingChangeDelta != null)
+        _MetricTile(
+          label: 'Изменения',
+          value: _formatMoney(summary.budget.pendingChangeDelta),
+          color: AppColors.warning,
+        ),
     ];
     if (compact) {
       return Column(
@@ -758,10 +763,10 @@ class _BudgetSummaryStrip extends StatelessWidget {
     return Row(
       children: [
         Expanded(child: metrics[0]),
-        const SizedBox(width: 10),
-        Expanded(child: metrics[1]),
-        const SizedBox(width: 10),
-        Expanded(child: metrics[2]),
+        for (final metric in metrics.skip(1)) ...[
+          const SizedBox(width: 10),
+          Expanded(child: metric),
+        ],
       ],
     );
   }
@@ -822,12 +827,13 @@ class _BudgetEstimateCard extends StatelessWidget {
           const SizedBox(height: 12),
           Row(
             children: [
-              Expanded(
-                child: _CompactFact(
-                  label: 'Сумма',
-                  value: _formatMoney(estimate.totals.amountWithVat),
+              if (estimate.totals.amountWithVat != null)
+                Expanded(
+                  child: _CompactFact(
+                    label: 'Сумма',
+                    value: _formatMoney(estimate.totals.amountWithVat),
+                  ),
                 ),
-              ),
               Expanded(
                 child: _CompactFact(
                   label: 'Разделы',
@@ -872,7 +878,8 @@ class _ApprovalCard extends StatelessWidget {
             ).copyWith(fontWeight: FontWeight.w900),
           ),
           const SizedBox(height: 10),
-          Text(_formatMoney(estimate.totals.amountWithVat)),
+          if (estimate.totals.amountWithVat != null)
+            Text(_formatMoney(estimate.totals.amountWithVat)),
           const SizedBox(height: 12),
           Wrap(
             spacing: 10,
@@ -954,7 +961,8 @@ class _LineGroupCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 10),
-              Text(_formatMoney(group.totalAmount)),
+              if (group.totalAmount != null)
+                Text(_formatMoney(group.totalAmount)),
             ],
           ),
           const SizedBox(height: 10),
@@ -1040,12 +1048,13 @@ class _LineItemRow extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 10),
-          Text(
-            _formatMoney(item.currentTotalAmount ?? item.totalAmount),
-            style: AppTypography.bodyMedium(
-              context,
-            ).copyWith(fontWeight: FontWeight.w900),
-          ),
+          if (item.currentTotalAmount != null || item.totalAmount != null)
+            Text(
+              _formatMoney(item.currentTotalAmount ?? item.totalAmount),
+              style: AppTypography.bodyMedium(
+                context,
+              ).copyWith(fontWeight: FontWeight.w900),
+            ),
         ],
       ),
     );

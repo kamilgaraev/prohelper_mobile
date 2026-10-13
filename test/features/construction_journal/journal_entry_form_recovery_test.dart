@@ -385,6 +385,8 @@ void main() {
         workers: [
           ConstructionJournalWorkerModel(
             id: 91,
+            contractId: 4,
+            contractAssignmentSpecified: true,
             estimateItemId: 81,
             specialty: 'Монтажник',
             workersCount: 3,
@@ -393,6 +395,8 @@ void main() {
         equipment: [
           ConstructionJournalEquipmentModel(
             id: 92,
+            contractId: null,
+            contractAssignmentSpecified: true,
             estimateItemId: 82,
             name: 'Кран',
             quantity: 2,
@@ -401,6 +405,8 @@ void main() {
         materials: [
           ConstructionJournalMaterialUsageModel(
             id: 93,
+            contractId: 5,
+            contractAssignmentSpecified: true,
             materialId: 11,
             estimateItemId: 83,
             projectMaterialDeliveryId: 54,
@@ -447,6 +453,8 @@ void main() {
       expect(payload!['quality_notes'], 'Проверено на участке А');
       final worker = (payload!['workers'] as List).single as Map;
       final machine = (payload!['equipment'] as List).single as Map;
+      expect(worker.containsKey('contract_id'), isFalse);
+      expect(machine.containsKey('contract_id'), isFalse);
       expect(worker['id'], 91);
       expect(worker['workers_count'], 3);
       expect(worker['estimate_item_id'], 81);
@@ -458,6 +466,7 @@ void main() {
       expect(machine.containsKey('hours_used'), isTrue);
       expect(machine['hours_used'], isNull);
       final material = (payload!['materials'] as List).single as Map;
+      expect(material.containsKey('contract_id'), isFalse);
       expect(material['id'], 93);
       expect(material['material_id'], 11);
       expect(material['estimate_item_id'], 83);
