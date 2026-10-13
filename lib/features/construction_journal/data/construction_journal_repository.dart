@@ -411,6 +411,7 @@ class ConstructionJournalRepository extends SyncQueueAwareRepository {
   Future<ConstructionJournalModel> updateJournal({
     required int journalId,
     int? contractId,
+    bool canManageContracts = false,
     required String name,
     required String journalNumber,
     required String startDate,
@@ -420,7 +421,7 @@ class ConstructionJournalRepository extends SyncQueueAwareRepository {
         '/construction-journals/$journalId',
         data: {
           'name': name,
-          'contract_id': contractId,
+          if (canManageContracts) 'contract_id': contractId,
           'journal_number': journalNumber,
           'start_date': startDate,
         },
@@ -448,7 +449,7 @@ class ConstructionJournalRepository extends SyncQueueAwareRepository {
       final payload = _extractMap(MobileApiResponse.payload(response.data));
 
       return _extractList(
-        payload['contracts'],
+        payload['contracts'] ?? const [],
       ).map(ConstructionJournalContractOption.fromJson).toList();
     } on DioException catch (error) {
       throw ApiException.fromDio(

@@ -1,4 +1,4 @@
-﻿class BudgetProjectModel {
+class BudgetProjectModel {
   const BudgetProjectModel({
     required this.id,
     required this.name,
@@ -33,18 +33,18 @@ class BudgetTotalsModel {
 
   final int estimatesCount;
   final Map<String, int> byStatus;
-  final double totalAmount;
-  final double totalAmountWithVat;
-  final double approvedAmountWithVat;
+  final double? totalAmount;
+  final double? totalAmountWithVat;
+  final double? approvedAmountWithVat;
   final int inReviewCount;
 
   factory BudgetTotalsModel.fromJson(Map<String, dynamic> json) {
     return BudgetTotalsModel(
       estimatesCount: _requiredInt(json, 'estimates_count'),
       byStatus: _statusCountMap(_requiredMap(json, 'by_status')),
-      totalAmount: _requiredDouble(json, 'total_amount'),
-      totalAmountWithVat: _requiredDouble(json, 'total_amount_with_vat'),
-      approvedAmountWithVat: _requiredDouble(json, 'approved_amount_with_vat'),
+      totalAmount: _nullableDouble(json['total_amount']),
+      totalAmountWithVat: _nullableDouble(json['total_amount_with_vat']),
+      approvedAmountWithVat: _nullableDouble(json['approved_amount_with_vat']),
       inReviewCount: _requiredInt(json, 'in_review_count'),
     );
   }
@@ -61,19 +61,19 @@ class BudgetRemainingModel {
   });
 
   final double? projectBudgetAmount;
-  final double approvedEstimateAmount;
-  final double approvedChangeDelta;
-  final double pendingChangeDelta;
-  final double committedAmount;
+  final double? approvedEstimateAmount;
+  final double? approvedChangeDelta;
+  final double? pendingChangeDelta;
+  final double? committedAmount;
   final double? budgetRemaining;
 
   factory BudgetRemainingModel.fromJson(Map<String, dynamic> json) {
     return BudgetRemainingModel(
       projectBudgetAmount: _nullableDouble(json['project_budget_amount']),
-      approvedEstimateAmount: _requiredDouble(json, 'approved_estimate_amount'),
-      approvedChangeDelta: _requiredDouble(json, 'approved_change_delta'),
-      pendingChangeDelta: _requiredDouble(json, 'pending_change_delta'),
-      committedAmount: _requiredDouble(json, 'committed_amount'),
+      approvedEstimateAmount: _nullableDouble(json['approved_estimate_amount']),
+      approvedChangeDelta: _nullableDouble(json['approved_change_delta']),
+      pendingChangeDelta: _nullableDouble(json['pending_change_delta']),
+      committedAmount: _nullableDouble(json['committed_amount']),
       budgetRemaining: _nullableDouble(json['budget_remaining']),
     );
   }
@@ -127,27 +127,27 @@ class BudgetEstimateTotalsModel {
     required this.profitRate,
   });
 
-  final double directCosts;
-  final double overheadCosts;
-  final double estimatedProfit;
-  final double equipmentCosts;
-  final double amount;
-  final double amountWithVat;
-  final double vatRate;
-  final double overheadRate;
-  final double profitRate;
+  final double? directCosts;
+  final double? overheadCosts;
+  final double? estimatedProfit;
+  final double? equipmentCosts;
+  final double? amount;
+  final double? amountWithVat;
+  final double? vatRate;
+  final double? overheadRate;
+  final double? profitRate;
 
   factory BudgetEstimateTotalsModel.fromJson(Map<String, dynamic> json) {
     return BudgetEstimateTotalsModel(
-      directCosts: _requiredDouble(json, 'direct_costs'),
-      overheadCosts: _requiredDouble(json, 'overhead_costs'),
-      estimatedProfit: _requiredDouble(json, 'estimated_profit'),
-      equipmentCosts: _requiredDouble(json, 'equipment_costs'),
-      amount: _requiredDouble(json, 'amount'),
-      amountWithVat: _requiredDouble(json, 'amount_with_vat'),
-      vatRate: _requiredDouble(json, 'vat_rate'),
-      overheadRate: _requiredDouble(json, 'overhead_rate'),
-      profitRate: _requiredDouble(json, 'profit_rate'),
+      directCosts: _nullableDouble(json['direct_costs']),
+      overheadCosts: _nullableDouble(json['overhead_costs']),
+      estimatedProfit: _nullableDouble(json['estimated_profit']),
+      equipmentCosts: _nullableDouble(json['equipment_costs']),
+      amount: _nullableDouble(json['amount']),
+      amountWithVat: _nullableDouble(json['amount_with_vat']),
+      vatRate: _nullableDouble(json['vat_rate']),
+      overheadRate: _nullableDouble(json['overhead_rate']),
+      profitRate: _nullableDouble(json['profit_rate']),
     );
   }
 }
@@ -244,7 +244,7 @@ class BudgetEstimateLineGroupModel {
   final String? description;
   final int sortOrder;
   final bool isSummary;
-  final double totalAmount;
+  final double? totalAmount;
   final List<BudgetEstimateLineItemModel> items;
 
   factory BudgetEstimateLineGroupModel.fromJson(Map<String, dynamic> json) {
@@ -257,7 +257,7 @@ class BudgetEstimateLineGroupModel {
       description: _nullableString(json['description']),
       sortOrder: _requiredInt(json, 'sort_order'),
       isSummary: _requiredBool(json, 'is_summary'),
-      totalAmount: _requiredDouble(json, 'total_amount'),
+      totalAmount: _nullableDouble(json['total_amount']),
       items:
           _requiredMapList(
             json,
@@ -335,7 +335,11 @@ class BudgetEstimateModel {
       version: _requiredInt(json, 'version'),
       estimateDate: _nullableString(json['estimate_date']),
       basePriceDate: _nullableString(json['base_price_date']),
-      totals: BudgetEstimateTotalsModel.fromJson(_requiredMap(json, 'totals')),
+      totals: BudgetEstimateTotalsModel.fromJson(
+        json['can_view_financials'] == false
+            ? const {}
+            : _requiredMap(json, 'totals'),
+      ),
       statistics: BudgetEstimateStatisticsModel.fromJson(
         _requiredMap(json, 'statistics'),
       ),
@@ -440,7 +444,11 @@ class BudgetEstimateSummaryModel {
     return BudgetEstimateSummaryModel(
       project: BudgetProjectModel.fromJson(_requiredMap(json, 'project')),
       totals: BudgetTotalsModel.fromJson(_requiredMap(json, 'totals')),
-      budget: BudgetRemainingModel.fromJson(_requiredMap(json, 'budget')),
+      budget: BudgetRemainingModel.fromJson(
+        json['can_view_financials'] == false
+            ? const {}
+            : _requiredMap(json, 'budget'),
+      ),
       estimates:
           _requiredMapList(
             json,
@@ -515,15 +523,6 @@ int? _nullableInt(dynamic value) {
   }
 
   return parsed;
-}
-
-double _requiredDouble(Map<String, dynamic> json, String key) {
-  final value = _nullableDouble(json[key]);
-  if (value == null) {
-    throw FormatException('Missing double field: $key');
-  }
-
-  return value;
 }
 
 double? _nullableDouble(dynamic value) {

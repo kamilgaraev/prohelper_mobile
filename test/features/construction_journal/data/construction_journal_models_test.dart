@@ -3,6 +3,46 @@ import 'package:prohelpers_mobile/features/construction_journal/data/constructio
 
 void main() {
   test(
+    'contract management capability defaults closed and follows server permission',
+    () {
+      final journal = _journalPayload();
+      expect(
+        ConstructionJournalModel.fromJson(journal).canManageContracts,
+        isFalse,
+      );
+      journal['can_manage_contracts'] = true;
+      expect(
+        ConstructionJournalModel.fromJson(journal).canManageContracts,
+        isTrue,
+      );
+      final entry = _entryPayload()..['can_manage_contracts'] = false;
+      expect(
+        ConstructionJournalEntryModel.fromJson(entry).canManageContracts,
+        isFalse,
+      );
+      final options = {
+        'estimates': <dynamic>[],
+        'work_types': <dynamic>[],
+        'project_materials': <dynamic>[],
+        'can_manage_contracts': false,
+      };
+      expect(
+        ConstructionJournalEntryFormOptions.fromJson(
+          options,
+        ).canManageContracts,
+        isFalse,
+      );
+      options['can_manage_contracts'] = true;
+      expect(
+        ConstructionJournalEntryFormOptions.fromJson(
+          options,
+        ).canManageContracts,
+        isTrue,
+      );
+    },
+  );
+
+  test(
     'estimate section filter includes descendants, keeps unassigned and terminates cycles',
     () {
       final estimate = ConstructionJournalEstimateOption.fromJson({

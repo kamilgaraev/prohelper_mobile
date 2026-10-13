@@ -325,7 +325,10 @@ class _JournalEntryDetailScreenState
               ),
             ],
             const SizedBox(height: 16),
-            _WorkVolumesReadOnlyCard(volumes: entry.workVolumes),
+            _WorkVolumesReadOnlyCard(
+              volumes: entry.workVolumes,
+              canManageContracts: entry.canManageContracts,
+            ),
             const SizedBox(height: 16),
             IndustrialCard(
               child: Column(
@@ -937,7 +940,12 @@ class _BlockersCard extends StatelessWidget {
 }
 
 class _WorkVolumesReadOnlyCard extends StatelessWidget {
-  const _WorkVolumesReadOnlyCard({required this.volumes});
+  const _WorkVolumesReadOnlyCard({
+    required this.volumes,
+    required this.canManageContracts,
+  });
+
+  final bool canManageContracts;
 
   final List<ConstructionJournalWorkVolumeModel> volumes;
 
@@ -982,7 +990,8 @@ class _WorkVolumesReadOnlyCard extends StatelessWidget {
                         'План по смете: ${volume.estimateItem!.estimatePlannedQuantity}',
                         style: AppTypography.caption(context),
                       ),
-                    if (volume.estimateItem?.contractAgreedQuantity != null)
+                    if (canManageContracts &&
+                        volume.estimateItem?.contractAgreedQuantity != null)
                       Text(
                         'Согласовано по договору: ${volume.estimateItem!.contractAgreedQuantity}',
                         style: AppTypography.caption(context),

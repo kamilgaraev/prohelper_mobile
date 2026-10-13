@@ -1,7 +1,49 @@
-﻿import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_test/flutter_test.dart';
 import 'package:prohelpers_mobile/features/budget_estimates/data/budget_estimate_model.dart';
 
 void main() {
+  test(
+    'parses redacted estimate money as unavailable, without substituting zero',
+    () {
+      final json =
+          _estimateJson()
+            ..remove('totals')
+            ..remove('contract_id');
+      json['can_view_financials'] = false;
+      for (final group in json['line_groups'] as List) {
+        (group as Map).remove('total_amount');
+        for (final item in group['items'] as List) {
+          for (final key in [
+            'unit_price',
+            'current_unit_price',
+            'total_amount',
+            'current_total_amount',
+          ]) {
+            (item as Map).remove(key);
+          }
+        }
+      }
+      final estimate = BudgetEstimateModel.fromJson(json);
+      expect(estimate.totals.amountWithVat, isNull);
+      expect(estimate.lineGroups.single.totalAmount, isNull);
+      expect(estimate.lineGroups.single.items.single.totalAmount, isNull);
+      expect(estimate.contractId, isNull);
+      final summaryJson = _summaryJson()..remove('budget');
+      summaryJson['can_view_financials'] = false;
+      for (final key in [
+        'total_amount',
+        'total_amount_with_vat',
+        'approved_amount_with_vat',
+      ]) {
+        (summaryJson['totals'] as Map).remove(key);
+      }
+      final summary = BudgetEstimateSummaryModel.fromJson(summaryJson);
+      expect(summary.totals.estimatesCount, 1);
+      expect(summary.totals.totalAmount, isNull);
+      expect(summary.budget.committedAmount, isNull);
+    },
+  );
+
   test('parses budget summary with approvals, lines and linked changes', () {
     final summary = BudgetEstimateSummaryModel.fromJson(_summaryJson());
 
