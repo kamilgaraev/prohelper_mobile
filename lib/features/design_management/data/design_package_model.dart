@@ -58,6 +58,8 @@ class DesignPackageFile {
     this.mimeType,
     this.previewUrl,
     this.downloadUrl,
+    this.canAnnotate = false,
+    this.versionNumber,
   });
 
   final int id;
@@ -65,6 +67,18 @@ class DesignPackageFile {
   final String? mimeType;
   final String? previewUrl;
   final String? downloadUrl;
+  final bool canAnnotate;
+  final String? versionNumber;
+
+  bool get supportsDrawingViewer =>
+      mimeType == 'application/pdf' ||
+      const ['image/png', 'image/jpeg', 'image/webp'].contains(mimeType) ||
+      RegExp(r'\.(pdf|png|jpe?g|webp)$', caseSensitive: false).hasMatch(name);
+
+  bool get isPdf =>
+      mimeType == 'application/pdf' ||
+      (!const ['image/png', 'image/jpeg', 'image/webp'].contains(mimeType) &&
+          name.toLowerCase().endsWith('.pdf'));
 
   Uri? uriFor(String purpose) {
     final value =
@@ -86,6 +100,8 @@ class DesignPackageFile {
         mimeType: _nullableString(json['mime_type']),
         previewUrl: _nullableString(json['preview_url']),
         downloadUrl: _nullableString(json['download_url']),
+        canAnnotate: json['can_annotate'] == true,
+        versionNumber: _nullableString(json['version_number']),
       );
 }
 

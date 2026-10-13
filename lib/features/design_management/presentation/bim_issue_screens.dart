@@ -996,13 +996,24 @@ class _BimIssueDetailScreenState extends ConsumerState<BimIssueDetailScreen> {
                                     (_, _, _) => const Text('Фото недоступно.'),
                               ),
                             ),
-                        OutlinedButton.icon(
-                          onPressed: _busy ? null : () => _openContext(issue),
-                          icon: const Icon(Icons.view_in_ar),
-                          label: const Text('Открыть место в модели'),
-                        ),
+                        if (bimMap(
+                              issue.context['annotations'],
+                            )['page_number'] ==
+                            null)
+                          OutlinedButton.icon(
+                            onPressed: _busy ? null : () => _openContext(issue),
+                            icon: const Icon(Icons.view_in_ar),
+                            label: const Text('Открыть место в модели'),
+                          ),
                         const SizedBox(height: 12),
-                        for (final action in issue.actions)
+                        for (final action in issue.actions.where(
+                          (action) =>
+                              action.key != 'snapshot' ||
+                              bimMap(
+                                    issue.context['annotations'],
+                                  )['page_number'] ==
+                                  null,
+                        ))
                           Padding(
                             padding: const EdgeInsets.only(bottom: 8),
                             child: FilledButton.tonal(
