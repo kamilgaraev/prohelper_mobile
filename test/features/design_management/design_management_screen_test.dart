@@ -8,6 +8,8 @@ import 'package:prohelpers_mobile/features/design_management/data/design_package
 import 'package:prohelpers_mobile/features/design_management/data/design_package_file_service.dart';
 import 'package:prohelpers_mobile/features/design_management/data/design_package_repository.dart';
 import 'package:prohelpers_mobile/features/design_management/domain/design_package_provider.dart';
+import 'package:prohelpers_mobile/features/design_management/domain/drawing_issues_provider.dart';
+import 'package:prohelpers_mobile/features/design_management/presentation/drawing_viewer_screen.dart';
 import 'package:prohelpers_mobile/features/design_management/presentation/design_management_screen.dart';
 import 'package:prohelpers_mobile/features/auth/data/auth_repository.dart';
 import 'package:prohelpers_mobile/features/auth/data/auth_session_identity.dart';
@@ -302,16 +304,26 @@ void main() {
     expect(find.text('application/octet-stream'), findsNothing);
   });
 
-  testWidgets('uses only the freshly fetched preview URI', (tester) async {
-    final notifier =
-        _FakeDesignPackageNotifier()
-          ..detailOverride = _detail(previewUrl: 'https://files.test/fresh');
-    await _pumpPackageDetail(tester, notifier, fileService);
-    await _tapPreview(tester);
+  testWidgets(
+    'views PDF internally using only the freshly fetched download URI',
+    (tester) async {
+      final notifier =
+          _FakeDesignPackageNotifier()
+            ..detailOverride = _detail(downloadUrl: 'https://files.test/fresh');
+      await _pumpPackageDetail(tester, notifier, fileService);
+      await _tapPreview(tester);
 
-    expect(fileService.openedPreviews, [Uri.parse('https://files.test/fresh')]);
-    expect(notifier.detailFetchCalls, 1);
-  });
+      expect(fileService.openedPreviews, isEmpty);
+      expect(fileService.downloadedUris, [
+        Uri.parse('https://files.test/fresh'),
+      ]);
+      expect(find.byType(DrawingViewerScreen), findsOneWidget);
+      expect(notifier.detailFetchCalls, 1);
+      await tester.tap(find.byTooltip('Закрыть просмотр'));
+      await tester.pumpAndSettle();
+      expect(fileService.cleanupCalls, 1);
+    },
+  );
 
   testWidgets('does not open a file when download fails', (tester) async {
     final failingService = _RecordingFileService(
@@ -564,6 +576,7 @@ Future<void> _pumpPackageDetail(
         ),
         designPackageProvider.overrideWith((ref) => notifier),
         designPackageFileServiceProvider.overrideWithValue(fileService),
+        drawingIssuesProvider.overrideWith((ref, key) async => []),
       ],
       child: const MaterialApp(home: DesignManagementScreen()),
     ),

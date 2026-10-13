@@ -14,6 +14,7 @@ import '../data/design_package_file_service.dart';
 import '../data/design_package_model.dart';
 import '../domain/design_package_provider.dart';
 import 'bim_catalog_screen.dart';
+import 'drawing_viewer_screen.dart';
 
 class DesignManagementScreen extends ConsumerStatefulWidget {
   const DesignManagementScreen({super.key});
@@ -320,7 +321,10 @@ class _DesignPackageDetailScreenState
                               child: CircularProgressIndicator(strokeWidth: 2),
                             ),
                           ),
-                        if (!_isOpeningFile && file.uriFor('preview') != null)
+                        if (!_isOpeningFile &&
+                            (file.uriFor('preview') != null ||
+                                (file.supportsDrawingViewer &&
+                                    file.uriFor('download') != null)))
                           IconButton(
                             tooltip: 'Просмотреть',
                             onPressed:
@@ -443,12 +447,49 @@ class _DesignPackageDetailScreenState
           freshPackage.files
               .where((candidate) => candidate.id == file.id)
               .firstOrNull;
-      if (freshFile == null) return;
-      final uri = freshFile.uriFor(purpose);
+      if (freshFile == null) {
+        throw const FormatException(
+          'Редакция документа изменилась. Обновите комплект и откройте актуальный файл.',
+        );
+      }
+      final uri =
+          purpose == 'preview' && freshFile.supportsDrawingViewer
+              ? freshFile.uriFor('download') ?? freshFile.uriFor('preview')
+              : freshFile.uriFor(purpose);
       if (uri == null) {
         throw const FormatException('Для файла нет актуальной ссылки.');
       }
-      if (purpose == 'preview') {
+      if (purpose == 'preview' && freshFile.supportsDrawingViewer) {
+        downloadedPath = await service.download(uri, freshFile.name);
+        if (!_fileContextCurrent(
+          selectedProjectId,
+          sessionIdentity,
+          freshPackage,
+        )) {
+          await service.deleteDownloaded(downloadedPath);
+          downloadedPath = null;
+          return;
+        }
+        if (!mounted) return;
+        final drawingRoute = MaterialPageRoute<void>(
+          builder:
+              (_) => DrawingViewerScreen(
+                path: downloadedPath!,
+                file: freshFile,
+                projectId: selectedProjectId,
+                packageId: freshPackage.id,
+                sessionIdentity: sessionIdentity,
+              ),
+        );
+        await Navigator.of(context).push<void>(drawingRoute);
+        await drawingRoute.completed;
+        try {
+          await service.deleteDownloaded(downloadedPath);
+        } catch (_) {
+          service.scheduleCleanup(downloadedPath);
+        }
+        downloadedPath = null;
+      } else if (purpose == 'preview') {
         final opened = await service.openPreview(uri);
         if (!_fileContextCurrent(
           selectedProjectId,
