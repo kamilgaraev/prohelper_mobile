@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -14,6 +15,8 @@ import 'package:prohelpers_mobile/features/projects/domain/projects_provider.dar
 import 'package:prohelpers_mobile/features/design_management/data/bim_models.dart';
 import 'package:prohelpers_mobile/features/design_management/data/bim_repository.dart';
 import 'package:prohelpers_mobile/features/design_management/data/design_package_model.dart';
+import 'package:prohelpers_mobile/features/design_management/data/drawing_annotations.dart';
+import 'package:prohelpers_mobile/features/design_management/data/drawing_sync_models.dart';
 import 'package:prohelpers_mobile/features/design_management/presentation/drawing_layer.dart';
 import 'package:prohelpers_mobile/features/design_management/presentation/drawing_viewer_screen.dart';
 
@@ -56,6 +59,39 @@ class DeviceProjects extends ProjectsNotifier {
 class DeviceIssues extends BimRepository {
   DeviceIssues() : super(Dio());
   final saved = <BimIssue>[];
+  final strokes = <SyncedDrawingStroke>[];
+  Completer<void>? pendingWrite;
+  @override
+  Future<DrawingStrokeDelta> drawingChanges(
+    int versionId,
+    int afterRevision,
+  ) async => DrawingStrokeDelta(
+    items: strokes.where((item) => item.revision > afterRevision).toList(),
+    revision: strokes.length,
+    hasMore: false,
+    canAnnotate: true,
+  );
+  @override
+  Future<SyncedDrawingStroke> createDrawingStroke(
+    int versionId,
+    String clientId,
+    DrawingAnnotations annotations,
+  ) async {
+    await pendingWrite?.future;
+    final stroke = SyncedDrawingStroke(
+      clientId: clientId,
+      versionId: versionId,
+      revision: strokes.length + 1,
+      authorId: 7,
+      authorName: 'Проверка',
+      createdAt: DateTime.now().toUtc(),
+      canDelete: true,
+      annotations: annotations,
+    );
+    strokes.add(stroke);
+    return stroke;
+  }
+
   @override
   Future<BimPage<BimIssue>> issues(
     int projectId, {
@@ -98,23 +134,40 @@ void main() {
           projectsProvider.overrideWith((ref) => DeviceProjects()),
           bimRepositoryProvider.overrideWithValue(repository),
         ],
-        child: const MaterialApp(
-          home: DrawingViewerScreen(
-            path: '/data/local/tmp/most-pir-drawing-20261013.pdf',
-            file: DesignPackageFile(
-              id: 15,
-              name: 'АР - проверка.pdf',
-              mimeType: 'application/pdf',
-              canAnnotate: true,
-              versionNumber: '2',
-            ),
-            projectId: 9,
-            packageId: 42,
-            sessionIdentity: session,
+        child: MaterialApp(
+          home: Builder(
+            builder:
+                (context) => Scaffold(
+                  body: TextButton(
+                    onPressed:
+                        () => Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder:
+                                (_) => const DrawingViewerScreen(
+                                  path:
+                                      '/data/local/tmp/most-pir-drawing-20261013.pdf',
+                                  file: DesignPackageFile(
+                                    id: 15,
+                                    name: 'АР - проверка.pdf',
+                                    mimeType: 'application/pdf',
+                                    canAnnotate: true,
+                                    versionNumber: '2',
+                                  ),
+                                  projectId: 9,
+                                  packageId: 42,
+                                  sessionIdentity: session,
+                                ),
+                          ),
+                        ),
+                    child: const Text('Открыть чертёж'),
+                  ),
+                ),
           ),
         ),
       ),
     );
+    await tester.tap(find.text('Открыть чертёж'));
+    await tester.pump();
     for (var attempt = 0; attempt < 60; attempt++) {
       await tester.pump(const Duration(milliseconds: 500));
       if (find.text('Лист 1 / 3').evaluate().isNotEmpty) break;
@@ -141,6 +194,10 @@ void main() {
       Offset(rect.width * 0.3, -rect.height * 0.1),
     );
     await tester.pump();
+    expect(repository.strokes, hasLength(1));
+    expect(repository.strokes.single.annotations!.pageNumber, 1);
+    expect(repository.strokes.single.annotations!.strokes, hasLength(1));
+    expect(repository.saved, isEmpty);
     await tester.tap(find.widgetWithText(FilledButton, 'Замечание'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField), 'Проверить проём');
@@ -150,11 +207,40 @@ void main() {
     expect(repository.saved, hasLength(1));
     final annotations = repository.saved.single.context['annotations'] as Map;
     expect(annotations['page_number'], 1);
-    expect(annotations['strokes'], hasLength(1));
+    expect(annotations['strokes'], isEmpty);
     await binding.takeScreenshot('mobile-drawing-saved');
     await tester.tap(find.byTooltip('Следующий лист'));
     await tester.pumpAndSettle();
     expect(find.text('Лист 2 / 3'), findsOneWidget);
     await binding.takeScreenshot('mobile-drawing-rotated');
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Стрелка'));
+    await tester.pump();
+    repository.pendingWrite = Completer<void>();
+    final rotated = tester.getRect(
+      find.byWidgetPredicate(
+        (widget) => widget is DrawingLayer && widget.pageNumber == 2,
+      ),
+    );
+    await tester.dragFrom(
+      rotated.topLeft + Offset(rotated.width * .3, rotated.height * .3),
+      Offset(rotated.width * .2, rotated.height * .2),
+    );
+    await tester.pump();
+    expect(find.textContaining('Не сохранено: 1'), findsOneWidget);
+    await tester.tap(find.byTooltip('Закрыть просмотр'));
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.text('Сохранить и выйти'), findsOneWidget);
+    await binding.takeScreenshot('mobile-drawing-save-exit');
+    await tester.tap(find.text('Сохранить и выйти'));
+    await tester.pump();
+    expect(find.text('Сохраняем…'), findsOneWidget);
+    expect(repository.strokes, hasLength(1));
+    repository.pendingWrite!.complete();
+    await tester.pumpAndSettle();
+    expect(repository.strokes, hasLength(2));
+    expect(repository.strokes.last.annotations!.pageNumber, 2);
+    expect(find.byType(DrawingViewerScreen), findsNothing);
   });
 }
