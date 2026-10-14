@@ -1,10 +1,11 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:prohelpers_mobile/features/time_tracking/data/time_tracking_repository.dart';
+import 'package:prohelpers_mobile/features/time_tracking/data/time_entry_model.dart';
 
 void main() {
   test('loads all pages of pending approval entries', () async {
@@ -175,6 +176,51 @@ void main() {
     expect(request.path, '/time-tracking/entries');
     expect(request.headers['Idempotency-Key'], 'manual-key-1');
   });
+
+  test(
+    'preserves explicit overnight offsets and actual break intervals',
+    () async {
+      late RequestOptions request;
+      final dio = Dio(BaseOptions(baseUrl: 'https://api.example.test'));
+      dio.httpClientAdapter = _JsonAdapter((options) {
+        request = options;
+        return _responseData(_entryJson());
+      });
+      await TimeTrackingRepository(dio).createManualEntry(
+        projectId: 9,
+        workDate: '2026-10-14',
+        hoursWorked: 7.5,
+        title: 'Ночная смена',
+        isBillable: true,
+        idempotencyKey: 'overnight-interval',
+        startTime: '22:00',
+        endTime: '06:00',
+        breakTime: 0.5,
+        startAt: '2026-10-14T22:00:00+03:00',
+        endAt: '2026-10-15T06:00:00+03:00',
+        timezone: 'Europe/Moscow',
+        employmentContractId: 41,
+        breakIntervals: const [
+          TimeBreakIntervalModel(
+            startAt: '2026-10-15T02:00:00+03:00',
+            endAt: '2026-10-15T02:30:00+03:00',
+          ),
+        ],
+      );
+      expect(request.data['start_at'], '2026-10-14T22:00:00+03:00');
+      expect(request.data['end_at'], '2026-10-15T06:00:00+03:00');
+      expect(request.data['timezone'], 'Europe/Moscow');
+      expect(request.data['employment_contract_id'], 41);
+      expect(request.data['break_intervals'], [
+        {
+          'start_at': '2026-10-15T02:00:00+03:00',
+          'end_at': '2026-10-15T02:30:00+03:00',
+        },
+      ]);
+      expect(request.data['start_time'], '22:00');
+      expect(request.data['end_time'], '06:00');
+    },
+  );
 
   test('submits correction with trimmed reason', () async {
     late RequestOptions request;

@@ -1,4 +1,4 @@
-﻿import 'package:dio/dio.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:prohelpers_mobile/core/network/api_exception.dart';
 import 'package:prohelpers_mobile/features/time_tracking/data/time_entry_model.dart';
@@ -71,6 +71,11 @@ class _FakeTimeTrackingRepository extends TimeTrackingRepository {
     required bool isBillable,
     required String idempotencyKey,
     String? description,
+    String? startAt,
+    String? endAt,
+    String? timezone,
+    int? employmentContractId,
+    List<TimeBreakIntervalModel>? breakIntervals,
   }) async {
     startedTitle = title;
     startedTime = startTime;
@@ -89,6 +94,11 @@ class _FakeTimeTrackingRepository extends TimeTrackingRepository {
     String? endTime,
     double? breakTime,
     String? description,
+    String? startAt,
+    String? endAt,
+    String? timezone,
+    int? employmentContractId,
+    List<TimeBreakIntervalModel>? breakIntervals,
   }) async {
     manualHours = hoursWorked;
     return _entry;
@@ -101,6 +111,9 @@ class _FakeTimeTrackingRepository extends TimeTrackingRepository {
     required double breakTime,
     required String idempotencyKey,
     String? notes,
+    String? endAt,
+    String? timezone,
+    List<TimeBreakIntervalModel>? breakIntervals,
   }) async {
     stoppedEntryId = id;
     stoppedBreakTime = breakTime;

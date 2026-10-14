@@ -12,6 +12,7 @@ import 'package:prohelpers_mobile/features/time_tracking/data/time_entry_model.d
 import 'package:prohelpers_mobile/features/time_tracking/data/time_tracking_repository.dart';
 import 'package:prohelpers_mobile/features/time_tracking/domain/time_tracking_provider.dart';
 import 'package:prohelpers_mobile/features/time_tracking/presentation/time_tracking_screen.dart';
+import 'package:prohelpers_mobile/features/workforce/data/employee_workspace_model.dart';
 
 class _RecordingTimeTrackingRepository extends TimeTrackingRepository {
   _RecordingTimeTrackingRepository() : super(Dio());
@@ -21,6 +22,10 @@ class _RecordingTimeTrackingRepository extends TimeTrackingRepository {
   int? fetchedEntryId;
   String? startedTitle;
   String? startedTime;
+  String? startedTimezone;
+  int? startedContractId;
+  String? manualTimezone;
+  int? manualContractId;
   double? manualHours;
   int? submittedEntryId;
   int? correctedEntryId;
@@ -96,6 +101,11 @@ class _RecordingTimeTrackingRepository extends TimeTrackingRepository {
     required bool isBillable,
     required String idempotencyKey,
     String? description,
+    String? startAt,
+    String? endAt,
+    String? timezone,
+    int? employmentContractId,
+    List<TimeBreakIntervalModel>? breakIntervals,
   }) async {
     startIdempotencyKeys.add(idempotencyKey);
     final error = startTimerError;
@@ -106,6 +116,8 @@ class _RecordingTimeTrackingRepository extends TimeTrackingRepository {
 
     startedTitle = title;
     startedTime = startTime;
+    startedTimezone = timezone;
+    startedContractId = employmentContractId;
     return _entry;
   }
 
@@ -121,8 +133,15 @@ class _RecordingTimeTrackingRepository extends TimeTrackingRepository {
     String? endTime,
     double? breakTime,
     String? description,
+    String? startAt,
+    String? endAt,
+    String? timezone,
+    int? employmentContractId,
+    List<TimeBreakIntervalModel>? breakIntervals,
   }) async {
     manualHours = hoursWorked;
+    manualTimezone = timezone;
+    manualContractId = employmentContractId;
     return _entry;
   }
 
@@ -277,9 +296,14 @@ void main() {
     Widget child,
     _RecordingTimeTrackingRepository repository, {
     TimeTrackingNotifier? notifier,
+    EmployeeWorkspaceModel? workingProfile,
   }) {
     return ProviderScope(
       overrides: [
+        if (workingProfile != null)
+          workingTimezonesProvider.overrideWith(
+            (ref, date) async => workingProfile,
+          ),
         projectsProvider.overrideWith(
           (ref) => _TestProjectsNotifier(project()),
         ),
@@ -318,9 +342,12 @@ void main() {
     expect(find.text('5.50 ч'), findsOneWidget);
   });
 
-  testWidgets('refreshes daily summary after approving an entry', (tester) async {
-    final repository = _RecordingTimeTrackingRepository()
-      ..approvalCompleter = Completer<void>();
+  testWidgets('refreshes daily summary after approving an entry', (
+    tester,
+  ) async {
+    final repository =
+        _RecordingTimeTrackingRepository()
+          ..approvalCompleter = Completer<void>();
     final notifier = _RecordingTimeTrackingNotifier(repository);
     useLargeSurface(tester);
 
@@ -514,6 +541,70 @@ void main() {
     expect(find.text('Согласовано'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets(
+    'working contract choice sends its IANA timezone for timer and manual entry',
+    (tester) async {
+      final repository = _RecordingTimeTrackingRepository();
+      useLargeSurface(tester);
+      const choices = [
+        WorkingContractTimezoneModel(
+          contractId: 41,
+          timezone: 'Europe/Moscow',
+          contractNumber: 'ТД-41',
+        ),
+        WorkingContractTimezoneModel(
+          contractId: 42,
+          timezone: 'Asia/Yekaterinburg',
+          contractNumber: 'ТД-42',
+        ),
+      ];
+      const profile = EmployeeWorkspaceModel(
+        employeeName: 'Иван Петров',
+        personnelNumber: '001',
+        documents: [],
+        requests: [],
+        periods: [],
+        workingTimezones: choices,
+      );
+      await tester.pumpWidget(
+        buildApp(
+          const TimeTrackingScreen(),
+          repository,
+          workingProfile: profile,
+        ),
+      );
+      await pumpUi(tester);
+      await tester.tap(find.text('Запустить').first);
+      await pumpUi(tester);
+      await tester.enterText(find.byType(TextField).at(0), 'Монтаж');
+      await tester.enterText(find.byType(TextField).at(1), '09:00');
+      await tester.tap(find.text('Запустить').last);
+      await pumpUi(tester);
+      expect(repository.startedTimezone, isNull);
+      expect(find.text('Выберите трудовой договор.'), findsOneWidget);
+      await tester.tap(find.byType(DropdownButtonFormField<int>));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('№ТД-42 — Asia/Yekaterinburg').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Запустить').last);
+      await pumpUi(tester);
+      expect(repository.startedTimezone, 'Asia/Yekaterinburg');
+      expect(repository.startedContractId, 42);
+      await tester.tap(find.text('Ручная запись').first);
+      await pumpUi(tester);
+      await tester.enterText(find.byType(TextField).at(0), 'Контроль');
+      await tester.enterText(find.byType(TextField).at(1), '2');
+      await tester.tap(find.byType(DropdownButtonFormField<int>));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('№ТД-41 — Europe/Moscow').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Сохранить').last);
+      await pumpUi(tester);
+      expect(repository.manualTimezone, 'Europe/Moscow');
+      expect(repository.manualContractId, 41);
+    },
+  );
 
   testWidgets('submits visible start timer and manual entry forms', (
     tester,

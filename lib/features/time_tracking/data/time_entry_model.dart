@@ -1,4 +1,16 @@
-﻿class TimeEntryCorrectionModel {
+class TimeBreakIntervalModel {
+  const TimeBreakIntervalModel({required this.startAt, required this.endAt});
+  final String startAt;
+  final String endAt;
+  factory TimeBreakIntervalModel.fromJson(Map<String, dynamic> json) =>
+      TimeBreakIntervalModel(
+        startAt: _requiredString(json, 'start_at'),
+        endAt: _requiredString(json, 'end_at'),
+      );
+  Map<String, dynamic> toJson() => {'start_at': startAt, 'end_at': endAt};
+}
+
+class TimeEntryCorrectionModel {
   const TimeEntryCorrectionModel({
     required this.id,
     required this.reason,
@@ -76,6 +88,12 @@ class TimeEntryModel {
     this.taskId,
     this.taskLabel,
     this.workerLabel,
+    this.startAt,
+    this.endAt,
+    this.timezone,
+    this.netMinutes,
+    this.breakIntervals = const [],
+    this.requiresReconciliation = false,
     this.startTime,
     this.endTime,
     this.hoursWorked,
@@ -100,6 +118,12 @@ class TimeEntryModel {
   final String? taskLabel;
   final String? workerLabel;
   final String workDate;
+  final String? startAt;
+  final String? endAt;
+  final String? timezone;
+  final int? netMinutes;
+  final List<TimeBreakIntervalModel> breakIntervals;
+  final bool requiresReconciliation;
   final String? startTime;
   final String? endTime;
   final double? hoursWorked;
@@ -141,6 +165,19 @@ class TimeEntryModel {
       taskLabel: _nullableString(json['task_label']),
       workerLabel: _nullableString(json['worker_label']),
       workDate: _requiredString(json, 'work_date'),
+      startAt: _nullableString(json['start_at']),
+      endAt: _nullableString(json['end_at']),
+      timezone: _nullableString(json['timezone']),
+      netMinutes: _nullableInt(json['net_minutes']),
+      breakIntervals:
+          (json['break_intervals'] as List? ?? const [])
+              .map(
+                (value) => TimeBreakIntervalModel.fromJson(
+                  Map<String, dynamic>.from(value as Map),
+                ),
+              )
+              .toList(),
+      requiresReconciliation: json['requires_reconciliation'] == true,
       startTime: _nullableString(json['start_time']),
       endTime: _nullableString(json['end_time']),
       hoursWorked: _nullableDouble(json['hours_worked']),

@@ -1,6 +1,10 @@
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/error/user_message.dart';
+import '../../../core/services/permission_service.dart';
+import '../../../core/providers/module_provider.dart';
+import '../../workforce/data/employee_workspace_repository.dart';
+import '../../workforce/data/employee_workspace_model.dart';
 import '../../../core/network/api_exception.dart';
 import '../../../core/storage/entity_snapshot_provider.dart';
 import '../../../core/storage/snapshot_read.dart';
@@ -219,6 +223,8 @@ class TimeTrackingNotifier extends StateNotifier<TimeTrackingState> {
     required String title,
     required bool isBillable,
     required String idempotencyKey,
+    String? timezone,
+    int? employmentContractId,
     String? description,
   }) async {
     final date = _requireDate();
@@ -231,6 +237,8 @@ class TimeTrackingNotifier extends StateNotifier<TimeTrackingState> {
       title: title,
       isBillable: isBillable,
       idempotencyKey: idempotencyKey,
+      timezone: timezone,
+      employmentContractId: employmentContractId,
       description: description,
     );
     await loadDailySummary();
@@ -244,6 +252,8 @@ class TimeTrackingNotifier extends StateNotifier<TimeTrackingState> {
     String? startTime,
     String? endTime,
     double? breakTime,
+    String? timezone,
+    int? employmentContractId,
     String? description,
   }) async {
     final date = _requireDate();
@@ -259,6 +269,8 @@ class TimeTrackingNotifier extends StateNotifier<TimeTrackingState> {
       startTime: startTime,
       endTime: endTime,
       breakTime: breakTime,
+      timezone: timezone,
+      employmentContractId: employmentContractId,
       description: description,
     );
     await loadDailySummary();
@@ -336,4 +348,16 @@ final timeTrackingSnapshotAdapterProvider =
         repository: ref.read(timeTrackingRepositoryProvider),
         snapshots: ref.read(entitySnapshotServiceProvider.future),
       );
+    });
+
+final workingTimezonesProvider = FutureProvider.autoDispose
+    .family<EmployeeWorkspaceModel?, String>((ref, date) async {
+      final permissions = ref.watch(permissionServiceProvider);
+      if (!permissions.canAccessModule(AppModule.workforceManagement) ||
+          !permissions.hasPermission('workforce.self-service.view')) {
+        return null;
+      }
+      return ref
+          .read(employeeWorkspaceRepositoryProvider)
+          .fetch(date.substring(0, 7), workDate: date);
     });
