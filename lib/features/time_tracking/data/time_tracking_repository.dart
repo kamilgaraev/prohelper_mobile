@@ -1,4 +1,4 @@
-﻿import 'dart:math';
+import 'dart:math';
 
 import 'package:dio/dio.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -166,6 +166,11 @@ class TimeTrackingRepository {
     required String title,
     required bool isBillable,
     required String idempotencyKey,
+    String? startAt,
+    String? endAt,
+    String? timezone,
+    int? employmentContractId,
+    List<TimeBreakIntervalModel>? breakIntervals,
     String? description,
   }) async {
     final trimmedTitle = title.trim();
@@ -178,6 +183,14 @@ class TimeTrackingRepository {
         '/time-tracking/timer/start',
         data: {
           'project_id': projectId,
+          if (_hasText(startAt)) 'start_at': startAt,
+          if (_hasText(endAt)) 'end_at': endAt,
+          if (_hasText(timezone)) 'timezone': timezone,
+          if (employmentContractId != null)
+            'employment_contract_id': employmentContractId,
+          if (breakIntervals != null)
+            'break_intervals':
+                breakIntervals.map((interval) => interval.toJson()).toList(),
           'work_date': workDate,
           'start_time': _normalizeTime(startTime),
           'title': trimmedTitle,
@@ -206,6 +219,11 @@ class TimeTrackingRepository {
     String? startTime,
     String? endTime,
     double? breakTime,
+    String? startAt,
+    String? endAt,
+    String? timezone,
+    int? employmentContractId,
+    List<TimeBreakIntervalModel>? breakIntervals,
     String? description,
   }) async {
     final trimmedTitle = title.trim();
@@ -218,6 +236,14 @@ class TimeTrackingRepository {
         '/time-tracking/entries',
         data: {
           'project_id': projectId,
+          if (_hasText(startAt)) 'start_at': startAt,
+          if (_hasText(endAt)) 'end_at': endAt,
+          if (_hasText(timezone)) 'timezone': timezone,
+          if (employmentContractId != null)
+            'employment_contract_id': employmentContractId,
+          if (breakIntervals != null)
+            'break_intervals':
+                breakIntervals.map((interval) => interval.toJson()).toList(),
           'work_date': workDate,
           'hours_worked': hoursWorked,
           'title': trimmedTitle,
@@ -244,6 +270,9 @@ class TimeTrackingRepository {
     required String endTime,
     required double breakTime,
     required String idempotencyKey,
+    String? endAt,
+    String? timezone,
+    List<TimeBreakIntervalModel>? breakIntervals,
     String? notes,
   }) async {
     try {
@@ -251,6 +280,11 @@ class TimeTrackingRepository {
         '/time-tracking/entries/$id/stop',
         data: {
           'end_time': _normalizeTime(endTime),
+          if (_hasText(endAt)) 'end_at': endAt,
+          if (_hasText(timezone)) 'timezone': timezone,
+          if (breakIntervals != null)
+            'break_intervals':
+                breakIntervals.map((interval) => interval.toJson()).toList(),
           'break_time': breakTime,
           if (_hasText(notes)) 'notes': notes!.trim(),
         },

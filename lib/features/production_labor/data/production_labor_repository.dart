@@ -73,6 +73,7 @@ class ProductionLaborRepository extends SyncQueueAwareRepository {
   }
 
   Future<LaborOutputModel> recordOutput({
+    required int projectId,
     required int workOrderLineId,
     required double quantity,
     required double hours,
@@ -82,6 +83,7 @@ class ProductionLaborRepository extends SyncQueueAwareRepository {
   }) async {
     final payload = <String, dynamic>{
       'idempotency_key': idempotencyKey,
+      'project_id': projectId,
       'work_order_line_id': workOrderLineId,
       'work_date': workDate,
       'quantity': quantity,
@@ -119,6 +121,7 @@ class ProductionLaborRepository extends SyncQueueAwareRepository {
   }
 
   Future<LaborTimesheetModel> createTimesheet({
+    required int projectId,
     required int workOrderId,
     required int workOrderLineId,
     required double hours,
@@ -132,6 +135,7 @@ class ProductionLaborRepository extends SyncQueueAwareRepository {
       final response = await _dio.post(
         '/production-labor/timesheets',
         data: {
+          'project_id': projectId,
           'work_order_id': workOrderId,
           'shift_date': shiftDate,
           'entries': [

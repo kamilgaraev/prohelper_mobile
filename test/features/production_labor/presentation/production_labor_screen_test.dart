@@ -54,6 +54,7 @@ class _RecordingProductionLaborRepository extends ProductionLaborRepository {
 
   @override
   Future<LaborOutputModel> recordOutput({
+    required int projectId,
     required int workOrderLineId,
     required double quantity,
     required double hours,
@@ -88,6 +89,7 @@ class _RecordingProductionLaborRepository extends ProductionLaborRepository {
 
   @override
   Future<LaborTimesheetModel> createTimesheet({
+    required int projectId,
     required int workOrderId,
     required int workOrderLineId,
     required double hours,

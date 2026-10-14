@@ -40,6 +40,7 @@ void main() {
       );
 
       final result = await ProductionLaborRepository(dio).createTimesheet(
+        projectId: 10,
         workOrderId: 42,
         workOrderLineId: 7,
         hours: 7.5,
@@ -53,7 +54,9 @@ void main() {
       expect(requests, hasLength(1));
       expect(requests.single.method, 'POST');
       expect(requests.single.path, '/production-labor/timesheets');
+      expect(requests.single.data['project_id'], 10);
       expect(requests.single.data, {
+        'project_id': 10,
         'work_order_id': 42,
         'shift_date': '2026-09-28',
         'entries': [
@@ -108,6 +111,7 @@ void main() {
 
         await expectLater(
           ProductionLaborRepository(dio).createTimesheet(
+            projectId: 10,
             workOrderId: 42,
             workOrderLineId: 7,
             hours: 7.5,
@@ -174,6 +178,7 @@ void main() {
       );
 
       final result = await ProductionLaborRepository(dio).recordOutput(
+        projectId: 10,
         workOrderLineId: 7,
         quantity: 2,
         hours: 4,
@@ -191,6 +196,7 @@ void main() {
       );
       expect(requests.single.data, {
         'idempotency_key': 'stable-output-contract-key-601',
+        'project_id': 10,
         'work_order_line_id': 7,
         'work_date': '2026-09-28',
         'quantity': 2,
@@ -284,6 +290,7 @@ void main() {
 
       await expectLater(
         repository.recordOutput(
+          projectId: 10,
           workOrderLineId: 7,
           quantity: 2,
           hours: 4,
@@ -298,6 +305,7 @@ void main() {
       expect(idempotencyKey, isA<String>());
       expect(queued.payload, {
         'idempotency_key': idempotencyKey,
+        'project_id': 10,
         'work_order_line_id': 7,
         'work_date': '2026-09-27',
         'quantity': 2,

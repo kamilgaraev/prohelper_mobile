@@ -43,6 +43,7 @@ import 'package:prohelpers_mobile/features/warehouse/presentation/warehouse_scre
 import 'package:prohelpers_mobile/features/video_monitoring/presentation/video_monitoring_screen.dart';
 import 'package:prohelpers_mobile/features/workflow_management/presentation/workflow_management_screen.dart';
 import 'package:prohelpers_mobile/features/workforce/presentation/workforce_attendance_screen.dart';
+import 'package:prohelpers_mobile/features/workforce/presentation/employee_workspace_screen.dart';
 
 import 'mobile_destination.dart';
 
@@ -201,6 +202,20 @@ class MobileNavigationRegistry {
       preferredContexts: <UserContext>{UserContext.field},
       builder: (_) => const ProductionLaborScreen(),
       aliases: <String>['production-labor'],
+    ),
+    MobileModuleDestination(
+      route: 'workforce_self_service',
+      adminGroup: MobileAdminGroup.personnel,
+      slug: 'workforce_self_service',
+      title: 'Мои кадровые данные',
+      shortTitle: 'Мои данные',
+      icon: Icons.person_outline_rounded,
+      group: MobileModuleGroup.fieldWork,
+      appModule: AppModule.workforceManagement,
+      viewPermissions: <String>['workforce.self-service.view'],
+      basePriority: 110,
+      recommendedReason: 'Документы, подтверждённое время и заявки',
+      builder: (_) => const EmployeeWorkspaceScreen(),
     ),
     MobileModuleDestination(
       route: 'workforce_management',

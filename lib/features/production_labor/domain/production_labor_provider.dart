@@ -120,6 +120,7 @@ class ProductionLaborNotifier extends StateNotifier<ProductionLaborState> {
     String? comment,
   }) async {
     await _repository.recordOutput(
+      projectId: workOrder.projectId,
       workOrderLineId: line.id,
       quantity: quantity,
       hours: hours,
@@ -141,6 +142,7 @@ class ProductionLaborNotifier extends StateNotifier<ProductionLaborState> {
     String? safetyPermitReference,
   }) async {
     await _repository.createTimesheet(
+      projectId: workOrder.projectId,
       workOrderId: workOrder.id,
       workOrderLineId: line.id,
       hours: hours,

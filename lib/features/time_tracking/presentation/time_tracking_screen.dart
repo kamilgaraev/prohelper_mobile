@@ -15,6 +15,7 @@ import '../../../core/widgets/pro_card.dart';
 import '../../../core/widgets/pro_status_banner.dart';
 import '../../projects/domain/projects_provider.dart';
 import '../data/time_entry_model.dart';
+import '../../workforce/data/employee_workspace_model.dart';
 import '../data/time_tracking_repository.dart';
 import '../domain/time_tracking_provider.dart';
 
@@ -1137,6 +1138,7 @@ class _StartTimerSheetState extends ConsumerState<_StartTimerSheet> {
   var submitting = false;
   String? idempotencyKey;
   String? operationFingerprint;
+  WorkingContractTimezoneModel? selectedWorkingContract;
 
   @override
   void dispose() {
@@ -1165,6 +1167,11 @@ class _StartTimerSheetState extends ConsumerState<_StartTimerSheet> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('Запустить таймер', style: AppTypography.h2(context)),
+            _WorkingTimezoneField(
+              selected: selectedWorkingContract,
+              onChanged:
+                  (value) => setState(() => selectedWorkingContract = value),
+            ),
             const SizedBox(height: 12),
             TextFormField(
               controller: titleController,
@@ -1228,7 +1235,19 @@ class _StartTimerSheetState extends ConsumerState<_StartTimerSheet> {
       return;
     }
 
+    final working = _workingSelection(ref, selectedWorkingContract);
+    if (working.loading || working.ambiguous) {
+      _message(
+        context,
+        working.loading
+            ? 'Дождитесь загрузки рабочего часового пояса.'
+            : 'Выберите трудовой договор.',
+      );
+      return;
+    }
     final fingerprint = [
+      working.timezone,
+      working.contractId,
       startController.text.trim(),
       titleController.text.trim(),
       isBillable,
@@ -1243,6 +1262,8 @@ class _StartTimerSheetState extends ConsumerState<_StartTimerSheet> {
       await ref
           .read(timeTrackingProvider.notifier)
           .startTimer(
+            timezone: working.timezone,
+            employmentContractId: working.contractId,
             startTime: startController.text.trim(),
             title: titleController.text.trim(),
             isBillable: isBillable,
@@ -1275,6 +1296,7 @@ Future<void> _showManualEntrySheet(BuildContext context, WidgetRef ref) async {
   var submitting = false;
   String? idempotencyKey;
   String? operationFingerprint;
+  WorkingContractTimezoneModel? selectedWorkingContract;
 
   await showModalBottomSheet<void>(
     context: context,
@@ -1294,6 +1316,13 @@ Future<void> _showManualEntrySheet(BuildContext context, WidgetRef ref) async {
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      _WorkingTimezoneField(
+                        selected: selectedWorkingContract,
+                        onChanged:
+                            (value) => setSheetState(
+                              () => selectedWorkingContract = value,
+                            ),
+                      ),
                       Text('Ручная запись', style: AppTypography.h2(context)),
                       const SizedBox(height: 12),
                       TextField(
@@ -1373,7 +1402,22 @@ Future<void> _showManualEntrySheet(BuildContext context, WidgetRef ref) async {
                                     return;
                                   }
 
+                                  final working = _workingSelection(
+                                    ref,
+                                    selectedWorkingContract,
+                                  );
+                                  if (working.loading || working.ambiguous) {
+                                    _message(
+                                      context,
+                                      working.loading
+                                          ? 'Дождитесь загрузки рабочего часового пояса.'
+                                          : 'Выберите трудовой договор.',
+                                    );
+                                    return;
+                                  }
                                   final fingerprint = [
+                                    working.timezone,
+                                    working.contractId,
                                     titleController.text.trim(),
                                     hours,
                                     isBillable,
@@ -1392,6 +1436,9 @@ Future<void> _showManualEntrySheet(BuildContext context, WidgetRef ref) async {
                                     await ref
                                         .read(timeTrackingProvider.notifier)
                                         .createManualEntry(
+                                          timezone: working.timezone,
+                                          employmentContractId:
+                                              working.contractId,
                                           hoursWorked: hours,
                                           title: titleController.text,
                                           isBillable: isBillable,
@@ -1708,4 +1755,119 @@ void _message(BuildContext context, String message) {
 
 void _errorMessage(BuildContext context, Object error) {
   AppErrorNotice.show(context, error);
+}
+
+class _WorkingSelection {
+  const _WorkingSelection({
+    this.timezone,
+    this.contractId,
+    this.loading = false,
+    this.ambiguous = false,
+  });
+  final String? timezone;
+  final int? contractId;
+  final bool loading;
+  final bool ambiguous;
+}
+
+_WorkingSelection _workingSelection(
+  WidgetRef ref,
+  WorkingContractTimezoneModel? selected,
+) {
+  final date = ref.read(timeTrackingProvider).date;
+  if (date == null) {
+    return const _WorkingSelection();
+  }
+  final value = ref.read(workingTimezonesProvider(date));
+  if (value.isLoading) {
+    return const _WorkingSelection(loading: true);
+  }
+  final profile = value.asData?.value;
+  if (profile == null) {
+    return const _WorkingSelection();
+  }
+  final matches = profile.workingTimezones.where(
+    (choice) => choice.contractId == selected?.contractId,
+  );
+  final choice =
+      matches.isNotEmpty
+          ? matches.first
+          : profile.workingTimezones.length == 1
+          ? profile.workingTimezones.single
+          : null;
+  return _WorkingSelection(
+    timezone: choice?.timezone ?? profile.workingTimezone,
+    contractId: choice?.contractId ?? profile.workingContractId,
+    ambiguous: profile.workingTimezones.length > 1 && choice == null,
+  );
+}
+
+class _WorkingTimezoneField extends ConsumerWidget {
+  const _WorkingTimezoneField({
+    required this.selected,
+    required this.onChanged,
+  });
+  final WorkingContractTimezoneModel? selected;
+  final ValueChanged<WorkingContractTimezoneModel?> onChanged;
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final date = ref.watch(timeTrackingProvider.select((state) => state.date));
+    if (date == null) {
+      return const SizedBox.shrink();
+    }
+    return ref
+        .watch(workingTimezonesProvider(date))
+        .when(
+          loading:
+              () => const Padding(
+                padding: EdgeInsets.symmetric(vertical: 8),
+                child: Text('Загружаем рабочий часовой пояс…'),
+              ),
+          error: (_, _) => const SizedBox.shrink(),
+          data: (profile) {
+            if (profile == null) {
+              return const SizedBox.shrink();
+            }
+            final choices = profile.workingTimezones;
+            if (choices.length <= 1) {
+              return Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Text(
+                  'Рабочий часовой пояс: ${choices.isEmpty ? profile.workingTimezone ?? 'не определён' : choices.single.timezone}',
+                ),
+              );
+            }
+            final matches = choices.where(
+              (choice) => choice.contractId == selected?.contractId,
+            );
+            return DropdownButtonFormField<int>(
+              key: ValueKey(selected?.contractId),
+              initialValue: matches.isEmpty ? null : matches.first.contractId,
+              isExpanded: true,
+              decoration: const InputDecoration(
+                labelText: 'Трудовой договор и рабочий часовой пояс',
+              ),
+              items:
+                  choices
+                      .map(
+                        (choice) => DropdownMenuItem(
+                          value: choice.contractId,
+                          child: Text(
+                            '№${choice.contractNumber ?? choice.contractId} — ${choice.timezone}',
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      )
+                      .toList(),
+              validator:
+                  (value) =>
+                      value == null ? 'Выберите трудовой договор.' : null,
+              onChanged:
+                  (id) => onChanged(
+                    choices.firstWhere((choice) => choice.contractId == id),
+                  ),
+            );
+          },
+        );
+  }
 }

@@ -1,7 +1,28 @@
-﻿import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_test/flutter_test.dart';
 import 'package:prohelpers_mobile/features/time_tracking/data/time_entry_model.dart';
 
 void main() {
+  test('parses canonical interval fields alongside legacy time fields', () {
+    final entry = TimeEntryModel.fromJson({
+      ..._entryJson(),
+      'start_at': '2026-10-14T22:00:00+03:00',
+      'end_at': '2026-10-15T06:00:00+03:00',
+      'timezone': 'Europe/Moscow',
+      'net_minutes': 450,
+      'requires_reconciliation': false,
+      'break_intervals': [
+        {
+          'start_at': '2026-10-15T02:00:00+03:00',
+          'end_at': '2026-10-15T02:30:00+03:00',
+        },
+      ],
+    });
+    expect(entry.netMinutes, 450);
+    expect(entry.timezone, 'Europe/Moscow');
+    expect(entry.breakIntervals.single.endAt, '2026-10-15T02:30:00+03:00');
+    expect(entry.requiresReconciliation, isFalse);
+  });
+
   test('parses daily summary with active timer and approval status', () {
     final summary = DailyTimeSummaryModel.fromJson({
       'date': '2026-05-22',
