@@ -475,6 +475,7 @@ class _FieldProductionLaborRepository extends ProductionLaborRepository {
 
   @override
   Future<LaborOutputModel> recordOutput({
+    required int projectId,
     required int workOrderLineId,
     required double quantity,
     required double hours,
