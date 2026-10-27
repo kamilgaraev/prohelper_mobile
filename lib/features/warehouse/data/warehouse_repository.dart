@@ -342,6 +342,7 @@ class WarehouseRepository extends SyncQueueAwareRepository {
     required int deliveryId,
     required double quantity,
     String? notes,
+    int? projectWarehouseId,
   }) async {
     final endpoint =
         '/warehouse/project-material-deliveries/$deliveryId/receive';
@@ -350,6 +351,8 @@ class WarehouseRepository extends SyncQueueAwareRepository {
       'idempotency_key': idempotencyKey,
       'quantity': quantity,
       if ((notes ?? '').trim().isNotEmpty) 'notes': notes!.trim(),
+      if (projectWarehouseId != null)
+        'project_warehouse_id': projectWarehouseId,
     };
     final response = await executeOrQueue(
       request:

@@ -75,6 +75,7 @@ class ProjectMaterialDeliveryModel {
     this.purchaseOrderId,
     this.outboundMovementId,
     this.inboundMovementId,
+    this.projectWarehouseOptions = const [],
     this.events = const [],
   });
 
@@ -111,7 +112,10 @@ class ProjectMaterialDeliveryModel {
   final int? outboundMovementId;
   final int? inboundMovementId;
   final bool canReceive;
+  final List<ProjectWarehouseOptionModel> projectWarehouseOptions;
   final List<ProjectMaterialDeliveryEventModel> events;
+
+  bool get requiresProjectWarehouseChoice => projectWarehouseOptions.length > 1;
 
   factory ProjectMaterialDeliveryModel.fromJson(Map<String, dynamic> json) {
     final project = json['project'];
@@ -125,6 +129,7 @@ class ProjectMaterialDeliveryModel {
     final responsibleUser = json['responsible_user'];
     final linkedEntities = json['linked_entities'];
     final rawEvents = json['events'];
+    final rawProjectWarehouseOptions = json['project_warehouse_options'];
     final int? projectWarehouseId;
 
     if (projectWarehouse is Map) {
@@ -201,6 +206,14 @@ class ProjectMaterialDeliveryModel {
               ? _asNullableInt(linkedEntities['inbound_movement_id'])
               : null,
       canReceive: _requiredBool(json, 'can_receive'),
+      projectWarehouseOptions:
+          rawProjectWarehouseOptions is List
+              ? rawProjectWarehouseOptions
+                  .whereType<Map>()
+                  .map(ProjectWarehouseOptionModel.tryFromJson)
+                  .whereType<ProjectWarehouseOptionModel>()
+                  .toList(growable: false)
+              : const <ProjectWarehouseOptionModel>[],
       events:
           rawEvents is List
               ? rawEvents
@@ -213,6 +226,23 @@ class ProjectMaterialDeliveryModel {
                   .toList(growable: false)
               : const <ProjectMaterialDeliveryEventModel>[],
     );
+  }
+}
+
+class ProjectWarehouseOptionModel {
+  const ProjectWarehouseOptionModel({required this.id, required this.name});
+
+  final int id;
+  final String name;
+
+  static ProjectWarehouseOptionModel? tryFromJson(Map<dynamic, dynamic> json) {
+    final id = _asNullableInt(json['id']);
+    final name = json['name']?.toString().trim();
+    if (id == null || name == null || name.isEmpty) {
+      return null;
+    }
+
+    return ProjectWarehouseOptionModel(id: id, name: name);
   }
 }
 
