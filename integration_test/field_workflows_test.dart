@@ -229,6 +229,7 @@ class _FieldWarehouseRepository extends WarehouseRepository {
     required int deliveryId,
     required double quantity,
     String? notes,
+    int? projectWarehouseId,
   }) async {
     receivedDeliveryId = deliveryId;
     receivedQuantity = quantity;
