@@ -4,12 +4,10 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import '../../../core/error/user_message.dart';
 import '../../../core/providers/module_provider.dart';
 import '../../../core/services/permission_service.dart';
-import '../../../core/sync/sync_queue_service.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../core/utils/quantity_format.dart';
 import '../../../core/widgets/app_empty_state.dart';
-import '../../../core/widgets/app_error_notice.dart';
 import '../../../core/widgets/industrial_card.dart';
 import '../../auth/domain/auth_provider.dart';
 import '../../construction_journal/presentation/construction_journal_screen.dart';
@@ -18,6 +16,7 @@ import '../data/project_material_delivery_model.dart';
 import '../data/warehouse_custody_model.dart';
 import '../data/warehouse_repository.dart';
 import '../domain/warehouse_provider.dart';
+import 'project_material_delivery_receive_sheet.dart';
 import 'warehouse_issue_sheet.dart';
 import 'warehouse_return_sheet.dart';
 
@@ -270,109 +269,16 @@ class _WarehouseCustodyScreenState
   }
 
   Future<void> _showReceiveSheet(ProjectMaterialDeliveryModel delivery) async {
-    final quantityController = TextEditingController(
-      text: _formatQuantity(delivery.remainingToAccept),
-    );
-    final notesController = TextEditingController();
-
     final received = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
       builder:
-          (sheetContext) => Padding(
-            padding: EdgeInsets.fromLTRB(
-              16,
-              12,
-              16,
-              16 + MediaQuery.of(sheetContext).viewInsets.bottom,
-            ),
-            child: ListView(
-              shrinkWrap: true,
-              children: [
-                Text('Принять на объект', style: AppTypography.h2(context)),
-                const SizedBox(height: 8),
-                Text(delivery.materialName ?? 'Материал не указан'),
-                const SizedBox(height: 12),
-                Text(
-                  'Осталось принять: ${_formatQuantity(delivery.remainingToAccept)} ${delivery.materialUnit ?? ''}',
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: quantityController,
-                  keyboardType: const TextInputType.numberWithOptions(
-                    decimal: true,
-                  ),
-                  decoration: const InputDecoration(
-                    labelText: 'Количество',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: notesController,
-                  minLines: 2,
-                  maxLines: 4,
-                  decoration: const InputDecoration(
-                    labelText: 'Комментарий',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                FilledButton.icon(
-                  onPressed: () async {
-                    final quantity = double.tryParse(
-                      quantityController.text.trim().replaceAll(',', '.'),
-                    );
-
-                    if (quantity == null ||
-                        quantity <= 0 ||
-                        quantity > delivery.remainingToAccept) {
-                      ScaffoldMessenger.of(sheetContext).showSnackBar(
-                        const SnackBar(
-                          content: Text(
-                            'Количество должно быть больше нуля и не больше остатка к приемке.',
-                          ),
-                        ),
-                      );
-                      return;
-                    }
-
-                    try {
-                      await ref
-                          .read(warehouseRepositoryProvider)
-                          .receiveProjectMaterialDelivery(
-                            deliveryId: delivery.id,
-                            quantity: quantity,
-                            notes: notesController.text,
-                          );
-
-                      if (sheetContext.mounted) {
-                        Navigator.of(sheetContext).pop(true);
-                      }
-                    } on SyncQueuedException catch (error) {
-                      if (sheetContext.mounted) {
-                        ScaffoldMessenger.of(
-                          sheetContext,
-                        ).showSnackBar(SnackBar(content: Text(error.message)));
-                        Navigator.of(sheetContext).pop(false);
-                      }
-                    } catch (error) {
-                      if (sheetContext.mounted) {
-                        AppErrorNotice.show(sheetContext, error);
-                      }
-                    }
-                  },
-                  icon: const Icon(Icons.check_circle_outline),
-                  label: const Text('Принять на объект'),
-                ),
-              ],
-            ),
+          (_) => ProjectMaterialDeliveryReceiveSheet(
+            delivery: delivery,
+            initialQuantity: _formatQuantity(delivery.remainingToAccept),
           ),
     );
-
-    quantityController.dispose();
-    notesController.dispose();
 
     if (received == true && mounted) {
       await _refresh();
