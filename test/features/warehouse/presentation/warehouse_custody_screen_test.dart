@@ -398,6 +398,124 @@ void main() {
     expect(find.textContaining('payload'), findsNothing);
     expect(notifier.returnedQuantity, 3);
   });
+
+  testWidgets(
+    'receive sheet with project warehouse choice fits a small screen with keyboard',
+    (tester) async {
+      tester.view.physicalSize = const Size(360, 560);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final repository = _ProjectWarehouseChoiceRepository();
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            warehouseRepositoryProvider.overrideWithValue(repository),
+          ],
+          child: MaterialApp(
+            builder:
+                (context, child) => MediaQuery(
+                  data: MediaQuery.of(
+                    context,
+                  ).copyWith(textScaler: const TextScaler.linear(1.5)),
+                  child: child!,
+                ),
+            home: const ProjectMaterialDeliveriesScreen(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final openReceive = find.text('Принять на объект');
+      await tester.scrollUntilVisible(
+        openReceive,
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.ensureVisible(openReceive);
+      await tester.pumpAndSettle();
+      await tester.tap(openReceive);
+      await tester.pumpAndSettle();
+      tester.view.viewInsets = const FakeViewPadding(bottom: 260);
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      await tester.tap(find.byKey(const ValueKey('project-warehouse-select')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Склад аудита').last);
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).first, '4');
+      final confirm =
+          find.widgetWithText(FilledButton, 'Принять на объект').last;
+      await tester.ensureVisible(confirm);
+      await tester.pumpAndSettle();
+      await tester.tap(confirm);
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(repository.receivedQuantity, 4);
+      expect(repository.receivedProjectWarehouseId, 23);
+    },
+  );
+}
+
+class _ProjectWarehouseChoiceRepository extends WarehouseRepository {
+  _ProjectWarehouseChoiceRepository() : super(Dio());
+
+  double? receivedQuantity;
+  int? receivedProjectWarehouseId;
+
+  static const _choiceDelivery = ProjectMaterialDeliveryModel(
+    id: 702,
+    status: 'in_transit',
+    statusLabel: 'В пути',
+    requestedQuantity: 12,
+    reservedQuantity: 12,
+    shippedQuantity: 12,
+    acceptedQuantity: 0,
+    usedQuantity: 0,
+    availableQuantity: 0,
+    remainingToShip: 0,
+    remainingToAccept: 12,
+    canReceive: true,
+    projectId: 10,
+    projectName: 'Дом 300м',
+    materialId: 42,
+    materialName: 'Цемент М500',
+    materialUnit: 'меш.',
+    projectWarehouseId: 22,
+    projectWarehouseOptions: [
+      ProjectWarehouseOptionModel(id: 22, name: 'Склад отделки'),
+      ProjectWarehouseOptionModel(id: 23, name: 'Склад аудита'),
+    ],
+  );
+
+  @override
+  Future<List<ProjectMaterialDeliveryModel>> fetchProjectMaterialDeliveries({
+    int? projectId,
+  }) async {
+    return const <ProjectMaterialDeliveryModel>[_choiceDelivery];
+  }
+
+  @override
+  Future<ProjectMaterialStockModel> fetchProjectMaterialStock({
+    int? projectId,
+  }) async {
+    return _projectStock;
+  }
+
+  @override
+  Future<ProjectMaterialDeliveryModel> receiveProjectMaterialDelivery({
+    required int deliveryId,
+    required double quantity,
+    String? notes,
+    int? projectWarehouseId,
+  }) async {
+    receivedQuantity = quantity;
+    receivedProjectWarehouseId = projectWarehouseId;
+
+    return _choiceDelivery;
+  }
 }
 
 Future<void> _pumpCustodyScreen(

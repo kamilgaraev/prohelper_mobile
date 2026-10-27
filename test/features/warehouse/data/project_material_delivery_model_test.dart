@@ -26,6 +26,11 @@ void main() {
       },
       'warehouse': {'id': 3, 'name': 'Основной склад'},
       'project_warehouse': {'id': 22, 'name': 'Склад объекта'},
+      'project_warehouse_options': [
+        {'id': 22, 'name': 'Склад объекта'},
+        {'id': 23, 'name': 'Склад отделки'},
+        {'id': null, 'name': 'Битая запись'},
+      ],
       'responsible_user': {'id': 7, 'name': 'Иван Прораб'},
       'linked_entities': {
         'site_request_id': 100,
@@ -55,6 +60,8 @@ void main() {
     expect(delivery.remainingToAccept, 6);
     expect(delivery.events.single.userName, 'Иван Петров');
     expect(delivery.projectWarehouseId, 22);
+    expect(delivery.projectWarehouseOptions.map((item) => item.id), [22, 23]);
+    expect(delivery.requiresProjectWarehouseChoice, isTrue);
     expect(delivery.outboundMovementId, 101);
     expect(delivery.inboundMovementId, 102);
     expect(delivery.responsibleUser?.id, 7);
