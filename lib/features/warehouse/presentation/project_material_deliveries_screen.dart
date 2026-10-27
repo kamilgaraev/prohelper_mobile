@@ -141,6 +141,8 @@ class _ProjectMaterialDeliveriesScreenState
             )
             ? delivery.projectWarehouseId
             : null;
+    final projectWarehouseLocked =
+        delivery.acceptedQuantity > 0 && selectedProjectWarehouseId != null;
 
     final received = await showModalBottomSheet<bool>(
       context: context,
@@ -185,12 +187,14 @@ class _ProjectMaterialDeliveriesScreenState
                           key: const ValueKey('project-warehouse-select'),
                           initialValue: selectedProjectWarehouseId,
                           isExpanded: true,
-                          decoration: const InputDecoration(
+                          decoration: InputDecoration(
                             labelText: 'Склад объекта',
                             helperText:
-                                'Склад подставлен из отгрузки. Измените, если материал приняли на другой склад.',
+                                projectWarehouseLocked
+                                    ? 'Часть поставки уже принята на этот склад. Остаток принимается туда же.'
+                                    : 'Склад подставлен из отгрузки. Измените, если материал приняли на другой склад.',
                             helperMaxLines: 2,
-                            border: OutlineInputBorder(),
+                            border: const OutlineInputBorder(),
                           ),
                           items: [
                             for (final warehouse in warehouseOptions)
@@ -203,9 +207,11 @@ class _ProjectMaterialDeliveriesScreenState
                               ),
                           ],
                           onChanged:
-                              (value) => setSheetState(
-                                () => selectedProjectWarehouseId = value,
-                              ),
+                              projectWarehouseLocked
+                                  ? null
+                                  : (value) => setSheetState(
+                                    () => selectedProjectWarehouseId = value,
+                                  ),
                         ),
                       ],
                       const SizedBox(height: 16),
