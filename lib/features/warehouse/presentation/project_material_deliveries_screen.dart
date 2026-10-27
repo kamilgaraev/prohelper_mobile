@@ -132,187 +132,12 @@ class _ProjectMaterialDeliveriesScreenState
   }
 
   Future<void> _showReceiveSheet(ProjectMaterialDeliveryModel delivery) async {
-    final quantityController = TextEditingController();
-    final notesController = TextEditingController();
-    final warehouseOptions = delivery.projectWarehouseOptions;
-    int? selectedProjectWarehouseId =
-        warehouseOptions.any(
-              (warehouse) => warehouse.id == delivery.projectWarehouseId,
-            )
-            ? delivery.projectWarehouseId
-            : null;
-    final projectWarehouseLocked =
-        delivery.acceptedQuantity > 0 && selectedProjectWarehouseId != null;
-
     final received = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
-      builder:
-          (sheetContext) => StatefulBuilder(
-            builder:
-                (sheetContext, setSheetState) => Padding(
-                  padding: EdgeInsets.fromLTRB(
-                    16,
-                    16,
-                    16,
-                    16 + MediaQuery.of(sheetContext).viewInsets.bottom,
-                  ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Принять на объект',
-                        style: AppTypography.h2(context),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        delivery.materialName!,
-                        style: AppTypography.bodyLarge(context),
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        'Отгружено: ${_formatQuantity(delivery.shippedQuantity)} ${delivery.materialUnit ?? ''}',
-                      ),
-                      Text(
-                        'Уже принято: ${_formatQuantity(delivery.acceptedQuantity)} ${delivery.materialUnit ?? ''}',
-                      ),
-                      Text(
-                        'Осталось принять: ${_formatQuantity(delivery.remainingToAccept)} ${delivery.materialUnit ?? ''}',
-                      ),
-                      if (delivery.requiresProjectWarehouseChoice) ...[
-                        const SizedBox(height: 16),
-                        DropdownButtonFormField<int>(
-                          key: const ValueKey('project-warehouse-select'),
-                          initialValue: selectedProjectWarehouseId,
-                          isExpanded: true,
-                          decoration: InputDecoration(
-                            labelText: 'Склад объекта',
-                            helperText:
-                                projectWarehouseLocked
-                                    ? 'Часть поставки уже принята на этот склад. Остаток принимается туда же.'
-                                    : 'Склад подставлен из отгрузки. Измените, если материал приняли на другой склад.',
-                            helperMaxLines: 2,
-                            border: const OutlineInputBorder(),
-                          ),
-                          items: [
-                            for (final warehouse in warehouseOptions)
-                              DropdownMenuItem<int>(
-                                value: warehouse.id,
-                                child: Text(
-                                  warehouse.name,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                          ],
-                          onChanged:
-                              projectWarehouseLocked
-                                  ? null
-                                  : (value) => setSheetState(
-                                    () => selectedProjectWarehouseId = value,
-                                  ),
-                        ),
-                      ],
-                      const SizedBox(height: 16),
-                      TextField(
-                        controller: quantityController,
-                        keyboardType: const TextInputType.numberWithOptions(
-                          decimal: true,
-                        ),
-                        decoration: InputDecoration(
-                          labelText: 'Количество',
-                          helperText:
-                              'К приемке: ${_formatQuantity(delivery.remainingToAccept)} ${delivery.materialUnit ?? ''}',
-                          border: const OutlineInputBorder(),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      TextField(
-                        controller: notesController,
-                        minLines: 1,
-                        maxLines: 3,
-                        decoration: const InputDecoration(
-                          labelText: 'Комментарий',
-                          border: OutlineInputBorder(),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      SizedBox(
-                        width: double.infinity,
-                        child: FilledButton.icon(
-                          onPressed: () async {
-                            final quantity = double.tryParse(
-                              quantityController.text.trim().replaceAll(
-                                ',',
-                                '.',
-                              ),
-                            );
-                            if (quantity == null ||
-                                quantity <= 0 ||
-                                quantity > delivery.remainingToAccept) {
-                              ScaffoldMessenger.of(sheetContext).showSnackBar(
-                                const SnackBar(
-                                  content: Text(
-                                    'Количество должно быть больше нуля и не больше остатка к приемке.',
-                                  ),
-                                ),
-                              );
-                              return;
-                            }
-                            if (delivery.requiresProjectWarehouseChoice &&
-                                selectedProjectWarehouseId == null) {
-                              ScaffoldMessenger.of(sheetContext).showSnackBar(
-                                const SnackBar(
-                                  content: Text(
-                                    'Выберите склад объекта, на который принимается материал.',
-                                  ),
-                                ),
-                              );
-                              return;
-                            }
-
-                            try {
-                              await ref
-                                  .read(warehouseRepositoryProvider)
-                                  .receiveProjectMaterialDelivery(
-                                    deliveryId: delivery.id,
-                                    quantity: quantity,
-                                    notes: notesController.text,
-                                    projectWarehouseId:
-                                        delivery.requiresProjectWarehouseChoice
-                                            ? selectedProjectWarehouseId
-                                            : null,
-                                  );
-
-                              if (sheetContext.mounted) {
-                                Navigator.of(sheetContext).pop(true);
-                              }
-                            } on SyncQueuedException catch (error) {
-                              if (sheetContext.mounted) {
-                                ScaffoldMessenger.of(sheetContext).showSnackBar(
-                                  SnackBar(content: Text(error.message)),
-                                );
-                                Navigator.of(sheetContext).pop(false);
-                              }
-                            } catch (error) {
-                              if (sheetContext.mounted) {
-                                AppErrorNotice.show(sheetContext, error);
-                              }
-                            }
-                          },
-                          icon: const Icon(Icons.check_circle_outline),
-                          label: const Text('Принять на объект'),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-          ),
+      builder: (_) => _ReceiveDeliverySheet(delivery: delivery),
     );
-
-    quantityController.dispose();
-    notesController.dispose();
 
     if (received == true && mounted) {
       await _refresh();
@@ -322,6 +147,198 @@ class _ProjectMaterialDeliveriesScreenState
         );
       }
     }
+  }
+}
+
+class _ReceiveDeliverySheet extends ConsumerStatefulWidget {
+  const _ReceiveDeliverySheet({required this.delivery});
+
+  final ProjectMaterialDeliveryModel delivery;
+
+  @override
+  ConsumerState<_ReceiveDeliverySheet> createState() =>
+      _ReceiveDeliverySheetState();
+}
+
+class _ReceiveDeliverySheetState extends ConsumerState<_ReceiveDeliverySheet> {
+  final _quantityController = TextEditingController();
+  final _notesController = TextEditingController();
+  late int? _selectedProjectWarehouseId;
+  late final bool _projectWarehouseLocked;
+
+  ProjectMaterialDeliveryModel get _delivery => widget.delivery;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedProjectWarehouseId =
+        _delivery.projectWarehouseOptions.any(
+              (warehouse) => warehouse.id == _delivery.projectWarehouseId,
+            )
+            ? _delivery.projectWarehouseId
+            : null;
+    _projectWarehouseLocked =
+        _delivery.acceptedQuantity > 0 && _selectedProjectWarehouseId != null;
+  }
+
+  @override
+  void dispose() {
+    _quantityController.dispose();
+    _notesController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    final delivery = _delivery;
+    final quantity = double.tryParse(
+      _quantityController.text.trim().replaceAll(',', '.'),
+    );
+    if (quantity == null ||
+        quantity <= 0 ||
+        quantity > delivery.remainingToAccept) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Количество должно быть больше нуля и не больше остатка к приемке.',
+          ),
+        ),
+      );
+      return;
+    }
+    if (delivery.requiresProjectWarehouseChoice &&
+        _selectedProjectWarehouseId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Выберите склад объекта, на который принимается материал.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    try {
+      await ref
+          .read(warehouseRepositoryProvider)
+          .receiveProjectMaterialDelivery(
+            deliveryId: delivery.id,
+            quantity: quantity,
+            notes: _notesController.text,
+            projectWarehouseId:
+                delivery.requiresProjectWarehouseChoice
+                    ? _selectedProjectWarehouseId
+                    : null,
+          );
+
+      if (mounted) {
+        Navigator.of(context).pop(true);
+      }
+    } on SyncQueuedException catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(error.message)));
+        Navigator.of(context).pop(false);
+      }
+    } catch (error) {
+      if (mounted) {
+        AppErrorNotice.show(context, error);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final delivery = _delivery;
+    final unit = delivery.materialUnit ?? '';
+
+    return SingleChildScrollView(
+      padding: EdgeInsets.fromLTRB(
+        16,
+        16,
+        16,
+        16 + MediaQuery.of(context).viewInsets.bottom,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Принять на объект', style: AppTypography.h2(context)),
+          const SizedBox(height: 8),
+          Text(delivery.materialName!, style: AppTypography.bodyLarge(context)),
+          const SizedBox(height: 12),
+          Text('Отгружено: ${_formatQuantity(delivery.shippedQuantity)} $unit'),
+          Text(
+            'Уже принято: ${_formatQuantity(delivery.acceptedQuantity)} $unit',
+          ),
+          Text(
+            'Осталось принять: ${_formatQuantity(delivery.remainingToAccept)} $unit',
+          ),
+          if (delivery.requiresProjectWarehouseChoice) ...[
+            const SizedBox(height: 16),
+            DropdownButtonFormField<int>(
+              key: const ValueKey('project-warehouse-select'),
+              initialValue: _selectedProjectWarehouseId,
+              isExpanded: true,
+              decoration: InputDecoration(
+                labelText: 'Склад объекта',
+                helperText:
+                    _projectWarehouseLocked
+                        ? 'Часть поставки уже принята на этот склад. Остаток принимается туда же.'
+                        : 'Склад подставлен из отгрузки. Измените, если материал приняли на другой склад.',
+                helperMaxLines: 2,
+                border: const OutlineInputBorder(),
+              ),
+              items: [
+                for (final warehouse in delivery.projectWarehouseOptions)
+                  DropdownMenuItem<int>(
+                    value: warehouse.id,
+                    child: Text(
+                      warehouse.name,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+              ],
+              onChanged:
+                  _projectWarehouseLocked
+                      ? null
+                      : (value) =>
+                          setState(() => _selectedProjectWarehouseId = value),
+            ),
+          ],
+          const SizedBox(height: 16),
+          TextField(
+            controller: _quantityController,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            decoration: InputDecoration(
+              labelText: 'Количество',
+              helperText:
+                  'К приемке: ${_formatQuantity(delivery.remainingToAccept)} $unit',
+              border: const OutlineInputBorder(),
+            ),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _notesController,
+            minLines: 1,
+            maxLines: 3,
+            decoration: const InputDecoration(
+              labelText: 'Комментарий',
+              border: OutlineInputBorder(),
+            ),
+          ),
+          const SizedBox(height: 16),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              onPressed: _submit,
+              icon: const Icon(Icons.check_circle_outline),
+              label: const Text('Принять на объект'),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 
