@@ -15,6 +15,7 @@ import 'package:prohelpers_mobile/features/production_labor/domain/production_la
 import 'package:prohelpers_mobile/features/quality_control/data/quality_control_repository.dart';
 import 'package:prohelpers_mobile/features/quality_control/data/quality_defect_model.dart';
 import 'package:prohelpers_mobile/features/quality_control/domain/quality_control_provider.dart';
+import 'package:prohelpers_mobile/features/quality_control/data/incoming_control_upload.dart';
 import 'package:prohelpers_mobile/features/safety/data/safety_model.dart';
 import 'package:prohelpers_mobile/features/safety/data/safety_repository.dart';
 import 'package:prohelpers_mobile/features/safety/domain/safety_provider.dart';
@@ -230,6 +231,10 @@ class _FieldWarehouseRepository extends WarehouseRepository {
     required double quantity,
     String? notes,
     int? projectWarehouseId,
+    int? projectId,
+    String? operationKey,
+    Map<String, dynamic>? incomingControl,
+    List<IncomingControlUpload> incomingControlFiles = const [],
   }) async {
     receivedDeliveryId = deliveryId;
     receivedQuantity = quantity;
