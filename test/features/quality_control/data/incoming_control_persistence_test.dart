@@ -15,6 +15,92 @@ import '../../../helpers/memory_entity_snapshot_store.dart';
 
 void main() {
   test(
+    'неудачная замена файлов оставляет прежний черновик целым, успешная удаляет прежние файлы',
+    () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'most-draft-atomic-',
+      );
+      addTearDown(() => directory.delete(recursive: true));
+      final original = await File(
+        '${directory.path}/original.pdf',
+      ).writeAsString('original-A');
+      final replacement = await File(
+        '${directory.path}/replacement.pdf',
+      ).writeAsString('replacement-B');
+      final store = IncomingControlDraftStore(
+        snapshots: Future.value(
+          EntitySnapshotService(
+            store: MemoryEntitySnapshotStore(),
+            resolveOwner: () => const EntitySnapshotOwner(userId: 1, orgId: 4),
+          ),
+        ),
+        files: EncryptedLocalFileCache(
+          keyStore: _Keys(),
+          directoryProvider: () async => directory,
+          temporaryDirectoryProvider: () async => directory,
+        ),
+        ownerScope: () => '1:4:session',
+      );
+      IncomingControlUpload upload(String path, String number) =>
+          IncomingControlUpload(
+            path: path,
+            kind: 'quality_document',
+            metadata: {'document_number': number},
+          );
+      Future<List<String>> encryptedPaths() async =>
+          (await directory.list(recursive: true).toList())
+              .whereType<File>()
+              .where((file) => file.path.endsWith('.enc'))
+              .map((file) => file.path)
+              .toList();
+      await store.save(
+        'draft',
+        9,
+        {'label': 'original'},
+        [upload(original.path, 'A')],
+      );
+      final originalEncrypted = (await encryptedPaths()).single;
+      await expectLater(
+        store.save(
+          'draft',
+          9,
+          {'label': 'replacement'},
+          [
+            upload(replacement.path, 'B'),
+            upload('${directory.path}/missing.pdf', 'C'),
+          ],
+        ),
+        throwsA(isA<FileSystemException>()),
+      );
+      final restored = (await store.read('draft', 9))!;
+      expect(restored.state['label'], 'original');
+      expect(restored.files.single.metadata['document_number'], 'A');
+      expect(
+        await File(restored.files.single.path).readAsString(),
+        'original-A',
+      );
+      expect(await encryptedPaths(), [originalEncrypted]);
+      await store.releaseFiles(restored.files);
+      await store.save(
+        'draft',
+        9,
+        {'label': 'replacement'},
+        [upload(replacement.path, 'B')],
+      );
+      expect(await File(originalEncrypted).exists(), false);
+      expect(await encryptedPaths(), hasLength(1));
+      final replaced = (await store.read('draft', 9))!;
+      expect(replaced.state['label'], 'replacement');
+      expect(replaced.files.single.metadata['document_number'], 'B');
+      expect(
+        await File(replaced.files.single.path).readAsString(),
+        'replacement-B',
+      );
+      await store.releaseFiles(replaced.files);
+    },
+  );
+
+  test(
     'WebP фото и точная историческая evidence версия открываются с авторизацией',
     () async {
       final directory = await Directory.systemTemp.createTemp(
@@ -52,7 +138,7 @@ void main() {
       );
       expect(adapter.request!.headers['Authorization'], 'Bearer test-only');
       expect(adapter.request!.headers['Accept'], 'image/webp');
-    expect(adapter.request!.followRedirects, false);
+      expect(adapter.request!.followRedirects, false);
       expect(opened.single, endsWith('.webp'));
       await service.dispose();
       expect(await File(opened.single).exists(), false);

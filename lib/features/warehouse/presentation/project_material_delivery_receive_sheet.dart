@@ -8,6 +8,7 @@ import '../../../core/widgets/app_error_notice.dart';
 import '../data/project_material_delivery_model.dart';
 import '../data/warehouse_repository.dart';
 import '../../quality_control/data/incoming_control_model.dart';
+import '../../quality_control/data/incoming_control_upload.dart';
 import '../../quality_control/domain/incoming_control_provider.dart';
 import '../../quality_control/presentation/incoming_control_fields.dart';
 
@@ -127,6 +128,12 @@ class _ProjectMaterialDeliveryReceiveSheetState
     }
 
     setState(() => _submitting = true);
+    final fileLease =
+        incomingControl == null
+            ? null
+            : _controlKey.currentState!.holdRestoredFiles();
+    final files =
+        _controlKey.currentState?.files ?? const <IncomingControlUpload>[];
     try {
       await ref
           .read(warehouseRepositoryProvider)
@@ -137,10 +144,7 @@ class _ProjectMaterialDeliveryReceiveSheetState
             projectId: delivery.projectId,
             operationKey: _operationKey,
             incomingControl: incomingControl,
-            incomingControlFiles:
-                incomingControl == null
-                    ? const []
-                    : _controlKey.currentState!.files,
+            incomingControlFiles: incomingControl == null ? const [] : files,
             projectWarehouseId:
                 delivery.requiresProjectWarehouseChoice
                     ? _selectedProjectWarehouseId
@@ -164,6 +168,7 @@ class _ProjectMaterialDeliveryReceiveSheetState
         AppErrorNotice.show(context, error);
       }
     } finally {
+      await fileLease?.release();
       if (mounted) setState(() => _submitting = false);
     }
   }

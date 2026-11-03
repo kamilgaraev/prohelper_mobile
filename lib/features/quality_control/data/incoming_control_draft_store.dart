@@ -95,40 +95,49 @@ class IncomingControlDraftStore {
             ? const <Map<String, dynamic>>[]
             : incomingMaps(decodeSnapshotPayload(previous)['files']);
     final manifest = <Map<String, dynamic>>[];
-    for (var index = 0; index < files.length; index++) {
-      final file = files[index];
-      final context = 'incoming-control-draft:$projectId:$id:$index';
-      final path = await _files.stageQueuedAttachment(
-        ownerIdentity: scope,
-        context: context,
-        sourcePath: file.path,
-      );
-      manifest.add({
-        'encrypted_path': path,
-        'context': context,
-        'filename': file.filename,
-        'kind': file.kind,
-        'metadata': file.metadata,
-      });
-    }
-    if (scope != _ownerScope()) throw const SnapshotOwnerChangedException();
-    await snapshots.putSnapshot(
-      cachedEntityFromPayload(
-        type: type,
-        remoteId: id,
-        projectId: projectId,
-        payload: {'owner_scope': scope, 'state': state, 'files': manifest},
-      ),
-      expectedOwner: owner,
-    );
-    for (final previousFile in previousFiles) {
-      if (!manifest.any(
-        (file) => file['encrypted_path'] == previousFile['encrypted_path'],
-      )) {
-        await _files.deleteStagedUpload(
-          previousFile['encrypted_path'].toString(),
+    final generation = newIncomingControlOperationKey();
+    try {
+      for (var index = 0; index < files.length; index++) {
+        final file = files[index];
+        final context =
+            'incoming-control-draft:$projectId:$id:$generation:$index';
+        final path = await _files.stageQueuedAttachment(
+          ownerIdentity: scope,
+          context: context,
+          sourcePath: file.path,
         );
+        manifest.add({
+          'encrypted_path': path,
+          'context': context,
+          'filename': file.filename,
+          'kind': file.kind,
+          'metadata': file.metadata,
+        });
       }
+      if (scope != _ownerScope()) throw const SnapshotOwnerChangedException();
+      await snapshots.putSnapshot(
+        cachedEntityFromPayload(
+          type: type,
+          remoteId: id,
+          projectId: projectId,
+          payload: {'owner_scope': scope, 'state': state, 'files': manifest},
+        ),
+        expectedOwner: owner,
+      );
+    } catch (_) {
+      await releaseFiles([
+        for (final file in manifest)
+          IncomingControlUpload(
+            path: file['encrypted_path'].toString(),
+            kind: file['kind'].toString(),
+          ),
+      ]);
+      rethrow;
+    }
+    for (final previousFile in previousFiles) {
+      await _files.deleteStagedUpload(
+        previousFile['encrypted_path'].toString(),
+      );
     }
   }
 

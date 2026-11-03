@@ -10,6 +10,7 @@ import '../../../core/widgets/app_error_state.dart';
 import '../../../core/widgets/app_loading_state.dart';
 import '../../projects/domain/projects_provider.dart';
 import '../data/incoming_control_model.dart';
+import '../data/incoming_control_draft_store.dart';
 import '../data/incoming_control_repository.dart';
 import '../data/incoming_control_file_service.dart';
 import '../data/quality_photo_picker.dart';
@@ -1087,6 +1088,7 @@ class _IncomingControlEditorState extends ConsumerState<IncomingControlEditor> {
     if (_busy || ref.read(incomingControlOwnerScopeProvider) != _ownerScope) {
       return;
     }
+    IncomingControlRestoredFileLease? fileLease;
     try {
       final values = _fields.currentState!.payload();
       if (widget.revise &&
@@ -1106,6 +1108,8 @@ class _IncomingControlEditorState extends ConsumerState<IncomingControlEditor> {
         );
       }
       setState(() => _busy = true);
+      fileLease = _fields.currentState!.holdRestoredFiles();
+      final files = _fields.currentState!.files;
       final repository = ref.read(incomingControlRepositoryProvider);
       if (widget.record case final record?) {
         if (widget.revise) {
@@ -1113,14 +1117,14 @@ class _IncomingControlEditorState extends ConsumerState<IncomingControlEditor> {
             record,
             values,
             idempotencyKey: _key,
-            files: _fields.currentState!.files,
+            files: files,
           );
         } else {
           await repository.decide(
             record,
             values,
             idempotencyKey: _key,
-            files: _fields.currentState!.files,
+            files: files,
           );
         }
       } else {
@@ -1135,7 +1139,7 @@ class _IncomingControlEditorState extends ConsumerState<IncomingControlEditor> {
             'is_customer_transfer': _source == 'customer_supplied',
           },
           idempotencyKey: _key,
-          files: _fields.currentState!.files,
+          files: files,
         );
       }
       await _fields.currentState?.clearDraft();
@@ -1155,6 +1159,7 @@ class _IncomingControlEditorState extends ConsumerState<IncomingControlEditor> {
     } catch (error) {
       if (mounted) AppErrorNotice.show(context, error);
     } finally {
+      await fileLease?.release();
       if (mounted) setState(() => _busy = false);
     }
   }

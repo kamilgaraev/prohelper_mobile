@@ -12,6 +12,7 @@ import '../data/warehouse_repository.dart';
 import '../data/warehouse_summary_model.dart';
 import '../../projects/domain/projects_provider.dart';
 import '../../quality_control/data/incoming_control_model.dart';
+import '../../quality_control/data/incoming_control_upload.dart';
 import '../../quality_control/domain/incoming_control_provider.dart';
 import '../../quality_control/presentation/incoming_control_fields.dart';
 
@@ -631,6 +632,12 @@ class _WarehouseReceiptSheetState extends ConsumerState<WarehouseReceiptSheet> {
     setState(() {
       _isSubmitting = true;
     });
+    final fileLease =
+        incomingControl == null
+            ? null
+            : _controlKey.currentState!.holdRestoredFiles();
+    final files =
+        _controlKey.currentState?.files ?? const <IncomingControlUpload>[];
 
     try {
       await ref
@@ -647,10 +654,7 @@ class _WarehouseReceiptSheetState extends ConsumerState<WarehouseReceiptSheet> {
               projectId: projectId,
               idempotencyKey: _operationKey,
               incomingControl: incomingControl,
-              incomingControlFiles:
-                  incomingControl == null
-                      ? const []
-                      : _controlKey.currentState!.files,
+              incomingControlFiles: incomingControl == null ? const [] : files,
             ),
           );
 
@@ -673,6 +677,7 @@ class _WarehouseReceiptSheetState extends ConsumerState<WarehouseReceiptSheet> {
         AppErrorNotice.show(context, error);
       }
     } finally {
+      await fileLease?.release();
       if (mounted) {
         setState(() {
           _isSubmitting = false;

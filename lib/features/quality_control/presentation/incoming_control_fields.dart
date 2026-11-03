@@ -181,6 +181,7 @@ class IncomingControlFieldsState extends ConsumerState<IncomingControlFields> {
   bool _savingDraft = false;
   String? _draftNotice;
   final _restoredFiles = <IncomingControlUpload>[];
+  bool _filesDisposed = false;
   IncomingControlDraftStore? _draftStore;
   String? _coverageConfirmedFor;
   String get _batchIdentity =>
@@ -390,6 +391,18 @@ class IncomingControlFieldsState extends ConsumerState<IncomingControlFields> {
     return lease;
   }
 
+  IncomingControlRestoredFileLease? holdRestoredFiles() {
+    final lease = transferRestoredFiles();
+    if (lease == null) return null;
+    return IncomingControlRestoredFileLease(lease.files, (files) async {
+      if (_filesDisposed) {
+        await lease.release();
+      } else {
+        _restoredFiles.addAll(files);
+      }
+    });
+  }
+
   void _holdPresentedQuantity() {
     _controllers['accepted_quantity']!.text = '0';
     _controllers['rejected_quantity']!.text = '0';
@@ -402,6 +415,7 @@ class IncomingControlFieldsState extends ConsumerState<IncomingControlFields> {
 
   @override
   void dispose() {
+    _filesDisposed = true;
     if (_restoredFiles.isNotEmpty && _draftStore != null) {
       unawaited(_draftStore!.releaseFiles(_restoredFiles));
     }
