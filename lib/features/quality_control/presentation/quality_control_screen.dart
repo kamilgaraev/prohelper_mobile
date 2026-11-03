@@ -21,6 +21,7 @@ import '../../projects/domain/projects_provider.dart';
 import '../data/quality_defect_model.dart';
 import '../data/quality_photo_picker.dart';
 import '../domain/quality_control_provider.dart';
+import 'incoming_control_screen.dart';
 
 const int _qualityPhotoLimit = 3;
 
@@ -73,6 +74,16 @@ class _QualityControlScreenState extends ConsumerState<QualityControlScreen> {
           elevation: 0,
           title: const Text('Контроль качества'),
           actions: [
+            IconButton(
+              tooltip: 'Журнал входного контроля',
+              onPressed:
+                  () => Navigator.of(context).push<void>(
+                    MaterialPageRoute(
+                      builder: (_) => const IncomingControlScreen(),
+                    ),
+                  ),
+              icon: const Icon(Icons.inventory_2_outlined),
+            ),
             IconButton(
               tooltip: 'Новое замечание',
               onPressed:

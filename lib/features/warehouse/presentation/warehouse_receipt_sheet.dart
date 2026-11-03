@@ -10,6 +10,11 @@ import '../../../core/widgets/industrial_card.dart';
 import '../data/warehouse_media_picker.dart';
 import '../data/warehouse_repository.dart';
 import '../data/warehouse_summary_model.dart';
+import '../../projects/domain/projects_provider.dart';
+import '../../quality_control/data/incoming_control_model.dart';
+import '../../quality_control/data/incoming_control_upload.dart';
+import '../../quality_control/domain/incoming_control_provider.dart';
+import '../../quality_control/presentation/incoming_control_fields.dart';
 
 class WarehouseReceiptSheet extends ConsumerStatefulWidget {
   const WarehouseReceiptSheet({
@@ -32,6 +37,11 @@ class _WarehouseReceiptSheetState extends ConsumerState<WarehouseReceiptSheet> {
   static const int _maxPhotos = 4;
 
   final _formKey = GlobalKey<FormState>();
+  final _controlKey = GlobalKey<IncomingControlFieldsState>();
+  String _operationKey = newIncomingControlOperationKey();
+  String _controlOperationKey = newIncomingControlOperationKey();
+  late final int? _projectId;
+  late final String? _ownerScope;
   late final TextEditingController _materialController;
   late final TextEditingController _quantityController;
   late final TextEditingController _priceController;
@@ -54,6 +64,8 @@ class _WarehouseReceiptSheetState extends ConsumerState<WarehouseReceiptSheet> {
   @override
   void initState() {
     super.initState();
+    _projectId = ref.read(projectsProvider).selectedProject?.serverId;
+    _ownerScope = ref.read(incomingControlOwnerScopeProvider);
     _materialController = TextEditingController();
     _quantityController = TextEditingController();
     _priceController = TextEditingController();
@@ -90,6 +102,20 @@ class _WarehouseReceiptSheetState extends ConsumerState<WarehouseReceiptSheet> {
   @override
   Widget build(BuildContext context) {
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+    if (ref.watch(incomingControlOwnerScopeProvider) != _ownerScope) {
+      return const Padding(
+        padding: EdgeInsets.all(24),
+        child: Text(
+          'Сеанс изменился. Закройте форму и откройте приёмку заново.',
+        ),
+      );
+    }
+    final projectId = _projectId;
+    final references =
+        projectId == null
+            ? null
+            : ref.watch(incomingControlReceivingReferencesProvider(projectId));
+    final control = references?.valueOrNull;
 
     return FractionallySizedBox(
       heightFactor: 0.95,
@@ -269,21 +295,22 @@ class _WarehouseReceiptSheetState extends ConsumerState<WarehouseReceiptSheet> {
               const SizedBox(height: 12),
               Row(
                 children: [
-                  Expanded(
-                    child: TextFormField(
-                      controller: _quantityController,
-                      focusNode: _quantityFocusNode,
-                      keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true,
+                  if (control?.enabled != true)
+                    Expanded(
+                      child: TextFormField(
+                        controller: _quantityController,
+                        focusNode: _quantityFocusNode,
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
+                        decoration: const InputDecoration(
+                          labelText: 'Количество',
+                          border: OutlineInputBorder(),
+                        ),
+                        validator: _validateQuantity,
                       ),
-                      decoration: const InputDecoration(
-                        labelText: 'Количество',
-                        border: OutlineInputBorder(),
-                      ),
-                      validator: _validateQuantity,
                     ),
-                  ),
-                  const SizedBox(width: 12),
+                  if (control?.enabled != true) const SizedBox(width: 12),
                   Expanded(
                     child: TextFormField(
                       controller: _priceController,
@@ -300,6 +327,76 @@ class _WarehouseReceiptSheetState extends ConsumerState<WarehouseReceiptSheet> {
                   ),
                 ],
               ),
+              if (references?.isLoading == true)
+                const LinearProgressIndicator(),
+              if (references?.hasError == true) ...[
+                const Text(
+                  'Не удалось проверить правила входного контроля. Обновите данные перед приёмкой.',
+                ),
+                TextButton(
+                  onPressed:
+                      () => ref.invalidate(
+                        incomingControlReceivingReferencesProvider(projectId!),
+                      ),
+                  child: const Text('Повторить'),
+                ),
+              ],
+              if (control?.enabled == true)
+                IncomingControlFields(
+                  key: _controlKey,
+                  references: control!,
+                  materialId: _selectedMaterial?.id,
+                  projectId: projectId,
+                  draftId: 'warehouse_receipt:new',
+                  draftContextBuilder:
+                      () => {
+                        'operation_key': _operationKey,
+                        'control_operation_key': _controlOperationKey,
+                        'warehouse_id': _selectedWarehouseId,
+                        'price': _priceController.text,
+                        'document': _documentController.text,
+                        'reason': _reasonController.text,
+                        if (_selectedMaterial != null)
+                          'material': {
+                            'id': _selectedMaterial!.id,
+                            'name': _selectedMaterial!.name,
+                            'default_price': _selectedMaterial!.defaultPrice,
+                            'code': _selectedMaterial!.code,
+                          },
+                      },
+                  onRestoreContext:
+                      (data) => setState(() {
+                        _operationKey =
+                            data['operation_key']?.toString() ?? _operationKey;
+                        _controlOperationKey =
+                            data['control_operation_key']?.toString() ??
+                            _controlOperationKey;
+                        final id = int.tryParse(
+                          data['warehouse_id']?.toString() ?? '',
+                        );
+                        if (widget.summary.warehouses.any(
+                          (warehouse) => warehouse.id == id,
+                        )) {
+                          _selectedWarehouseId = id;
+                        }
+                        final material = incomingMap(data['material']);
+                        if (material.isNotEmpty) {
+                          _selectedMaterial = WarehouseMaterialOption.fromJson(
+                            material,
+                          );
+                          _materialController.text = _selectedMaterial!.name;
+                        }
+                        _priceController.text = data['price']?.toString() ?? '';
+                        _documentController.text =
+                            data['document']?.toString() ?? '';
+                        _reasonController.text =
+                            data['reason']?.toString() ?? '';
+                      }),
+                  quantity: _parseNumber(_quantityController.text) ?? 0,
+                  canComplete: control.can('inspect'),
+                  canAccept: control.can('approve'),
+                  canReject: control.can('reject'),
+                ),
               const SizedBox(height: 12),
               TextField(
                 controller: _documentController,
@@ -391,7 +488,11 @@ class _WarehouseReceiptSheetState extends ConsumerState<WarehouseReceiptSheet> {
               ],
               const SizedBox(height: 20),
               FilledButton.icon(
-                onPressed: _isSubmitting ? null : _submit,
+                onPressed:
+                    _isSubmitting ||
+                            (references != null && !references.hasValue)
+                        ? null
+                        : _submit,
                 icon:
                     _isSubmitting
                         ? const SizedBox(
@@ -488,6 +589,7 @@ class _WarehouseReceiptSheetState extends ConsumerState<WarehouseReceiptSheet> {
   }
 
   Future<void> _submit() async {
+    if (_isSubmitting) return;
     final form = _formKey.currentState;
     if (form == null || !form.validate()) {
       setState(() {
@@ -499,12 +601,43 @@ class _WarehouseReceiptSheetState extends ConsumerState<WarehouseReceiptSheet> {
 
     final warehouseId = _selectedWarehouseId!;
     final material = _selectedMaterial!;
-    final quantity = _parseNumber(_quantityController.text)!;
+    if (ref.read(incomingControlOwnerScopeProvider) != _ownerScope) return;
+    final projectId = _projectId;
+    final references =
+        projectId == null
+            ? null
+            : ref.read(incomingControlReceivingReferencesProvider(projectId));
+    if (references != null && !references.hasValue) {
+      _showMessage('Дождитесь загрузки правил входного контроля.');
+      return;
+    }
+    Map<String, dynamic>? incomingControl;
+    if (references?.valueOrNull?.enabled == true) {
+      try {
+        incomingControl = {
+          ..._controlKey.currentState!.payload(),
+          'idempotency_key': _controlOperationKey,
+        };
+      } on FormatException catch (error) {
+        _showMessage(error.message);
+        return;
+      }
+    }
+    final quantity =
+        incomingControl != null
+            ? incomingQuantity(incomingControl['accepted_quantity'])
+            : _parseNumber(_quantityController.text)!;
     final price = _parseNumber(_priceController.text)!;
 
     setState(() {
       _isSubmitting = true;
     });
+    final fileLease =
+        incomingControl == null
+            ? null
+            : _controlKey.currentState!.holdRestoredFiles();
+    final files =
+        _controlKey.currentState?.files ?? const <IncomingControlUpload>[];
 
     try {
       await ref
@@ -518,15 +651,21 @@ class _WarehouseReceiptSheetState extends ConsumerState<WarehouseReceiptSheet> {
               documentNumber: _documentController.text.trim(),
               reason: _reasonController.text.trim(),
               photos: _photoPaths,
+              projectId: projectId,
+              idempotencyKey: _operationKey,
+              incomingControl: incomingControl,
+              incomingControlFiles: incomingControl == null ? const [] : files,
             ),
           );
 
+      await _controlKey.currentState?.clearDraft();
       if (!mounted) {
         return;
       }
 
       Navigator.of(context).pop(true);
     } on SyncQueuedException catch (error) {
+      await _controlKey.currentState?.clearDraft();
       if (mounted) {
         ScaffoldMessenger.of(
           context,
@@ -538,6 +677,7 @@ class _WarehouseReceiptSheetState extends ConsumerState<WarehouseReceiptSheet> {
         AppErrorNotice.show(context, error);
       }
     } finally {
+      await fileLease?.release();
       if (mounted) {
         setState(() {
           _isSubmitting = false;

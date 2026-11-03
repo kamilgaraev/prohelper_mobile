@@ -15,6 +15,10 @@ import '../../../core/widgets/app_loading_state.dart';
 import '../../../core/widgets/mesh_background.dart';
 import '../../../core/widgets/pro_card.dart';
 import '../../projects/domain/projects_provider.dart';
+import '../../quality_control/data/incoming_control_model.dart';
+import '../../quality_control/data/incoming_control_draft_store.dart';
+import '../../quality_control/domain/incoming_control_provider.dart';
+import '../../quality_control/presentation/incoming_control_fields.dart';
 import '../data/procurement_model.dart';
 import '../domain/procurement_provider.dart';
 import 'purchase_request_form_screen.dart';
@@ -457,13 +461,19 @@ class _ProcurementOrderDetailScreenState
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
                 children: [
                   _PurchaseOrderCard(order: order),
-                  if (order.canReceiveMaterials || order.canComment) ...[
+                  if (order.canReceiveMaterials ||
+                      order.canRecordIncomingControl ||
+                      order.canComment) ...[
                     const SizedBox(height: 12),
                     _OrderActionBar(
                       order: order,
                       onReceive:
-                          order.canReceiveMaterials
-                              ? () => _receiveMaterials(detail)
+                          order.canReceiveMaterials ||
+                                  order.canRecordIncomingControl
+                              ? () => _receiveMaterials(
+                                detail,
+                                recordOnly: !order.canReceiveMaterials,
+                              )
                               : null,
                       onComment:
                           order.canComment ? () => _addComment(order) : null,
@@ -526,14 +536,22 @@ class _ProcurementOrderDetailScreenState
     );
   }
 
-  Future<void> _receiveMaterials(ProcurementOrderDetailModel detail) async {
+  Future<void> _receiveMaterials(
+    ProcurementOrderDetailModel detail, {
+    bool recordOnly = false,
+  }) async {
     final input = await showModalBottomSheet<_ReceiveMaterialsInput>(
       context: context,
       isScrollControlled: true,
-      builder: (_) => _ReceiveMaterialsSheet(detail: detail),
+      builder:
+          (_) => _ReceiveMaterialsSheet(detail: detail, recordOnly: recordOnly),
     );
 
-    if (!mounted || input == null) {
+    if (input == null) {
+      return;
+    }
+    if (!mounted) {
+      await input.releaseFiles();
       return;
     }
 
@@ -546,15 +564,25 @@ class _ProcurementOrderDetailScreenState
             items: input.items,
             receiptDate: input.receiptDate,
             notes: input.notes,
+            operationKey: input.operationKey,
+            projectId: detail.order.purchaseRequest?.projectId,
           );
+
+      await _clearReceivingDrafts(detail, input);
 
       if (!mounted) {
         return;
       }
 
       _reload();
-      _message(context, 'Материалы приняты на склад');
+      _message(
+        context,
+        input.items.every((item) => item.quantityReceived == 0)
+            ? 'Входной контроль сохранён'
+            : 'Материалы приняты на склад',
+      );
     } on SyncQueuedException catch (error) {
+      await _clearReceivingDrafts(detail, input);
       if (!mounted) {
         return;
       }
@@ -565,6 +593,37 @@ class _ProcurementOrderDetailScreenState
       }
 
       AppErrorNotice.showMessage(context, _actionErrorMessage(error));
+    } finally {
+      await input.releaseFiles();
+    }
+  }
+
+  Future<void> _clearReceivingDrafts(
+    ProcurementOrderDetailModel detail,
+    _ReceiveMaterialsInput input,
+  ) async {
+    if (!mounted) {
+      return;
+    }
+    final projectId = detail.order.purchaseRequest?.projectId;
+    if (projectId == null ||
+        input.ownerScope == null ||
+        input.ownerScope != ref.read(incomingControlOwnerScopeProvider)) {
+      return;
+    }
+    for (final item in input.items.where(
+      (item) => item.incomingControl != null,
+    )) {
+      await ref
+          .read(incomingControlDraftStoreProvider)
+          .clear(
+            _purchaseOrderControlDraftId(
+              detail.order.id,
+              item.itemId,
+              recordOnly: input.recordOnly,
+            ),
+            projectId,
+          );
     }
   }
 
@@ -1161,8 +1220,14 @@ class _OrderActionBar extends StatelessWidget {
         if (onReceive != null)
           FilledButton.icon(
             onPressed: onReceive,
-            icon: const Icon(Icons.move_to_inbox_rounded),
-            label: const Text('Принять'),
+            icon: Icon(
+              order.canReceiveMaterials
+                  ? Icons.move_to_inbox_rounded
+                  : Icons.fact_check_outlined,
+            ),
+            label: Text(
+              order.canReceiveMaterials ? 'Принять' : 'Входной контроль',
+            ),
           ),
         if (onComment != null)
           OutlinedButton.icon(
@@ -1288,23 +1353,41 @@ class _CommentCard extends StatelessWidget {
   }
 }
 
-class _ReceiveMaterialsSheet extends StatefulWidget {
-  const _ReceiveMaterialsSheet({required this.detail});
+String _purchaseOrderControlDraftId(
+  int orderId,
+  int itemId, {
+  bool recordOnly = false,
+}) => 'purchase_order:$orderId:$itemId${recordOnly ? ':record_only' : ''}';
+
+class _ReceiveMaterialsSheet extends ConsumerStatefulWidget {
+  const _ReceiveMaterialsSheet({required this.detail, this.recordOnly = false});
 
   final ProcurementOrderDetailModel detail;
+  final bool recordOnly;
 
   @override
-  State<_ReceiveMaterialsSheet> createState() => _ReceiveMaterialsSheetState();
+  ConsumerState<_ReceiveMaterialsSheet> createState() =>
+      _ReceiveMaterialsSheetState();
 }
 
-class _ReceiveMaterialsSheetState extends State<_ReceiveMaterialsSheet> {
+class _ReceiveMaterialsSheetState
+    extends ConsumerState<_ReceiveMaterialsSheet> {
   final _dateController = TextEditingController();
   final _notesController = TextEditingController();
   final _quantityControllers = <int, TextEditingController>{};
   final _priceControllers = <int, TextEditingController>{};
+  final _controlKeys = <int, GlobalKey<IncomingControlFieldsState>>{};
+  final _controlOperationKeys = <int, String>{};
+  final _selectedControlItems = <int>{};
+  String _operationKey = newIncomingControlOperationKey();
+  late final String? _ownerScope;
 
   int? _warehouseId;
   String? _validationMessage;
+  bool _submitted = false;
+  bool _explicitControl = false;
+
+  bool get _useFullReferences => widget.recordOnly || _explicitControl;
 
   List<ProcurementPurchaseOrderItemModel> get _receivableItems {
     return widget.detail.order.items
@@ -1315,11 +1398,19 @@ class _ReceiveMaterialsSheetState extends State<_ReceiveMaterialsSheet> {
   @override
   void initState() {
     super.initState();
+    if (widget.recordOnly) {
+      _dateController.text = DateTime.now().toIso8601String().substring(0, 10);
+    }
 
     for (final item in _receivableItems) {
       _quantityControllers[item.id] = TextEditingController();
-      _priceControllers[item.id] = TextEditingController();
+      _priceControllers[item.id] = TextEditingController(
+        text: widget.recordOnly ? item.unitPrice.toString() : null,
+      );
+      _controlKeys[item.id] = GlobalKey<IncomingControlFieldsState>();
+      _controlOperationKeys[item.id] = newIncomingControlOperationKey();
     }
+    _ownerScope = ref.read(incomingControlOwnerScopeProvider);
   }
 
   @override
@@ -1338,8 +1429,27 @@ class _ReceiveMaterialsSheetState extends State<_ReceiveMaterialsSheet> {
   @override
   Widget build(BuildContext context) {
     final bottom = MediaQuery.viewInsetsOf(context).bottom;
+    if (ref.watch(incomingControlOwnerScopeProvider) != _ownerScope) {
+      return const Padding(
+        padding: EdgeInsets.all(24),
+        child: Text(
+          'Сеанс изменился. Закройте форму и откройте приёмку заново.',
+        ),
+      );
+    }
     final warehouses = widget.detail.warehouses;
     final items = _receivableItems;
+    final projectId = widget.detail.order.purchaseRequest?.projectId;
+    final references =
+        projectId == null
+            ? null
+            : ref.watch(
+              _useFullReferences
+                  ? incomingControlReferencesProvider(projectId)
+                  : incomingControlReceivingReferencesProvider(projectId),
+            );
+    final control = references?.valueOrNull;
+    final useControl = _useFullReferences || control?.enabled == true;
 
     return SingleChildScrollView(
       padding: EdgeInsets.fromLTRB(20, 20, 20, bottom + 20),
@@ -1347,8 +1457,63 @@ class _ReceiveMaterialsSheetState extends State<_ReceiveMaterialsSheet> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Приемка материалов', style: AppTypography.h2(context)),
+          Text(
+            widget.recordOnly
+                ? 'Входной контроль поставки'
+                : 'Приемка материалов',
+            style: AppTypography.h2(context),
+          ),
+          if (widget.recordOnly)
+            const Padding(
+              padding: EdgeInsets.only(top: 8),
+              child: Text(
+                'Материалы не приходуются. Можно зафиксировать отказ или ожидание решения.',
+              ),
+            ),
+          if (_useFullReferences && projectId == null)
+            const Padding(
+              padding: EdgeInsets.only(top: 8),
+              child: Text(
+                'Для входного контроля у заказа должен быть указан объект.',
+              ),
+            ),
           const SizedBox(height: 12),
+          if (references?.isLoading == true) const LinearProgressIndicator(),
+          if (!widget.recordOnly &&
+              widget.detail.order.canRecordIncomingControl)
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Провести входной контроль'),
+              subtitle: Text(
+                control?.enabled == true
+                    ? 'На этом объекте контроль обязателен.'
+                    : 'Проверить партию, документы и состояние при приёмке.',
+              ),
+              value: useControl,
+              onChanged:
+                  control?.enabled == true
+                      ? null
+                      : (value) => setState(() {
+                        _explicitControl = value;
+                        _validationMessage = null;
+                      }),
+            ),
+          if (references?.hasError == true) ...[
+            const Text(
+              'Не удалось проверить правила входного контроля. Обновите данные перед приёмкой.',
+            ),
+            TextButton(
+              onPressed:
+                  () => ref.invalidate(
+                    _useFullReferences
+                        ? incomingControlReferencesProvider(projectId!)
+                        : incomingControlReceivingReferencesProvider(
+                          projectId!,
+                        ),
+                  ),
+              child: const Text('Повторить'),
+            ),
+          ],
           if (warehouses.isEmpty)
             const AppEmptyState(
               icon: Icons.warehouse_outlined,
@@ -1408,6 +1573,93 @@ class _ReceiveMaterialsSheetState extends State<_ReceiveMaterialsSheet> {
                   quantityController: _quantityControllers[item.id]!,
                   priceController: _priceControllers[item.id]!,
                   onChanged: _clearValidation,
+                  showQuantity: !useControl,
+                  showPrice: !widget.recordOnly,
+                  control:
+                      !useControl || control == null
+                          ? null
+                          : Column(
+                            children: [
+                              SwitchListTile(
+                                contentPadding: EdgeInsets.zero,
+                                title: Text(
+                                  widget.recordOnly
+                                      ? 'Зафиксировать контроль по позиции'
+                                      : 'Принять эту позицию',
+                                ),
+                                value: _selectedControlItems.contains(item.id),
+                                onChanged:
+                                    (checked) => setState(() {
+                                      if (checked) {
+                                        _selectedControlItems.add(item.id);
+                                      } else {
+                                        _selectedControlItems.remove(item.id);
+                                      }
+                                    }),
+                              ),
+                              if (_selectedControlItems.contains(item.id))
+                                IncomingControlFields(
+                                  key: _controlKeys[item.id],
+                                  references: control,
+                                  materialId: item.materialId,
+                                  materialResolvedBySource: true,
+                                  projectId: projectId,
+                                  draftId: _purchaseOrderControlDraftId(
+                                    widget.detail.order.id,
+                                    item.id,
+                                    recordOnly: widget.recordOnly,
+                                  ),
+                                  draftContextBuilder:
+                                      () => {
+                                        'operation_key': _operationKey,
+                                        'control_operation_key':
+                                            _controlOperationKeys[item.id],
+                                        'warehouse_id': _warehouseId,
+                                        'receipt_date': _dateController.text,
+                                        'notes': _notesController.text,
+                                        'price':
+                                            _priceControllers[item.id]!.text,
+                                      },
+                                  onRestoreContext:
+                                      (data) => setState(() {
+                                        _operationKey =
+                                            data['operation_key']?.toString() ??
+                                            _operationKey;
+                                        _controlOperationKeys[item.id] =
+                                            data['control_operation_key']
+                                                ?.toString() ??
+                                            _controlOperationKeys[item.id]!;
+                                        final id = int.tryParse(
+                                          data['warehouse_id']?.toString() ??
+                                              '',
+                                        );
+                                        if (warehouses.any(
+                                          (warehouse) => warehouse.id == id,
+                                        )) {
+                                          _warehouseId = id;
+                                        }
+                                        _dateController.text =
+                                            data['receipt_date']?.toString() ??
+                                            '';
+                                        _notesController.text =
+                                            data['notes']?.toString() ?? '';
+                                        _priceControllers[item.id]!.text =
+                                            data['price']?.toString() ?? '';
+                                      }),
+                                  quantity:
+                                      _parseDecimal(
+                                        _quantityControllers[item.id]!.text,
+                                      ) ??
+                                      item.remainingQuantity,
+                                  canComplete: control.can('inspect'),
+                                  canAccept:
+                                      control.can('approve') &&
+                                      !widget.recordOnly &&
+                                      widget.detail.order.canReceiveMaterials,
+                                  canReject: control.can('reject'),
+                                ),
+                            ],
+                          ),
                 ),
               ),
             ),
@@ -1436,9 +1688,17 @@ class _ReceiveMaterialsSheetState extends State<_ReceiveMaterialsSheet> {
             width: double.infinity,
             child: FilledButton.icon(
               onPressed:
-                  warehouses.isEmpty || items.isEmpty ? null : _submitReceive,
+                  (_useFullReferences &&
+                              (projectId == null || control == null)) ||
+                          warehouses.isEmpty ||
+                          items.isEmpty ||
+                          (references != null && !references.hasValue)
+                      ? null
+                      : _submitReceive,
               icon: const Icon(Icons.check_rounded),
-              label: const Text('Принять материалы'),
+              label: Text(
+                widget.recordOnly ? 'Сохранить контроль' : 'Принять материалы',
+              ),
             ),
           ),
         ],
@@ -1457,6 +1717,10 @@ class _ReceiveMaterialsSheetState extends State<_ReceiveMaterialsSheet> {
   }
 
   void _submitReceive() {
+    if (_submitted) {
+      return;
+    }
+    if (ref.read(incomingControlOwnerScopeProvider) != _ownerScope) return;
     final warehouseId = _warehouseId;
     if (warehouseId == null) {
       _setValidation('Выберите склад приемки');
@@ -1470,8 +1734,62 @@ class _ReceiveMaterialsSheetState extends State<_ReceiveMaterialsSheet> {
     }
 
     final items = <ProcurementReceiveItemPayload>[];
+    final projectId = widget.detail.order.purchaseRequest?.projectId;
+    final control =
+        projectId == null
+            ? null
+            : ref
+                .read(
+                  _useFullReferences
+                      ? incomingControlReferencesProvider(projectId)
+                      : incomingControlReceivingReferencesProvider(projectId),
+                )
+                .valueOrNull;
+    if (_useFullReferences && control == null) {
+      _setValidation('Дождитесь загрузки входного контроля объекта.');
+      return;
+    }
 
     for (final item in _receivableItems) {
+      if (_useFullReferences || control?.enabled == true) {
+        if (!_selectedControlItems.contains(item.id)) continue;
+        try {
+          final values = _controlKeys[item.id]!.currentState!.payload();
+          final accepted = incomingQuantity(values['accepted_quantity']);
+          if (widget.recordOnly && accepted != 0) {
+            throw const FormatException(
+              'В этом режиме можно сохранить только отказ или ожидание решения.',
+            );
+          }
+          final presented = incomingQuantity(values['presented_quantity']);
+          if (presented > item.remainingQuantity) {
+            throw const FormatException(
+              'Предъявленное количество не должно превышать остаток по заказу.',
+            );
+          }
+          final price = _parseDecimal(_priceControllers[item.id]!.text);
+          if (price == null || !price.isFinite || price < 0) {
+            throw const FormatException('Укажите цену, не меньшую нуля.');
+          }
+          items.add(
+            ProcurementReceiveItemPayload(
+              itemId: item.id,
+              quantityReceived: accepted,
+              price: price,
+              incomingControl: {
+                ...values,
+                'received_at': receiptDate,
+                'idempotency_key': _controlOperationKeys[item.id],
+              },
+              incomingControlFiles: _controlKeys[item.id]!.currentState!.files,
+            ),
+          );
+        } on FormatException catch (error) {
+          _setValidation(error.message);
+          return;
+        }
+        continue;
+      }
       final quantityText = _quantityControllers[item.id]!.text.trim();
       final priceText = _priceControllers[item.id]!.text.trim();
       final hasQuantity = quantityText.isNotEmpty;
@@ -1518,12 +1836,25 @@ class _ReceiveMaterialsSheetState extends State<_ReceiveMaterialsSheet> {
       return;
     }
 
+    _submitted = true;
+    final leases = <IncomingControlRestoredFileLease>[];
+    for (final item in items) {
+      final lease =
+          _controlKeys[item.itemId]?.currentState?.transferRestoredFiles();
+      if (lease != null) {
+        leases.add(lease);
+      }
+    }
     Navigator.of(context).pop(
       _ReceiveMaterialsInput(
         warehouseId: warehouseId,
         receiptDate: receiptDate,
         items: items,
         notes: _notesController.text.trim(),
+        operationKey: _operationKey,
+        ownerScope: _ownerScope,
+        fileLeases: leases,
+        recordOnly: widget.recordOnly,
       ),
     );
   }
@@ -1541,12 +1872,18 @@ class _ReceiveItemFields extends StatelessWidget {
     required this.quantityController,
     required this.priceController,
     required this.onChanged,
+    this.showQuantity = true,
+    this.showPrice = true,
+    this.control,
   });
 
   final ProcurementPurchaseOrderItemModel item;
   final TextEditingController quantityController;
   final TextEditingController priceController;
   final VoidCallback onChanged;
+  final bool showQuantity;
+  final bool showPrice;
+  final Widget? control;
 
   @override
   Widget build(BuildContext context) {
@@ -1568,46 +1905,50 @@ class _ReceiveItemFields extends StatelessWidget {
             style: AppTypography.caption(context),
           ),
           const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  key: Key('procurement-receive-quantity-${item.id}'),
-                  controller: quantityController,
-                  keyboardType: const TextInputType.numberWithOptions(
-                    decimal: true,
+          if (showQuantity || showPrice)
+            Row(
+              children: [
+                if (showQuantity)
+                  Expanded(
+                    child: TextField(
+                      key: Key('procurement-receive-quantity-${item.id}'),
+                      controller: quantityController,
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      inputFormatters: [
+                        FilteringTextInputFormatter.allow(RegExp(r'[0-9,.]')),
+                      ],
+                      decoration: InputDecoration(
+                        labelText: 'Количество',
+                        suffixText: item.unit,
+                        border: const OutlineInputBorder(),
+                      ),
+                      onChanged: (_) => onChanged(),
+                    ),
                   ),
-                  inputFormatters: [
-                    FilteringTextInputFormatter.allow(RegExp(r'[0-9,.]')),
-                  ],
-                  decoration: InputDecoration(
-                    labelText: 'Количество',
-                    suffixText: item.unit,
-                    border: const OutlineInputBorder(),
+                if (showQuantity && showPrice) const SizedBox(width: 10),
+                if (showPrice)
+                  Expanded(
+                    child: TextField(
+                      key: Key('procurement-receive-price-${item.id}'),
+                      controller: priceController,
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      inputFormatters: [
+                        FilteringTextInputFormatter.allow(RegExp(r'[0-9,.]')),
+                      ],
+                      decoration: const InputDecoration(
+                        labelText: 'Цена',
+                        border: OutlineInputBorder(),
+                      ),
+                      onChanged: (_) => onChanged(),
+                    ),
                   ),
-                  onChanged: (_) => onChanged(),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: TextField(
-                  key: Key('procurement-receive-price-${item.id}'),
-                  controller: priceController,
-                  keyboardType: const TextInputType.numberWithOptions(
-                    decimal: true,
-                  ),
-                  inputFormatters: [
-                    FilteringTextInputFormatter.allow(RegExp(r'[0-9,.]')),
-                  ],
-                  decoration: const InputDecoration(
-                    labelText: 'Цена',
-                    border: OutlineInputBorder(),
-                  ),
-                  onChanged: (_) => onChanged(),
-                ),
-              ),
-            ],
-          ),
+              ],
+            ),
+          if (control != null) control!,
         ],
       ),
     );
@@ -1620,12 +1961,25 @@ class _ReceiveMaterialsInput {
     required this.receiptDate,
     required this.items,
     required this.notes,
+    required this.operationKey,
+    required this.ownerScope,
+    this.fileLeases = const [],
+    this.recordOnly = false,
   });
 
   final int warehouseId;
   final String receiptDate;
   final List<ProcurementReceiveItemPayload> items;
   final String notes;
+  final String operationKey;
+  final String? ownerScope;
+  final List<IncomingControlRestoredFileLease> fileLeases;
+  final bool recordOnly;
+  Future<void> releaseFiles() async {
+    for (final lease in fileLeases) {
+      await lease.release();
+    }
+  }
 }
 
 class _MetricTile extends StatelessWidget {

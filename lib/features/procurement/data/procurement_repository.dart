@@ -11,6 +11,7 @@ import '../../../core/sync/sync_queue_provider.dart';
 import '../../../core/sync/sync_queue_repository.dart';
 import '../../../core/sync/sync_queue_service.dart';
 import 'procurement_model.dart';
+import '../../quality_control/data/incoming_control_upload.dart';
 
 final procurementRepositoryProvider = Provider<ProcurementRepository>((ref) {
   return ProcurementRepository(
@@ -189,6 +190,8 @@ class ProcurementRepository extends SyncQueueAwareRepository {
     required List<ProcurementReceiveItemPayload> items,
     required String receiptDate,
     String? notes,
+    String? operationKey,
+    int? projectId,
   }) async {
     if (warehouseId <= 0) {
       throw ArgumentError.value(warehouseId, 'warehouseId');
@@ -199,7 +202,12 @@ class ProcurementRepository extends SyncQueueAwareRepository {
     }
 
     for (final item in items) {
-      if (item.itemId <= 0 || item.quantityReceived <= 0 || item.price < 0) {
+      if (item.itemId <= 0 ||
+          !item.quantityReceived.isFinite ||
+          item.quantityReceived < 0 ||
+          (item.quantityReceived == 0 && item.incomingControl == null) ||
+          !item.price.isFinite ||
+          item.price < 0) {
         throw ArgumentError.value(items, 'items');
       }
     }
@@ -211,21 +219,37 @@ class ProcurementRepository extends SyncQueueAwareRepository {
 
     final trimmedNotes = notes?.trim();
     final endpoint = '/procurement/purchase-orders/$orderId/receive-materials';
-    final idempotencyKey = _newIdempotencyKey();
+    final idempotencyKey = operationKey ?? _newIdempotencyKey();
+    final scope = (await syncQueueServiceFuture)?.currentScope;
     final payload = <String, dynamic>{
       'warehouse_id': warehouseId,
+      if (projectId != null) 'project_id': projectId,
       'items': items.map((item) => item.toJson()).toList(growable: false),
       'receipt_date': trimmedReceiptDate,
       if (trimmedNotes != null && trimmedNotes.isNotEmpty)
         'notes': trimmedNotes,
       'idempotency_key': idempotencyKey,
     };
-
+    final hasFiles = items.any((item) => item.incomingControlFiles.isNotEmpty);
+    final wirePayload =
+        hasFiles ? flattenIncomingControlFields(payload) : payload;
+    final attachments = <SyncAttachmentRef>[];
+    for (var index = 0; index < items.length; index++) {
+      final files = items[index].incomingControlFiles;
+      for (var fileIndex = 0; fileIndex < files.length; fileIndex++) {
+        final prefix = 'items[$index][incoming_control][files][$fileIndex]';
+        wirePayload.addAll(files[fileIndex].fields(prefix));
+        attachments.add(files[fileIndex].attachment(prefix));
+      }
+    }
     return executeOrQueue(
       request: () async {
         final response = await _dio.post(
           endpoint,
-          data: payload,
+          data:
+              attachments.isEmpty
+                  ? wirePayload
+                  : await incomingControlMultipart(wirePayload, attachments),
           options: Options(headers: {'Idempotency-Key': idempotencyKey}),
         );
 
@@ -238,7 +262,8 @@ class ProcurementRepository extends SyncQueueAwareRepository {
         operationType: 'receive_materials',
         method: 'POST',
         endpoint: endpoint,
-        payload: payload,
+        payload: {...wirePayload, if (scope != null) 'queue_scope': scope},
+        attachments: attachments,
       ),
       businessMessage: 'Не удалось принять материалы.',
     );

@@ -97,6 +97,8 @@ class _RecordingProcurementRepository extends ProcurementRepository {
     required List<ProcurementReceiveItemPayload> items,
     required String receiptDate,
     String? notes,
+    String? operationKey,
+    int? projectId,
   }) async {
     receivedOrderId = orderId;
     receivedWarehouseId = warehouseId;

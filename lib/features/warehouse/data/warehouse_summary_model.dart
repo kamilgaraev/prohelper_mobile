@@ -1,3 +1,5 @@
+import '../../quality_control/data/incoming_control_upload.dart';
+
 class WarehouseSummaryModel {
   const WarehouseSummaryModel({
     required this.summary,
@@ -371,6 +373,9 @@ class WarehouseReceiptPayload {
     this.documentNumber,
     this.reason,
     this.projectId,
+    this.idempotencyKey,
+    this.incomingControl,
+    this.incomingControlFiles = const [],
     this.metadata = const <String, dynamic>{},
   });
 
@@ -382,6 +387,9 @@ class WarehouseReceiptPayload {
   final String? documentNumber;
   final String? reason;
   final int? projectId;
+  final String? idempotencyKey;
+  final Map<String, dynamic>? incomingControl;
+  final List<IncomingControlUpload> incomingControlFiles;
   final Map<String, dynamic> metadata;
 }
 

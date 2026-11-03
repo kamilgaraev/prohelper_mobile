@@ -7,6 +7,10 @@ import '../../../core/utils/quantity_format.dart';
 import '../../../core/widgets/app_error_notice.dart';
 import '../data/project_material_delivery_model.dart';
 import '../data/warehouse_repository.dart';
+import '../../quality_control/data/incoming_control_model.dart';
+import '../../quality_control/data/incoming_control_upload.dart';
+import '../../quality_control/domain/incoming_control_provider.dart';
+import '../../quality_control/presentation/incoming_control_fields.dart';
 
 class ProjectMaterialDeliveryReceiveSheet extends ConsumerStatefulWidget {
   const ProjectMaterialDeliveryReceiveSheet({
@@ -29,6 +33,11 @@ class _ProjectMaterialDeliveryReceiveSheetState
     text: widget.initialQuantity,
   );
   final _notesController = TextEditingController();
+  final _controlKey = GlobalKey<IncomingControlFieldsState>();
+  String _operationKey = newIncomingControlOperationKey();
+  String _controlOperationKey = newIncomingControlOperationKey();
+  bool _submitting = false;
+  late final String? _ownerScope;
   late int? _selectedProjectWarehouseId;
   late final bool _projectWarehouseLocked;
 
@@ -37,6 +46,7 @@ class _ProjectMaterialDeliveryReceiveSheetState
   @override
   void initState() {
     super.initState();
+    _ownerScope = ref.read(incomingControlOwnerScopeProvider);
     _selectedProjectWarehouseId =
         _delivery.projectWarehouseOptions.any(
               (warehouse) => warehouse.id == _delivery.projectWarehouseId,
@@ -55,10 +65,44 @@ class _ProjectMaterialDeliveryReceiveSheetState
   }
 
   Future<void> _submit() async {
+    if (_submitting ||
+        ref.read(incomingControlOwnerScopeProvider) != _ownerScope) {
+      return;
+    }
     final delivery = _delivery;
-    final quantity = double.tryParse(
-      _quantityController.text.trim().replaceAll(',', '.'),
-    );
+    final references =
+        delivery.projectId == null
+            ? null
+            : ref.read(
+              incomingControlReceivingReferencesProvider(delivery.projectId!),
+            );
+    if (references != null && !references.hasValue) {
+      AppErrorNotice.show(
+        context,
+        references.error ?? 'Дождитесь загрузки правил входного контроля.',
+      );
+      return;
+    }
+    Map<String, dynamic>? incomingControl;
+    if (references?.valueOrNull?.enabled == true) {
+      try {
+        incomingControl = {
+          ..._controlKey.currentState!.payload(),
+          'idempotency_key': _controlOperationKey,
+        };
+      } on FormatException catch (error) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(error.message)));
+        return;
+      }
+    }
+    final quantity =
+        incomingControl != null
+            ? incomingQuantity(incomingControl['presented_quantity'])
+            : double.tryParse(
+              _quantityController.text.trim().replaceAll(',', '.'),
+            );
     if (quantity == null ||
         quantity <= 0 ||
         quantity > delivery.remainingToAccept) {
@@ -83,6 +127,13 @@ class _ProjectMaterialDeliveryReceiveSheetState
       return;
     }
 
+    setState(() => _submitting = true);
+    final fileLease =
+        incomingControl == null
+            ? null
+            : _controlKey.currentState!.holdRestoredFiles();
+    final files =
+        _controlKey.currentState?.files ?? const <IncomingControlUpload>[];
     try {
       await ref
           .read(warehouseRepositoryProvider)
@@ -90,16 +141,22 @@ class _ProjectMaterialDeliveryReceiveSheetState
             deliveryId: delivery.id,
             quantity: quantity,
             notes: _notesController.text,
+            projectId: delivery.projectId,
+            operationKey: _operationKey,
+            incomingControl: incomingControl,
+            incomingControlFiles: incomingControl == null ? const [] : files,
             projectWarehouseId:
                 delivery.requiresProjectWarehouseChoice
                     ? _selectedProjectWarehouseId
                     : null,
           );
 
+      await _controlKey.currentState?.clearDraft();
       if (mounted) {
         Navigator.of(context).pop(true);
       }
     } on SyncQueuedException catch (error) {
+      await _controlKey.currentState?.clearDraft();
       if (mounted) {
         ScaffoldMessenger.of(
           context,
@@ -110,6 +167,9 @@ class _ProjectMaterialDeliveryReceiveSheetState
       if (mounted) {
         AppErrorNotice.show(context, error);
       }
+    } finally {
+      await fileLease?.release();
+      if (mounted) setState(() => _submitting = false);
     }
   }
 
@@ -117,6 +177,21 @@ class _ProjectMaterialDeliveryReceiveSheetState
   Widget build(BuildContext context) {
     final delivery = _delivery;
     final unit = delivery.materialUnit ?? '';
+    if (ref.watch(incomingControlOwnerScopeProvider) != _ownerScope) {
+      return const Padding(
+        padding: EdgeInsets.all(24),
+        child: Text(
+          'Сеанс изменился. Закройте форму и откройте приёмку заново.',
+        ),
+      );
+    }
+    final references =
+        delivery.projectId == null
+            ? null
+            : ref.watch(
+              incomingControlReceivingReferencesProvider(delivery.projectId!),
+            );
+    final control = references?.valueOrNull;
 
     return SingleChildScrollView(
       padding: EdgeInsets.fromLTRB(
@@ -173,16 +248,76 @@ class _ProjectMaterialDeliveryReceiveSheetState
             ),
           ],
           const SizedBox(height: 16),
-          TextField(
-            controller: _quantityController,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            decoration: InputDecoration(
-              labelText: 'Количество',
-              helperText:
-                  'К приемке: ${_formatQuantity(delivery.remainingToAccept)} $unit',
-              border: const OutlineInputBorder(),
+          if (references?.isLoading == true) const LinearProgressIndicator(),
+          if (references?.hasError == true) ...[
+            const Text(
+              'Не удалось проверить правила входного контроля. Обновите данные перед приёмкой.',
             ),
-          ),
+            TextButton(
+              onPressed:
+                  () => ref.invalidate(
+                    incomingControlReceivingReferencesProvider(
+                      delivery.projectId!,
+                    ),
+                  ),
+              child: const Text('Повторить'),
+            ),
+          ],
+          if (control?.enabled == true)
+            IncomingControlFields(
+              key: _controlKey,
+              references: control!,
+              materialId: delivery.materialId,
+              materialResolvedBySource: true,
+              projectId: delivery.projectId,
+              draftId: 'project_delivery:${delivery.id}',
+              draftContextBuilder:
+                  () => {
+                    'operation_key': _operationKey,
+                    'control_operation_key': _controlOperationKey,
+                    'notes': _notesController.text,
+                    'warehouse_id': _selectedProjectWarehouseId,
+                  },
+              onRestoreContext:
+                  (data) => setState(() {
+                    _operationKey =
+                        data['operation_key']?.toString() ?? _operationKey;
+                    _controlOperationKey =
+                        data['control_operation_key']?.toString() ??
+                        _controlOperationKey;
+                    _notesController.text = data['notes']?.toString() ?? '';
+                    final id = int.tryParse(
+                      data['warehouse_id']?.toString() ?? '',
+                    );
+                    if (!_projectWarehouseLocked &&
+                        delivery.projectWarehouseOptions.any(
+                          (warehouse) => warehouse.id == id,
+                        )) {
+                      _selectedProjectWarehouseId = id;
+                    }
+                  }),
+              quantity:
+                  double.tryParse(
+                    _quantityController.text.replaceAll(',', '.'),
+                  ) ??
+                  delivery.remainingToAccept,
+              canComplete: control.can('inspect'),
+              canAccept: control.can('approve'),
+              canReject: control.can('reject'),
+            ),
+          if (control?.enabled != true)
+            TextField(
+              controller: _quantityController,
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
+              decoration: InputDecoration(
+                labelText: 'Количество',
+                helperText:
+                    'К приемке: ${_formatQuantity(delivery.remainingToAccept)} $unit',
+                border: const OutlineInputBorder(),
+              ),
+            ),
           const SizedBox(height: 12),
           TextField(
             controller: _notesController,
@@ -197,9 +332,12 @@ class _ProjectMaterialDeliveryReceiveSheetState
           SizedBox(
             width: double.infinity,
             child: FilledButton.icon(
-              onPressed: _submit,
+              onPressed:
+                  _submitting || (references != null && !references.hasValue)
+                      ? null
+                      : _submit,
               icon: const Icon(Icons.check_circle_outline),
-              label: const Text('Принять на объект'),
+              label: Text(_submitting ? 'Сохраняем…' : 'Принять на объект'),
             ),
           ),
         ],
