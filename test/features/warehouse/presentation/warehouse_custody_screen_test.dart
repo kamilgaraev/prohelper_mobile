@@ -5,6 +5,9 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:prohelpers_mobile/core/models/user_context.dart';
 import 'package:prohelpers_mobile/core/providers/module_provider.dart';
 import 'package:prohelpers_mobile/core/services/permission_service.dart';
+import 'package:prohelpers_mobile/features/quality_control/data/incoming_control_model.dart';
+import 'package:prohelpers_mobile/features/quality_control/data/incoming_control_upload.dart';
+import 'package:prohelpers_mobile/features/quality_control/domain/incoming_control_provider.dart';
 import 'package:prohelpers_mobile/features/warehouse/data/project_material_delivery_model.dart';
 import 'package:prohelpers_mobile/features/warehouse/data/warehouse_custody_model.dart';
 import 'package:prohelpers_mobile/features/warehouse/data/warehouse_repository.dart';
@@ -411,6 +414,11 @@ void main() {
         ProviderScope(
           overrides: [
             warehouseRepositoryProvider.overrideWithValue(repository),
+            incomingControlReceivingReferencesProvider(10).overrideWith(
+              (ref) async => const IncomingControlReferences({
+                'policy': {'enabled': false},
+              }),
+            ),
           ],
           child: MaterialApp(
             builder:
@@ -510,6 +518,10 @@ class _ProjectWarehouseChoiceRepository extends WarehouseRepository {
     required double quantity,
     String? notes,
     int? projectWarehouseId,
+    int? projectId,
+    String? operationKey,
+    Map<String, dynamic>? incomingControl,
+    List<IncomingControlUpload> incomingControlFiles = const [],
   }) async {
     receivedQuantity = quantity;
     receivedProjectWarehouseId = projectWarehouseId;

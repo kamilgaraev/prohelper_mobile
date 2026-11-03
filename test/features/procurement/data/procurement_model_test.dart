@@ -1,9 +1,31 @@
-﻿import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_test/flutter_test.dart';
 import 'package:prohelpers_mobile/features/procurement/data/procurement_model.dart';
 
 import '../procurement_test_data.dart';
 
 void main() {
+  test(
+    'QC-only capability does not expand the financial receipt capability',
+    () {
+      final controlOnly = ProcurementPurchaseOrderModel.fromJson(
+        procurementPurchaseOrderJson(
+          actions: const ['record_incoming_control'],
+        ),
+      );
+      expect(controlOnly.canRecordIncomingControl, isTrue);
+      expect(controlOnly.canReceiveMaterials, isFalse);
+      final financial = ProcurementPurchaseOrderModel.fromJson(
+        procurementPurchaseOrderJson(actions: const ['receive_materials']),
+      );
+      expect(financial.canReceiveMaterials, isTrue);
+      expect(financial.canRecordIncomingControl, isFalse);
+      final denied = ProcurementPurchaseOrderModel.fromJson(
+        procurementPurchaseOrderJson(actions: const []),
+      );
+      expect(denied.canRecordIncomingControl, isFalse);
+      expect(denied.canReceiveMaterials, isFalse);
+    },
+  );
   test('parses procurement summary contract', () {
     final summary = ProcurementSummaryModel.fromJson(procurementSummaryJson());
 
@@ -37,10 +59,7 @@ void main() {
 
   test('parses order pricing breakdown with delivery amount', () {
     final order = ProcurementPurchaseOrderModel.fromJson(
-      procurementPurchaseOrderJson(
-        subtotalAmount: 162500,
-        deliveryAmount: 3,
-      ),
+      procurementPurchaseOrderJson(subtotalAmount: 162500, deliveryAmount: 3),
     );
 
     expect(order.totalAmount, 162503);

@@ -16,6 +16,7 @@ import 'project_material_delivery_model.dart';
 import 'warehouse_custody_model.dart';
 import 'warehouse_scan_model.dart';
 import 'warehouse_summary_model.dart';
+import '../../quality_control/data/incoming_control_upload.dart';
 
 final warehouseRepositoryProvider = Provider<WarehouseRepository>((ref) {
   return WarehouseRepository(
@@ -343,22 +344,42 @@ class WarehouseRepository extends SyncQueueAwareRepository {
     required double quantity,
     String? notes,
     int? projectWarehouseId,
+    int? projectId,
+    String? operationKey,
+    Map<String, dynamic>? incomingControl,
+    List<IncomingControlUpload> incomingControlFiles = const [],
   }) async {
     final endpoint =
         '/warehouse/project-material-deliveries/$deliveryId/receive';
-    final idempotencyKey = _newWarehouseIdempotencyKey();
+    final idempotencyKey = operationKey ?? _newWarehouseIdempotencyKey();
+    final scope = (await syncQueueServiceFuture)?.currentScope;
     final payload = <String, dynamic>{
       'idempotency_key': idempotencyKey,
       'quantity': quantity,
+      if (projectId != null) 'project_id': projectId,
+      if (incomingControl != null) 'incoming_control': incomingControl,
       if ((notes ?? '').trim().isNotEmpty) 'notes': notes!.trim(),
       if (projectWarehouseId != null)
         'project_warehouse_id': projectWarehouseId,
     };
+    final wirePayload =
+        incomingControlFiles.isEmpty
+            ? payload
+            : flattenIncomingControlFields(payload);
+    final attachments = <SyncAttachmentRef>[];
+    for (var index = 0; index < incomingControlFiles.length; index++) {
+      final prefix = 'incoming_control[files][$index]';
+      wirePayload.addAll(incomingControlFiles[index].fields(prefix));
+      attachments.add(incomingControlFiles[index].attachment(prefix));
+    }
     final response = await executeOrQueue(
       request:
-          () => _dio.post(
+          () async => _dio.post(
             endpoint,
-            data: payload,
+            data:
+                incomingControlFiles.isEmpty
+                    ? wirePayload
+                    : await incomingControlMultipart(wirePayload, attachments),
             options: Options(headers: {'Idempotency-Key': idempotencyKey}),
           ),
       draft: SyncQueueDraft(
@@ -366,7 +387,8 @@ class WarehouseRepository extends SyncQueueAwareRepository {
         operationType: 'receive_project_delivery',
         method: 'POST',
         endpoint: endpoint,
-        payload: payload,
+        payload: {...wirePayload, if (scope != null) 'queue_scope': scope},
+        attachments: attachments,
       ),
       businessMessage: 'Не удалось подтвердить приемку материала.',
     );
@@ -375,7 +397,9 @@ class WarehouseRepository extends SyncQueueAwareRepository {
   }
 
   Future<void> createReceipt(WarehouseReceiptPayload payload) async {
-    final idempotencyKey = _newWarehouseIdempotencyKey();
+    final idempotencyKey =
+        payload.idempotencyKey ?? _newWarehouseIdempotencyKey();
+    final scope = (await syncQueueServiceFuture)?.currentScope;
     final receiptPayload = <String, dynamic>{
       'idempotency_key': idempotencyKey,
       'warehouse_id': payload.warehouseId.toString(),
@@ -388,6 +412,8 @@ class WarehouseRepository extends SyncQueueAwareRepository {
       if ((payload.reason ?? '').trim().isNotEmpty)
         'reason': payload.reason!.trim(),
       if (payload.metadata.isNotEmpty) 'metadata': jsonEncode(payload.metadata),
+      if (payload.incomingControl != null)
+        'incoming_control': jsonEncode(payload.incomingControl),
     };
     final attachments =
         payload.photos
@@ -400,16 +426,20 @@ class WarehouseRepository extends SyncQueueAwareRepository {
             )
             .toList();
 
+    final wirePayload =
+        payload.incomingControlFiles.isEmpty
+            ? receiptPayload
+            : flattenIncomingControlFields({
+              ...receiptPayload,
+              'incoming_control': payload.incomingControl,
+            });
+    for (var index = 0; index < payload.incomingControlFiles.length; index++) {
+      final prefix = 'incoming_control[files][$index]';
+      wirePayload.addAll(payload.incomingControlFiles[index].fields(prefix));
+      attachments.add(payload.incomingControlFiles[index].attachment(prefix));
+    }
     try {
-      final formData = FormData.fromMap({
-        ...receiptPayload,
-        'photos[]': await Future.wait(
-          payload.photos.map(
-            (path) =>
-                MultipartFile.fromFile(path, filename: _fileNameFromPath(path)),
-          ),
-        ),
-      });
+      final formData = await incomingControlMultipart(wirePayload, attachments);
 
       final response = await _dio.post(
         '/warehouse/operations/receipt',
@@ -418,7 +448,11 @@ class WarehouseRepository extends SyncQueueAwareRepository {
       );
       final data = _extractData(response.data);
 
-      _requirePositiveInt(data, 'movement_id');
+      if (payload.incomingControl != null && payload.quantity == 0) {
+        _requirePositiveInt(_extractData(data['incoming_control']), 'id');
+      } else {
+        _requirePositiveInt(data, 'movement_id');
+      }
     } on DioException catch (error) {
       if (SyncQueueService.shouldQueueDioException(error)) {
         await queueAndThrow(
@@ -427,7 +461,7 @@ class WarehouseRepository extends SyncQueueAwareRepository {
             operationType: 'create_receipt',
             method: 'POST',
             endpoint: '/warehouse/operations/receipt',
-            payload: receiptPayload,
+            payload: {...wirePayload, if (scope != null) 'queue_scope': scope},
             attachments: attachments,
           ),
           cause: error,

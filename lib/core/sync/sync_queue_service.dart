@@ -960,6 +960,26 @@ class SyncQueueService {
       ('quality_control', 'resolve_defect') => RegExp(
         r'^/quality-control/defects/\d+/resolve$',
       ).hasMatch(path),
+      ('quality_control', 'create_incoming_control') =>
+        path == '/quality-control/incoming-controls',
+      ('quality_control', 'decide_incoming_control') => RegExp(
+        r'^/quality-control/incoming-controls/\d+/decision$',
+      ).hasMatch(path),
+      ('quality_control', 'revise_incoming_control') => RegExp(
+        r'^/quality-control/incoming-controls/\d+/revise$',
+      ).hasMatch(path),
+      ('quality_control', 'revoke_incoming_control') => RegExp(
+        r'^/quality-control/incoming-controls/\d+/revoke$',
+      ).hasMatch(path),
+      ('quality_control', 'attach_incoming_control') => RegExp(
+        r'^/quality-control/incoming-controls/\d+/attachments$',
+      ).hasMatch(path),
+      ('quality_control', 'executive_incoming_control') => RegExp(
+        r'^/quality-control/incoming-controls/\d+/executive-document$',
+      ).hasMatch(path),
+      ('quality_control', 'return_incoming_control') => RegExp(
+        r'^/quality-control/incoming-controls/\d+/return$',
+      ).hasMatch(path),
       ('safety', 'create_incident') => path == '/safety-management/incidents',
       ('safety', 'create_violation') => path == '/safety-management/violations',
       ('safety', 'create_inspection_finding') =>

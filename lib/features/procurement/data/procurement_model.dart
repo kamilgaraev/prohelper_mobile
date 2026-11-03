@@ -1,3 +1,5 @@
+import '../../quality_control/data/incoming_control_upload.dart';
+
 class ProcurementPage<T> {
   const ProcurementPage({
     required this.items,
@@ -426,6 +428,8 @@ class ProcurementPurchaseOrderModel {
 
   bool get canReceiveMaterials =>
       availableActions.contains('receive_materials');
+  bool get canRecordIncomingControl =>
+      availableActions.contains('record_incoming_control');
   bool get canComment => availableActions.contains('comment');
 
   double get remainingQuantity {
@@ -867,17 +871,22 @@ class ProcurementReceiveItemPayload {
     required this.itemId,
     required this.quantityReceived,
     required this.price,
+    this.incomingControl,
+    this.incomingControlFiles = const [],
   });
 
   final int itemId;
   final double quantityReceived;
   final double price;
+  final Map<String, dynamic>? incomingControl;
+  final List<IncomingControlUpload> incomingControlFiles;
 
   Map<String, dynamic> toJson() {
     return {
       'item_id': itemId,
       'quantity_received': quantityReceived,
       'price': price,
+      if (incomingControl != null) 'incoming_control': incomingControl,
     };
   }
 }

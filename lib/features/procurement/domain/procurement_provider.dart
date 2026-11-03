@@ -618,6 +618,8 @@ class ProcurementNotifier extends StateNotifier<ProcurementState> {
     required List<ProcurementReceiveItemPayload> items,
     required String receiptDate,
     String? notes,
+    String? operationKey,
+    int? projectId,
   }) async {
     final updated = await _repository.receiveMaterials(
       orderId: orderId,
@@ -625,6 +627,8 @@ class ProcurementNotifier extends StateNotifier<ProcurementState> {
       items: items,
       receiptDate: receiptDate,
       notes: notes,
+      operationKey: operationKey,
+      projectId: projectId,
     );
     await loadSummary();
     return updated;
