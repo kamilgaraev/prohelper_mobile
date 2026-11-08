@@ -306,7 +306,7 @@ class _CreditsCard extends StatelessWidget {
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Кредиты МОСТ', style: AppTypography.caption(context)),
+        Text('Единицы МОСТ', style: AppTypography.caption(context)),
         const SizedBox(height: 8),
         Text(
           balance == null
