@@ -602,7 +602,11 @@ class AuthNotifier extends StateNotifier<AuthState> {
           messageIsError: true,
         );
       case PinCheckStatus.exhausted:
-        await _wipeLocalSession(operation, _pinExhaustedMessage);
+        await _wipeLocalSession(
+          operation,
+          current.sessionIdentity,
+          _pinExhaustedMessage,
+        );
       case PinCheckStatus.notConfigured:
         state = current.copyWith(
           isSubmitting: false,
@@ -795,7 +799,14 @@ class AuthNotifier extends StateNotifier<AuthState> {
     );
   }
 
-  Future<void> _wipeLocalSession(int operation, String message) async {
+  Future<void> _wipeLocalSession(
+    int operation,
+    AuthSessionIdentity identity,
+    String message,
+  ) async {
+    try {
+      await _discardLockedSession?.call(identity);
+    } catch (_) {}
     await _clearQuickUnlock();
     await _queueOfflineMutation(_storage.clearToken);
     if (!_isCurrent(operation)) return;

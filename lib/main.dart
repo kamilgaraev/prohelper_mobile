@@ -33,6 +33,9 @@ import 'features/schedule/presentation/schedule_details_screen.dart';
 import 'features/warehouse/data/warehouse_repository.dart';
 import 'features/warehouse/presentation/warehouse_tasks_screen.dart';
 
+bool authTransitionClosesRoutes(AuthState? previous, AuthState next) =>
+    previous is AuthAuthenticated && next is! AuthAuthenticated;
+
 final GlobalKey<NavigatorState> mostNavigatorKey = GlobalKey<NavigatorState>();
 
 enum _PushContextResult { ready, waiting, unavailable }
@@ -79,6 +82,9 @@ class _MostAppState extends ConsumerState<MostApp> with WidgetsBindingObserver {
     _openedPushSubscription = _pushService.openedMessages.listen(_onOpenedPush);
     ref.listenManual<AuthState>(authProvider, (previous, state) {
       unawaited(_pushService.setAuthenticated(state is AuthAuthenticated));
+      if (authTransitionClosesRoutes(previous, state)) {
+        _closeOpenedRoutes();
+      }
       if (state is AuthAuthenticated &&
           state.isOnlineVerified &&
           !(previous is AuthAuthenticated && previous.isOnlineVerified)) {
@@ -166,6 +172,12 @@ class _MostAppState extends ConsumerState<MostApp> with WidgetsBindingObserver {
   }
 
   bool _quickUnlockOfferScheduled = false;
+
+  void _closeOpenedRoutes() {
+    final navigator = mostNavigatorKey.currentState;
+    if (navigator == null || !navigator.mounted) return;
+    navigator.popUntil((route) => route.isFirst);
+  }
 
   void _scheduleQuickUnlockOffer() {
     if (_quickUnlockOfferScheduled) return;

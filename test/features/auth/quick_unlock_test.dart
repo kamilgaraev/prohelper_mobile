@@ -308,7 +308,21 @@ void main() {
 
     test('too many wrong PINs erase the local session', () async {
       await quickUnlock.setPin(7, '2468');
-      final notifier = await lockedNotifier();
+      final discarded = <AuthSessionIdentity>[];
+      final notifier = AuthNotifier(
+        repository,
+        storage,
+        quickUnlock: quickUnlock,
+        biometricUnlock: biometric,
+        autoCheckAuth: false,
+        isDefinitelyOffline: () async => false,
+        discardLockedSession: (identity) async => discarded.add(identity),
+      );
+      addTearDown(notifier.dispose);
+      await notifier.checkAuth();
+      storage.token = null;
+      notifier.handleSessionInvalidation();
+      await pumpEventQueue();
 
       for (var i = 0; i < QuickUnlockService.maxAttempts; i++) {
         await notifier.unlockWithPin('1111');
@@ -318,6 +332,7 @@ void main() {
       expect(storage.offlineAuth, isNull);
       expect(storage.quickUnlock, isNull);
       expect(biometric.disabled, isTrue);
+      expect(discarded, [_identity]);
     });
 
     test('offline unlock is not offered after 14 days', () async {
