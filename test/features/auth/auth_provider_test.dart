@@ -107,6 +107,39 @@ class _MemoryStorage extends SecureStorageService {
     await clearOfflineAuth();
   }
 
+  int accessTokenClearCalls = 0;
+  Map<String, dynamic>? quickUnlock;
+  final offeredUsers = <int>{};
+
+  @override
+  Future<void> clearAccessToken() async {
+    accessTokenClearCalls += 1;
+    token = null;
+  }
+
+  @override
+  Future<Map<String, dynamic>?> getQuickUnlock() async =>
+      quickUnlock == null ? null : Map<String, dynamic>.from(quickUnlock!);
+
+  @override
+  Future<void> saveQuickUnlock(Map<String, dynamic> value) async {
+    quickUnlock = Map<String, dynamic>.from(value);
+  }
+
+  @override
+  Future<void> clearQuickUnlock() async {
+    quickUnlock = null;
+  }
+
+  @override
+  Future<bool> wasQuickUnlockOffered(int userId) async =>
+      offeredUsers.contains(userId);
+
+  @override
+  Future<void> markQuickUnlockOffered(int userId) async {
+    offeredUsers.add(userId);
+  }
+
   @override
   Future<String> ensureSessionId() async => sessionId ??= 'session-1';
 
@@ -464,29 +497,32 @@ void main() {
   );
 
   for (final statusCode in [401, 403]) {
-    test('online $statusCode rejection cannot use cached login', () async {
-      final storage =
-          _MemoryStorage()
-            ..offlineAuth = offlineAuthRecord(DateTime.now().toUtc());
-      final repository = _FakeAuthRepository(
-        getMeError: ApiException('Доступ отклонён.', statusCode: statusCode),
-      );
-      final notifier = AuthNotifier(
-        repository,
-        storage,
-        autoCheckAuth: false,
-        isDefinitelyOffline: () async => false,
-      );
-      addTearDown(notifier.dispose);
+    test(
+      'online $statusCode rejection locks session instead of cached login',
+      () async {
+        final storage =
+            _MemoryStorage()
+              ..offlineAuth = offlineAuthRecord(DateTime.now().toUtc());
+        final repository = _FakeAuthRepository(
+          getMeError: ApiException('Доступ отклонён.', statusCode: statusCode),
+        );
+        final notifier = AuthNotifier(
+          repository,
+          storage,
+          autoCheckAuth: false,
+          isDefinitelyOffline: () async => false,
+        );
+        addTearDown(notifier.dispose);
 
-      await notifier.checkAuth();
+        await notifier.checkAuth();
 
-      expect(notifier.state, isA<AuthUnauthenticated>());
-      expect(repository.getMeCalls, 1);
-      expect(storage.token, isNull);
-      expect(storage.offlineAuth, isNull);
-      expect(storage.clearCalls, 1);
-    });
+        expect(notifier.state, isA<AuthLocked>());
+        expect(repository.getMeCalls, 1);
+        expect(storage.token, isNull);
+        expect(storage.offlineAuth, isNotNull);
+        expect(storage.clearCalls, 0);
+      },
+    );
   }
 
   test('connectivity check error preserves online server rejection', () async {
@@ -506,10 +542,10 @@ void main() {
 
     await notifier.checkAuth();
 
-    expect(notifier.state, isA<AuthUnauthenticated>());
+    expect(notifier.state, isA<AuthLocked>());
     expect(repository.getMeCalls, 1);
     expect(storage.token, isNull);
-    expect(storage.offlineAuth, isNull);
+    expect(storage.offlineAuth, isNotNull);
   });
 
   test(
@@ -531,10 +567,10 @@ void main() {
 
       await notifier.checkAuth();
 
-      expect(notifier.state, isA<AuthUnauthenticated>());
+      expect(notifier.state, isA<AuthLocked>());
       expect(repository.getMeCalls, 1);
       expect(storage.token, isNull);
-      expect(storage.offlineAuth, isNull);
+      expect(storage.offlineAuth, isNotNull);
     },
   );
 

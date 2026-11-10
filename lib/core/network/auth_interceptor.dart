@@ -192,7 +192,7 @@ class AuthInterceptor extends Interceptor {
           (authorization != null && authorization != 'Bearer $currentToken')) {
         return;
       }
-      await storage.clearToken();
+      await storage.clearAccessToken();
       _ref.read(authSessionVersionProvider.notifier).state++;
     });
   }

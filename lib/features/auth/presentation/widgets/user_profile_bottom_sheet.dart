@@ -8,6 +8,7 @@ import '../../../../core/widgets/industrial_card.dart';
 import '../../../projects/presentation/project_selection_screen.dart';
 import '../../data/user_model.dart';
 import '../../domain/auth_provider.dart';
+import '../quick_unlock_settings_screen.dart';
 import 'logout_confirmation_dialog.dart';
 import '../../../design_management/offline/bim_context_change_dialog.dart';
 
@@ -20,6 +21,9 @@ class UserProfileBottomSheet extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final organizations = user.organizations;
+    final auth = ref.watch(authProvider);
+    final needsReauthentication =
+        auth is AuthAuthenticated && auth.needsReauthentication;
 
     return Container(
       padding: const EdgeInsets.all(24),
@@ -139,6 +143,62 @@ class UserProfileBottomSheet extends ConsumerWidget {
           const SizedBox(height: 24),
           const Divider(),
           const SizedBox(height: 16),
+          if (needsReauthentication) ...[
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: () {
+                  Navigator.pop(context);
+                  ref.read(authProvider.notifier).requestPasswordSignIn();
+                },
+                style: FilledButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                icon: const Icon(Icons.login_rounded),
+                label: const Text('Войти с паролем и отправить изменения'),
+              ),
+            ),
+            const SizedBox(height: 12),
+          ] else ...[
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () {
+                  final navigator = Navigator.of(context);
+                  navigator.pop();
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    final navigatorContext = navigator.context;
+                    if (!navigator.mounted || !navigatorContext.mounted) {
+                      return;
+                    }
+                    openQuickUnlockSettings(navigatorContext);
+                  });
+                },
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  side: BorderSide(color: theme.dividerColor),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                icon: Icon(
+                  Icons.pin_outlined,
+                  color: theme.colorScheme.onSurface,
+                ),
+                label: Text(
+                  'Вход без связи',
+                  style: AppTypography.button.copyWith(
+                    color: theme.colorScheme.onSurface,
+                    fontSize: 14,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
           SizedBox(
             width: double.infinity,
             child: OutlinedButton.icon(

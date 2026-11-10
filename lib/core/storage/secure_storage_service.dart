@@ -81,6 +81,35 @@ class SecureStorageService {
     await clearOfflineAuth();
   }
 
+  Future<void> clearAccessToken() async {
+    await _storage.delete(key: _tokenKey);
+  }
+
+  static const _quickUnlockKey = 'quick_unlock_v1';
+  static const _quickUnlockOfferedPrefix = 'quick_unlock_offered_';
+
+  Future<Map<String, dynamic>?> getQuickUnlock() async {
+    final value = await _storage.read(key: _quickUnlockKey);
+    if (value == null || value.isEmpty) return null;
+    try {
+      final decoded = jsonDecode(value);
+      return decoded is Map<String, dynamic> ? decoded : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> saveQuickUnlock(Map<String, dynamic> value) =>
+      _storage.write(key: _quickUnlockKey, value: jsonEncode(value));
+
+  Future<void> clearQuickUnlock() => _storage.delete(key: _quickUnlockKey);
+
+  Future<bool> wasQuickUnlockOffered(int userId) async =>
+      await _storage.read(key: '$_quickUnlockOfferedPrefix$userId') == '1';
+
+  Future<void> markQuickUnlockOffered(int userId) =>
+      _storage.write(key: '$_quickUnlockOfferedPrefix$userId', value: '1');
+
   Future<String> ensureSessionId() async {
     final current = await _storage.read(key: _offlineSessionIdKey);
     if (current != null && current.isNotEmpty) return current;

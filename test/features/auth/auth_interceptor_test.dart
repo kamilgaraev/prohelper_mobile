@@ -559,6 +559,11 @@ class _MemorySecureStorage extends SecureStorageService {
   }
 
   @override
+  Future<void> clearAccessToken() async {
+    token = null;
+  }
+
+  @override
   Future<void> saveOfflineAuth(Map<String, dynamic> value) async {
     offlineAuth = Map<String, dynamic>.from(value);
   }

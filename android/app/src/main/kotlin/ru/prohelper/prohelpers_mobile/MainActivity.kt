@@ -11,14 +11,16 @@ import android.Manifest
 import android.content.pm.PackageManager
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
-import io.flutter.embedding.android.FlutterActivity
+import io.flutter.embedding.android.FlutterFragmentActivity
 
-class MainActivity : FlutterActivity() {
+class MainActivity : FlutterFragmentActivity() {
     private val permissionResults = mutableListOf<MethodChannel.Result>()
     private var permissionRequestInFlight = false
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, BiometricUnlockHandler.CHANNEL)
+            .setMethodCallHandler(BiometricUnlockHandler(this))
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "most.android.push")
             .setMethodCallHandler { call, result ->
                 if (call.method != "requestPermission") {

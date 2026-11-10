@@ -15,6 +15,9 @@ class _FakeSecureStorageService extends SecureStorageService {
   Future<String?> getToken() async => null;
 
   @override
+  Future<Map<String, dynamic>?> getOfflineAuth() async => null;
+
+  @override
   Future<void> saveToken(String token) async {}
 
   @override
