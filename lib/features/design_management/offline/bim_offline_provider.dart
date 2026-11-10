@@ -27,6 +27,19 @@ bool bimOfflineAuthIsValid(
       age <= const Duration(days: 14);
 }
 
+bool bimOfflineAccessAllowed({
+  required Map<String, dynamic>? record,
+  required String? token,
+  required bool unlockedOffline,
+  required DateTime now,
+  required String scope,
+}) {
+  final tokenMatches =
+      token != null && token.isNotEmpty && record?['token'] == token;
+  return (tokenMatches || unlockedOffline) &&
+      bimOfflineAuthIsValid(record, now, scope);
+}
+
 String? bimAuthScope(AuthState state) {
   if (state is! AuthAuthenticated || state.sessionIdentity == null) return null;
   final identity = state.sessionIdentity!;
@@ -51,15 +64,21 @@ bimOfflineServiceProvider = FutureProvider<BimOfflineService>((ref) async {
     currentScope: () => disposed ? null : bimAuthScope(ref.read(authProvider)),
     canUseOffline: () async {
       if (disposed) return false;
-      final scope = bimAuthScope(ref.read(authProvider));
+      final auth = ref.read(authProvider);
+      final scope = bimAuthScope(auth);
       if (scope == null) return false;
       final storage = ref.read(secureStorageProvider);
       final record = await storage.getOfflineAuth();
       final token = await storage.getToken();
       return !disposed &&
-          record?['token'] == token &&
-          token?.isNotEmpty == true &&
-          bimOfflineAuthIsValid(record, DateTime.now(), scope);
+          bimOfflineAccessAllowed(
+            record: record,
+            token: token,
+            unlockedOffline:
+                auth is AuthAuthenticated && auth.needsReauthentication,
+            now: DateTime.now(),
+            scope: scope,
+          );
     },
     isOnline: () async {
       final connectivity = await Connectivity().checkConnectivity();

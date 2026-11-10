@@ -92,6 +92,7 @@ class _Repository extends AuthRepository {
   final switchedTo = <int>[];
   Object? switchError;
   int loginCalls = 0;
+  bool failAfterSavingToken = false;
 
   @override
   Future<User> getMe({String? token}) async => _user();
@@ -102,6 +103,9 @@ class _Repository extends AuthRepository {
     final error = loginError;
     if (error != null) throw error;
     storage.token = 'token-new';
+    if (failAfterSavingToken) {
+      throw const ApiException('Нет ответа.');
+    }
     return _user(organizationId: loginOrganizationId);
   }
 
@@ -384,6 +388,42 @@ void main() {
         },
       );
     }
+
+    test('interrupted password sign-in drops the new token', () async {
+      repository.failAfterSavingToken = true;
+      final notifier = await lockedNotifier();
+
+      await notifier.reauthenticate('secret');
+
+      expect(notifier.state, isA<AuthLocked>());
+      expect(storage.token, isNull);
+      expect(storage.offlineAuth, isNotNull);
+    });
+
+    test(
+      'sign-out from the lock screen works without an active session',
+      () async {
+        final notifier = AuthNotifier(
+          repository,
+          storage,
+          quickUnlock: quickUnlock,
+          biometricUnlock: biometric,
+          autoCheckAuth: false,
+          isDefinitelyOffline: () async => false,
+          beforeContextChange: () async => throw StateError('no scope'),
+        );
+        addTearDown(notifier.dispose);
+        await notifier.checkAuth();
+        storage.token = null;
+        notifier.handleSessionInvalidation();
+        await pumpEventQueue();
+
+        await notifier.logout();
+
+        expect(notifier.state, isA<AuthUnauthenticated>());
+        expect(storage.offlineAuth, isNull);
+      },
+    );
 
     test('failed password sign-in stays locked with a message', () async {
       repository.loginError = const ApiException(

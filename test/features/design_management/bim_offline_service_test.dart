@@ -914,4 +914,30 @@ void main() {
       expect(bimOfflineAuthIsValid(record, now, '1:2:session'), false);
     },
   );
+  test('saved models open after offline unlock without a server token', () {
+    final record = {
+      'token': 'old-token',
+      'user_id': 1,
+      'organization_id': 2,
+      'session_id': 'session',
+      'confirmed_at': now.subtract(const Duration(days: 1)).toIso8601String(),
+    };
+    bool allowed({
+      String? token,
+      bool unlockedOffline = false,
+      String? scope,
+    }) => bimOfflineAccessAllowed(
+      record: record,
+      token: token,
+      unlockedOffline: unlockedOffline,
+      now: now,
+      scope: scope ?? '1:2:session',
+    );
+
+    expect(allowed(token: 'old-token'), true);
+    expect(allowed(), false);
+    expect(allowed(token: 'other'), false);
+    expect(allowed(unlockedOffline: true), true);
+    expect(allowed(unlockedOffline: true, scope: '1:3:session'), false);
+  });
 }

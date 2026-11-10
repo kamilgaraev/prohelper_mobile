@@ -422,7 +422,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
   Future<void> logout() async {
     if (!mounted || _loggingOut) return;
     final authBeforeLogout = state;
-    await _beforeContextChange?.call();
+    if (authBeforeLogout is! AuthLocked) {
+      await _beforeContextChange?.call();
+    }
     final currentAuth = state;
     final sameSession =
         authBeforeLogout is AuthAuthenticated &&
@@ -546,6 +548,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
       );
       await _saveOfflineUser(user, identity, operation);
     } catch (error) {
+      if (!_isCurrent(operation)) return;
+      await _queueOfflineMutation(_storage.clearAccessToken);
       if (!_isCurrent(operation)) return;
       state = current.copyWith(
         isSubmitting: false,
