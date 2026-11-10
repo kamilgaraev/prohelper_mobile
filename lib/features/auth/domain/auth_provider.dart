@@ -110,6 +110,10 @@ const _pinExhaustedMessage =
 const _biometricChangedMessage =
     'Отпечатки или лицо на телефоне изменились. Войдите по PIN-коду.';
 const _biometricLockedMessage = 'Слишком много попыток. Войдите по PIN-коду.';
+const _organizationRestoreFailedMessage =
+    'Не удалось вернуться в организацию, где сделаны изменения. Проверьте связь и войдите еще раз.';
+const _organizationAccessLostMessage =
+    'Нет доступа к организации, где сделаны изменения. Обратитесь к администратору или выйдите из аккаунта — неотправленные изменения будут удалены.';
 const _offlineUnavailableMessage =
     'Вход без связи больше недоступен. Подключитесь к интернету и войдите с паролем.';
 
@@ -509,10 +513,30 @@ class AuthNotifier extends StateNotifier<AuthState> {
       final lockedOrganizationId = lockedIdentity.organizationId;
       if (lockedOrganizationId != null &&
           user.currentOrganizationId != lockedOrganizationId) {
+        Object? switchError;
         try {
           user = await _repository.switchOrganization(lockedOrganizationId);
-        } catch (_) {}
+        } catch (error) {
+          switchError = error;
+        }
         if (!_isCurrent(operation)) return;
+        if (switchError != null ||
+            user.currentOrganizationId != lockedOrganizationId) {
+          await _queueOfflineMutation(_storage.clearAccessToken);
+          if (!_isCurrent(operation)) return;
+          final accessDenied =
+              switchError is ApiException &&
+              (switchError.statusCode == 403 || switchError.statusCode == 404);
+          state = current.copyWith(
+            isSubmitting: false,
+            message:
+                accessDenied
+                    ? _organizationAccessLostMessage
+                    : _organizationRestoreFailedMessage,
+            messageIsError: true,
+          );
+          return;
+        }
       }
       final identity = _identity(user, lockedIdentity.sessionId);
       state = AuthAuthenticated(

@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:prohelpers_mobile/core/network/api_exception.dart';
 import 'package:prohelpers_mobile/core/storage/secure_storage_service.dart';
+import 'package:prohelpers_mobile/core/sync/sync_queue_provider.dart';
 import 'package:prohelpers_mobile/features/auth/data/auth_repository.dart';
 import 'package:prohelpers_mobile/features/auth/data/auth_session_identity.dart';
 import 'package:prohelpers_mobile/features/auth/data/biometric_unlock.dart';
@@ -89,6 +90,7 @@ class _Repository extends AuthRepository {
   Object? loginError;
   int loginOrganizationId = 12;
   final switchedTo = <int>[];
+  Object? switchError;
   int loginCalls = 0;
 
   @override
@@ -106,6 +108,8 @@ class _Repository extends AuthRepository {
   @override
   Future<User> switchOrganization(int organizationId) async {
     switchedTo.add(organizationId);
+    final error = switchError;
+    if (error != null) throw error;
     return _user(organizationId: organizationId);
   }
 
@@ -347,6 +351,39 @@ void main() {
       expect(repository.switchedTo, [12]);
       expect((notifier.state as AuthAuthenticated).sessionIdentity, _identity);
     });
+
+    for (final scenario in [
+      (name: 'timeout', error: const ApiException('Нет ответа.')),
+      (
+        name: 'lost access',
+        error: const ApiException('Нет доступа.', statusCode: 403),
+      ),
+    ]) {
+      test(
+        'organization restore ${scenario.name} keeps the session locked',
+        () async {
+          repository.loginOrganizationId = 99;
+          repository.switchError = scenario.error;
+          final notifier = await lockedNotifier();
+
+          await notifier.reauthenticate('secret');
+
+          final state = notifier.state as AuthLocked;
+          expect(state.sessionIdentity, _identity);
+          expect(state.isSubmitting, isFalse);
+          expect(state.messageIsError, isTrue);
+          expect(storage.token, isNull);
+          expect(storage.offlineAuth, isNotNull);
+          expect(
+            queueScopeToClearOnAuthTransition(
+              AuthLocked(_user(), _identity),
+              state,
+            ),
+            isNull,
+          );
+        },
+      );
+    }
 
     test('failed password sign-in stays locked with a message', () async {
       repository.loginError = const ApiException(
