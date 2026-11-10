@@ -403,7 +403,9 @@ void main() {
     test(
       'sign-out from the lock screen works without an active session',
       () async {
+        final discarded = <AuthSessionIdentity>[];
         final notifier = AuthNotifier(
+          discardLockedSession: (identity) async => discarded.add(identity),
           repository,
           storage,
           quickUnlock: quickUnlock,
@@ -422,6 +424,7 @@ void main() {
 
         expect(notifier.state, isA<AuthUnauthenticated>());
         expect(storage.offlineAuth, isNull);
+        expect(discarded, [_identity]);
       },
     );
 

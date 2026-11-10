@@ -914,6 +914,21 @@ void main() {
       expect(bimOfflineAuthIsValid(record, now, '1:2:session'), false);
     },
   );
+  test(
+    'locked session sign-out removes saved drafts without active scope',
+    () async {
+      await service.createDraft(
+        versionId: 7,
+        payload: {'project_id': 1, 'title': 'locked'},
+      );
+      scope = null;
+
+      await service.discardScope('1:2:session');
+
+      scope = '1:2:session';
+      expect(await service.drafts(), isEmpty);
+    },
+  );
   test('saved models open after offline unlock without a server token', () {
     final record = {
       'token': 'old-token',

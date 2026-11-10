@@ -123,32 +123,37 @@ const unlockPromptText = BiometricPromptText(
   cancel: 'Ввести PIN-код',
 );
 
-final StateNotifierProvider<AuthNotifier, AuthState> authProvider =
-    StateNotifierProvider<AuthNotifier, AuthState>((ref) {
-      final notifier = AuthNotifier(
-        ref.read(authRepositoryProvider),
-        ref.read(secureStorageProvider),
-        quickUnlock: ref.read(quickUnlockServiceProvider),
-        biometricUnlock: ref.read(biometricUnlockProvider),
-        autoCheckAuth: false,
-        beforeContextChange: () async {
-          await (await ref.read(
-            bimOfflineServiceProvider.future,
-          )).prepareContextChange();
-        },
-        beforeLogout:
-            () => ref.read(mobilePushServiceProvider).setAuthenticated(false),
-        onSessionInvalidated: () {
-          ref.read(authSessionVersionProvider.notifier).state++;
-        },
+final StateNotifierProvider<AuthNotifier, AuthState>
+authProvider = StateNotifierProvider<AuthNotifier, AuthState>((ref) {
+  final notifier = AuthNotifier(
+    ref.read(authRepositoryProvider),
+    ref.read(secureStorageProvider),
+    quickUnlock: ref.read(quickUnlockServiceProvider),
+    biometricUnlock: ref.read(biometricUnlockProvider),
+    autoCheckAuth: false,
+    beforeContextChange: () async {
+      await (await ref.read(
+        bimOfflineServiceProvider.future,
+      )).prepareContextChange();
+    },
+    discardLockedSession: (identity) async {
+      await (await ref.read(bimOfflineServiceProvider.future)).discardScope(
+        '${identity.userId}:${identity.organizationId ?? 0}:${identity.sessionId}',
       );
+    },
+    beforeLogout:
+        () => ref.read(mobilePushServiceProvider).setAuthenticated(false),
+    onSessionInvalidated: () {
+      ref.read(authSessionVersionProvider.notifier).state++;
+    },
+  );
 
-      ref.listen<int>(authSessionVersionProvider, (_, __) {
-        notifier.handleSessionInvalidation();
-      });
+  ref.listen<int>(authSessionVersionProvider, (_, __) {
+    notifier.handleSessionInvalidation();
+  });
 
-      return notifier;
-    });
+  return notifier;
+});
 
 class AuthNotifier extends StateNotifier<AuthState> {
   AuthNotifier(
@@ -159,9 +164,11 @@ class AuthNotifier extends StateNotifier<AuthState> {
     bool autoCheckAuth = true,
     Future<void> Function()? beforeLogout,
     Future<void> Function()? beforeContextChange,
+    Future<void> Function(AuthSessionIdentity identity)? discardLockedSession,
     void Function()? onSessionInvalidated,
     Future<bool> Function()? isDefinitelyOffline,
-  }) : _quickUnlock = quickUnlock ?? QuickUnlockService(_storage),
+  }) : _discardLockedSession = discardLockedSession,
+       _quickUnlock = quickUnlock ?? QuickUnlockService(_storage),
        _biometric = biometricUnlock ?? const UnavailableBiometricUnlock(),
        _beforeContextChange = beforeContextChange,
        _onSessionInvalidated = onSessionInvalidated,
@@ -179,6 +186,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
   final void Function()? _onSessionInvalidated;
   final Future<void> Function()? _beforeLogout;
   final Future<void> Function()? _beforeContextChange;
+  final Future<void> Function(AuthSessionIdentity identity)?
+  _discardLockedSession;
   final Future<bool> Function() _isDefinitelyOffline;
   bool _loggingOut = false;
   bool _autoRelockAllowed = false;
@@ -422,7 +431,11 @@ class AuthNotifier extends StateNotifier<AuthState> {
   Future<void> logout() async {
     if (!mounted || _loggingOut) return;
     final authBeforeLogout = state;
-    if (authBeforeLogout is! AuthLocked) {
+    if (authBeforeLogout is AuthLocked) {
+      try {
+        await _discardLockedSession?.call(authBeforeLogout.sessionIdentity);
+      } catch (_) {}
+    } else {
       await _beforeContextChange?.call();
     }
     final currentAuth = state;

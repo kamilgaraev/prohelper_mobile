@@ -8,6 +8,10 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:prohelpers_mobile/core/network/auth_interceptor.dart';
 import 'package:prohelpers_mobile/core/network/dio_client.dart';
 import 'package:prohelpers_mobile/core/storage/secure_storage_service.dart';
+import 'package:prohelpers_mobile/features/auth/data/auth_repository.dart';
+import 'package:prohelpers_mobile/features/auth/data/auth_session_identity.dart';
+import 'package:prohelpers_mobile/features/auth/data/user_model.dart';
+import 'package:prohelpers_mobile/features/auth/domain/auth_provider.dart';
 import 'package:prohelpers_mobile/features/auth/domain/auth_session_provider.dart';
 
 void main() {
@@ -381,6 +385,36 @@ void main() {
     );
   });
 
+  test(
+    'offline unlocked mode does not send requests without a token',
+    () async {
+      final adapter = _AuthHttpAdapter();
+      final storage = _MemorySecureStorage();
+      final container = ProviderContainer(
+        overrides: [
+          secureStorageProvider.overrideWithValue(storage),
+          authProvider.overrideWith((ref) => _OfflineUnlockedNotifier(storage)),
+        ],
+      );
+      addTearDown(container.dispose);
+      final dio = container.read(dioProvider)..httpClientAdapter = adapter;
+
+      await expectLater(
+        dio.get<dynamic>('/legal-archive/documents'),
+        throwsA(
+          isA<DioException>().having(
+            (error) => error.type,
+            'type',
+            DioExceptionType.connectionError,
+          ),
+        ),
+      );
+
+      expect(adapter.requests, isEmpty);
+      expect(container.read(authSessionVersionProvider), 0);
+    },
+  );
+
   test('expired session clears token and increments session version', () async {
     final adapter =
         _AuthHttpAdapter()
@@ -521,6 +555,27 @@ void main() {
       expect(container.read(authSessionVersionProvider), 0);
     },
   );
+}
+
+class _OfflineUnlockedNotifier extends AuthNotifier {
+  _OfflineUnlockedNotifier(SecureStorageService storage)
+    : super(AuthRepository(Dio(), storage), storage, autoCheckAuth: false) {
+    state = AuthAuthenticated(
+      User()
+        ..serverId = 7
+        ..email = 'foreman@example.test'
+        ..name = 'Прораб'
+        ..roles = <String>[]
+        ..organizationsJson = '[]'
+        ..permissionsJson = '{}',
+      sessionIdentity: const AuthSessionIdentity(
+        userId: 7,
+        organizationId: 12,
+        sessionId: 'session-1',
+      ),
+      needsReauthentication: true,
+    );
+  }
 }
 
 ProviderContainer _container(
