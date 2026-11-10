@@ -355,9 +355,10 @@ class LegalDocumentRepository {
       if (CancelToken.isCancel(error)) rethrow;
       final statusCode = error.response?.statusCode;
       if (statusCode != null && statusCode < 500) {
-        if (statusCode == 401 || statusCode == 403 || statusCode == 404) {
+        if (_endsSession(error)) throw ApiException.fromDio(error);
+        if (statusCode == 403 || statusCode == 404) {
           await _deleteListSnapshots(projectId, identity);
-          if (statusCode == 401 || statusCode == 403) {
+          if (statusCode == 403) {
             await _clearIdentityAfterAccessDenied(identity);
           }
         }
@@ -425,6 +426,7 @@ class LegalDocumentRepository {
     } on DioException catch (error) {
       if (CancelToken.isCancel(error)) rethrow;
       final statusCode = error.response?.statusCode;
+      if (_endsSession(error)) throw ApiException.fromDio(error);
       if (statusCode == 403 || statusCode == 404) {
         await _deleteDetailSnapshot(projectId, identity, id);
         if (statusCode == 403) {
@@ -718,6 +720,15 @@ class LegalDocumentRepository {
       if (list != null) await isar.legalDocumentSnapshots.delete(list.id);
       if (partial != null) await isar.legalDocumentSnapshots.delete(partial.id);
     });
+  }
+
+  bool _endsSession(DioException error) {
+    final response = error.response;
+    if (response?.statusCode == 401) return true;
+    final data = response?.data;
+    return response?.statusCode == 403 &&
+        data is Map &&
+        data['code'] == 'organization_membership_inactive';
   }
 
   Future<void> _clearIdentityAfterAccessDenied(

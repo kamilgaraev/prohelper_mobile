@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import '../storage/secure_storage_service.dart';
+import '../../features/auth/domain/auth_provider.dart';
 import '../../features/auth/domain/auth_session_provider.dart';
 
 final authRefreshClientFactoryProvider = Provider<Dio Function(BaseOptions)>(
@@ -35,8 +36,26 @@ class AuthInterceptor extends Interceptor {
     final token = await _ref.read(secureStorageProvider).getToken();
     if (token != null && token.isNotEmpty) {
       options.headers['Authorization'] = 'Bearer $token';
+    } else if (_isOfflineUnlocked()) {
+      handler.reject(
+        DioException(
+          requestOptions: options,
+          type: DioExceptionType.connectionError,
+          message: 'Sign-in with password is required before server access.',
+        ),
+      );
+      return;
     }
     handler.next(options);
+  }
+
+  bool _isOfflineUnlocked() {
+    try {
+      final auth = _ref.read(authProvider);
+      return auth is AuthAuthenticated && auth.needsReauthentication;
+    } catch (_) {
+      return false;
+    }
   }
 
   @override
@@ -192,7 +211,7 @@ class AuthInterceptor extends Interceptor {
           (authorization != null && authorization != 'Bearer $currentToken')) {
         return;
       }
-      await storage.clearToken();
+      await storage.clearAccessToken();
       _ref.read(authSessionVersionProvider.notifier).state++;
     });
   }

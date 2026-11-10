@@ -21,6 +21,18 @@ bool shouldAutoFlushQueueOnAuthTransition({
       (!previousOnlineVerified || previousScope != nextScope);
 }
 
+String? queueScopeToClearOnAuthTransition(AuthState previous, AuthState next) {
+  String? scopeOf(AuthState state) {
+    final identity = retainedSessionIdentity(state);
+    if (identity == null) return null;
+    return '${identity.userId}:${identity.organizationId ?? 0}:${identity.sessionId}';
+  }
+
+  final oldScope = scopeOf(previous);
+  if (oldScope == null || oldScope == scopeOf(next)) return null;
+  return oldScope;
+}
+
 final syncQueueStoreProvider = FutureProvider<SyncQueueStore>((ref) async {
   final isar = await ref.watch(isarProvider.future);
   return IsarSyncQueueStore(isar);
@@ -43,9 +55,13 @@ final syncQueueServiceProvider = FutureProvider<SyncQueueService>((ref) async {
   ref.listen<AuthState>(authProvider, (previous, next) {
     final oldScope = scopeFor(previous ?? AuthInitial());
     final newScope = scopeFor(next);
-    if (oldScope != null && oldScope != newScope) {
-      unawaited(fileCache.clearIdentity(oldScope));
-      unawaited(service.clearScope(oldScope));
+    final scopeToClear = queueScopeToClearOnAuthTransition(
+      previous ?? AuthInitial(),
+      next,
+    );
+    if (scopeToClear != null) {
+      unawaited(fileCache.clearIdentity(scopeToClear));
+      unawaited(service.clearScope(scopeToClear));
     }
     final wasVerified =
         previous is AuthAuthenticated &&

@@ -1333,8 +1333,13 @@ class BimOfflineService {
   Future<bool> hasPending() async => (await store.records(
     _scope(),
   )).any((item) => item.kind == 'draft' && item.status != 'completed');
-  Future<void> prepareContextChange({bool discard = false}) async {
-    final scope = _scope();
+  Future<void> prepareContextChange({bool discard = false}) =>
+      _clearScope(_scope(), discard: discard);
+
+  Future<void> discardScope(String scope) => _clearScope(scope, discard: true);
+
+  Future<void> _clearScope(String scope, {required bool discard}) async {
+    if (_disposed) return;
     _transitioning = true;
     ++_epoch;
     for (final token in _downloads.values) {

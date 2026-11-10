@@ -13,7 +13,9 @@ import 'core/widgets/mobile_app_shell.dart';
 import 'core/theme/pro_theme.dart';
 import 'core/theme/theme_mode_provider.dart';
 import 'features/auth/domain/auth_provider.dart';
+import 'features/auth/presentation/lock_screen.dart';
 import 'features/auth/presentation/login_screen.dart';
+import 'features/auth/presentation/quick_unlock_settings_screen.dart';
 import 'features/projects/domain/projects_provider.dart';
 import 'features/projects/presentation/project_selection_screen.dart';
 import 'features/notifications/data/mobile_push_service.dart';
@@ -30,6 +32,9 @@ import 'features/schedule/data/schedule_repository.dart';
 import 'features/schedule/presentation/schedule_details_screen.dart';
 import 'features/warehouse/data/warehouse_repository.dart';
 import 'features/warehouse/presentation/warehouse_tasks_screen.dart';
+
+bool authTransitionClosesRoutes(AuthState? previous, AuthState next) =>
+    previous is AuthAuthenticated && next is! AuthAuthenticated;
 
 final GlobalKey<NavigatorState> mostNavigatorKey = GlobalKey<NavigatorState>();
 
@@ -75,8 +80,16 @@ class _MostAppState extends ConsumerState<MostApp> with WidgetsBindingObserver {
       _onForegroundPush,
     );
     _openedPushSubscription = _pushService.openedMessages.listen(_onOpenedPush);
-    ref.listenManual<AuthState>(authProvider, (_, state) {
+    ref.listenManual<AuthState>(authProvider, (previous, state) {
       unawaited(_pushService.setAuthenticated(state is AuthAuthenticated));
+      if (authTransitionClosesRoutes(previous, state)) {
+        _closeOpenedRoutes();
+      }
+      if (state is AuthAuthenticated &&
+          state.isOnlineVerified &&
+          !(previous is AuthAuthenticated && previous.isOnlineVerified)) {
+        _scheduleQuickUnlockOffer();
+      }
       if (state is AuthAuthenticated) {
         unawaited(_retryOfflineQueue());
         _scheduleOpenPendingPush();
@@ -156,6 +169,34 @@ class _MostAppState extends ConsumerState<MostApp> with WidgetsBindingObserver {
     if (messageId != null && !_handledPushMessages.add(messageId)) return;
     _pendingOpenedMessage = message;
     if (ref.read(authProvider) is AuthAuthenticated) _scheduleOpenPendingPush();
+  }
+
+  bool _quickUnlockOfferScheduled = false;
+
+  void _closeOpenedRoutes() {
+    final navigator = mostNavigatorKey.currentState;
+    if (navigator == null || !navigator.mounted) return;
+    navigator.popUntil((route) => route.isFirst);
+  }
+
+  void _scheduleQuickUnlockOffer() {
+    if (_quickUnlockOfferScheduled) return;
+    _quickUnlockOfferScheduled = true;
+    unawaited(
+      Future<void>.delayed(const Duration(seconds: 1), () async {
+        _quickUnlockOfferScheduled = false;
+        final navigatorContext = mostNavigatorKey.currentContext;
+        final auth = ref.read(authProvider);
+        if (!mounted ||
+            navigatorContext == null ||
+            !navigatorContext.mounted ||
+            auth is! AuthAuthenticated ||
+            !auth.isOnlineVerified) {
+          return;
+        }
+        await offerQuickUnlockSetup(navigatorContext, ref);
+      }).catchError((Object _) {}),
+    );
   }
 
   void _scheduleOpenPendingPush() {
@@ -354,6 +395,8 @@ class _MostAppState extends ConsumerState<MostApp> with WidgetsBindingObserver {
           projectsState.selectedProject != null
               ? const MobileAppShell()
               : const ProjectSelectionScreen();
+    } else if (authState is AuthLocked) {
+      home = const LockScreen();
     } else if (authState is AuthInitial) {
       home = const Scaffold(
         body: AppLoadingState(message: 'Проверяем сессию', minHeight: 156),

@@ -216,10 +216,10 @@ final legalDocumentProvider =
       );
       final repository = ref.read(legalDocumentRepositoryProvider);
       ref.listen<AuthState>(authProvider, (previous, next) {
-        final previousIdentity =
-            previous is AuthAuthenticated ? previous.sessionIdentity : null;
-        final nextIdentity =
-            next is AuthAuthenticated ? next.sessionIdentity : null;
+        final previousIdentity = retainedSessionIdentity(
+          previous ?? AuthInitial(),
+        );
+        final nextIdentity = retainedSessionIdentity(next);
         if (previousIdentity != null && previousIdentity != nextIdentity) {
           unawaited(
             repository.clearSnapshotScope(

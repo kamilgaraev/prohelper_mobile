@@ -310,6 +310,62 @@ void main() {
       expect(cached, isEmpty);
     },
   );
+  for (final scenario in [
+    (status: 401, data: <String, dynamic>{'message': 'expired'}),
+    (
+      status: 403,
+      data: <String, dynamic>{'code': 'organization_membership_inactive'},
+    ),
+  ]) {
+    test(
+      'ended session ${scenario.status} keeps cached detail and queued changes',
+      () async {
+        const identity = LegalDocumentCacheIdentity(
+          userId: 3,
+          organizationId: 8,
+          sessionId: 'session-a',
+        );
+        final cached = <int, LegalDocumentModel>{};
+        final queue = _RecordingQueue();
+        final dio = Dio(BaseOptions(baseUrl: 'https://api.example.test'));
+        dio.httpClientAdapter = _LegalDocumentJsonAdapter((options) {
+          throw DioException(
+            requestOptions: options,
+            type: DioExceptionType.badResponse,
+            response: Response<dynamic>(
+              requestOptions: options,
+              statusCode: scenario.status,
+              data: scenario.data,
+            ),
+          );
+        });
+        final repository = LegalDocumentRepository(
+          dio,
+          syncQueueService: () async => queue,
+          snapshotReader: (_, documentId, _) async => cached[documentId],
+          snapshotWriter: (_, documentId, _, payload) async {
+            cached[documentId] = LegalDocumentModel.fromJson(payload);
+          },
+          snapshotDeleter: (_, documentId, _) async {
+            cached.remove(documentId);
+          },
+        );
+        await repository.saveDocumentSnapshot(
+          projectId: 7,
+          documentId: 44,
+          identity: identity,
+          payload: _document(44),
+        );
+
+        await expectLater(
+          repository.fetchDocument(44, projectId: 7, identity: identity),
+          throwsA(isA<ApiException>()),
+        );
+        expect(cached.keys, [44]);
+        expect(queue.cleared, isEmpty);
+      },
+    );
+  }
   test(
     'does not queue an action under a new owner after an in-flight POST',
     () async {
@@ -349,42 +405,46 @@ void main() {
       expect(store.operations, isEmpty);
     },
   );
-  test('removes a queued action when the owner changes during storage', () async {
-    var currentIdentity = '3:8:session-a';
-    final requestStarted = Completer<void>();
-    final responseFailure = Completer<void>();
-    final dio = Dio(BaseOptions(baseUrl: 'https://api.example.test'));
-    dio.httpClientAdapter = _FailAfterOwnerSwitchAdapter(
-      requestStarted: requestStarted,
-      responseFailure: responseFailure,
-    );
-    final store = _MemorySyncQueueStore()
-      ..afterPut = () => currentIdentity = '9:11:session-b';
-    final queue = SyncQueueService(store: store, dio: Dio());
-    final repository = LegalDocumentRepository(
-      dio,
-      currentOwnerIdentity: () => currentIdentity,
-      syncQueueService: () async => queue,
-    );
+  test(
+    'removes a queued action when the owner changes during storage',
+    () async {
+      var currentIdentity = '3:8:session-a';
+      final requestStarted = Completer<void>();
+      final responseFailure = Completer<void>();
+      final dio = Dio(BaseOptions(baseUrl: 'https://api.example.test'));
+      dio.httpClientAdapter = _FailAfterOwnerSwitchAdapter(
+        requestStarted: requestStarted,
+        responseFailure: responseFailure,
+      );
+      final store =
+          _MemorySyncQueueStore()
+            ..afterPut = () => currentIdentity = '9:11:session-b';
+      final queue = SyncQueueService(store: store, dio: Dio());
+      final repository = LegalDocumentRepository(
+        dio,
+        currentOwnerIdentity: () => currentIdentity,
+        syncQueueService: () async => queue,
+      );
 
-    final action = repository.performAction(
-      documentId: 44,
-      action: const LegalDocumentAction(
-        action: 'approve',
-        label: 'Согласовать',
-        enabled: true,
-        blockers: [],
-        targetStepId: 12,
-        expectedInstanceLockVersion: 3,
-        expectedStepLockVersion: 5,
-      ),
-    );
-    await requestStarted.future;
-    responseFailure.complete();
+      final action = repository.performAction(
+        documentId: 44,
+        action: const LegalDocumentAction(
+          action: 'approve',
+          label: 'Согласовать',
+          enabled: true,
+          blockers: [],
+          targetStepId: 12,
+          expectedInstanceLockVersion: 3,
+          expectedStepLockVersion: 5,
+        ),
+      );
+      await requestStarted.future;
+      responseFailure.complete();
 
-    await expectLater(action, throwsA(isA<StateError>()));
-    expect(store.operations, isEmpty);
-  });
+      await expectLater(action, throwsA(isA<StateError>()));
+      expect(store.operations, isEmpty);
+    },
+  );
 }
 
 Map<String, dynamic> _document(int id, {String? title}) => {
@@ -475,4 +535,15 @@ class _MemorySyncQueueStore implements SyncQueueStore {
   @override
   Future<void> delete(int id) async =>
       operations.removeWhere((item) => item.id == id);
+}
+
+class _RecordingQueue extends SyncQueueService {
+  _RecordingQueue() : super(store: _MemorySyncQueueStore(), dio: Dio());
+
+  final cleared = <String>[];
+
+  @override
+  Future<void> clearScope(String ownerIdentity) async {
+    cleared.add(ownerIdentity);
+  }
 }
