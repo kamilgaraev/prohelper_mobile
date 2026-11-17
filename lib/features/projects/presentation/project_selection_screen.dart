@@ -15,6 +15,9 @@ import 'package:prohelpers_mobile/features/projects/domain/projects_provider.dar
 import 'package:prohelpers_mobile/features/projects/presentation/widgets/project_card.dart';
 import 'project_hierarchy_screen.dart';
 import '../../design_management/offline/bim_context_change_dialog.dart';
+import '../../../core/providers/module_provider.dart';
+import '../../../core/services/permission_service.dart';
+import '../../workforce/presentation/month_timekeeping_screen.dart';
 
 class ProjectSelectionScreen extends ConsumerStatefulWidget {
   const ProjectSelectionScreen({super.key});
@@ -98,6 +101,10 @@ class _ProjectSelectionScreenState
     final theme = Theme.of(context);
     final state = ref.watch(projectsProvider);
     final user = ref.watch(authProvider).user;
+    final permissions = ref.watch(permissionServiceProvider);
+    final canOpenTimekeeping =
+        permissions.canAccessModule(AppModule.workforceManagement) &&
+        permissions.hasPermission('workforce.timekeeping.view');
 
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
@@ -129,6 +136,28 @@ class _ProjectSelectionScreenState
                 ),
               ),
               const SliverToBoxAdapter(child: SizedBox(height: ProSpacing.md)),
+              if (canOpenTimekeeping)
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(
+                    ProSpacing.md,
+                    0,
+                    ProSpacing.md,
+                    ProSpacing.md,
+                  ),
+                  sliver: SliverToBoxAdapter(
+                    child: AppSecondaryActionButton(
+                      label: 'Месячные табели',
+                      leading: const Icon(Icons.calendar_month_outlined),
+                      expanded: true,
+                      onPressed:
+                          () => Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (_) => const MonthTimekeepingScreen(),
+                            ),
+                          ),
+                    ),
+                  ),
+                ),
               if (state.fromCache)
                 const SliverPadding(
                   padding: EdgeInsets.fromLTRB(
