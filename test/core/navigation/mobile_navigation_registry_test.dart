@@ -6,6 +6,31 @@ import 'package:prohelpers_mobile/features/actions/presentation/mobile_action_se
 import 'package:prohelpers_mobile/features/modules/data/mobile_module_model.dart';
 
 void main() {
+  test(
+    'monthly timekeeping is discoverable only with its own view permission',
+    () {
+      final destination =
+          MobileNavigationRegistry.destinationForRoute(
+            'workforce_timekeeping',
+          )!;
+      expect(destination.requiresProject, false);
+      expect(destination.isSecondary, true);
+      expect(destination.allowsPermissions(['workforce.view']), false);
+      final routes = visibleMobileDestinations([
+        MobileModuleModel(
+          slug: 'workforce-management',
+          title: 'Персонал',
+          description: '',
+          icon: 'grid',
+          supportedOnMobile: true,
+          order: 0,
+          route: 'workforce_management',
+          permissions: ['workforce.timekeeping.view'],
+        ),
+      ]).map((item) => item.route);
+      expect(routes, contains('workforce_timekeeping'));
+    },
+  );
   test('registry resolves every primary dashboard route once', () {
     final routes = <String>{
       'project_overview',

@@ -2,6 +2,9 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:prohelpers_mobile/core/models/user_context.dart';
+import 'package:prohelpers_mobile/core/providers/module_provider.dart';
+import 'package:prohelpers_mobile/core/services/permission_service.dart';
 import 'package:prohelpers_mobile/core/storage/secure_storage_service.dart';
 import 'package:prohelpers_mobile/core/theme/pro_theme.dart';
 import 'package:prohelpers_mobile/features/auth/data/auth_repository.dart';
@@ -171,6 +174,7 @@ void main() {
     required Widget child,
     _TestProjectsNotifier? projectState,
     User? user,
+    bool canTimekeeping = false,
   }) {
     authNotifier = _TestAuthNotifier(user ?? _user());
     projectsNotifier = projectState ?? _TestProjectsNotifier.loaded(_project());
@@ -182,15 +186,29 @@ void main() {
           (ref) async => _TestBimOfflineService(),
         ),
         projectsProvider.overrideWith((ref) => projectsNotifier),
+        permissionServiceProvider.overrideWithValue(
+          PermissionService(
+            context: UserContext.field,
+            activeModules: {AppModule.workforceManagement},
+            grantedPermissions: {
+              if (canTimekeeping) 'workforce.timekeeping.view',
+            },
+          ),
+        ),
       ],
       child: child,
     );
   }
 
-  Widget buildScreen({_TestProjectsNotifier? projectState, User? user}) {
+  Widget buildScreen({
+    _TestProjectsNotifier? projectState,
+    User? user,
+    bool canTimekeeping = false,
+  }) {
     return buildScope(
       projectState: projectState,
       user: user,
+      canTimekeeping: canTimekeeping,
       child: MaterialApp(
         theme: MostTheme.lightTheme,
         home: const ProjectSelectionScreen(),
@@ -221,6 +239,25 @@ void main() {
         ),
       ),
     );
+  }
+
+  for (final allowed in [true, false]) {
+    testWidgets('табели без выбранного объекта: доступ $allowed', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        buildScreen(
+          projectState: _TestProjectsNotifier.pending(),
+          canTimekeeping: allowed,
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Нет доступных объектов'), findsOneWidget);
+      expect(
+        find.text('Месячные табели'),
+        allowed ? findsOneWidget : findsNothing,
+      );
+    });
   }
 
   testWidgets('кнопка выхода на выборе объекта имеет понятную подпись', (

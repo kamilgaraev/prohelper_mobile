@@ -44,6 +44,7 @@ import 'package:prohelpers_mobile/features/video_monitoring/presentation/video_m
 import 'package:prohelpers_mobile/features/workflow_management/presentation/workflow_management_screen.dart';
 import 'package:prohelpers_mobile/features/workforce/presentation/workforce_attendance_screen.dart';
 import 'package:prohelpers_mobile/features/workforce/presentation/employee_workspace_screen.dart';
+import 'package:prohelpers_mobile/features/workforce/presentation/month_timekeeping_screen.dart';
 
 import 'mobile_destination.dart';
 
@@ -202,6 +203,21 @@ class MobileNavigationRegistry {
       preferredContexts: <UserContext>{UserContext.field},
       builder: (_) => const ProductionLaborScreen(),
       aliases: <String>['production-labor'],
+    ),
+    MobileModuleDestination(
+      route: 'workforce_timekeeping',
+      adminGroup: MobileAdminGroup.personnel,
+      slug: 'workforce_timekeeping',
+      title: 'Месячные табели',
+      shortTitle: 'Табели',
+      icon: Icons.calendar_month_outlined,
+      group: MobileModuleGroup.management,
+      appModule: AppModule.workforceManagement,
+      viewPermissions: <String>['workforce.timekeeping.view'],
+      isSecondary: true,
+      requiresProject: false,
+      searchKeywords: <String>['часы', 'сотрудники', 'учёт времени'],
+      builder: (_) => const MonthTimekeepingScreen(),
     ),
     MobileModuleDestination(
       route: 'workforce_self_service',
