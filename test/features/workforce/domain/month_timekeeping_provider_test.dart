@@ -15,6 +15,8 @@ class _Repository extends MonthTimekeepingRepository {
   final loads = <Completer<TimekeepingPage>>[];
   final scopes = <int?>[];
   final revisions = <int>[];
+  final detailLoads = <Completer<TimekeepingPeriod>>[];
+  bool delayDetails = false;
   Completer<TimekeepingPeriod>? pending;
   @override
   Future<TimekeepingPage> periods(
@@ -29,8 +31,15 @@ class _Repository extends MonthTimekeepingRepository {
   }
 
   @override
-  Future<TimekeepingPeriod> period(int id) async =>
-      TimekeepingPeriod.fromJson(timekeepingFixture());
+  Future<TimekeepingPeriod> period(int id) async {
+    if (delayDetails) {
+      final completer = Completer<TimekeepingPeriod>();
+      detailLoads.add(completer);
+      return completer.future;
+    }
+    return TimekeepingPeriod.fromJson(timekeepingFixture());
+  }
+
   @override
   Future<TimekeepingPeriod> saveCell(
     TimekeepingPeriod period,
@@ -42,6 +51,45 @@ class _Repository extends MonthTimekeepingRepository {
 }
 
 void main() {
+  test('ignores stale detail responses after a newer reload', () async {
+    final repository = _Repository()..delayDetails = true;
+    final notifier = TimekeepingDetailNotifier(repository, 7);
+    final newer = notifier.load();
+    repository.detailLoads[1].complete(
+      TimekeepingPeriod.fromJson(timekeepingFixture(revision: 3)),
+    );
+    await newer;
+    repository.detailLoads[0].complete(
+      TimekeepingPeriod.fromJson(timekeepingFixture(revision: 1)),
+    );
+    await Future<void>.delayed(Duration.zero);
+    expect(notifier.state.requireValue.revision, 3);
+    notifier.dispose();
+  });
+
+  test('ignores pending detail loads after a mutation begins', () async {
+    final repository = _Repository()..delayDetails = true;
+    final notifier = TimekeepingDetailNotifier(repository, 7);
+    final newer = notifier.load();
+    repository.detailLoads[1].complete(
+      TimekeepingPeriod.fromJson(timekeepingFixture(revision: 3)),
+    );
+    await newer;
+    repository.pending = Completer<TimekeepingPeriod>();
+    final saving = notifier.saveCell({});
+    repository.detailLoads[0].complete(
+      TimekeepingPeriod.fromJson(timekeepingFixture(revision: 1)),
+    );
+    await Future<void>.delayed(Duration.zero);
+    expect(notifier.state.isLoading, true);
+    repository.pending!.complete(
+      TimekeepingPeriod.fromJson(timekeepingFixture(revision: 4)),
+    );
+    await saving;
+    expect(notifier.state.requireValue.revision, 4);
+    notifier.dispose();
+  });
+
   test(
     'ignores stale month requests and clears project scope explicitly',
     () async {

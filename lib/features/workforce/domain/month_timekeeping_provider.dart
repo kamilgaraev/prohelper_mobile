@@ -91,20 +91,25 @@ class TimekeepingDetailNotifier
   final MonthTimekeepingRepository _repository;
   final int id;
   bool _busy = false;
+  int _loadGeneration = 0;
   Future<void> load() async {
     if (_busy) return;
+    final generation = ++_loadGeneration;
     state = const AsyncLoading();
     try {
       final result = await _repository.period(id);
-      if (mounted) state = AsyncData(result);
+      if (mounted && generation == _loadGeneration) state = AsyncData(result);
     } catch (error, stack) {
-      if (mounted) state = AsyncError(error, stack);
+      if (mounted && generation == _loadGeneration) {
+        state = AsyncError(error, stack);
+      }
     }
   }
 
   Future<T> _run<T>(Future<T> Function(TimekeepingPeriod) call) async {
     if (_busy) throw StateError('Дождитесь сохранения табеля.');
     final previous = state.requireValue;
+    ++_loadGeneration;
     _busy = true;
     state = const AsyncLoading<TimekeepingPeriod>().copyWithPrevious(state);
     try {

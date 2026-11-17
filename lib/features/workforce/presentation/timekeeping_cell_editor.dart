@@ -290,15 +290,13 @@ class _TimekeepingCellEditorState extends ConsumerState<TimekeepingCellEditor> {
                                 'Начало работы',
                                 interval.start,
                                 (v) => change(() => interval.start = v),
-                                ObjectKey(
-                                  'start-${identityHashCode(interval)}',
-                                ),
+                                ValueKey('start-${identityHashCode(interval)}'),
                               ),
                               _dateField(
                                 'Конец работы',
                                 interval.end,
                                 (v) => change(() => interval.end = v),
-                                ObjectKey('end-${identityHashCode(interval)}'),
+                                ValueKey('end-${identityHashCode(interval)}'),
                               ),
                               TextFormField(
                                 initialValue: interval.timezone,
@@ -317,7 +315,7 @@ class _TimekeepingCellEditorState extends ConsumerState<TimekeepingCellEditor> {
                                       'Начало перерыва',
                                       pause.start,
                                       (v) => change(() => pause.start = v),
-                                      ObjectKey(
+                                      ValueKey(
                                         'pause-start-${identityHashCode(pause)}',
                                       ),
                                     ),
@@ -325,7 +323,7 @@ class _TimekeepingCellEditorState extends ConsumerState<TimekeepingCellEditor> {
                                       'Конец перерыва',
                                       pause.end,
                                       (v) => change(() => pause.end = v),
-                                      ObjectKey(
+                                      ValueKey(
                                         'pause-end-${identityHashCode(pause)}',
                                       ),
                                     ),

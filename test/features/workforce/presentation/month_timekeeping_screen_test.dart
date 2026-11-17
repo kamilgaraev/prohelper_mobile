@@ -189,6 +189,47 @@ Future<void> _openDay(WidgetTester tester) async {
 }
 
 void main() {
+  testWidgets(
+    'detailed time fields keep focus and input when the keyboard changes insets',
+    (tester) async {
+      addTearDown(tester.view.resetViewInsets);
+      await tester.pumpWidget(_app(_Repository()));
+      await tester.pumpAndSettle();
+      await _openDay(tester);
+      await tester.tap(find.text('Только количество часов'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Добавить перерыв'));
+      await tester.tap(find.text('Добавить перерыв'));
+      await tester.pumpAndSettle();
+      final fields = [
+        'Начало работы',
+        'Конец работы',
+        'Начало перерыва',
+        'Конец перерыва',
+      ];
+      for (var i = 0; i < fields.length; i++) {
+        final field = find.widgetWithText(TextFormField, fields[i]);
+        await tester.ensureVisible(field);
+        await tester.enterText(field, '02.09.2026 09:00');
+        final editable = find.descendant(
+          of: field,
+          matching: find.byType(EditableText),
+        );
+        expect(tester.widget<EditableText>(editable).focusNode.hasFocus, true);
+        tester.view.viewInsets = FakeViewPadding(bottom: 220 + i * 20);
+        await tester.pumpAndSettle();
+        expect(
+          tester.widget<EditableText>(editable).focusNode.hasFocus,
+          true,
+          reason: fields[i],
+        );
+        expect(
+          tester.widget<EditableText>(editable).controller.text,
+          '02.09.2026 09:00',
+        );
+      }
+    },
+  );
   for (final noRows in [false, true]) {
     testWidgets(
       'documents remain available without matching employees (empty period: $noRows)',
