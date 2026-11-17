@@ -9,6 +9,31 @@ import '../timekeeping_fixture.dart';
 
 void main() {
   test(
+    'keeps work wall-clock boundaries valid across a different device DST gap',
+    () {
+      final input = TimekeepingIntervalInput(
+        start: '29.03.2026 02:30',
+        end: '29.03.2026 03:30',
+        timezone: 'Europe/Moscow',
+        breaks: [TimekeepingBreakInput('29.03.2026 02:40', '29.03.2026 03:10')],
+      );
+      final payload = input.toJson();
+      expect(
+        timekeepingLocalInput('2026-03-29T02:30:00', 'Europe/Moscow'),
+        '29.03.2026 02:30',
+      );
+      expect(payload['start_at'], '2026-03-29T02:30:00');
+      expect(payload['end_at'], '2026-03-29T03:30:00');
+      expect(payload['break_intervals'], [
+        {'start_at': '2026-03-29T02:40:00', 'end_at': '2026-03-29T03:10:00'},
+      ]);
+      input.end = '29.03.2026 01:30';
+      expect(input.toJson, throwsFormatException);
+      input.end = input.start;
+      expect(input.toJson, throwsFormatException);
+    },
+  );
+  test(
     'reads mobile pagination and keeps organization and project scope explicit',
     () async {
       final requests = <RequestOptions>[];

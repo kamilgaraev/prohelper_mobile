@@ -8,11 +8,10 @@ String timekeepingLocalInput(String timestamp, String timezone) {
     database.initializeTimeZones();
     _initialized = true;
   }
-  final parsed = DateTime.parse(timestamp);
+  final hasOffset = RegExp(r'(Z|[+-]\d\d:\d\d)$').hasMatch(timestamp);
+  final parsed = DateTime.parse(hasOffset ? timestamp : '${timestamp}Z');
   final value =
-      RegExp(r'(Z|[+-]\d\d:\d\d)$').hasMatch(timestamp)
-          ? tz.TZDateTime.from(parsed, tz.getLocation(timezone))
-          : parsed;
+      hasOffset ? tz.TZDateTime.from(parsed, tz.getLocation(timezone)) : parsed;
   String two(int n) => n.toString().padLeft(2, '0');
   return '${two(value.day)}.${two(value.month)}.${value.year} ${two(value.hour)}:${two(value.minute)}';
 }
@@ -76,7 +75,7 @@ class TimekeepingIntervalInput {
         'Укажите даты и время начала и конца работы.',
       );
     }
-    if (DateTime.parse(endAt).compareTo(DateTime.parse(startAt)) <= 0) {
+    if (endAt.compareTo(startAt) <= 0) {
       throw const FormatException('Конец работы должен быть позже начала.');
     }
     return {
