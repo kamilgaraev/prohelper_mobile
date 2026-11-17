@@ -497,48 +497,21 @@ class _TimekeepingPeriodScreenState
                   padding: const EdgeInsets.fromLTRB(12, 0, 12, 16),
                   sliver:
                       rows.isEmpty
-                          ? SliverFillRemaining(
-                            hasScrollBody: false,
-                            child: Center(
-                              child: Text(
-                                period.rows.isEmpty
-                                    ? 'В этом табеле нет сотрудников. Проверьте состав сотрудников и обновите табель из источников.'
-                                    : 'Сотрудники не найдены.',
+                          ? SliverToBoxAdapter(
+                            child: Padding(
+                              padding: const EdgeInsets.all(16),
+                              child: Center(
+                                child: Text(
+                                  period.rows.isEmpty
+                                      ? 'В этом табеле нет сотрудников. Проверьте состав сотрудников и обновите табель из источников.'
+                                      : 'Сотрудники не найдены.',
+                                ),
                               ),
                             ),
                           )
                           : SliverList.builder(
-                            itemCount:
-                                rows.length +
-                                (period.documents.isEmpty ? 0 : 1),
+                            itemCount: rows.length,
                             itemBuilder: (context, index) {
-                              if (index == rows.length) {
-                                return ExpansionTile(
-                                  title: const Text('Документы табеля'),
-                                  children:
-                                      period.documents
-                                          .map(
-                                            (doc) => ListTile(
-                                              title: Text(doc.filename),
-                                              subtitle: Text(
-                                                'Версия ${doc.revision}',
-                                              ),
-                                              trailing: const Icon(
-                                                Icons.open_in_new,
-                                              ),
-                                              onTap:
-                                                  busy
-                                                      ? null
-                                                      : () => _openDocument(
-                                                        () => notifier.download(
-                                                          doc.id,
-                                                        ),
-                                                      ),
-                                            ),
-                                          )
-                                          .toList(),
-                                );
-                              }
                               final row = rows[index];
                               final canEdit =
                                   canManage &&
@@ -688,6 +661,31 @@ class _TimekeepingPeriodScreenState
                             },
                           ),
                 ),
+                if (period.documents.isNotEmpty)
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 0, 12, 16),
+                      child: ExpansionTile(
+                        title: const Text('Документы табеля'),
+                        children:
+                            period.documents
+                                .map(
+                                  (doc) => ListTile(
+                                    title: Text(doc.filename),
+                                    subtitle: Text('Версия ${doc.revision}'),
+                                    trailing: const Icon(Icons.open_in_new),
+                                    onTap:
+                                        busy
+                                            ? null
+                                            : () => _openDocument(
+                                              () => notifier.download(doc.id),
+                                            ),
+                                  ),
+                                )
+                                .toList(),
+                      ),
+                    ),
+                  ),
               ],
             );
           },

@@ -33,6 +33,7 @@ class _Repository extends MonthTimekeepingRepository {
   int uploadCalls = 0;
   int actionCalls = 0;
   bool approval = false;
+  bool noRows = false;
   Map<String, dynamic>? actionData;
   TimekeepingPeriod fixture(int id) {
     final json = timekeepingFixture(
@@ -56,6 +57,7 @@ class _Repository extends MonthTimekeepingRepository {
         },
       ];
     }
+    if (noRows) json['rows'] = [];
     return TimekeepingPeriod.fromJson(json);
   }
 
@@ -187,6 +189,33 @@ Future<void> _openDay(WidgetTester tester) async {
 }
 
 void main() {
+  for (final noRows in [false, true]) {
+    testWidgets(
+      'documents remain available without matching employees (empty period: $noRows)',
+      (tester) async {
+        final repository =
+            _Repository()
+              ..approval = true
+              ..noRows = noRows;
+        await tester.pumpWidget(_app(repository));
+        await tester.pumpAndSettle();
+        await tester.enterText(
+          find.widgetWithText(TextField, 'Сотрудник или табельный номер'),
+          'Нет совпадений',
+        );
+        await tester.pumpAndSettle();
+        await tester.scrollUntilVisible(
+          find.text('Документы табеля'),
+          240,
+          scrollable: find.byType(Scrollable).first,
+        );
+        await tester.tap(find.text('Документы табеля'));
+        await tester.pumpAndSettle();
+        expect(find.text('Табель.pdf'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
   testWidgets(
     'resets the selected approval document when reloading a new revision',
     (tester) async {
