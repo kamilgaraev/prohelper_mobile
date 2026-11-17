@@ -83,7 +83,11 @@ void main() {
         await tester.tap(find.text('Сохранить часы'));
         await tester.pumpAndSettle();
         expect(repository.minutes, 450);
-        await tester.ensureVisible(find.textContaining('Часов: 7,5'));
+        await tester.scrollUntilVisible(
+          find.textContaining('Часов: 7,5'),
+          -240,
+          scrollable: find.byType(Scrollable).first,
+        );
         expect(find.textContaining('Часов: 7,5'), findsOneWidget);
         expect(tester.takeException(), isNull);
         await tester.pumpWidget(const SizedBox.shrink());
