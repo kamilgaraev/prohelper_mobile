@@ -923,6 +923,81 @@ void main() {
     }
   });
 
+  testWidgets('terminal POST replay restores the question without retrying', (
+    tester,
+  ) async {
+    for (final (status, errorCode, notice) in [
+      ('cancelled', 'request_cancelled', 'Запрос остановлен.'),
+      (
+        'failed',
+        'request_failed',
+        'Ассистент не смог подготовить ответ. Попробуйте новый запрос.',
+      ),
+    ]) {
+      final repository = _RaceRepository(freeQuote: true);
+      await tester.pumpWidget(buildScreen(repository));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), 'Вопрос');
+      await tester.tap(find.byIcon(Icons.send_rounded));
+      await tester.pump();
+      repository.answer.complete(
+        AiAssistantChatRequest.fromJson({
+          'request_id': repository.requestId,
+          'conversation_id': 1,
+          'status': status,
+          'run_status': status,
+          'stage': status,
+          'error_code': errorCode,
+        }),
+      );
+
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(seconds: 5));
+
+      expect(find.text(notice), findsOneWidget);
+      expect(find.text('Ассистент готов'), findsOneWidget);
+      expect(find.text('Стоп'), findsNothing);
+      expect(
+        tester.widget<TextField>(find.byType(TextField)).controller?.text,
+        'Вопрос',
+      );
+      expect(repository.sentIds, [repository.requestId]);
+      expect(repository.polledIds, isEmpty);
+      await tester.pumpWidget(const SizedBox.shrink());
+    }
+  });
+
+  testWidgets('pending server cancellation disables Stop with running status', (
+    tester,
+  ) async {
+    final repository = _RaceRepository(freeQuote: true);
+    await tester.pumpWidget(buildScreen(repository));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), 'Вопрос');
+    await tester.tap(find.byIcon(Icons.send_rounded));
+    await tester.pump();
+    repository.answer.complete(
+      AiAssistantChatRequest.fromJson({
+        'request_id': repository.requestId,
+        'conversation_id': 1,
+        'status': 'cancel_requested',
+        'run_status': 'running',
+        'stage': 'generating',
+      }),
+    );
+    await tester.pump();
+
+    expect(find.text('Останавливаю обработку'), findsOneWidget);
+    final stop = find.ancestor(
+      of: find.text('Стоп'),
+      matching: find.byWidgetPredicate((widget) => widget is TextButton),
+    );
+    expect(tester.widget<TextButton>(stop).onPressed, isNull);
+    expect(repository.cancelledRequestId, isNull);
+    expect(repository.polledIds, [repository.requestId]);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets(
     'reports zero actual charge in shadow mode without claiming payment',
     (tester) async {

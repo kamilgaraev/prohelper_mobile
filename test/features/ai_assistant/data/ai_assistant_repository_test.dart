@@ -97,12 +97,16 @@ void main() {
         (options) => _responseData({
           'request_id': 'request-1',
           'status': 'cancel_requested',
+          'run_status': 'running',
           'stage': 'generating',
         }),
       );
       final repository = AiAssistantRepository(dio);
       final request = await repository.cancelRequest('request-1');
       expect(request.status, 'cancel_requested');
+      expect(request.runStatus, 'running');
+      expect(request.isCancellationPending, isTrue);
+      expect(request.isTerminal, isFalse);
       expect(request.stage, 'generating');
       await expectLater(
         repository.cancelRequest('request-2'),
@@ -413,6 +417,41 @@ void main() {
       expect(payloads[1]['quote_id'], 'same-quote');
     },
   );
+
+  test('accepts terminal POST replay with no assistant message', () async {
+    for (final (status, errorCode) in [
+      ('cancelled', 'request_cancelled'),
+      ('failed', 'request_failed'),
+    ]) {
+      final requests = <RequestOptions>[];
+      final dio = Dio(BaseOptions(baseUrl: 'https://api.example.test'));
+      dio.httpClientAdapter = _JsonAdapter((request) {
+        requests.add(request);
+        return _responseData({
+          'request_id': 'same-id',
+          'conversation_id': 12,
+          'status': status,
+          'run_status': status,
+          'stage': status,
+          'error_code': errorCode,
+        });
+      });
+      final result = await AiAssistantRepository(dio).sendMessageRequest(
+        message: 'Вопрос',
+        requestId: 'same-id',
+        conversationId: 12,
+        quoteId: 'same-quote',
+        maxConfirmed: true,
+      );
+
+      expect(result.requestId, 'same-id');
+      expect(result.runStatus, status);
+      expect(result.isTerminal, isTrue);
+      expect(result.errorCode, errorCode);
+      expect(result.result, isNull);
+      expect(requests.single.method, 'POST');
+    }
+  });
 
   test(
     'request status rejects a result for a different conversation',

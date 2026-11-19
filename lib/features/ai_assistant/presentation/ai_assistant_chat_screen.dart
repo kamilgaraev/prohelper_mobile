@@ -366,10 +366,15 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
       _isSending = true;
       _error = null;
       _progressSteps = snapshot?.progress ?? const [];
-      _progress = _currentActivity(
-        recovering ? 'recovering' : snapshot?.stage ?? snapshot?.runStatus,
-        _progressSteps,
-      );
+      _progress =
+          _cancelRequested
+              ? 'Останавливаю обработку'
+              : _currentActivity(
+                recovering
+                    ? 'recovering'
+                    : snapshot?.stage ?? snapshot?.runStatus,
+                _progressSteps,
+              );
     });
     _startElapsedTimer(reset: !recovering);
     _startPolling(requestId, revision, conversationId);
@@ -484,8 +489,9 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
     final steps = _mergeProgress(_progressSteps, request.progress);
     setState(() {
       _progressSteps = steps;
+      _cancelRequested = _cancelRequested || request.isCancellationPending;
       _progress =
-          request.isCancellationPending || _cancelRequested
+          _cancelRequested
               ? 'Останавливаю обработку'
               : _currentActivity(request.stage ?? request.runStatus, steps);
     });
