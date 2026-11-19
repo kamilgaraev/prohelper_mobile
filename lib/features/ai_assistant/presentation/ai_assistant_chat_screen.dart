@@ -32,20 +32,67 @@ import 'ai_assistant_credits_screen.dart';
 import 'ai_assistant_documents_screen.dart';
 
 const _progressLabels = <String, List<String>>{
-  'rag_search': ['Ищу информацию', 'Информация собрана'],
-  'estimates': ['Проверяю сметы', 'Сметы проверены'],
-  'warehouse': ['Проверяю склад', 'Склад проверен'],
-  'projects': ['Проверяю проекты', 'Проекты проверены'],
-  'contracts': ['Проверяю договоры', 'Договоры проверены'],
-  'procurement': ['Проверяю закупки', 'Закупки проверены'],
-  'schedule': ['Проверяю график', 'График проверен'],
-  'work_volumes': ['Проверяю объёмы работ', 'Объёмы работ проверены'],
-  'materials': ['Проверяю материалы', 'Материалы проверены'],
-  'reports': ['Проверяю отчёты', 'Отчёты проверены'],
+  'rag_search': [
+    'Ищу информацию',
+    'Информация собрана',
+    'Поиск информации прерван',
+  ],
+  'estimates': [
+    'Проверяю сметы',
+    'Сметы проверены',
+    'Не удалось проверить сметы',
+  ],
+  'warehouse': [
+    'Проверяю склад',
+    'Склад проверен',
+    'Не удалось проверить склад',
+  ],
+  'projects': [
+    'Проверяю проекты',
+    'Проекты проверены',
+    'Не удалось проверить проекты',
+  ],
+  'contracts': [
+    'Проверяю договоры',
+    'Договоры проверены',
+    'Не удалось проверить договоры',
+  ],
+  'procurement': [
+    'Проверяю закупки',
+    'Закупки проверены',
+    'Не удалось проверить закупки',
+  ],
+  'schedule': [
+    'Проверяю график',
+    'График проверен',
+    'Не удалось проверить график',
+  ],
+  'work_volumes': [
+    'Проверяю объёмы работ',
+    'Объёмы работ проверены',
+    'Не удалось проверить объёмы работ',
+  ],
+  'materials': [
+    'Проверяю материалы',
+    'Материалы проверены',
+    'Не удалось проверить материалы',
+  ],
+  'reports': [
+    'Проверяю отчёты',
+    'Отчёты проверены',
+    'Не удалось проверить отчёты',
+  ],
   'financial_data': [
     'Проверяю финансовые данные',
     'Финансовые данные проверены',
+    'Не удалось проверить финансовые данные',
   ],
+  'record_check': [
+    'Проверяю запись',
+    'Запись проверена',
+    'Не удалось проверить запись',
+  ],
+  'composing': ['Собираю ответ', 'Ответ собран', 'Не удалось собрать ответ'],
 };
 
 List<AiAssistantProgressModel> _mergeProgress(
@@ -66,8 +113,17 @@ List<AiAssistantProgressModel> _mergeProgress(
 }
 
 String _progressLabel(AiAssistantProgressModel step) =>
-    _progressLabels[step.code]?[step.state == 'completed' ? 1 : 0] ??
+    _progressLabels[step.code]?[switch (step.state) {
+      'completed' => 1,
+      'failed' => 2,
+      _ => 0,
+    }] ??
     'Запрос обрабатывается';
+
+(String, String?) _progressIdentity(AiAssistantProgressModel step) => (
+  step.code,
+  step.key,
+);
 
 String _currentActivity(
   String? stage,
@@ -81,28 +137,30 @@ String _currentActivity(
   }.contains(stage)) {
     return _stageLabels[stage]!;
   }
-  final latestByCode = <String, AiAssistantProgressModel>{};
+  final latestByStep = <(String, String?), AiAssistantProgressModel>{};
   for (final step in progress) {
-    latestByCode[step.code] = step;
+    latestByStep[_progressIdentity(step)] = step;
   }
   final active =
-      latestByCode.values.where((step) => step.state == 'started').toList()
+      latestByStep.values.where((step) => step.state == 'started').toList()
         ..sort((left, right) => right.id.compareTo(left.id));
   if (active.isNotEmpty) {
-    return _progressLabels[active.first.code]?[0] ?? 'Запрос обрабатывается';
+    return _progressLabel(active.first);
   }
   return _stageLabels[stage] ?? 'Запрос обрабатывается';
 }
 
-List<AiAssistantProgressModel> _completedSources(
+List<AiAssistantProgressModel> _progressHistory(
   List<AiAssistantProgressModel> progress,
 ) {
-  final byCode = <String, AiAssistantProgressModel>{};
+  final byStep = <(String, String?), AiAssistantProgressModel>{};
   for (final step in progress) {
-    if (step.state == 'completed') byCode[step.code] = step;
+    if (step.state == 'completed' || step.state == 'failed') {
+      byStep[_progressIdentity(step)] = step;
+    }
   }
   final result =
-      byCode.values.toList()
+      byStep.values.toList()
         ..sort((left, right) => left.id.compareTo(right.id));
   return result;
 }
@@ -161,14 +219,17 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
   int _conversationScopeRevision = 0;
   String? _progress;
   List<AiAssistantProgressModel> _progressSteps = const [];
-  final Map<int, List<AiAssistantProgressModel>> _completedProgressByMessageId =
-      {};
+  final Map<int, List<AiAssistantProgressModel>> _progressByMessageId = {};
   String? _activeRequestId;
   AiAssistantRepository? _activeRequestRepository;
   Timer? _progressTimer;
   Timer? _elapsedTimer;
-  int _elapsedSeconds = 0;
-  DateTime? _requestCreatedAt;
+  int? _elapsedSeconds;
+  DateTime? _elapsedReferenceAt;
+  int _elapsedReferenceSeconds = 0;
+  bool _hasServerElapsed = false;
+  AiAssistantInterimResult? _interimResult;
+  int _interimRevision = 0;
   int? _pollingRevision;
   bool _cancelRequested = false;
   DateTime? _requestStartedAt;
@@ -222,7 +283,7 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
       _imageError = null;
       _messages = const [];
       _progressSteps = const [];
-      _completedProgressByMessageId.clear();
+      _progressByMessageId.clear();
       _failedRequest = null;
       _bootstrap();
     }
@@ -359,6 +420,7 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
   }) {
     final revision = ++_requestRevision;
     final conversationId = _conversationId;
+    if (requestId != _activeRequestId) _resetTurnProgress();
     _activeRequestId = requestId;
     _activeRequestRepository = ref.read(aiAssistantRepositoryProvider);
     _requestStartedAt = DateTime.now();
@@ -367,6 +429,11 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
       _isSending = true;
       _error = null;
       _progressSteps = snapshot?.progress ?? const [];
+      _interimResult = null;
+      if (snapshot != null) {
+        _updateElapsedClock(snapshot);
+        _updateInterimResult(snapshot);
+      }
       _progress =
           _cancelRequested
               ? 'Останавливаю обработку'
@@ -377,7 +444,6 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
                 _progressSteps,
               );
     });
-    _startElapsedTimer(reset: !recovering);
     _startPolling(requestId, revision, conversationId);
   }
 
@@ -406,9 +472,11 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
             const Duration(minutes: 9)) {
       _progressTimer?.cancel();
       _elapsedTimer?.cancel();
+      _elapsedTimer = null;
       setState(() {
         _isSending = false;
         _progress = null;
+        _interimResult = null;
         _error =
             'Ответ задерживается. Проверьте результат этого запроса позже.';
       });
@@ -488,36 +556,81 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
       return true;
     }
     final steps = _mergeProgress(_progressSteps, request.progress);
+    final previousInterim = _interimResult;
     setState(() {
       _progressSteps = steps;
       _cancelRequested = _cancelRequested || request.isCancellationPending;
+      _updateElapsedClock(request);
+      _updateInterimResult(request);
       _progress =
           _cancelRequested
               ? 'Останавливаю обработку'
               : _currentActivity(request.stage ?? request.runStatus, steps);
     });
+    if (_interimResult != null &&
+        _interimResult?.revision != previousInterim?.revision &&
+        _scrollController.hasClients &&
+        _scrollController.position.extentAfter < 80) {
+      _scrollToBottom();
+    }
     return false;
   }
 
-  void _startElapsedTimer({bool reset = false}) {
-    _elapsedTimer?.cancel();
-    if (reset || _requestCreatedAt == null) {
-      _requestCreatedAt = DateTime.now();
-      _elapsedSeconds = 0;
+  void _updateElapsedClock(AiAssistantChatRequest request) {
+    if (!request.isActive) return;
+    final now = DateTime.now();
+    final acceptedAt = request.acceptedAt;
+    final serverElapsed =
+        request.elapsedSeconds ??
+        (acceptedAt == null
+            ? null
+            : max(0, now.difference(acceptedAt).inSeconds));
+    final current = _elapsedSeconds;
+    if (current == null ||
+        (serverElapsed != null &&
+            (!_hasServerElapsed || serverElapsed > current))) {
+      _elapsedSeconds = serverElapsed ?? 0;
+      _elapsedReferenceSeconds = _elapsedSeconds!;
+      _elapsedReferenceAt = now;
     }
-    _elapsedTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+    if (serverElapsed != null) _hasServerElapsed = true;
+    _elapsedTimer ??= Timer.periodic(const Duration(seconds: 1), (_) {
       if (!mounted || !_isSending) return;
       final wallSeconds =
-          DateTime.now().difference(_requestCreatedAt!).inSeconds;
-      setState(() => _elapsedSeconds = max(_elapsedSeconds + 1, wallSeconds));
+          _elapsedReferenceSeconds +
+          DateTime.now().difference(_elapsedReferenceAt!).inSeconds;
+      setState(() => _elapsedSeconds = max(_elapsedSeconds! + 1, wallSeconds));
     });
   }
 
-  String get _elapsedLabel =>
-      '${(_elapsedSeconds ~/ 60).toString().padLeft(2, '0')}:${(_elapsedSeconds % 60).toString().padLeft(2, '0')}';
+  void _updateInterimResult(AiAssistantChatRequest request) {
+    final interim =
+        request.isActive && !_cancelRequested ? request.interimResult : null;
+    if (interim == null) {
+      _interimResult = null;
+      return;
+    }
+    if (interim.revision >= _interimRevision) {
+      _interimResult = interim;
+      _interimRevision = interim.revision;
+    }
+  }
 
-  List<AiAssistantProgressModel> get _visibleCompletedProgress =>
-      _completedSources(_progressSteps);
+  void _resetTurnProgress() {
+    _elapsedTimer?.cancel();
+    _elapsedTimer = null;
+    _elapsedSeconds = null;
+    _elapsedReferenceAt = null;
+    _elapsedReferenceSeconds = 0;
+    _hasServerElapsed = false;
+    _interimResult = null;
+    _interimRevision = 0;
+  }
+
+  String get _elapsedLabel {
+    final elapsed = _elapsedSeconds ?? 0;
+    return '${(elapsed ~/ 60).toString().padLeft(2, '0')}:${(elapsed % 60).toString().padLeft(2, '0')}';
+  }
 
   void _completeRequest(
     AiAssistantChatResult result,
@@ -532,15 +645,15 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
       return;
     }
     _progressTimer?.cancel();
-    _elapsedTimer?.cancel();
+    _resetTurnProgress();
     final reloadHistory = _failedRequest == null;
     final completedProgress = _mergeProgress(
       _mergeProgress(_progressSteps, progress),
       result.progress,
     );
-    final completedSources = _completedSources(completedProgress);
-    if (result.message != null && completedSources.isNotEmpty) {
-      _completedProgressByMessageId[result.message!.id] = completedSources;
+    final progressHistory = _progressHistory(completedProgress);
+    if (result.message != null && progressHistory.isNotEmpty) {
+      _progressByMessageId[result.message!.id] = progressHistory;
     }
     _activeRequestId = null;
     _sendCancelToken = null;
@@ -625,7 +738,7 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
     final requestId = _activeRequestId;
     if (requestId != null) _forgetDraftRequest(requestId);
     _progressTimer?.cancel();
-    _elapsedTimer?.cancel();
+    _resetTurnProgress();
     _activeRequestId = null;
     _sendCancelToken = null;
     _activeRequestRepository = null;
@@ -645,7 +758,7 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
 
   void _detachSending({bool updateUi = true}) {
     _progressTimer?.cancel();
-    _elapsedTimer?.cancel();
+    _resetTurnProgress();
     _sendCancelToken?.cancel('Запрос отсоединён от текущего экрана.');
     _sendCancelToken = null;
     _activeRequestId = null;
@@ -719,6 +832,7 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
         attachmentRevision != _draftRevision) {
       return;
     }
+    _resetTurnProgress();
     final optimistic = AiMessageModel(
       id: DateTime.now().millisecondsSinceEpoch,
       role: 'user',
@@ -764,7 +878,6 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
         ref.read(aiAssistantDraftTurnStoreProvider).track(scope, requestId);
       }
       _requestStartedAt = DateTime.now();
-      _startElapsedTimer(reset: true);
       _sendCancelToken = CancelToken();
       final request = await _activeRequestRepository!.sendMessageRequest(
         message: message,
@@ -999,6 +1112,7 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
     setState(() {
       _cancelRequested = true;
       _progress = 'Останавливаю обработку';
+      _interimResult = null;
     });
     try {
       final request = await repository.cancelRequest(requestId);
@@ -1056,7 +1170,7 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
     setState(() {
       _messages = const [];
       _progressSteps = const [];
-      _completedProgressByMessageId.clear();
+      _progressByMessageId.clear();
       _draftImages = const [];
       _isUploadingImage = false;
       _imageUploadProgress = null;
@@ -1549,44 +1663,62 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
                       itemCount: _messages.length + (_isSending ? 1 : 0),
                       itemBuilder: (context, index) {
                         if (_isSending && index == _messages.length) {
+                          final history = _progressHistory(_progressSteps);
                           return Padding(
-                            padding: EdgeInsets.only(top: 8),
-                            child: Row(
+                            padding: const EdgeInsets.only(top: 8),
+                            child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                const SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        _progress ?? 'Запрос обрабатывается',
-                                        style: AppTypography.bodyMedium(
-                                          context,
-                                        ),
+                                Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const SizedBox(
+                                      width: 20,
+                                      height: 20,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
                                       ),
-                                      Text(
-                                        'Прошло $_elapsedLabel',
-                                        style: AppTypography.caption(context),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Semantics(
+                                            liveRegion: true,
+                                            child: Text(
+                                              _progress ??
+                                                  'Запрос обрабатывается',
+                                              style: AppTypography.bodyMedium(
+                                                context,
+                                              ),
+                                            ),
+                                          ),
+                                          if (_elapsedSeconds != null)
+                                            Text(
+                                              'Прошло $_elapsedLabel',
+                                              style: AppTypography.caption(
+                                                context,
+                                              ),
+                                            ),
+                                        ],
                                       ),
-                                      if (_visibleCompletedProgress
-                                          .isNotEmpty) ...[
-                                        const SizedBox(height: 6),
-                                        _CompletedAssistantSources(
-                                          steps: _visibleCompletedProgress,
-                                        ),
-                                      ],
-                                    ],
-                                  ),
+                                    ),
+                                  ],
                                 ),
+                                if (history.isNotEmpty)
+                                  _AssistantProgressHistory(
+                                    key: PageStorageKey(_activeRequestId),
+                                    steps: history,
+                                  ),
+                                if (_interimResult case final result?)
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 8),
+                                    child: _AssistantInterimCard(
+                                      result: result,
+                                    ),
+                                  ),
                               ],
                             ),
                           );
@@ -1682,15 +1814,13 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
                                     ).copyWith(color: bubbleTextColor),
                                   ),
                                 if (!isUser &&
-                                    _completedProgressByMessageId.containsKey(
+                                    _progressByMessageId.containsKey(
                                       message.id,
                                     )) ...[
                                   const SizedBox(height: 10),
-                                  _CompletedAssistantSources(
-                                    steps: _completedSources(
-                                      _completedProgressByMessageId[message
-                                          .id]!,
-                                    ),
+                                  _AssistantProgressHistory(
+                                    key: PageStorageKey(message.id),
+                                    steps: _progressByMessageId[message.id]!,
                                   ),
                                 ],
                                 if (sourceLinks.isNotEmpty)
@@ -2571,25 +2701,31 @@ class _AuthenticatedAttachmentImageState
   );
 }
 
-class _CompletedAssistantSources extends StatelessWidget {
-  const _CompletedAssistantSources({required this.steps});
+class _AssistantProgressHistory extends StatelessWidget {
+  const _AssistantProgressHistory({super.key, required this.steps});
 
   final List<AiAssistantProgressModel> steps;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: steps
-          .map((step) {
-            return Padding(
+    return Material(
+      type: MaterialType.transparency,
+      child: ExpansionTile(
+        tilePadding: EdgeInsets.zero,
+        expandedCrossAxisAlignment: CrossAxisAlignment.start,
+        title: const Text('Ход работы'),
+        children: [
+          for (final step in steps)
+            Padding(
               padding: const EdgeInsets.only(bottom: 4),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Icon(
-                    Icons.check_circle_outline,
+                    step.state == 'failed'
+                        ? Icons.error_outline
+                        : Icons.check_circle_outline,
                     size: 16,
                     color: theme.colorScheme.onSurfaceVariant,
                   ),
@@ -2604,9 +2740,49 @@ class _CompletedAssistantSources extends StatelessWidget {
                   ),
                 ],
               ),
-            );
-          })
-          .toList(growable: false),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AssistantInterimCard extends StatelessWidget {
+  const _AssistantInterimCard({required this.result});
+
+  final AiAssistantInterimResult result;
+
+  @override
+  Widget build(BuildContext context) {
+    final caption = AppTypography.caption(
+      context,
+    ).copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant);
+    return IndustrialCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Промежуточный результат',
+            style: AppTypography.bodyMedium(
+              context,
+            ).copyWith(fontWeight: FontWeight.w700),
+          ),
+          Text(
+            result.isProjectScoped ? 'По проекту' : 'По организации',
+            style: caption,
+          ),
+          const SizedBox(height: 8),
+          Text(result.text, style: AppTypography.bodyMedium(context)),
+          if (result.sources.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text('Источники', style: caption),
+            for (final source in result.sources.toSet())
+              Text(source, style: caption),
+          ],
+          const SizedBox(height: 8),
+          Text('Работа продолжается.', style: caption),
+        ],
+      ),
     );
   }
 }

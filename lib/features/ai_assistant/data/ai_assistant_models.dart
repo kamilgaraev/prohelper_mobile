@@ -765,11 +765,15 @@ class AiAssistantProgressModel {
     required this.id,
     required this.code,
     required this.state,
+    this.key,
+    this.at,
   });
 
   final int id;
   final String code;
   final String state;
+  final String? key;
+  final DateTime? at;
 }
 
 List<AiAssistantProgressModel> _assistantProgressList(dynamic value) {
@@ -785,6 +789,8 @@ List<AiAssistantProgressModel> _assistantProgressList(dynamic value) {
     'materials',
     'reports',
     'financial_data',
+    'record_check',
+    'composing',
   };
   final unique = <int, AiAssistantProgressModel>{};
   final items = _asList(value);
@@ -796,15 +802,66 @@ List<AiAssistantProgressModel> _assistantProgressList(dynamic value) {
     final state = _stringValue(json['state']);
     if (id <= 0 ||
         !codes.contains(code) ||
-        (state != 'started' && state != 'completed')) {
+        !const {'started', 'completed', 'failed'}.contains(state)) {
       continue;
     }
-    unique[id] = AiAssistantProgressModel(id: id, code: code!, state: state!);
+    unique[id] = AiAssistantProgressModel(
+      id: id,
+      code: code!,
+      state: state!,
+      key: json['key'] is String ? _stringValue(json['key']) : null,
+      at: _dateTimeValue(json['at']),
+    );
   }
   final result =
       unique.values.toList()
         ..sort((left, right) => left.id.compareTo(right.id));
   return result.take(24).toList(growable: false);
+}
+
+class AiAssistantInterimResult {
+  const AiAssistantInterimResult({
+    required this.revision,
+    required this.text,
+    required this.isProjectScoped,
+    required this.sources,
+    required this.publishedAt,
+  });
+
+  final int revision;
+  final String text;
+  final bool isProjectScoped;
+  final List<String> sources;
+  final DateTime publishedAt;
+
+  static AiAssistantInterimResult? fromJson(dynamic value) {
+    final json = _nullableMap(value);
+    if (json == null || json['key'] != 'answer') return null;
+    final revision = _intValue(json['revision']);
+    final text = json['text'];
+    final scope = _nullableMap(json['scope']);
+    final scopeKind = scope?['kind'];
+    final publishedAt = _dateTimeValue(json['published_at']);
+    if (revision <= 0 ||
+        text is! String ||
+        text.trim().isEmpty ||
+        publishedAt == null ||
+        (scopeKind != 'organization' &&
+            (scopeKind != 'project' || _intValue(scope?['project_id']) <= 0))) {
+      return null;
+    }
+    return AiAssistantInterimResult(
+      revision: revision,
+      text: text.trim(),
+      isProjectScoped: scopeKind == 'project',
+      sources: [
+        for (final source in _asList(json['sources']))
+          if (_nullableMap(source)?['label'] case final String label)
+            if (label.trim().isNotEmpty) label.trim(),
+      ],
+      publishedAt: publishedAt,
+    );
+  }
 }
 
 class AiAssistantChatResult {
@@ -815,6 +872,7 @@ class AiAssistantChatResult {
     this.creditUsage,
     this.publication,
     this.progress = const [],
+    this.resultKey,
   });
 
   final String requestId;
@@ -823,6 +881,7 @@ class AiAssistantChatResult {
   final AiCreditUsageModel? creditUsage;
   final AiAssistantPublication? publication;
   final List<AiAssistantProgressModel> progress;
+  final String? resultKey;
 
   factory AiAssistantChatResult.fromJson(Map<String, dynamic> json) {
     final messageJson = _nullableMap(json['message']);
@@ -854,6 +913,7 @@ class AiAssistantChatResult {
       ),
       publication: AiAssistantPublication.fromJson(metadata),
       progress: _assistantProgressList(json['progress']),
+      resultKey: json['result_key'] == 'answer' ? 'answer' : null,
     );
   }
 }
@@ -868,6 +928,9 @@ class AiAssistantChatRequest {
     this.result,
     this.errorCode,
     this.canonicalStatus,
+    this.acceptedAt,
+    this.elapsedSeconds,
+    this.interimResult,
   });
 
   final String requestId;
@@ -878,6 +941,9 @@ class AiAssistantChatRequest {
   final AiAssistantChatResult? result;
   final String? errorCode;
   final String? canonicalStatus;
+  final DateTime? acceptedAt;
+  final int? elapsedSeconds;
+  final AiAssistantInterimResult? interimResult;
 
   String get runStatus {
     if (const {
@@ -923,6 +989,13 @@ class AiAssistantChatRequest {
           response == null ? null : AiAssistantChatResult.fromJson(response),
       errorCode: _stringValue(json['error_code']),
       canonicalStatus: canonicalStatus,
+      acceptedAt: _dateTimeValue(json['accepted_at']),
+      elapsedSeconds: switch (json['elapsed_seconds']) {
+        final num elapsed when elapsed.isFinite && elapsed >= 0 =>
+          elapsed.floor(),
+        _ => null,
+      },
+      interimResult: AiAssistantInterimResult.fromJson(json['interim_result']),
     );
   }
 

@@ -53,6 +53,15 @@ class _OrganizationAuthNotifier extends AuthNotifier {
 }
 
 void main() {
+  Future<void> toggleProgressHistory(WidgetTester tester) async {
+    final tile = find.descendant(
+      of: find.byType(ExpansionTile),
+      matching: find.byType(ListTile),
+    );
+    await tester.ensureVisible(tile);
+    await tester.tap(tile);
+  }
+
   Widget buildScreen(AiAssistantRepository repository, {ThemeData? theme}) {
     return ProviderScope(
       overrides: [aiAssistantRepositoryProvider.overrideWithValue(repository)],
@@ -456,6 +465,9 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(find.text('Ответ про бетон'), findsOneWidget);
+      expect(find.text('Сметы проверены'), findsNothing);
+      await toggleProgressHistory(tester);
+      await tester.pumpAndSettle();
       expect(find.text('Сметы проверены'), findsOneWidget);
       expect(find.text('Склад проверен'), findsOneWidget);
       expect(find.text('Проекты проверены'), findsNothing);
@@ -503,7 +515,6 @@ void main() {
     await tester.tap(find.text('Продолжить'));
     await tester.pump();
     expect(find.text('Проверяю склад'), findsNothing);
-    expect(find.text('Склад проверен'), findsOneWidget);
     repository.answer.complete(
       AiAssistantChatRequest(
         requestId: repository.requestId!,
@@ -521,6 +532,9 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    await toggleProgressHistory(tester);
+    await tester.pumpAndSettle();
+    expect(find.text('Склад проверен'), findsOneWidget);
   });
 
   testWidgets('shows one current activity and elapsed time', (tester) async {
@@ -568,6 +582,149 @@ void main() {
     final pollCount = repository.polledIds.length;
     await tester.pump(const Duration(seconds: 3));
     expect(repository.polledIds.length, pollCount);
+  });
+
+  testWidgets(
+    'restores verified progress and replaces the latest interim result',
+    (tester) async {
+      const requestId = '2962344c-2256-4315-99f1-638ffb026a3e';
+      final repository = _RaceRepository(
+        activeRequest: const AiAssistantChatRequest(
+          requestId: requestId,
+          conversationId: 1,
+          status: 'running',
+        ),
+        scriptedStatuses: [
+          {
+            'accepted_at': '2026-11-19T08:00:00Z',
+            'elapsed_seconds': 125,
+            'progress': [
+              {
+                'id': 1,
+                'key': 'private-record-id',
+                'code': 'record_check',
+                'state': 'started',
+              },
+              {
+                'id': 2,
+                'key': 'private-record-id',
+                'code': 'record_check',
+                'state': 'completed',
+              },
+              {'id': 3, 'code': 'estimates', 'state': 'failed'},
+              {'id': 4, 'code': 'composing', 'state': 'started'},
+              {'id': 5, 'code': 'private_tool', 'state': 'completed'},
+            ],
+            'interim_result': _interimResult(1, 'Проверен первый срок.'),
+          },
+          StateError('Connection lost'),
+          {'interim_result': _interimResult(2, 'Проверены два срока.')},
+        ],
+      );
+      await tester.pumpWidget(buildScreen(repository));
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.text('Прошло 02:05'), findsOneWidget);
+      expect(find.text('Собираю ответ'), findsOneWidget);
+      expect(find.text('Промежуточный результат'), findsOneWidget);
+      expect(find.text('Проверен первый срок.'), findsOneWidget);
+      expect(find.text('По проекту'), findsOneWidget);
+      expect(find.text('График работ'), findsOneWidget);
+      expect(find.text('Работа продолжается.'), findsOneWidget);
+      expect(find.text('Запись проверена'), findsNothing);
+      await toggleProgressHistory(tester);
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.text('Запись проверена'), findsOneWidget);
+      expect(find.text('Не удалось проверить сметы'), findsOneWidget);
+      expect(find.textContaining('private'), findsNothing);
+      await toggleProgressHistory(tester);
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.text('Запись проверена'), findsNothing);
+
+      await tester.pump(const Duration(seconds: 2));
+      await tester.pump();
+      expect(find.text('Проверяю состояние запроса'), findsOneWidget);
+      expect(find.text('Проверен первый срок.'), findsOneWidget);
+      await tester.pump(const Duration(seconds: 2));
+      await tester.pump();
+      expect(find.text('Проверен первый срок.'), findsNothing);
+      expect(find.text('Проверены два срока.'), findsOneWidget);
+
+      repository.answer.complete(
+        AiAssistantChatRequest.fromJson({
+          'request_id': requestId,
+          'conversation_id': 1,
+          'status': 'completed',
+          'response': {
+            'request_id': requestId,
+            'conversation_id': 1,
+            'result_key': 'answer',
+            'message': {
+              'id': 81,
+              'role': 'assistant',
+              'content': 'Проверены два срока.',
+            },
+          },
+        }),
+      );
+      await tester.pump(const Duration(seconds: 2));
+      await tester.pumpAndSettle();
+
+      expect(repository.sentIds, isEmpty);
+      expect(find.text('Проверены два срока.'), findsOneWidget);
+      expect(find.text('Промежуточный результат'), findsNothing);
+      expect(find.text('Работа продолжается.'), findsNothing);
+      expect(find.textContaining('Прошло '), findsNothing);
+    },
+  );
+
+  testWidgets('hides interim text on an empty snapshot and denied status', (
+    tester,
+  ) async {
+    const requestId = '2962344c-2256-4315-99f1-638ffb026a3e';
+    final repository = _RaceRepository(
+      activeRequest: const AiAssistantChatRequest(
+        requestId: requestId,
+        conversationId: 1,
+        status: 'running',
+      ),
+      scriptedStatuses: [
+        {'interim_result': _interimResult(1, 'Первая проверка.')},
+        {'interim_result': null},
+        {
+          'interim_result': _interimResult(
+            2,
+            'Вторая проверка.',
+            project: false,
+          ),
+        },
+        const ApiException('Нет доступа.', statusCode: 403),
+      ],
+    );
+    await tester.pumpWidget(buildScreen(repository));
+    await tester.pump();
+    await tester.pump();
+    expect(find.text('Первая проверка.'), findsOneWidget);
+
+    await tester.pump(const Duration(seconds: 2));
+    await tester.pump();
+    expect(find.text('Промежуточный результат'), findsNothing);
+    expect(find.text('Стоп'), findsOneWidget);
+
+    await tester.pump(const Duration(seconds: 2));
+    await tester.pump();
+    expect(find.text('Вторая проверка.'), findsOneWidget);
+    expect(find.text('По организации'), findsOneWidget);
+
+    await tester.pump(const Duration(seconds: 2));
+    await tester.pumpAndSettle();
+    expect(
+      find.text('Диалог недоступен или у пользователя нет прав.'),
+      findsOneWidget,
+    );
+    expect(find.text('Промежуточный результат'), findsNothing);
+    expect(find.text('Стоп'), findsNothing);
   });
 
   testWidgets('zero-cost greeting skips expense confirmation', (tester) async {
@@ -1304,6 +1461,24 @@ AiAssistantActionModel _blockedAction() {
   );
 }
 
+Map<String, dynamic> _interimResult(
+  int revision,
+  String text, {
+  bool project = true,
+}) => {
+  'key': 'answer',
+  'revision': revision,
+  'text': text,
+  'scope': {
+    'kind': project ? 'project' : 'organization',
+    if (project) 'project_id': 17,
+  },
+  'sources': [
+    {'label': 'График работ'},
+  ],
+  'published_at': '2026-11-19T08:01:00Z',
+};
+
 class _RaceRepository extends AiAssistantRepository {
   _RaceRepository({
     this.canWrite = true,
@@ -1321,6 +1496,7 @@ class _RaceRepository extends AiAssistantRepository {
     this.activeRequest,
     this.delayedConversation,
     this.postResponse,
+    this.scriptedStatuses = const [],
   }) : super(Dio());
   final bool canWrite;
   final bool failFirst;
@@ -1337,8 +1513,10 @@ class _RaceRepository extends AiAssistantRepository {
   final AiAssistantChatRequest? activeRequest;
   final Future<AiConversationDetailsModel>? delayedConversation;
   final Future<AiAssistantChatRequest>? postResponse;
+  final List<Object> scriptedStatuses;
   int _stageIndex = 0;
   int _progressIndex = 0;
+  int _statusIndex = 0;
   int quoteCalls = 0;
   final sentIds = <String>[];
   final answer = Completer<AiAssistantChatRequest>();
@@ -1429,6 +1607,18 @@ class _RaceRepository extends AiAssistantRepository {
     int? conversationId,
   }) async {
     polledIds.add(requestId);
+    if (_statusIndex < scriptedStatuses.length) {
+      final snapshot = scriptedStatuses[_statusIndex++];
+      if (snapshot is Map<String, dynamic>) {
+        return AiAssistantChatRequest.fromJson({
+          'request_id': requestId,
+          'conversation_id': conversationId,
+          'status': 'running',
+          ...snapshot,
+        });
+      }
+      throw snapshot;
+    }
     if (notSubmittedOnce && polledIds.length == 1) {
       return AiAssistantChatRequest(
         requestId: requestId,
