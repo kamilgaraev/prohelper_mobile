@@ -97,21 +97,60 @@ void main() {
         (options) => _responseData({
           'request_id': 'request-1',
           'status': 'cancel_requested',
-          'run_status': 'running',
           'stage': 'generating',
         }),
       );
       final repository = AiAssistantRepository(dio);
       final request = await repository.cancelRequest('request-1');
       expect(request.status, 'cancel_requested');
-      expect(request.runStatus, 'running');
-      expect(request.isCancellationPending, isTrue);
-      expect(request.isTerminal, isFalse);
       expect(request.stage, 'generating');
       await expectLater(
         repository.cancelRequest('request-2'),
         throwsA(isA<ApiException>()),
       );
+    },
+  );
+
+  test(
+    'fetches a completed result after cancel returned only status',
+    () async {
+      const requestId = '6d4cbf59-a08a-48cb-9f93-a9ac85ea4e16';
+      const requestPath = '/ai-assistant/requests/$requestId';
+      final dio = Dio(BaseOptions(baseUrl: 'https://api.example.test'));
+      dio.httpClientAdapter = _JsonAdapter((request) {
+        if (request.method == 'POST') {
+          expect(request.path, '$requestPath/cancel');
+          return _responseData({
+            'request_id': requestId,
+            'conversation_id': 12,
+            'status': 'completed',
+          });
+        }
+
+        expect(request.method, 'GET');
+        expect(request.path, requestPath);
+        return _responseData({
+          'request_id': requestId,
+          'conversation_id': 12,
+          'status': 'completed',
+          'response': {
+            'request_id': requestId,
+            'conversation_id': 12,
+            'message': {'id': 17, 'role': 'assistant', 'content': 'Готово'},
+          },
+        });
+      });
+      final repository = AiAssistantRepository(dio);
+
+      final cancellation = await repository.cancelRequest(requestId);
+      expect(cancellation.status, 'completed');
+      expect(cancellation.result, isNull);
+
+      final completed = await repository.fetchChatRequest(
+        requestId,
+        conversationId: 12,
+      );
+      expect(completed.result?.message?.content, 'Готово');
     },
   );
 
@@ -126,15 +165,17 @@ void main() {
         return _responseData({
           'request_id': requestId,
           'conversation_id': 8,
-          'run_status': 'queued',
+          'status': 'running',
+          'stage': 'queued',
         });
       }, statusCode: (_) => 202);
       final repository = AiAssistantRepository(dio);
 
-      await repository.sendMessageRequest(
+      final accepted = await repository.sendMessageRequest(
         message: 'Что по рискам?',
         requestId: requestId,
         conversationId: 8,
+        maxConfirmed: true,
         context: const {
           'source_module': 'ai-assistant',
           'source_route': 'mobile/ai-assistant/chat',
@@ -161,6 +202,8 @@ void main() {
       expect(payload['message'], 'Что по рискам?');
       expect(payload['conversation_id'], 8);
       expect(payload['async'], isTrue);
+      expect(accepted.status, 'running');
+      expect(accepted.stage, 'queued');
       expect(context['source_route'], 'mobile/ai-assistant/chat');
       expect(entityRefs.single, containsPair('id', 77));
       expect(filters['project_id'], 77);
@@ -228,6 +271,7 @@ void main() {
         requestId: requestId,
         conversationId: 12,
         quoteId: quote.id,
+        maxConfirmed: true,
         profile: 'short',
         allowActions: false,
         context: {'entity_refs': []},
@@ -252,37 +296,10 @@ void main() {
         message: 'Question',
         requestId: 'current',
         quoteId: 'quote',
+        maxConfirmed: true,
       ),
       throwsException,
     );
-  });
-
-  test('loads only a scoped active request from first history page', () async {
-    const requestId = '2962344c-2256-4315-99f1-638ffb026a3e';
-    final dio = Dio(BaseOptions(baseUrl: 'https://api.example.test'));
-    dio.httpClientAdapter = _JsonAdapter((request) {
-      return {
-        'success': true,
-        'data': [],
-        'meta': {
-          'active_request': {
-            'request_id': requestId,
-            'conversation_id': 12,
-            'status': 'running',
-            'run_status': 'queued',
-          },
-        },
-      };
-    });
-    final repository = AiAssistantRepository(dio);
-    final first = await repository.fetchMessages(12);
-    final older = await repository.fetchMessages(12, page: 2);
-    final unknown = await repository.fetchMessages(13);
-
-    expect(first.activeRequest?.requestId, requestId);
-    expect(first.activeRequest?.runStatus, 'queued');
-    expect(older.activeRequest, isNull);
-    expect(unknown.activeRequest, isNull);
   });
 
   test('202 request completes through GET with the same identity', () async {
@@ -304,7 +321,7 @@ void main() {
       return _responseData({
         'request_id': 'request-1',
         'conversation_id': 12,
-        'run_status': 'completed',
+        'status': 'completed',
         'stage': 'completed',
         'progress': [
           {'id': 31, 'code': 'estimates', 'state': 'completed'},
@@ -313,10 +330,6 @@ void main() {
         'response': {
           'request_id': 'request-1',
           'conversation_id': 12,
-          'contract_version': 1,
-          'outcome': 'ok',
-          'coverage': {'status': 'found'},
-          'billing': {'charged_minor': 23},
           'message': {'id': 17, 'role': 'assistant', 'content': 'Готово'},
           'progress': [
             {'id': 31, 'code': 'estimates', 'state': 'completed'},
@@ -330,17 +343,15 @@ void main() {
       message: 'Вопрос',
       requestId: 'request-1',
       quoteId: 'quote-1',
+      maxConfirmed: true,
     );
     expect(accepted.status, 'running');
-    expect(accepted.runStatus, 'queued');
     expect(accepted.result, isNull);
     expect(accepted.progress.single.code, 'estimates');
     expect(accepted.progress.single.state, 'started');
     expect((requests.first.data as Map)['async'], true);
     final completed = await repository.fetchChatRequest('request-1');
     expect(completed.result!.message!.content, 'Готово');
-    expect(completed.result!.message!.publication?.coverageStatus, 'found');
-    expect(completed.result!.publication?.chargedMinor, 23);
     expect(completed.progress.map((step) => step.code), [
       'estimates',
       'warehouse',
@@ -393,6 +404,7 @@ void main() {
           requestId: 'same-id',
           conversationId: 12,
           quoteId: 'same-quote',
+          maxConfirmed: true,
         );
       }
       expect(payloads, hasLength(2));
@@ -401,40 +413,6 @@ void main() {
       expect(payloads[1]['quote_id'], 'same-quote');
     },
   );
-
-  test('accepts terminal POST replay with no assistant message', () async {
-    for (final (status, errorCode) in [
-      ('cancelled', 'request_cancelled'),
-      ('failed', 'request_failed'),
-    ]) {
-      final requests = <RequestOptions>[];
-      final dio = Dio(BaseOptions(baseUrl: 'https://api.example.test'));
-      dio.httpClientAdapter = _JsonAdapter((request) {
-        requests.add(request);
-        return _responseData({
-          'request_id': 'same-id',
-          'conversation_id': 12,
-          'status': status,
-          'run_status': status,
-          'stage': status,
-          'error_code': errorCode,
-        });
-      });
-      final result = await AiAssistantRepository(dio).sendMessageRequest(
-        message: 'Вопрос',
-        requestId: 'same-id',
-        conversationId: 12,
-        quoteId: 'same-quote',
-      );
-
-      expect(result.requestId, 'same-id');
-      expect(result.runStatus, status);
-      expect(result.isTerminal, isTrue);
-      expect(result.errorCode, errorCode);
-      expect(result.result, isNull);
-      expect(requests.single.method, 'POST');
-    }
-  });
 
   test(
     'request status rejects a result for a different conversation',

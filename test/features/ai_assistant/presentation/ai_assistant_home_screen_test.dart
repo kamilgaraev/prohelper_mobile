@@ -24,7 +24,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(
-      find.text('Списания выключены. Показана только оценка расхода.'),
+      find.textContaining('Тестовый режим: списания выключены'),
       findsOneWidget,
     );
     expect(find.byType(OutlinedButton), findsNothing);

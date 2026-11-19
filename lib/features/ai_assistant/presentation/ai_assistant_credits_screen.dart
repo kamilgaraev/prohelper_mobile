@@ -132,7 +132,7 @@ class _CreditsState extends ConsumerState<AiAssistantCreditsScreen> {
             const SizedBox(height: 20),
             Text(
               _balance!.billingMode == 'shadow'
-                  ? 'Списания выключены. Показана только оценка расхода.'
+                  ? 'Тестовый режим: списания выключены. Показана оценка расхода, фактическое списание — 0.'
                   : !_balance!.chargingEnabled
                   ? 'Списания пока не включены.'
                   : 'Купленные единицы бессрочные. Оплата доступна пользователям с правом управления оплатой.',

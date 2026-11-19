@@ -104,9 +104,6 @@ class AiMessageModel {
   String get validationStatus =>
       _stringValue(metadata?['validation_status']) ?? 'unverified';
 
-  AiAssistantPublication? get publication =>
-      AiAssistantPublication.fromJson(metadata);
-
   List<AiAssistantEvidenceModel> get evidence => [
         ..._asList(metadata?['source_refs']),
         ..._asList(_nullableMap(metadata?['rag_context'])?['sources']),
@@ -440,8 +437,6 @@ class AiActionExecutionModel {
 
 class AiAssistantArtifact {
   const AiAssistantArtifact({
-    this.artifactType,
-    this.status,
     this.id,
     this.title,
     this.name,
@@ -465,8 +460,6 @@ class AiAssistantArtifact {
   });
 
   final Object? id;
-  final String? artifactType;
-  final String? status;
   final String? title;
   final String? name;
   final String? filename;
@@ -487,13 +480,21 @@ class AiAssistantArtifact {
   final int? size;
   final Map<String, dynamic> raw;
 
-  bool get isReportTask => artifactType == 'core_report_task';
-
   bool get isReport =>
-      isReportTask ||
       reportType != null ||
       (sourceTool?.startsWith('generate_') ?? false) ||
       (storagePath?.contains('/reports/') ?? false);
+
+  String? get trustedUrl {
+    final candidate = downloadUrl ?? url ?? href ?? path;
+    final uri = Uri.tryParse(candidate ?? '');
+
+    if (uri == null || (uri.scheme != 'https' && uri.scheme != 'http')) {
+      return null;
+    }
+
+    return uri.toString();
+  }
 
   String get displayTitle {
     final value = title ?? name ?? filename ?? fileName;
@@ -512,8 +513,6 @@ class AiAssistantArtifact {
     }
 
     return AiAssistantArtifact(
-      artifactType: _stringValue(json['artifact_type']),
-      status: _stringValue(json['status']),
       id: json['id'] is int || json['id'] is String ? json['id'] : null,
       title: _stringValue(json['title']),
       name: _stringValue(json['name']),
@@ -545,12 +544,10 @@ class AiConversationDetailsModel {
   const AiConversationDetailsModel({
     required this.conversation,
     required this.messages,
-    this.activeRequest,
   });
 
   final AiConversationModel conversation;
   final List<AiMessageModel> messages;
-  final AiAssistantChatRequest? activeRequest;
 }
 
 class AiAssistantHomeModel {
@@ -568,102 +565,13 @@ class AiAssistantHomeModel {
 }
 
 class AiAssistantPage<T> {
-  const AiAssistantPage({
-    required this.items,
-    this.nextPage,
-    this.total,
-    this.activeRequest,
-  });
+  const AiAssistantPage({required this.items, this.nextPage, this.total});
 
   final List<T> items;
   final int? nextPage;
   final int? total;
-  final AiAssistantChatRequest? activeRequest;
 
   bool get hasNextPage => nextPage != null;
-}
-
-class AiAssistantPublication {
-  const AiAssistantPublication({
-    required this.version,
-    this.outcome,
-    this.coverageStatus,
-    this.evidence = const [],
-    this.uiActions = const [],
-    this.chargedMinor,
-    this.exportTask,
-  });
-
-  final int version;
-  final String? outcome;
-  final String? coverageStatus;
-  final List<AiAssistantEvidenceModel> evidence;
-  final List<AiAssistantUiAction> uiActions;
-  final int? chargedMinor;
-  final AiAssistantArtifact? exportTask;
-
-  static AiAssistantPublication? fromJson(Map<String, dynamic>? json) {
-    final version = _nullableInt(json?['contract_version']);
-    if (json == null || version == null || version < 1) return null;
-    final task = _nullableMap(json['export_task']);
-    return AiAssistantPublication(
-      version: version,
-      outcome: _stringValue(json['outcome']),
-      coverageStatus: _stringValue(_nullableMap(json['coverage'])?['status']),
-      evidence: _asList(json['evidence'])
-          .map(AiAssistantEvidenceModel.fromJson)
-          .whereType<AiAssistantEvidenceModel>()
-          .toList(growable: false),
-      uiActions: _asList(json['ui_actions'])
-          .map(AiAssistantUiAction.fromJson)
-          .whereType<AiAssistantUiAction>()
-          .toList(growable: false),
-      chargedMinor: _nullableInt(
-        _nullableMap(json['billing'])?['charged_minor'],
-      ),
-      exportTask:
-          task == null
-              ? null
-              : AiAssistantArtifact.fromJson({
-                ...task,
-                'artifact_type': 'core_report_task',
-                'type': task['format'],
-              }),
-    );
-  }
-}
-
-class AiAssistantUiAction {
-  const AiAssistantUiAction({
-    required this.type,
-    required this.label,
-    this.surface,
-    this.target,
-  });
-
-  final String type;
-  final String label;
-  final String? surface;
-  final String? target;
-
-  static AiAssistantUiAction? fromJson(dynamic value) {
-    final json = _nullableMap(value);
-    final type = json?['type'];
-    final label = json?['label'];
-    if (json == null ||
-        type is! String ||
-        type.trim().isEmpty ||
-        label is! String ||
-        label.trim().isEmpty) {
-      return null;
-    }
-    return AiAssistantUiAction(
-      type: type,
-      label: label.trim(),
-      surface: json['surface'] is String ? json['surface'] as String : null,
-      target: json['target'] is String ? json['target'] as String : null,
-    );
-  }
 }
 
 class AiAssistantEvidenceModel {
@@ -691,13 +599,10 @@ class AiAssistantEvidenceModel {
 
   static AiAssistantEvidenceModel? fromJson(dynamic value) {
     final json = _nullableMap(value);
-    final sourceRef = _nullableMap(json?['source_ref']);
     final title =
         _stringValue(json?['title']) ??
         _stringValue(json?['label']) ??
-        _stringValue(sourceRef?['title'] ?? sourceRef?['label']) ??
-        _sourceTitle(json) ??
-        _sourceTitle(sourceRef);
+        _sourceTitle(json);
     if (json == null || title == null) return null;
     return AiAssistantEvidenceModel(
       title: title,
@@ -712,7 +617,7 @@ class AiAssistantEvidenceModel {
           _stringValue(_nullableMap(json['navigation_target'])?['route']) ??
           _stringValue(json['url']),
       status: _stringValue(json['status']),
-      fetchedAt: _dateTimeValue(json['fetched_at'] ?? sourceRef?['fetched_at']),
+      fetchedAt: _dateTimeValue(json['fetched_at']),
       projectId: _stringValue(json['project_id']),
       entityId: _stringValue(json['entity_id'] ?? json['id']),
       entityType: _stringValue(
@@ -754,15 +659,11 @@ class AiAssistantProgressModel {
     required this.id,
     required this.code,
     required this.state,
-    this.key,
-    this.at,
   });
 
   final int id;
   final String code;
   final String state;
-  final String? key;
-  final DateTime? at;
 }
 
 List<AiAssistantProgressModel> _assistantProgressList(dynamic value) {
@@ -778,8 +679,6 @@ List<AiAssistantProgressModel> _assistantProgressList(dynamic value) {
     'materials',
     'reports',
     'financial_data',
-    'record_check',
-    'composing',
   };
   final unique = <int, AiAssistantProgressModel>{};
   final items = _asList(value);
@@ -791,66 +690,15 @@ List<AiAssistantProgressModel> _assistantProgressList(dynamic value) {
     final state = _stringValue(json['state']);
     if (id <= 0 ||
         !codes.contains(code) ||
-        !const {'started', 'completed', 'failed'}.contains(state)) {
+        (state != 'started' && state != 'completed')) {
       continue;
     }
-    unique[id] = AiAssistantProgressModel(
-      id: id,
-      code: code!,
-      state: state!,
-      key: json['key'] is String ? _stringValue(json['key']) : null,
-      at: _dateTimeValue(json['at']),
-    );
+    unique[id] = AiAssistantProgressModel(id: id, code: code!, state: state!);
   }
   final result =
       unique.values.toList()
         ..sort((left, right) => left.id.compareTo(right.id));
   return result.take(24).toList(growable: false);
-}
-
-class AiAssistantInterimResult {
-  const AiAssistantInterimResult({
-    required this.revision,
-    required this.text,
-    required this.isProjectScoped,
-    required this.sources,
-    required this.publishedAt,
-  });
-
-  final int revision;
-  final String text;
-  final bool isProjectScoped;
-  final List<String> sources;
-  final DateTime publishedAt;
-
-  static AiAssistantInterimResult? fromJson(dynamic value) {
-    final json = _nullableMap(value);
-    if (json == null || json['key'] != 'answer') return null;
-    final revision = _intValue(json['revision']);
-    final text = json['text'];
-    final scope = _nullableMap(json['scope']);
-    final scopeKind = scope?['kind'];
-    final publishedAt = _dateTimeValue(json['published_at']);
-    if (revision <= 0 ||
-        text is! String ||
-        text.trim().isEmpty ||
-        publishedAt == null ||
-        (scopeKind != 'organization' &&
-            (scopeKind != 'project' || _intValue(scope?['project_id']) <= 0))) {
-      return null;
-    }
-    return AiAssistantInterimResult(
-      revision: revision,
-      text: text.trim(),
-      isProjectScoped: scopeKind == 'project',
-      sources: [
-        for (final source in _asList(json['sources']))
-          if (_nullableMap(source)?['label'] case final String label)
-            if (label.trim().isNotEmpty) label.trim(),
-      ],
-      publishedAt: publishedAt,
-    );
-  }
 }
 
 class AiAssistantChatResult {
@@ -859,50 +707,26 @@ class AiAssistantChatResult {
     required this.conversationId,
     this.message,
     this.creditUsage,
-    this.publication,
     this.progress = const [],
-    this.resultKey,
   });
 
   final String requestId;
   final int conversationId;
   final AiMessageModel? message;
   final AiCreditUsageModel? creditUsage;
-  final AiAssistantPublication? publication;
   final List<AiAssistantProgressModel> progress;
-  final String? resultKey;
 
   factory AiAssistantChatResult.fromJson(Map<String, dynamic> json) {
     final messageJson = _nullableMap(json['message']);
-    final metadata = {
-      for (final key in const [
-        'contract_version',
-        'outcome',
-        'coverage',
-        'evidence',
-        'billing',
-        'ui_actions',
-        'export_task',
-      ])
-        if (json.containsKey(key)) key: json[key],
-      ...?_nullableMap(messageJson?['metadata']),
-    };
     return AiAssistantChatResult(
       requestId: _stringValue(json['request_id']) ?? '',
       conversationId: _intValue(json['conversation_id']),
       message:
-          messageJson == null
-              ? null
-              : AiMessageModel.fromJson({
-                ...messageJson,
-                if (metadata.isNotEmpty) 'metadata': metadata,
-              }),
+          messageJson == null ? null : AiMessageModel.fromJson(messageJson),
       creditUsage: AiCreditUsageModel.fromJson(
         _nullableMap(json['credit_usage']),
       ),
-      publication: AiAssistantPublication.fromJson(metadata),
       progress: _assistantProgressList(json['progress']),
-      resultKey: json['result_key'] == 'answer' ? 'answer' : null,
     );
   }
 }
@@ -916,10 +740,6 @@ class AiAssistantChatRequest {
     this.conversationId,
     this.result,
     this.errorCode,
-    this.canonicalStatus,
-    this.acceptedAt,
-    this.elapsedSeconds,
-    this.interimResult,
   });
 
   final String requestId;
@@ -929,45 +749,15 @@ class AiAssistantChatRequest {
   final int? conversationId;
   final AiAssistantChatResult? result;
   final String? errorCode;
-  final String? canonicalStatus;
-  final DateTime? acceptedAt;
-  final int? elapsedSeconds;
-  final AiAssistantInterimResult? interimResult;
 
-  String get runStatus {
-    if (const {
-      'queued',
-      'running',
-      'completed',
-      'failed',
-      'cancelled',
-    }.contains(canonicalStatus)) {
-      return canonicalStatus!;
-    }
-    return switch (status) {
-      'cancel_requested' => 'running',
-      'running' when stage == 'queued' => 'queued',
-      _ => status,
-    };
-  }
-
-  bool get isActive => runStatus == 'queued' || runStatus == 'running';
   bool get isTerminal =>
-      const {'completed', 'failed', 'cancelled'}.contains(runStatus);
-  bool get isCancellationPending =>
-      isActive && (status == 'cancel_requested' || stage == 'cancel_requested');
+      status == 'completed' || status == 'failed' || status == 'cancelled';
 
   factory AiAssistantChatRequest.fromJson(Map<String, dynamic> json) {
-    final status = _stringValue(json['status']) ?? '';
-    final canonicalStatus = _stringValue(json['run_status']);
-    final response =
-        _nullableMap(json['response']) ??
-        ((canonicalStatus ?? status) == 'completed' && json['message'] is Map
-            ? json
-            : null);
+    final response = _nullableMap(json['response']);
     return AiAssistantChatRequest(
       requestId: _stringValue(json['request_id']) ?? '',
-      status: status,
+      status: _stringValue(json['status']) ?? '',
       stage: _stringValue(json['stage']),
       progress: _assistantProgressList(json['progress']),
       conversationId:
@@ -977,39 +767,9 @@ class AiAssistantChatRequest {
       result:
           response == null ? null : AiAssistantChatResult.fromJson(response),
       errorCode: _stringValue(json['error_code']),
-      canonicalStatus: canonicalStatus,
-      acceptedAt: _dateTimeValue(json['accepted_at']),
-      elapsedSeconds: switch (json['elapsed_seconds']) {
-        final num elapsed when elapsed.isFinite && elapsed >= 0 =>
-          elapsed.floor(),
-        _ => null,
-      },
-      interimResult: AiAssistantInterimResult.fromJson(json['interim_result']),
     );
   }
-
-  static AiAssistantChatRequest? activeFromJson(
-    dynamic value,
-    int conversation,
-  ) {
-    final json = _nullableMap(value);
-    if (json == null) return null;
-    final request = AiAssistantChatRequest.fromJson(json);
-    return request.isActive &&
-            request.conversationId == conversation &&
-            isRequestId(request.requestId)
-        ? request
-        : null;
-  }
-
-  static bool isRequestId(String value) =>
-      _assistantRequestIdPattern.hasMatch(value);
 }
-
-final _assistantRequestIdPattern = RegExp(
-  r'^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$',
-  caseSensitive: false,
-);
 
 class AiCreditUsageModel {
   const AiCreditUsageModel({
@@ -1096,6 +856,7 @@ class AiCreditsBalanceModel {
 class AiCreditQuoteModel {
   const AiCreditQuoteModel({
     required this.id,
+    required this.maxConfirmed,
     required this.amount,
     required this.unit,
     this.processingDeadlineSeconds,
@@ -1103,6 +864,7 @@ class AiCreditQuoteModel {
   });
 
   final String id;
+  final bool maxConfirmed;
   final String amount;
   final String unit;
   final int? processingDeadlineSeconds;
@@ -1111,6 +873,7 @@ class AiCreditQuoteModel {
   factory AiCreditQuoteModel.fromJson(Map<String, dynamic> json) {
     return AiCreditQuoteModel(
       id: _stringValue(json['quote_id']) ?? _stringValue(json['id']) ?? '',
+      maxConfirmed: _boolValue(json['max_confirmed']),
       expiresAt: DateTime.tryParse(_stringValue(json['expires_at']) ?? ''),
       amount: formatAiMinor(_intValue(json['max_units_minor'])),
       unit: _stringValue(json['unit']) ?? 'ед. МОСТ',
