@@ -1254,6 +1254,38 @@ void main() {
     expect(find.text('Порядок работ'), findsNothing);
   });
 
+  for (final (statusCode, serverMessage, userMessage) in [
+    (401, 'Unauthorized.', 'Статья недоступна.'),
+    (
+      500,
+      'FormatException: malformed article payload',
+      'Не удалось выполнить действие. Попробуйте еще раз.',
+    ),
+  ]) {
+    testWidgets('hides raw article errors from HTTP $statusCode', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _knowledgeArticleChat(
+          auth: _OrganizationAuthNotifier(11),
+          articleResponse: (_) async => statusCode,
+          articleErrorMessage: serverMessage,
+        ),
+      );
+      await tester.pumpAndSettle();
+      final link = find.widgetWithText(TextButton, 'Порядок работ');
+      await tester.ensureVisible(link);
+      await tester.tap(link);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(KnowledgeArticleScreen), findsOneWidget);
+      expect(find.text('Не удалось открыть статью'), findsOneWidget);
+      expect(find.text(userMessage), findsOneWidget);
+      expect(find.text(serverMessage, findRichText: true), findsNothing);
+      expect(find.text('Откройте раздел и создайте заявку.'), findsNothing);
+    });
+  }
+
   testWidgets('hides a loaded chat article after the organization changes', (
     tester,
   ) async {
@@ -1573,6 +1605,7 @@ void main() {
 Widget _knowledgeArticleChat({
   required _OrganizationAuthNotifier auth,
   required Future<int> Function(RequestOptions) articleResponse,
+  String? articleErrorMessage,
 }) {
   final dio = Dio(
     BaseOptions(baseUrl: 'https://mobile.example.test/api/v1/mobile'),
@@ -1635,7 +1668,14 @@ Widget _knowledgeArticleChat({
         final response = Response(
           requestOptions: options,
           statusCode: statusCode,
-          data: {'success': statusCode == 200, 'data': data},
+          data: {
+            'success': statusCode == 200,
+            'data': data,
+            if (options.path == articlePath &&
+                statusCode != 200 &&
+                articleErrorMessage != null)
+              'message': articleErrorMessage,
+          },
         );
         if (statusCode == 200) {
           handler.resolve(response);

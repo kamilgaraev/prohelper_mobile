@@ -4,7 +4,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import 'package:prohelpers_mobile/core/design/pro_design_tokens.dart';
 import 'package:prohelpers_mobile/core/design/pro_status.dart';
-import 'package:prohelpers_mobile/core/network/api_exception.dart';
+import 'package:prohelpers_mobile/core/error/user_message.dart';
 import 'package:prohelpers_mobile/core/theme/app_typography.dart';
 import 'package:prohelpers_mobile/core/widgets/app_error_state.dart';
 import 'package:prohelpers_mobile/core/widgets/app_loading_state.dart';
@@ -185,7 +185,8 @@ class _AssistantKnowledgeArticleViewState
                 padding: const EdgeInsets.only(top: 80),
                 child: AppErrorState(
                   title: 'Не удалось открыть статью',
-                  description: error is ApiException ? error.message : null,
+                  description:
+                      error == null ? null : UserMessage.fromError(error),
                   onRetry: () => ref.invalidate(provider),
                 ),
               ),
