@@ -1,3 +1,5 @@
+import '../../knowledge_hub/data/knowledge_article_model.dart';
+
 class AiUsageModel {
   const AiUsageModel({
     required this.monthlyLimit,
@@ -106,6 +108,18 @@ class AiMessageModel {
 
   AiAssistantPublication? get publication =>
       AiAssistantPublication.fromJson(metadata);
+
+  List<AiAssistantKnowledgeSource> get knowledgeSources {
+    final version = metadata?['contract_version'];
+    if (role != 'assistant' || version is! int || version != 1) return const [];
+
+    final sources = <String, AiAssistantKnowledgeSource>{};
+    for (final value in _asList(metadata?['source_refs'])) {
+      final source = AiAssistantKnowledgeSource.fromJson(value);
+      if (source != null) sources.putIfAbsent(source.slug, () => source);
+    }
+    return sources.values.toList(growable: false);
+  }
 
   List<AiAssistantEvidenceModel> get evidence => [
         ..._asList(metadata?['source_refs']),
@@ -663,6 +677,41 @@ class AiAssistantUiAction {
       surface: json['surface'] is String ? json['surface'] as String : null,
       target: json['target'] is String ? json['target'] as String : null,
     );
+  }
+}
+
+class AiAssistantKnowledgeSource {
+  const AiAssistantKnowledgeSource._(this.slug, this.title);
+
+  final String slug;
+  final String? title;
+
+  static AiAssistantKnowledgeSource? fromJson(dynamic value) {
+    final json = _nullableMap(value);
+    if (json == null ||
+        json['source_type'] != 'knowledge' ||
+        json['entity_type'] != 'knowledge_article') {
+      return null;
+    }
+
+    final url = _nullableMap(json['navigation'])?['url'];
+    const prefix = '/dashboard/help/knowledge/';
+    if (url is! String || !url.startsWith(prefix)) return null;
+
+    final segment = url.substring(prefix.length);
+    try {
+      final slug = Uri.decodeComponent(segment);
+      if (canonicalKnowledgeArticleSlugSegment(slug) != segment) return null;
+      final label = json['display_label'];
+      return AiAssistantKnowledgeSource._(
+        slug,
+        label is String ? _stringValue(label) : null,
+      );
+    } on ArgumentError {
+      return null;
+    } on FormatException {
+      return null;
+    }
   }
 }
 

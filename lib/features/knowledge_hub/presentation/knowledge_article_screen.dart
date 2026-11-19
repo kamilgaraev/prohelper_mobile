@@ -1,9 +1,10 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import 'package:prohelpers_mobile/core/design/pro_design_tokens.dart';
 import 'package:prohelpers_mobile/core/design/pro_status.dart';
+import 'package:prohelpers_mobile/core/network/api_exception.dart';
 import 'package:prohelpers_mobile/core/theme/app_typography.dart';
 import 'package:prohelpers_mobile/core/widgets/app_error_state.dart';
 import 'package:prohelpers_mobile/core/widgets/app_loading_state.dart';
@@ -14,13 +15,26 @@ import 'package:prohelpers_mobile/features/knowledge_hub/data/knowledge_hub_repo
 import 'package:prohelpers_mobile/features/knowledge_hub/domain/knowledge_hub_provider.dart';
 
 class KnowledgeArticleScreen extends ConsumerWidget {
-  const KnowledgeArticleScreen({super.key, required this.slug, this.title});
+  const KnowledgeArticleScreen({super.key, required this.slug, this.title})
+    : assistantScope = null;
+
+  const KnowledgeArticleScreen.fromAssistant({
+    super.key,
+    required this.slug,
+    required AssistantKnowledgeArticleScope scope,
+  }) : assistantScope = scope,
+       title = null;
 
   final String slug;
   final String? title;
+  final AssistantKnowledgeArticleScope? assistantScope;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final scope = assistantScope;
+    if (scope != null) {
+      return _AssistantKnowledgeArticleView(slug: slug, scope: scope);
+    }
     final state = ref.watch(knowledgeArticleDetailProvider(slug));
     final notifier = ref.read(knowledgeArticleDetailProvider(slug).notifier);
     final article = state.article;
@@ -98,21 +112,107 @@ class KnowledgeArticleScreen extends ConsumerWidget {
   }
 }
 
+class _AssistantKnowledgeArticleView extends ConsumerStatefulWidget {
+  const _AssistantKnowledgeArticleView({
+    required this.slug,
+    required this.scope,
+  });
+
+  final String slug;
+  final AssistantKnowledgeArticleScope scope;
+
+  @override
+  ConsumerState<_AssistantKnowledgeArticleView> createState() =>
+      _AssistantKnowledgeArticleViewState();
+}
+
+class _AssistantKnowledgeArticleViewState
+    extends ConsumerState<_AssistantKnowledgeArticleView> {
+  bool _scopeChanged = false;
+
+  @override
+  void initState() {
+    super.initState();
+    ref.listenManual(assistantKnowledgeArticleScopeProvider, (_, scope) {
+      if (!_scopeChanged && scope != widget.scope) {
+        setState(() => _scopeChanged = true);
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_scopeChanged ||
+        ref.watch(assistantKnowledgeArticleScopeProvider) != widget.scope) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Статья')),
+        body: const AppErrorState(title: 'Статья недоступна.'),
+      );
+    }
+
+    final provider = assistantKnowledgeArticleProvider((
+      slug: widget.slug,
+      scope: widget.scope,
+    ));
+    final result = ref.watch(provider);
+    final article = result.isLoading || result.hasError ? null : result.value;
+    final error = result.error;
+    return Scaffold(
+      appBar: AppBar(
+        centerTitle: false,
+        title: Text(article?.title ?? 'Статья'),
+      ),
+      body: RefreshIndicator(
+        onRefresh: () async {
+          final loading = ref.refresh(provider.future);
+          try {
+            await loading;
+          } catch (_) {}
+        },
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+          children: [
+            if (article != null)
+              _ArticleBody(article: article)
+            else if (result.isLoading)
+              const Padding(
+                padding: EdgeInsets.only(top: 120),
+                child: AppLoadingState(message: 'Открываем статью'),
+              )
+            else
+              Padding(
+                padding: const EdgeInsets.only(top: 80),
+                child: AppErrorState(
+                  title: 'Не удалось открыть статью',
+                  description: error is ApiException ? error.message : null,
+                  onRetry: () => ref.invalidate(provider),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _ArticleBody extends StatelessWidget {
   const _ArticleBody({
     required this.article,
-    required this.state,
-    required this.onFeedback,
-    required this.onOpenArticle,
+    this.state = const KnowledgeArticleDetailState(),
+    this.onFeedback,
+    this.onOpenArticle,
   });
 
   final KnowledgeArticleModel article;
   final KnowledgeArticleDetailState state;
-  final ValueChanged<KnowledgeFeedbackReaction> onFeedback;
-  final ValueChanged<KnowledgeArticleModel> onOpenArticle;
+  final ValueChanged<KnowledgeFeedbackReaction>? onFeedback;
+  final ValueChanged<KnowledgeArticleModel>? onOpenArticle;
 
   @override
   Widget build(BuildContext context) {
+    final feedback = onFeedback;
+    final openArticle = onOpenArticle;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -158,22 +258,24 @@ class _ArticleBody extends StatelessWidget {
             style: AppTypography.bodyLarge(context).copyWith(height: 1.45),
           ),
         ),
-        const SizedBox(height: 16),
-        _FeedbackBlock(state: state, onFeedback: onFeedback),
-        if (article.children.isNotEmpty) ...[
+        if (feedback != null) ...[
+          const SizedBox(height: 16),
+          _FeedbackBlock(state: state, onFeedback: feedback),
+        ],
+        if (openArticle != null && article.children.isNotEmpty) ...[
           const SizedBox(height: 20),
           _ArticleLinksSection(
             title: 'Вложенные статьи',
             articles: article.children,
-            onOpenArticle: onOpenArticle,
+            onOpenArticle: openArticle,
           ),
         ],
-        if (article.related.isNotEmpty) ...[
+        if (openArticle != null && article.related.isNotEmpty) ...[
           const SizedBox(height: 20),
           _ArticleLinksSection(
             title: 'Похожие материалы',
             articles: article.related,
-            onOpenArticle: onOpenArticle,
+            onOpenArticle: openArticle,
           ),
         ],
       ],

@@ -1,4 +1,4 @@
-﻿import 'package:dio/dio.dart';
+import 'package:dio/dio.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import 'package:prohelpers_mobile/core/network/api_exception.dart';
@@ -53,12 +53,10 @@ class KnowledgeContextHelpModel {
     final primary = _mapValue(json['primary']);
 
     return KnowledgeContextHelpModel(
-      primary:
-          primary.isEmpty ? null : KnowledgeArticleModel.fromJson(primary),
-      suggested:
-          _mapList(json['suggested'])
-              .map(KnowledgeArticleModel.fromJson)
-              .toList(growable: false),
+      primary: primary.isEmpty ? null : KnowledgeArticleModel.fromJson(primary),
+      suggested: _mapList(
+        json['suggested'],
+      ).map(KnowledgeArticleModel.fromJson).toList(growable: false),
       context: _mapValue(json['context']),
     );
   }
@@ -95,10 +93,9 @@ class KnowledgeHubRepository {
       final payload = MobileApiResponse.list(response.data);
 
       return KnowledgeArticlePage(
-        items:
-            payload.data
-                .map(KnowledgeArticleModel.fromJson)
-                .toList(growable: false),
+        items: payload.data
+            .map(KnowledgeArticleModel.fromJson)
+            .toList(growable: false),
         currentPage: _intValue(payload.meta['current_page'], fallback: page),
         lastPage: _intValue(payload.meta['last_page'], fallback: page),
         perPage: _intValue(payload.meta['per_page'], fallback: perPage),
@@ -125,9 +122,9 @@ class KnowledgeHubRepository {
         }),
       );
 
-      return MobileApiResponse.dataList(response.data)
-          .map(KnowledgeArticleModel.fromJson)
-          .toList(growable: false);
+      return MobileApiResponse.dataList(
+        response.data,
+      ).map(KnowledgeArticleModel.fromJson).toList(growable: false);
     } on DioException catch (error) {
       throw ApiException.fromDio(
         error,
@@ -172,6 +169,44 @@ class KnowledgeHubRepository {
         MobileApiResponse.dataMap(response.data),
       );
     } on DioException catch (error) {
+      throw ApiException.fromDio(
+        error,
+        fallbackMessage: 'Не удалось открыть статью.',
+      );
+    }
+  }
+
+  Future<KnowledgeArticleModel> fetchAssistantArticle(
+    String slug, {
+    CancelToken? cancelToken,
+  }) async {
+    final segment = canonicalKnowledgeArticleSlugSegment(slug);
+    const unavailable = 'Статья недоступна.';
+    if (segment == null) throw const ApiException(unavailable);
+
+    try {
+      final response = await _dio.get(
+        '/ai-assistant/knowledge/articles/$segment',
+        cancelToken: cancelToken,
+        options: Options(followRedirects: false),
+      );
+      final envelope = response.data;
+      if (envelope is! Map ||
+          envelope['success'] != true ||
+          envelope['data'] is! Map) {
+        throw const ApiException(unavailable);
+      }
+      final data = MobileApiResponse.dataMap(envelope);
+      final article = KnowledgeArticleModel.fromJson(data);
+      if (data['slug'] != slug || article.id <= 0) {
+        throw const ApiException(unavailable);
+      }
+      return article;
+    } on DioException catch (error) {
+      final status = error.response?.statusCode;
+      if (status == 401 || status == 403 || status == 404) {
+        throw ApiException(unavailable, statusCode: status);
+      }
       throw ApiException.fromDio(
         error,
         fallbackMessage: 'Не удалось открыть статью.',

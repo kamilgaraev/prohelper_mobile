@@ -1,10 +1,52 @@
-﻿import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:dio/dio.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import 'package:prohelpers_mobile/core/network/api_exception.dart';
+import 'package:prohelpers_mobile/features/auth/domain/auth_provider.dart';
 import 'package:prohelpers_mobile/features/knowledge_hub/data/knowledge_article_model.dart';
 import 'package:prohelpers_mobile/features/knowledge_hub/data/knowledge_hub_repository.dart';
 
 const _knowledgeHubSentinel = Object();
+
+typedef AssistantKnowledgeArticleScope =
+    ({int userId, int organizationId, String? sessionId});
+
+final assistantKnowledgeArticleScopeProvider =
+    Provider<AssistantKnowledgeArticleScope?>((ref) {
+      return ref.watch(
+        authProvider.select((state) {
+          if (state is! AuthAuthenticated || state.needsReauthentication) {
+            return null;
+          }
+          final user = state.user;
+          final organizationId = user.currentOrganizationId;
+          if (user.serverId <= 0 ||
+              organizationId == null ||
+              organizationId <= 0) {
+            return null;
+          }
+          return (
+            userId: user.serverId,
+            organizationId: organizationId,
+            sessionId: state.sessionIdentity?.sessionId,
+          );
+        }),
+      );
+    });
+
+final assistantKnowledgeArticleProvider = FutureProvider.autoDispose.family<
+  KnowledgeArticleModel,
+  ({String slug, AssistantKnowledgeArticleScope scope})
+>((ref, entry) {
+  if (ref.watch(assistantKnowledgeArticleScopeProvider) != entry.scope) {
+    throw const ApiException('Статья недоступна.');
+  }
+  final cancelToken = CancelToken();
+  ref.onDispose(cancelToken.cancel);
+  return ref
+      .watch(knowledgeHubRepositoryProvider)
+      .fetchAssistantArticle(entry.slug, cancelToken: cancelToken);
+});
 
 class KnowledgeHubState {
   const KnowledgeHubState({
@@ -93,8 +135,7 @@ class KnowledgeHubNotifier extends StateNotifier<KnowledgeHubState> {
     );
 
     try {
-      final tree =
-          refresh ? await _repository.fetchTree() : state.tree;
+      final tree = refresh ? await _repository.fetchTree() : state.tree;
       final page = await _repository.fetchArticles(
         page: nextPage,
         query: state.query,
@@ -168,8 +209,7 @@ class KnowledgeArticleDetailState {
   }) {
     return KnowledgeArticleDetailState(
       isLoading: isLoading ?? this.isLoading,
-      isSubmittingFeedback:
-          isSubmittingFeedback ?? this.isSubmittingFeedback,
+      isSubmittingFeedback: isSubmittingFeedback ?? this.isSubmittingFeedback,
       article: article ?? this.article,
       feedbackReaction:
           clearFeedbackReaction
@@ -213,11 +253,7 @@ class KnowledgeArticleDetailNotifier
 
     try {
       final article = await _repository.fetchArticle(_slug);
-      state = state.copyWith(
-        isLoading: false,
-        article: article,
-        error: null,
-      );
+      state = state.copyWith(isLoading: false, article: article, error: null);
     } catch (error) {
       state = state.copyWith(isLoading: false, error: _errorMessage(error));
     }
@@ -278,12 +314,7 @@ class KnowledgeContextHelpParams {
   }
 
   @override
-  int get hashCode => Object.hash(
-    contextKey,
-    moduleSlug,
-    permissionKey,
-    limit,
-  );
+  int get hashCode => Object.hash(contextKey, moduleSlug, permissionKey, limit);
 }
 
 final knowledgeContextHelpProvider = FutureProvider.family<
