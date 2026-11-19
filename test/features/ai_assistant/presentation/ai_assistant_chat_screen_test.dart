@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:prohelpers_mobile/core/network/api_exception.dart';
@@ -52,6 +53,15 @@ class _OrganizationAuthNotifier extends AuthNotifier {
 }
 
 void main() {
+  Future<void> toggleProgressHistory(WidgetTester tester) async {
+    final tile = find.descendant(
+      of: find.byType(ExpansionTile),
+      matching: find.byType(ListTile),
+    );
+    await tester.ensureVisible(tile);
+    await tester.tap(tile);
+  }
+
   Widget buildScreen(AiAssistantRepository repository, {ThemeData? theme}) {
     return ProviderScope(
       overrides: [aiAssistantRepositoryProvider.overrideWithValue(repository)],
@@ -455,6 +465,9 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(find.text('Ответ про бетон'), findsOneWidget);
+      expect(find.text('Сметы проверены'), findsNothing);
+      await toggleProgressHistory(tester);
+      await tester.pumpAndSettle();
       expect(find.text('Сметы проверены'), findsOneWidget);
       expect(find.text('Склад проверен'), findsOneWidget);
       expect(find.text('Проекты проверены'), findsNothing);
@@ -502,7 +515,6 @@ void main() {
     await tester.tap(find.text('Продолжить'));
     await tester.pump();
     expect(find.text('Проверяю склад'), findsNothing);
-    expect(find.text('Склад проверен'), findsOneWidget);
     repository.answer.complete(
       AiAssistantChatRequest(
         requestId: repository.requestId!,
@@ -520,6 +532,9 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    await toggleProgressHistory(tester);
+    await tester.pumpAndSettle();
+    expect(find.text('Склад проверен'), findsOneWidget);
   });
 
   testWidgets('shows one current activity and elapsed time', (tester) async {
@@ -569,7 +584,165 @@ void main() {
     expect(repository.polledIds.length, pollCount);
   });
 
-  testWidgets('zero-cost greeting skips expense confirmation', (tester) async {
+  testWidgets(
+    'restores verified progress and replaces the latest interim result',
+    (tester) async {
+      const requestId = '2962344c-2256-4315-99f1-638ffb026a3e';
+      final repository = _RaceRepository(
+        activeRequest: const AiAssistantChatRequest(
+          requestId: requestId,
+          conversationId: 1,
+          status: 'running',
+          canonicalStatus: 'running',
+        ),
+        scriptedStatuses: [
+          {
+            'run_status': 'running',
+            'accepted_at': '2026-11-19T08:00:00Z',
+            'elapsed_seconds': 125,
+            'progress': [
+              {
+                'id': 1,
+                'key': 'private-record-id',
+                'code': 'record_check',
+                'state': 'started',
+              },
+              {
+                'id': 2,
+                'key': 'private-record-id',
+                'code': 'record_check',
+                'state': 'completed',
+              },
+              {'id': 3, 'code': 'estimates', 'state': 'failed'},
+              {'id': 4, 'code': 'estimate_position_search', 'state': 'started'},
+              {'id': 5, 'code': 'private_tool', 'state': 'completed'},
+            ],
+            'interim_result': _interimResult(1, 'Проверен первый срок.'),
+          },
+          StateError('Connection lost'),
+          {
+            'progress': [
+              {
+                'id': 6,
+                'code': 'estimate_position_search',
+                'state': 'completed',
+              },
+              {'id': 7, 'code': 'estimate_position_read', 'state': 'started'},
+            ],
+            'interim_result': _interimResult(2, 'Проверены два срока.'),
+          },
+        ],
+      );
+      await tester.pumpWidget(buildScreen(repository));
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.text('Прошло 02:05'), findsOneWidget);
+      expect(find.text('Поиск позиций сметы'), findsOneWidget);
+      expect(find.text('Промежуточный результат'), findsOneWidget);
+      expect(find.text('Проверен первый срок.'), findsOneWidget);
+      expect(find.text('По проекту'), findsOneWidget);
+      expect(find.text('График работ'), findsOneWidget);
+      expect(find.text('Работа продолжается.'), findsOneWidget);
+      expect(find.text('Запись проверена'), findsNothing);
+      await toggleProgressHistory(tester);
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.text('Запись проверена'), findsOneWidget);
+      expect(find.text('Не удалось проверить сметы'), findsOneWidget);
+      expect(find.textContaining('private'), findsNothing);
+      await toggleProgressHistory(tester);
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.text('Запись проверена'), findsNothing);
+
+      await tester.pump(const Duration(seconds: 2));
+      await tester.pump();
+      expect(find.text('Проверяю состояние запроса'), findsOneWidget);
+      expect(find.text('Проверен первый срок.'), findsOneWidget);
+      await tester.pump(const Duration(seconds: 2));
+      await tester.pump();
+      expect(find.text('Проверен первый срок.'), findsNothing);
+      expect(find.text('Проверены два срока.'), findsOneWidget);
+      expect(find.text('Чтение позиции сметы'), findsOneWidget);
+
+      repository.answer.complete(
+        AiAssistantChatRequest.fromJson({
+          'request_id': requestId,
+          'conversation_id': 1,
+          'run_status': 'completed',
+          'response': {
+            'request_id': requestId,
+            'conversation_id': 1,
+            'result_key': 'answer',
+            'message': {
+              'id': 81,
+              'role': 'assistant',
+              'content': 'Проверены два срока.',
+            },
+          },
+        }),
+      );
+      await tester.pump(const Duration(seconds: 2));
+      await tester.pumpAndSettle();
+
+      expect(repository.sentIds, isEmpty);
+      expect(find.text('Проверены два срока.'), findsOneWidget);
+      expect(find.text('Промежуточный результат'), findsNothing);
+      expect(find.text('Работа продолжается.'), findsNothing);
+      expect(find.textContaining('Прошло '), findsNothing);
+    },
+  );
+
+  testWidgets('hides interim text on an empty snapshot and denied status', (
+    tester,
+  ) async {
+    const requestId = '2962344c-2256-4315-99f1-638ffb026a3e';
+    final repository = _RaceRepository(
+      activeRequest: const AiAssistantChatRequest(
+        requestId: requestId,
+        conversationId: 1,
+        status: 'running',
+      ),
+      scriptedStatuses: [
+        {'interim_result': _interimResult(1, 'Первая проверка.')},
+        {'interim_result': null},
+        {
+          'interim_result': _interimResult(
+            2,
+            'Вторая проверка.',
+            project: false,
+          ),
+        },
+        const ApiException('Нет доступа.', statusCode: 403),
+      ],
+    );
+    await tester.pumpWidget(buildScreen(repository));
+    await tester.pump();
+    await tester.pump();
+    expect(find.text('Первая проверка.'), findsOneWidget);
+
+    await tester.pump(const Duration(seconds: 2));
+    await tester.pump();
+    expect(find.text('Промежуточный результат'), findsNothing);
+    expect(find.text('Стоп'), findsOneWidget);
+
+    await tester.pump(const Duration(seconds: 2));
+    await tester.pump();
+    expect(find.text('Вторая проверка.'), findsOneWidget);
+    expect(find.text('По организации'), findsOneWidget);
+
+    await tester.pump(const Duration(seconds: 2));
+    await tester.pumpAndSettle();
+    expect(
+      find.text('Диалог недоступен или у пользователя нет прав.'),
+      findsOneWidget,
+    );
+    expect(find.text('Промежуточный результат'), findsNothing);
+    expect(find.text('Стоп'), findsNothing);
+  });
+
+  testWidgets('fast local turn shows the final reply without polling', (
+    tester,
+  ) async {
     final repository = _RaceRepository(freeQuote: true);
     await tester.pumpWidget(buildScreen(repository));
     await tester.pumpAndSettle();
@@ -579,28 +752,86 @@ void main() {
     expect(find.text('Оценка расхода'), findsNothing);
     expect(repository.sentIds, hasLength(1));
     repository.answer.complete(
+      AiAssistantChatRequest.fromJson({
+        'request_id': repository.requestId,
+        'conversation_id': 1,
+        'run_status': 'completed',
+        'result_key': 'answer',
+        'message': {'id': 102, 'role': 'assistant', 'content': 'Здравствуйте!'},
+      }),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Здравствуйте!'), findsOneWidget);
+    expect(find.textContaining('Прошло '), findsNothing);
+    expect(find.text('Промежуточный результат'), findsNothing);
+    expect(repository.polledIds, isEmpty);
+  });
+
+  testWidgets('declining a legacy paid quote keeps the question unsent', (
+    tester,
+  ) async {
+    final repository = _RaceRepository();
+    await tester.pumpWidget(buildScreen(repository));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), 'Вопрос');
+    await tester.tap(find.byIcon(Icons.send_rounded));
+    await tester.pumpAndSettle();
+    expect(find.text('Оценка расхода'), findsOneWidget);
+    expect(repository.sentIds, isEmpty);
+
+    await tester.tap(find.text('Отмена'));
+    await tester.pumpAndSettle();
+
+    expect(repository.sentIds, isEmpty);
+    expect(
+      tester.widget<TextField>(find.byType(TextField)).controller?.text,
+      'Вопрос',
+    );
+  });
+
+  testWidgets('v1 completed cancel without a result waits for GET', (
+    tester,
+  ) async {
+    final repository = _RaceRepository(
+      asyncAccepted: true,
+      freeQuote: true,
+      cancelStatus: 'completed',
+      cancelRunStatus: 'completed',
+    );
+    await tester.pumpWidget(buildScreen(repository));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), 'Вопрос');
+    await tester.tap(find.byIcon(Icons.send_rounded));
+    await tester.pump();
+    await tester.tap(find.text('Стоп'));
+    await tester.pump();
+
+    expect(repository.cancelledRequestId, repository.requestId);
+    expect(repository.polledIds, [repository.requestId]);
+    expect(find.text('Стоп'), findsOneWidget);
+
+    final requestId = repository.requestId!;
+    repository.answer.complete(
       AiAssistantChatRequest(
-        requestId: repository.requestId!,
+        requestId: requestId,
+        conversationId: 1,
         status: 'completed',
         result: AiAssistantChatResult(
-          requestId: repository.requestId!,
+          requestId: requestId,
           conversationId: 1,
           message: const AiMessageModel(
-            id: 102,
+            id: 103,
             role: 'assistant',
-            content: 'Здравствуйте!',
+            content: 'Готовый ответ',
             createdAt: null,
-            metadata: {
-              'response_kind': 'greeting',
-              'validation_status': 'verified',
-            },
           ),
         ),
       ),
     );
     await tester.pumpAndSettle();
-    expect(find.text('Здравствуйте!'), findsOneWidget);
-    expect(find.text('Проверено'), findsNothing);
+    expect(find.text('Готовый ответ'), findsOneWidget);
+    expect(find.text('Стоп'), findsNothing);
+    expect(repository.sentIds, [requestId]);
   });
 
   testWidgets('switching chat detaches 202 polling without server cancel', (
@@ -646,7 +877,7 @@ void main() {
     expect(repository.cancelledRequestId, isNull);
   });
 
-  testWidgets('disposing the screen cancels the captured request', (
+  testWidgets('disposing the screen detaches without cancelling the turn', (
     tester,
   ) async {
     final repository = _RaceRepository(asyncAccepted: true);
@@ -659,13 +890,11 @@ void main() {
     await tester.pump();
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump();
-    expect(repository.cancelledRequestId, repository.requestId);
+    expect(repository.cancelledRequestId, isNull);
     expect(repository.sentCancelToken?.isCancelled, isTrue);
   });
 
-  testWidgets('organization change cancels request captured in old scope', (
-    tester,
-  ) async {
+  testWidgets('organization change detaches from the old turn', (tester) async {
     final repository = _RaceRepository(asyncAccepted: true);
     final auth = _OrganizationAuthNotifier(4);
     await tester.pumpWidget(
@@ -687,9 +916,277 @@ void main() {
     await tester.pump();
     auth.setOrganization(5);
     await tester.pump();
-    expect(repository.cancelledRequestId, repository.requestId);
+    expect(repository.cancelledRequestId, isNull);
     expect(repository.sentCancelToken?.isCancelled, isTrue);
     expect(find.text('Прошло 00:'), findsNothing);
+  });
+
+  testWidgets('reopening a chat watches the active turn from the server', (
+    tester,
+  ) async {
+    const requestId = '2962344c-2256-4315-99f1-638ffb026a3e';
+    final repository = _RaceRepository(
+      activeRequest: const AiAssistantChatRequest(
+        requestId: requestId,
+        conversationId: 1,
+        status: 'running',
+        canonicalStatus: 'queued',
+      ),
+    );
+    await tester.pumpWidget(buildScreen(repository));
+    await tester.pump();
+    await tester.pump();
+
+    expect(repository.polledIds, [requestId]);
+    expect(repository.sentIds, isEmpty);
+    expect(find.text('Стоп'), findsOneWidget);
+
+    repository.answer.complete(
+      const AiAssistantChatRequest(
+        requestId: requestId,
+        status: 'completed',
+        result: AiAssistantChatResult(
+          requestId: requestId,
+          conversationId: 1,
+          message: AiMessageModel(
+            id: 72,
+            role: 'assistant',
+            content: 'Запрос завершён после возвращения.',
+            createdAt: null,
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Запрос завершён после возвращения.'), findsOneWidget);
+    expect(find.text('Стоп'), findsNothing);
+    expect(repository.cancelledRequestId, isNull);
+  });
+
+  testWidgets('reopens a draft turn saved for the signed-in organization', (
+    tester,
+  ) async {
+    const requestId = '2962344c-2256-4315-99f1-638ffb026a3e';
+    FlutterSecureStorage.setMockInitialValues({
+      'assistant_draft_request_7_4': requestId,
+      'assistant_draft_request_7_5': 'bfb62fbc-e2cb-49f3-95aa-b169bb5538ce',
+    });
+    final repository = _RaceRepository();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authProvider.overrideWith((_) => _OrganizationAuthNotifier(4)),
+          aiAssistantRepositoryProvider.overrideWithValue(repository),
+        ],
+        child: const MaterialApp(home: AiAssistantChatScreen()),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(repository.polledIds, [requestId]);
+    expect(repository.sentIds, isEmpty);
+
+    repository.answer.complete(
+      const AiAssistantChatRequest(requestId: requestId, status: 'cancelled'),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Запрос остановлен.'), findsOneWidget);
+    const storage = FlutterSecureStorage();
+    expect(await storage.read(key: 'assistant_draft_request_7_4'), isNull);
+    expect(await storage.read(key: 'assistant_draft_request_7_5'), isNotNull);
+    FlutterSecureStorage.setMockInitialValues({});
+  });
+
+  testWidgets('merges delayed draft history with the next completed turn', (
+    tester,
+  ) async {
+    const requestId = '2962344c-2256-4315-99f1-638ffb026a3e';
+    const recovered = AiMessageModel(
+      id: 72,
+      role: 'assistant',
+      content: 'Первый ответ',
+      createdAt: null,
+    );
+    const followUp = AiMessageModel(
+      id: 74,
+      role: 'assistant',
+      content: 'Следующий ответ',
+      createdAt: null,
+    );
+    final history = Completer<AiConversationDetailsModel>();
+    final nextResponse = Completer<AiAssistantChatRequest>();
+    final repository = _RaceRepository(
+      freeQuote: true,
+      delayedConversation: history.future,
+      postResponse: nextResponse.future,
+    );
+    FlutterSecureStorage.setMockInitialValues({
+      'assistant_draft_request_7_4': requestId,
+    });
+    addTearDown(() => FlutterSecureStorage.setMockInitialValues({}));
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authProvider.overrideWith((_) => _OrganizationAuthNotifier(4)),
+          aiAssistantRepositoryProvider.overrideWithValue(repository),
+        ],
+        child: const MaterialApp(home: AiAssistantChatScreen()),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+    repository.answer.complete(
+      const AiAssistantChatRequest(
+        requestId: requestId,
+        status: 'completed',
+        result: AiAssistantChatResult(
+          requestId: requestId,
+          conversationId: 1,
+          message: recovered,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Первый ответ'), findsOneWidget);
+
+    await tester.enterText(find.byType(TextField), 'Следующий вопрос');
+    await tester.tap(find.byIcon(Icons.send_rounded));
+    await tester.pump();
+    final nextId = repository.sentIds.single;
+    nextResponse.complete(
+      AiAssistantChatRequest(
+        requestId: nextId,
+        status: 'completed',
+        result: AiAssistantChatResult(
+          requestId: nextId,
+          conversationId: 1,
+          message: followUp,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    history.complete(
+      AiConversationDetailsModel(
+        conversation: const AiConversationModel(
+          id: 1,
+          title: 'Chat',
+          createdAt: null,
+          updatedAt: null,
+        ),
+        messages: [
+          const AiMessageModel(
+            id: 71,
+            role: 'user',
+            content: 'Восстановленный вопрос',
+            createdAt: null,
+          ),
+          recovered,
+          AiMessageModel(
+            id: 73,
+            role: 'user',
+            content: 'Следующий вопрос',
+            createdAt: null,
+            metadata: {'request_id': nextId},
+          ),
+        ],
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final messages = [
+      find.text('Восстановленный вопрос'),
+      find.text('Первый ответ'),
+      find.text('Следующий вопрос'),
+      find.text('Следующий ответ'),
+    ];
+    for (final message in messages) {
+      expect(message, findsOneWidget);
+    }
+    final positions =
+        messages.map((message) => tester.getTopLeft(message).dy).toList();
+    expect(positions, orderedEquals([...positions]..sort()));
+  });
+
+  testWidgets('published reveal is noninteractive without mobile adapter', (
+    tester,
+  ) async {
+    final repository = _AiAssistantRepository(
+      messages: [
+        AiMessageModel.fromJson({
+          'id': 51,
+          'role': 'assistant',
+          'content': 'Найдена работа.',
+          'metadata': {
+            'contract_version': 1,
+            'outcome': 'ok',
+            'coverage': {'status': 'partial'},
+            'source_refs': [
+              {
+                'title': 'Непроверенная ссылка',
+                'url': '/dashboard/projects/77',
+              },
+            ],
+            'evidence': [
+              {
+                'source_ref': {'title': 'Рабочий график'},
+              },
+            ],
+            'ui_actions': [
+              {
+                'type': 'reveal_source',
+                'label': 'Показать работу',
+                'surface': 'mobile',
+                'target': 'https://example.test/arbitrary',
+              },
+            ],
+          },
+        }),
+      ],
+    );
+    await tester.pumpWidget(buildScreen(repository));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Рабочий график'), findsOneWidget);
+    expect(find.text('Показать работу'), findsOneWidget);
+    expect(find.text('Эти действия недоступны в приложении.'), findsOneWidget);
+    expect(find.text('Непроверенная ссылка'), findsNothing);
+    expect(find.byIcon(Icons.open_in_new), findsNothing);
+  });
+
+  testWidgets('queued export task does not offer the file download', (
+    tester,
+  ) async {
+    final repository = _AiAssistantRepository(
+      messages: [
+        AiMessageModel.fromJson({
+          'id': 52,
+          'role': 'assistant',
+          'content': 'Собираю отчёт.',
+          'metadata': {
+            'contract_version': 1,
+            'export_task': {
+              'task_id': 'f6d3412e-5b13-4426-b77f-de8a5e81736d',
+              'title': 'График работ',
+              'status': 'queued',
+              'url':
+                  '/ai-assistant/report-tasks/f6d3412e-5b13-4426-b77f-de8a5e81736d',
+            },
+          },
+        }),
+      ],
+    );
+    await tester.pumpWidget(buildScreen(repository));
+    await tester.pumpAndSettle();
+
+    expect(find.text('График работ'), findsOneWidget);
+    expect(
+      find.text('Отчёт готовится. Статус доступен в админке.'),
+      findsOneWidget,
+    );
+    expect(find.byIcon(Icons.download_rounded), findsNothing);
   });
 
   testWidgets('forbidden status polling stops instead of retrying', (
@@ -766,6 +1263,81 @@ void main() {
     }
   });
 
+  testWidgets('terminal POST replay restores the question without retrying', (
+    tester,
+  ) async {
+    for (final (status, errorCode, notice) in [
+      ('cancelled', 'request_cancelled', 'Запрос остановлен.'),
+      (
+        'failed',
+        'request_failed',
+        'Ассистент не смог подготовить ответ. Попробуйте новый запрос.',
+      ),
+    ]) {
+      final repository = _RaceRepository(freeQuote: true);
+      await tester.pumpWidget(buildScreen(repository));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), 'Вопрос');
+      await tester.tap(find.byIcon(Icons.send_rounded));
+      await tester.pump();
+      repository.answer.complete(
+        AiAssistantChatRequest.fromJson({
+          'request_id': repository.requestId,
+          'conversation_id': 1,
+          'status': status,
+          'run_status': status,
+          'stage': status,
+          'error_code': errorCode,
+        }),
+      );
+
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(seconds: 5));
+
+      expect(find.text(notice), findsOneWidget);
+      expect(find.text('Ассистент готов'), findsOneWidget);
+      expect(find.text('Стоп'), findsNothing);
+      expect(
+        tester.widget<TextField>(find.byType(TextField)).controller?.text,
+        'Вопрос',
+      );
+      expect(repository.sentIds, [repository.requestId]);
+      expect(repository.polledIds, isEmpty);
+      await tester.pumpWidget(const SizedBox.shrink());
+    }
+  });
+
+  testWidgets('pending server cancellation disables Stop with running status', (
+    tester,
+  ) async {
+    final repository = _RaceRepository(freeQuote: true);
+    await tester.pumpWidget(buildScreen(repository));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), 'Вопрос');
+    await tester.tap(find.byIcon(Icons.send_rounded));
+    await tester.pump();
+    repository.answer.complete(
+      AiAssistantChatRequest.fromJson({
+        'request_id': repository.requestId,
+        'conversation_id': 1,
+        'status': 'cancel_requested',
+        'run_status': 'running',
+        'stage': 'generating',
+      }),
+    );
+    await tester.pump();
+
+    expect(find.text('Останавливаю обработку'), findsOneWidget);
+    final stop = find.ancestor(
+      of: find.text('Стоп'),
+      matching: find.byWidgetPredicate((widget) => widget is TextButton),
+    );
+    expect(tester.widget<TextButton>(stop).onPressed, isNull);
+    expect(repository.cancelledRequestId, isNull);
+    expect(repository.polledIds, [repository.requestId]);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets(
     'reports zero actual charge in shadow mode without claiming payment',
     (tester) async {
@@ -804,9 +1376,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(
-        find.text(
-          'Тестовый режим: списания выключены. Фактическое списание — 0 ед. МОСТ.',
-        ),
+        find.text('Списания выключены. За этот запрос списано 0 ед. МОСТ.'),
         findsOneWidget,
       );
       expect(find.textContaining('Списано: 0'), findsNothing);
@@ -964,6 +1534,24 @@ AiAssistantActionModel _blockedAction() {
   );
 }
 
+Map<String, dynamic> _interimResult(
+  int revision,
+  String text, {
+  bool project = true,
+}) => {
+  'key': 'answer',
+  'revision': revision,
+  'text': text,
+  'scope': {
+    'kind': project ? 'project' : 'organization',
+    if (project) 'project_id': 17,
+  },
+  'sources': [
+    {'label': 'График работ'},
+  ],
+  'published_at': '2026-11-19T08:01:00Z',
+};
+
 class _RaceRepository extends AiAssistantRepository {
   _RaceRepository({
     this.canWrite = true,
@@ -977,7 +1565,13 @@ class _RaceRepository extends AiAssistantRepository {
     this.pollErrorStatusCode,
     this.notSubmittedOnce = false,
     this.cancelPending = false,
+    this.cancelStatus,
+    this.cancelRunStatus,
     this.quoteExpiresAt,
+    this.activeRequest,
+    this.delayedConversation,
+    this.postResponse,
+    this.scriptedStatuses = const [],
   }) : super(Dio());
   final bool canWrite;
   final bool failFirst;
@@ -990,9 +1584,16 @@ class _RaceRepository extends AiAssistantRepository {
   final int? pollErrorStatusCode;
   final bool notSubmittedOnce;
   final bool cancelPending;
+  final String? cancelStatus;
+  final String? cancelRunStatus;
   final DateTime? quoteExpiresAt;
+  final AiAssistantChatRequest? activeRequest;
+  final Future<AiConversationDetailsModel>? delayedConversation;
+  final Future<AiAssistantChatRequest>? postResponse;
+  final List<Object> scriptedStatuses;
   int _stageIndex = 0;
   int _progressIndex = 0;
+  int _statusIndex = 0;
   int quoteCalls = 0;
   final sentIds = <String>[];
   final answer = Completer<AiAssistantChatRequest>();
@@ -1002,17 +1603,22 @@ class _RaceRepository extends AiAssistantRepository {
   String? cancelledRequestId;
   CancelToken? sentCancelToken;
   @override
-  Future<AiConversationDetailsModel> fetchConversation(int id) async =>
-      AiConversationDetailsModel(
-        conversation: AiConversationModel(
-          id: id,
-          title: 'Chat',
-          createdAt: null,
-          updatedAt: null,
-          canWrite: canWrite,
-        ),
-        messages: const [],
-      );
+  Future<AiConversationDetailsModel> fetchConversation(int id) async {
+    final pending = delayedConversation;
+    if (pending != null) return pending;
+    return AiConversationDetailsModel(
+      conversation: AiConversationModel(
+        id: id,
+        title: 'Chat',
+        createdAt: null,
+        updatedAt: null,
+        canWrite: canWrite,
+      ),
+      messages: const [],
+      activeRequest: activeRequest,
+    );
+  }
+
   @override
   Future<AiAssistantPage<AiMessageModel>> fetchMessages(
     int conversationId, {
@@ -1032,7 +1638,6 @@ class _RaceRepository extends AiAssistantRepository {
     quoteRequestId = requestId;
     return AiCreditQuoteModel(
       id: 'quote-uuid',
-      maxConfirmed: false,
       amount: freeQuote ? '0.00' : '1.50',
       unit: 'ед. МОСТ',
       processingDeadlineSeconds: processingDeadlineSeconds,
@@ -1046,7 +1651,6 @@ class _RaceRepository extends AiAssistantRepository {
     required String requestId,
     int? conversationId,
     String? quoteId,
-    required bool maxConfirmed,
     String profile = 'normal',
     bool allowActions = true,
     Map<String, dynamic>? context,
@@ -1069,7 +1673,7 @@ class _RaceRepository extends AiAssistantRepository {
         ),
       );
     }
-    return answer.future;
+    return postResponse ?? answer.future;
   }
 
   @override
@@ -1078,6 +1682,18 @@ class _RaceRepository extends AiAssistantRepository {
     int? conversationId,
   }) async {
     polledIds.add(requestId);
+    if (_statusIndex < scriptedStatuses.length) {
+      final snapshot = scriptedStatuses[_statusIndex++];
+      if (snapshot is Map<String, dynamic>) {
+        return AiAssistantChatRequest.fromJson({
+          'request_id': requestId,
+          'conversation_id': conversationId,
+          'status': 'running',
+          ...snapshot,
+        });
+      }
+      throw snapshot;
+    }
     if (notSubmittedOnce && polledIds.length == 1) {
       return AiAssistantChatRequest(
         requestId: requestId,
@@ -1104,11 +1720,17 @@ class _RaceRepository extends AiAssistantRepository {
   }
 
   @override
-  Future<AiAssistantChatRequest> cancelRequest(String requestId) async {
+  Future<AiAssistantChatRequest> cancelRequest(
+    String requestId, {
+    int? conversationId,
+  }) async {
     cancelledRequestId = requestId;
     return AiAssistantChatRequest(
       requestId: requestId,
-      status: cancelPending ? 'cancel_requested' : 'cancelled',
+      status:
+          cancelStatus ?? (cancelPending ? 'cancel_requested' : 'cancelled'),
+      canonicalStatus: cancelRunStatus,
+      conversationId: conversationId,
     );
   }
 }

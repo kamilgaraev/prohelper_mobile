@@ -97,12 +97,16 @@ void main() {
         (options) => _responseData({
           'request_id': 'request-1',
           'status': 'cancel_requested',
+          'run_status': 'running',
           'stage': 'generating',
         }),
       );
       final repository = AiAssistantRepository(dio);
       final request = await repository.cancelRequest('request-1');
       expect(request.status, 'cancel_requested');
+      expect(request.runStatus, 'running');
+      expect(request.isCancellationPending, isTrue);
+      expect(request.isTerminal, isFalse);
       expect(request.stage, 'generating');
       await expectLater(
         repository.cancelRequest('request-2'),
@@ -120,6 +124,7 @@ void main() {
       dio.httpClientAdapter = _JsonAdapter((request) {
         if (request.method == 'POST') {
           expect(request.path, '$requestPath/cancel');
+          expect(request.data, {'contract_version': 1});
           return _responseData({
             'request_id': requestId,
             'conversation_id': 12,
@@ -129,6 +134,7 @@ void main() {
 
         expect(request.method, 'GET');
         expect(request.path, requestPath);
+        expect(request.queryParameters, {'contract_version': 1});
         return _responseData({
           'request_id': requestId,
           'conversation_id': 12,
@@ -146,6 +152,59 @@ void main() {
       expect(cancellation.status, 'completed');
       expect(cancellation.result, isNull);
 
+      final completed = await repository.fetchChatRequest(
+        requestId,
+        conversationId: 12,
+      );
+      expect(completed.result?.message?.content, 'Готово');
+    },
+  );
+
+  test(
+    'accepts a v1 completed snapshot without result only on cancel',
+    () async {
+      const requestId = '6d4cbf59-a08a-48cb-9f93-a9ac85ea4e16';
+      var includeResult = false;
+      final dio = Dio(BaseOptions(baseUrl: 'https://api.example.test'));
+      dio.httpClientAdapter = _JsonAdapter(
+        (request) => _responseData({
+          'request_id': requestId,
+          'conversation_id': 12,
+          'run_status': 'completed',
+          if (request.method == 'GET' && includeResult)
+            'response': {
+              'request_id': requestId,
+              'conversation_id': 12,
+              'message': {'id': 17, 'role': 'assistant', 'content': 'Готово'},
+            },
+        }),
+      );
+      final repository = AiAssistantRepository(dio);
+
+      final cancelled = await repository.cancelRequest(
+        requestId,
+        conversationId: 12,
+      );
+      expect(cancelled.runStatus, 'completed');
+      expect(cancelled.result, isNull);
+      await expectLater(
+        repository.cancelRequest(requestId, conversationId: 13),
+        throwsA(isA<ApiException>()),
+      );
+      await expectLater(
+        repository.fetchChatRequest(requestId, conversationId: 12),
+        throwsA(isA<ApiException>()),
+      );
+      await expectLater(
+        repository.sendMessageRequest(
+          message: 'Вопрос',
+          requestId: requestId,
+          conversationId: 12,
+        ),
+        throwsA(isA<ApiException>()),
+      );
+
+      includeResult = true;
       final completed = await repository.fetchChatRequest(
         requestId,
         conversationId: 12,
@@ -175,7 +234,6 @@ void main() {
         message: 'Что по рискам?',
         requestId: requestId,
         conversationId: 8,
-        maxConfirmed: true,
         context: const {
           'source_module': 'ai-assistant',
           'source_route': 'mobile/ai-assistant/chat',
@@ -202,6 +260,11 @@ void main() {
       expect(payload['message'], 'Что по рискам?');
       expect(payload['conversation_id'], 8);
       expect(payload['async'], isTrue);
+      expect(payload['contract_version'], 1);
+      expect(
+        chatRequest.headers.keys.map((key) => key.toLowerCase()),
+        isNot(contains('x-most-assistant-contract')),
+      );
       expect(accepted.status, 'running');
       expect(accepted.stage, 'queued');
       expect(context['source_route'], 'mobile/ai-assistant/chat');
@@ -211,12 +274,48 @@ void main() {
     },
   );
   test(
+    'negotiates an active turn on details and reads legacy messages',
+    () async {
+      const requestId = '2962344c-2256-4315-99f1-638ffb026a3e';
+      var supportsActiveRequest = false;
+      final dio = Dio(BaseOptions(baseUrl: 'https://api.example.test'));
+      dio.httpClientAdapter = _JsonAdapter((request) {
+        expect(request.path, '/ai-assistant/conversations/12');
+        expect(request.queryParameters, {'contract_version': 1});
+        return _responseData({
+          'conversation': {'id': 12, 'title': 'Диалог'},
+          'messages': [
+            {'id': 2, 'role': 'assistant', 'content': 'Предыдущий ответ'},
+          ],
+          if (supportsActiveRequest)
+            'active_request': {
+              'request_id': requestId,
+              'conversation_id': 12,
+              'status': 'running',
+              'run_status': 'running',
+            },
+        });
+      });
+      final repository = AiAssistantRepository(dio);
+      final legacy = await repository.fetchConversation(12);
+      expect(legacy.messages.single.content, 'Предыдущий ответ');
+      expect(legacy.activeRequest, isNull);
+
+      supportsActiveRequest = true;
+      final modern = await repository.fetchConversation(12);
+      expect(modern.messages.single.content, 'Предыдущий ответ');
+      expect(modern.activeRequest?.requestId, requestId);
+      expect(modern.activeRequest?.runStatus, 'running');
+    },
+  );
+
+  test(
     'keeps envelope pagination and uses chronological history endpoint',
     () async {
       final dio = Dio(BaseOptions(baseUrl: 'https://api.example.test'));
       dio.httpClientAdapter = _JsonAdapter((request) {
         expect(request.path, '/ai-assistant/conversations/12/history');
-        expect(request.queryParameters['page'], 2);
+        expect(request.queryParameters, {'page': 2, 'contract_version': 1});
         return {
           'success': true,
           'data': [
@@ -231,6 +330,7 @@ void main() {
       expect(result.nextPage, 3);
       expect(result.total, 52);
       expect(result.items.single.id, 2);
+      expect(result.activeRequest, isNull);
     },
   );
 
@@ -246,12 +346,16 @@ void main() {
           return _responseData({
             'quote_id': 'quote-uuid',
             'max_units_minor': 175,
-            'metadata': {'processing_deadline_seconds': 120},
+            'metadata': {
+              'processing_deadline_seconds': 120,
+              'processing_mode': 'adaptive',
+            },
           });
         }
         return _responseData({
           'request_id': requestId,
           'conversation_id': 12,
+          'status': 'ok',
           'credit_usage': {'charged_minor': 50},
         });
       });
@@ -266,12 +370,12 @@ void main() {
       );
       expect(quote.amount, '1.75');
       expect(quote.processingDeadlineSeconds, 120);
+      expect(quote.processingMode, AiAssistantProcessingMode.adaptive);
       final result = await repository.sendMessageRequest(
         message: 'Question',
         requestId: requestId,
         conversationId: 12,
         quoteId: quote.id,
-        maxConfirmed: true,
         profile: 'short',
         allowActions: false,
         context: {'entity_refs': []},
@@ -281,10 +385,52 @@ void main() {
             ..remove('quote_id')
             ..remove('async');
       expect(chat, requests[0].data);
+      expect(chat['contract_version'], 1);
       expect((requests[1].data as Map)['async'], true);
+      expect(result.runStatus, 'completed');
       expect(result.result!.creditUsage!.actualCharge, '0.50');
     },
   );
+
+  test('handles a v1 local quote and an inline final answer', () async {
+    const requestId = '6d4cbf59-a08a-48cb-9f93-a9ac85ea4e16';
+    final dio = Dio(BaseOptions(baseUrl: 'https://api.example.test'));
+    dio.httpClientAdapter = _JsonAdapter((request) {
+      expect(request.method, 'POST');
+      expect((request.data as Map)['contract_version'], 1);
+      if (request.path == '/ai-assistant/credits/quote') {
+        return _responseData({
+          'quote_id': 'quote-local',
+          'max_units_minor': 0,
+          'metadata': {'processing_mode': 'local'},
+        });
+      }
+      expect(request.path, '/ai-assistant/chat');
+      expect((request.data as Map)['quote_id'], 'quote-local');
+      return _responseData({
+        'request_id': requestId,
+        'conversation_id': 12,
+        'run_status': 'completed',
+        'result_key': 'answer',
+        'message': {'id': 18, 'role': 'assistant', 'content': 'Здравствуйте!'},
+      });
+    });
+    final repository = AiAssistantRepository(dio);
+
+    final quote = await repository.quoteCredits(
+      message: 'Привет',
+      requestId: requestId,
+    );
+    expect(quote.processingMode, AiAssistantProcessingMode.local);
+    expect(quote.amount, '0.00');
+    final request = await repository.sendMessageRequest(
+      message: 'Привет',
+      requestId: requestId,
+      quoteId: quote.id,
+    );
+    expect(request.runStatus, 'completed');
+    expect(request.result?.message?.content, 'Здравствуйте!');
+  });
 
   test('rejects responses belonging to another request', () async {
     final dio = Dio();
@@ -296,10 +442,38 @@ void main() {
         message: 'Question',
         requestId: 'current',
         quoteId: 'quote',
-        maxConfirmed: true,
       ),
       throwsException,
     );
+  });
+
+  test('loads only a scoped active request from first history page', () async {
+    const requestId = '2962344c-2256-4315-99f1-638ffb026a3e';
+    final dio = Dio(BaseOptions(baseUrl: 'https://api.example.test'));
+    dio.httpClientAdapter = _JsonAdapter((request) {
+      expect(request.queryParameters['contract_version'], 1);
+      return {
+        'success': true,
+        'data': [],
+        'meta': {
+          'active_request': {
+            'request_id': requestId,
+            'conversation_id': 12,
+            'status': 'running',
+            'run_status': 'queued',
+          },
+        },
+      };
+    });
+    final repository = AiAssistantRepository(dio);
+    final first = await repository.fetchMessages(12);
+    final older = await repository.fetchMessages(12, page: 2);
+    final unknown = await repository.fetchMessages(13);
+
+    expect(first.activeRequest?.requestId, requestId);
+    expect(first.activeRequest?.runStatus, 'queued');
+    expect(older.activeRequest, isNull);
+    expect(unknown.activeRequest, isNull);
   });
 
   test('202 request completes through GET with the same identity', () async {
@@ -321,7 +495,7 @@ void main() {
       return _responseData({
         'request_id': 'request-1',
         'conversation_id': 12,
-        'status': 'completed',
+        'run_status': 'completed',
         'stage': 'completed',
         'progress': [
           {'id': 31, 'code': 'estimates', 'state': 'completed'},
@@ -330,6 +504,10 @@ void main() {
         'response': {
           'request_id': 'request-1',
           'conversation_id': 12,
+          'contract_version': 1,
+          'outcome': 'ok',
+          'coverage': {'status': 'found'},
+          'billing': {'charged_minor': 23},
           'message': {'id': 17, 'role': 'assistant', 'content': 'Готово'},
           'progress': [
             {'id': 31, 'code': 'estimates', 'state': 'completed'},
@@ -343,15 +521,17 @@ void main() {
       message: 'Вопрос',
       requestId: 'request-1',
       quoteId: 'quote-1',
-      maxConfirmed: true,
     );
     expect(accepted.status, 'running');
+    expect(accepted.runStatus, 'queued');
     expect(accepted.result, isNull);
     expect(accepted.progress.single.code, 'estimates');
     expect(accepted.progress.single.state, 'started');
     expect((requests.first.data as Map)['async'], true);
     final completed = await repository.fetchChatRequest('request-1');
     expect(completed.result!.message!.content, 'Готово');
+    expect(completed.result!.message!.publication?.coverageStatus, 'found');
+    expect(completed.result!.publication?.chargedMinor, 23);
     expect(completed.progress.map((step) => step.code), [
       'estimates',
       'warehouse',
@@ -404,7 +584,6 @@ void main() {
           requestId: 'same-id',
           conversationId: 12,
           quoteId: 'same-quote',
-          maxConfirmed: true,
         );
       }
       expect(payloads, hasLength(2));
@@ -413,6 +592,40 @@ void main() {
       expect(payloads[1]['quote_id'], 'same-quote');
     },
   );
+
+  test('accepts terminal POST replay with no assistant message', () async {
+    for (final (status, errorCode) in [
+      ('cancelled', 'request_cancelled'),
+      ('failed', 'request_failed'),
+    ]) {
+      final requests = <RequestOptions>[];
+      final dio = Dio(BaseOptions(baseUrl: 'https://api.example.test'));
+      dio.httpClientAdapter = _JsonAdapter((request) {
+        requests.add(request);
+        return _responseData({
+          'request_id': 'same-id',
+          'conversation_id': 12,
+          'status': status,
+          'run_status': status,
+          'stage': status,
+          'error_code': errorCode,
+        });
+      });
+      final result = await AiAssistantRepository(dio).sendMessageRequest(
+        message: 'Вопрос',
+        requestId: 'same-id',
+        conversationId: 12,
+        quoteId: 'same-quote',
+      );
+
+      expect(result.requestId, 'same-id');
+      expect(result.runStatus, status);
+      expect(result.isTerminal, isTrue);
+      expect(result.errorCode, errorCode);
+      expect(result.result, isNull);
+      expect(requests.single.method, 'POST');
+    }
+  });
 
   test(
     'request status rejects a result for a different conversation',
@@ -542,7 +755,7 @@ void main() {
   );
 
   test(
-    'cancel uses the current auth token and path-only request scope',
+    'cancel uses the current auth token and sends only contract version',
     () async {
       final storage = _MutableSecureStorage('old-organization-token');
       final container = ProviderContainer(
@@ -575,7 +788,7 @@ void main() {
         'Bearer current-organization-token',
       );
       expect(requests.single.queryParameters, isEmpty);
-      expect(requests.single.data, isNull);
+      expect(requests.single.data, {'contract_version': 1});
       expect(
         requests.single.headers.keys.any(
           (key) => key.toLowerCase().contains('organization'),

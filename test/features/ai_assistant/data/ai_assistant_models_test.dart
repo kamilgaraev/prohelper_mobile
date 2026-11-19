@@ -2,6 +2,69 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:prohelpers_mobile/features/ai_assistant/data/ai_assistant_models.dart';
 
 void main() {
+  test('loads public progress and a checked interim response from status', () {
+    final request = AiAssistantChatRequest.fromJson({
+      'request_id': 'request-1',
+      'status': 'running',
+      'accepted_at': '2026-11-19T08:00:00Z',
+      'elapsed_seconds': 121,
+      'progress': [
+        {
+          'id': 7,
+          'key': 'check',
+          'code': 'record_check',
+          'state': 'failed',
+          'at': '2026-11-19T08:01:00Z',
+        },
+        {'id': 8, 'code': 'private_tool_id', 'state': 'started'},
+      ],
+      'interim_result': {
+        'key': 'answer',
+        'revision': 2,
+        'text': 'Проверены сроки.',
+        'scope': {'kind': 'project', 'project_id': 7},
+        'sources': [
+          {'label': 'График работ', 'id': 'internal-record'},
+          {'url': 'https://example.test'},
+        ],
+        'published_at': '2026-11-19T08:01:30Z',
+      },
+    });
+
+    expect(request.acceptedAt, DateTime.utc(2026, 11, 19, 8));
+    expect(request.elapsedSeconds, 121);
+    expect(request.progress.single.key, 'check');
+    expect(request.progress.single.state, 'failed');
+    expect(request.progress.single.at, DateTime.utc(2026, 11, 19, 8, 1));
+    expect(request.interimResult?.revision, 2);
+    expect(request.interimResult?.isProjectScoped, isTrue);
+    expect(request.interimResult?.sources, ['График работ']);
+    expect(
+      request.interimResult?.publishedAt,
+      DateTime.utc(2026, 11, 19, 8, 1, 30),
+    );
+    expect(
+      AiAssistantChatResult.fromJson({'result_key': 'answer'}).resultKey,
+      'answer',
+    );
+  });
+
+  test('drops interim text outside a supported checked scope', () {
+    final request = AiAssistantChatRequest.fromJson({
+      'status': 'running',
+      'elapsed_seconds': -1,
+      'interim_result': {
+        'key': 'answer',
+        'revision': 1,
+        'text': 'Проверены сроки.',
+        'scope': {'kind': 'project'},
+        'published_at': '2026-11-19T08:01:30Z',
+      },
+    });
+    expect(request.elapsedSeconds, isNull);
+    expect(request.interimResult, isNull);
+  });
+
   test('parses shadow billing status and zero actual charge', () {
     final balance = AiCreditsBalanceModel.fromJson({
       'included_minor': 500000,
@@ -60,7 +123,7 @@ void main() {
     expect(message.artifacts.single.isReport, isTrue);
     expect(message.artifacts.single.displayTitle, 'timeline.pdf');
     expect(
-      message.artifacts.single.trustedUrl,
+      message.artifacts.single.downloadUrl,
       'https://example.test/timeline.pdf',
     );
     expect(message.artifacts.single.reportType, 'project_timelines');
