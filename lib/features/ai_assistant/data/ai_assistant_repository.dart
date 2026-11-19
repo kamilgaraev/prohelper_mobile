@@ -97,7 +97,10 @@ class AiAssistantRepository {
 
   Future<AiConversationDetailsModel> fetchConversation(int id) async {
     try {
-      final response = await _dio.get('/ai-assistant/conversations/$id');
+      final response = await _dio.get(
+        '/ai-assistant/conversations/$id',
+        queryParameters: {'contract_version': _turnContractVersion},
+      );
       final parsed = MobileApiResponse.map(response.data);
       final payload = parsed.data;
 
@@ -170,7 +173,10 @@ class AiAssistantRepository {
     try {
       final response = await _dio.get(
         '/ai-assistant/conversations/$conversationId/history',
-        queryParameters: {'page': page},
+        queryParameters: {
+          'page': page,
+          'contract_version': _turnContractVersion,
+        },
       );
       final parsed = MobileApiResponse.list(response.data);
       final meta = parsed.meta;
@@ -593,19 +599,23 @@ class AiAssistantRepository {
     }
   }
 
-  Future<AiAssistantChatRequest> cancelRequest(String requestId) async {
+  Future<AiAssistantChatRequest> cancelRequest(
+    String requestId, {
+    int? conversationId,
+  }) async {
     try {
       final response = await _dio.post(
         '/ai-assistant/requests/$requestId/cancel',
         data: {'contract_version': _turnContractVersion},
       );
-      final payload = _asMap(_unwrapData(response.data));
-      final request = AiAssistantChatRequest.fromJson(payload);
+      final request = AiAssistantChatRequest.fromJson(
+        _asMap(_unwrapData(response.data)),
+      );
       _assertChatRequestIdentity(
         request,
         requestId,
-        request.conversationId,
-        requireCompletedResult: payload['run_status'] is String,
+        conversationId ?? request.conversationId,
+        requireCompletedResult: false,
       );
       return request;
     } on DioException catch (error) {

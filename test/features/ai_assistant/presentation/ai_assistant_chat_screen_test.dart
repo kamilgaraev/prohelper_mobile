@@ -789,13 +789,14 @@ void main() {
     );
   });
 
-  testWidgets('legacy completed cancel without a result waits for GET', (
+  testWidgets('v1 completed cancel without a result waits for GET', (
     tester,
   ) async {
     final repository = _RaceRepository(
       asyncAccepted: true,
       freeQuote: true,
       cancelStatus: 'completed',
+      cancelRunStatus: 'completed',
     );
     await tester.pumpWidget(buildScreen(repository));
     await tester.pumpAndSettle();
@@ -1565,6 +1566,7 @@ class _RaceRepository extends AiAssistantRepository {
     this.notSubmittedOnce = false,
     this.cancelPending = false,
     this.cancelStatus,
+    this.cancelRunStatus,
     this.quoteExpiresAt,
     this.activeRequest,
     this.delayedConversation,
@@ -1583,6 +1585,7 @@ class _RaceRepository extends AiAssistantRepository {
   final bool notSubmittedOnce;
   final bool cancelPending;
   final String? cancelStatus;
+  final String? cancelRunStatus;
   final DateTime? quoteExpiresAt;
   final AiAssistantChatRequest? activeRequest;
   final Future<AiConversationDetailsModel>? delayedConversation;
@@ -1717,12 +1720,17 @@ class _RaceRepository extends AiAssistantRepository {
   }
 
   @override
-  Future<AiAssistantChatRequest> cancelRequest(String requestId) async {
+  Future<AiAssistantChatRequest> cancelRequest(
+    String requestId, {
+    int? conversationId,
+  }) async {
     cancelledRequestId = requestId;
     return AiAssistantChatRequest(
       requestId: requestId,
       status:
           cancelStatus ?? (cancelPending ? 'cancel_requested' : 'cancelled'),
+      canonicalStatus: cancelRunStatus,
+      conversationId: conversationId,
     );
   }
 }

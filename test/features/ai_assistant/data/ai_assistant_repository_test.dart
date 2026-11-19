@@ -161,6 +161,59 @@ void main() {
   );
 
   test(
+    'accepts a v1 completed snapshot without result only on cancel',
+    () async {
+      const requestId = '6d4cbf59-a08a-48cb-9f93-a9ac85ea4e16';
+      var includeResult = false;
+      final dio = Dio(BaseOptions(baseUrl: 'https://api.example.test'));
+      dio.httpClientAdapter = _JsonAdapter(
+        (request) => _responseData({
+          'request_id': requestId,
+          'conversation_id': 12,
+          'run_status': 'completed',
+          if (request.method == 'GET' && includeResult)
+            'response': {
+              'request_id': requestId,
+              'conversation_id': 12,
+              'message': {'id': 17, 'role': 'assistant', 'content': 'Готово'},
+            },
+        }),
+      );
+      final repository = AiAssistantRepository(dio);
+
+      final cancelled = await repository.cancelRequest(
+        requestId,
+        conversationId: 12,
+      );
+      expect(cancelled.runStatus, 'completed');
+      expect(cancelled.result, isNull);
+      await expectLater(
+        repository.cancelRequest(requestId, conversationId: 13),
+        throwsA(isA<ApiException>()),
+      );
+      await expectLater(
+        repository.fetchChatRequest(requestId, conversationId: 12),
+        throwsA(isA<ApiException>()),
+      );
+      await expectLater(
+        repository.sendMessageRequest(
+          message: 'Вопрос',
+          requestId: requestId,
+          conversationId: 12,
+        ),
+        throwsA(isA<ApiException>()),
+      );
+
+      includeResult = true;
+      final completed = await repository.fetchChatRequest(
+        requestId,
+        conversationId: 12,
+      );
+      expect(completed.result?.message?.content, 'Готово');
+    },
+  );
+
+  test(
     'sends selected project and mobile UI context with an asynchronous turn',
     () async {
       const requestId = '6d4cbf59-a08a-48cb-9f93-a9ac85ea4e16';
@@ -221,12 +274,48 @@ void main() {
     },
   );
   test(
+    'negotiates an active turn on details and reads legacy messages',
+    () async {
+      const requestId = '2962344c-2256-4315-99f1-638ffb026a3e';
+      var supportsActiveRequest = false;
+      final dio = Dio(BaseOptions(baseUrl: 'https://api.example.test'));
+      dio.httpClientAdapter = _JsonAdapter((request) {
+        expect(request.path, '/ai-assistant/conversations/12');
+        expect(request.queryParameters, {'contract_version': 1});
+        return _responseData({
+          'conversation': {'id': 12, 'title': 'Диалог'},
+          'messages': [
+            {'id': 2, 'role': 'assistant', 'content': 'Предыдущий ответ'},
+          ],
+          if (supportsActiveRequest)
+            'active_request': {
+              'request_id': requestId,
+              'conversation_id': 12,
+              'status': 'running',
+              'run_status': 'running',
+            },
+        });
+      });
+      final repository = AiAssistantRepository(dio);
+      final legacy = await repository.fetchConversation(12);
+      expect(legacy.messages.single.content, 'Предыдущий ответ');
+      expect(legacy.activeRequest, isNull);
+
+      supportsActiveRequest = true;
+      final modern = await repository.fetchConversation(12);
+      expect(modern.messages.single.content, 'Предыдущий ответ');
+      expect(modern.activeRequest?.requestId, requestId);
+      expect(modern.activeRequest?.runStatus, 'running');
+    },
+  );
+
+  test(
     'keeps envelope pagination and uses chronological history endpoint',
     () async {
       final dio = Dio(BaseOptions(baseUrl: 'https://api.example.test'));
       dio.httpClientAdapter = _JsonAdapter((request) {
         expect(request.path, '/ai-assistant/conversations/12/history');
-        expect(request.queryParameters, {'page': 2});
+        expect(request.queryParameters, {'page': 2, 'contract_version': 1});
         return {
           'success': true,
           'data': [
@@ -241,6 +330,7 @@ void main() {
       expect(result.nextPage, 3);
       expect(result.total, 52);
       expect(result.items.single.id, 2);
+      expect(result.activeRequest, isNull);
     },
   );
 
@@ -361,6 +451,7 @@ void main() {
     const requestId = '2962344c-2256-4315-99f1-638ffb026a3e';
     final dio = Dio(BaseOptions(baseUrl: 'https://api.example.test'));
     dio.httpClientAdapter = _JsonAdapter((request) {
+      expect(request.queryParameters['contract_version'], 1);
       return {
         'success': true,
         'data': [],

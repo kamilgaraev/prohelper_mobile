@@ -1110,21 +1110,26 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
     final repository = _activeRequestRepository;
     if (requestId == null || repository == null || _cancelRequested) return;
     final revision = _requestRevision;
+    final conversationId = _conversationId;
     setState(() {
       _cancelRequested = true;
       _progress = 'Останавливаю обработку';
       _interimResult = null;
     });
     try {
-      final request = await repository.cancelRequest(requestId);
+      final request = await repository.cancelRequest(
+        requestId,
+        conversationId: conversationId,
+      );
       if (!mounted ||
           revision != _requestRevision ||
-          requestId != _activeRequestId) {
+          requestId != _activeRequestId ||
+          conversationId != _conversationId) {
         return;
       }
-      if (!_applyRequestSnapshot(request, _conversationId)) {
+      if (!_applyRequestSnapshot(request, conversationId)) {
         _requestStartedAt = DateTime.now();
-        _startPolling(requestId, revision, _conversationId);
+        _startPolling(requestId, revision, conversationId);
       }
     } catch (error) {
       if (mounted && revision == _requestRevision) {
