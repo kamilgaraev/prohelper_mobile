@@ -1,4 +1,4 @@
-﻿class KnowledgeArticleModel {
+class KnowledgeArticleModel {
   const KnowledgeArticleModel({
     required this.id,
     required this.title,
@@ -94,20 +94,36 @@
       searchRank: _doubleOrNull(json['search_rank']),
       content: _stringOrNull(json['content']),
       plainText: _stringOrNull(json['plain_text']),
-      tableOfContents:
-          _mapList(json['table_of_contents'])
-              .map(KnowledgeArticleTocItem.fromJson)
-              .toList(growable: false),
-      children:
-          _mapList(json['children'])
-              .map(KnowledgeArticleModel.fromJson)
-              .toList(growable: false),
-      related:
-          _mapList(json['related'])
-              .map(KnowledgeArticleModel.fromJson)
-              .toList(growable: false),
+      tableOfContents: _mapList(
+        json['table_of_contents'],
+      ).map(KnowledgeArticleTocItem.fromJson).toList(growable: false),
+      children: _mapList(
+        json['children'],
+      ).map(KnowledgeArticleModel.fromJson).toList(growable: false),
+      related: _mapList(
+        json['related'],
+      ).map(KnowledgeArticleModel.fromJson).toList(growable: false),
     );
   }
+}
+
+final _unsafeArticleSlugCharacter = RegExp(
+  r'[/\\?#%\p{Cc}\p{Cf}]',
+  unicode: true,
+);
+final _nonRfc3986SlugCharacter = RegExp(r"[!'()*]");
+
+String? canonicalKnowledgeArticleSlugSegment(String slug) {
+  if (slug.isEmpty ||
+      slug == '.' ||
+      slug == '..' ||
+      _unsafeArticleSlugCharacter.hasMatch(slug)) {
+    return null;
+  }
+  return Uri.encodeComponent(slug).replaceAllMapped(
+    _nonRfc3986SlugCharacter,
+    (match) => '%${match[0]!.codeUnitAt(0).toRadixString(16).toUpperCase()}',
+  );
 }
 
 class KnowledgeArticleTocItem {
@@ -211,7 +227,10 @@ String _plainTextFromHtml(String? html) {
 
   final withBreaks = html
       .replaceAll(RegExp(r'<\s*br\s*/?\s*>', caseSensitive: false), '\n')
-      .replaceAll(RegExp(r'</\s*(p|div|li|h[1-6])\s*>', caseSensitive: false), '\n');
+      .replaceAll(
+        RegExp(r'</\s*(p|div|li|h[1-6])\s*>', caseSensitive: false),
+        '\n',
+      );
   final withoutTags = withBreaks.replaceAll(RegExp(r'<[^>]+>'), ' ');
 
   return withoutTags

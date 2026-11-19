@@ -21,6 +21,8 @@ import '../../../core/widgets/industrial_card.dart';
 import '../../projects/domain/projects_provider.dart';
 import '../../auth/domain/auth_provider.dart';
 import '../../actions/presentation/mobile_action_search.dart';
+import '../../knowledge_hub/domain/knowledge_hub_provider.dart';
+import '../../knowledge_hub/presentation/knowledge_article_screen.dart';
 import '../../../core/providers/module_provider.dart';
 import '../data/assistant_source_navigation.dart';
 import '../data/ai_assistant_draft_turn_store.dart';
@@ -1417,6 +1419,25 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
         ).any((item) => item.matches(target.mobileRoute!));
   }
 
+  void _openKnowledgeArticle(
+    AiAssistantKnowledgeSource source,
+    AssistantKnowledgeArticleScope? scope,
+  ) {
+    if (scope == null ||
+        ref.read(assistantKnowledgeArticleScopeProvider) != scope) {
+      return;
+    }
+    Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder:
+            (_) => KnowledgeArticleScreen.fromAssistant(
+              slug: source.slug,
+              scope: scope,
+            ),
+      ),
+    );
+  }
+
   Future<void> _openAssistantSource(AiAssistantEvidenceModel evidence) async {
     final target = _sourceTarget(evidence);
     if (target != null && target.mobileRoute != null) {
@@ -1491,6 +1512,7 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final articleScope = ref.watch(assistantKnowledgeArticleScopeProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -1839,6 +1861,15 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
                                 if (publication != null)
                                   _PublishedAssistantDetails(
                                     publication: publication,
+                                    knowledgeSources:
+                                        articleScope == null
+                                            ? const []
+                                            : message.knowledgeSources,
+                                    onOpenArticle:
+                                        (source) => _openKnowledgeArticle(
+                                          source,
+                                          articleScope,
+                                        ),
                                   ),
                                 if (reportArtifacts.isNotEmpty)
                                   ...reportArtifacts.map(
@@ -2051,9 +2082,15 @@ Color _readableForeground(Color background, Color preferred) {
 }
 
 class _PublishedAssistantDetails extends StatelessWidget {
-  const _PublishedAssistantDetails({required this.publication});
+  const _PublishedAssistantDetails({
+    required this.publication,
+    required this.knowledgeSources,
+    required this.onOpenArticle,
+  });
 
   final AiAssistantPublication publication;
+  final List<AiAssistantKnowledgeSource> knowledgeSources;
+  final ValueChanged<AiAssistantKnowledgeSource> onOpenArticle;
 
   @override
   Widget build(BuildContext context) {
@@ -2072,6 +2109,7 @@ class _PublishedAssistantDetails extends StatelessWidget {
     if (detail == null &&
         publication.coverageStatus != 'partial' &&
         evidenceTitles.isEmpty &&
+        knowledgeSources.isEmpty &&
         unavailable.isEmpty) {
       return const SizedBox.shrink();
     }
@@ -2086,9 +2124,15 @@ class _PublishedAssistantDetails extends StatelessWidget {
           if (detail != null) Text(detail, style: style),
           if (publication.coverageStatus == 'partial')
             Text('Проверена часть доступных данных.', style: style),
-          if (evidenceTitles.isNotEmpty) ...[
+          if (evidenceTitles.isNotEmpty || knowledgeSources.isNotEmpty) ...[
             Text('Источники', style: style),
             for (final title in evidenceTitles) Text(title, style: style),
+            for (final source in knowledgeSources)
+              TextButton.icon(
+                onPressed: () => onOpenArticle(source),
+                icon: const Icon(Icons.menu_book_outlined, size: 16),
+                label: Text(source.title ?? 'Открыть статью'),
+              ),
           ],
           if (unavailable.isNotEmpty) ...[
             for (final label in unavailable) Text(label, style: style),

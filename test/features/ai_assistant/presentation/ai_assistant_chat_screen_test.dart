@@ -5,6 +5,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:prohelpers_mobile/core/network/api_exception.dart';
+import 'package:prohelpers_mobile/core/network/dio_client.dart';
 import 'package:prohelpers_mobile/core/storage/secure_storage_service.dart';
 import 'package:prohelpers_mobile/features/auth/data/auth_repository.dart';
 import 'package:prohelpers_mobile/features/auth/data/user_model.dart';
@@ -12,6 +13,7 @@ import 'package:prohelpers_mobile/features/auth/domain/auth_provider.dart';
 import 'package:prohelpers_mobile/features/ai_assistant/data/ai_assistant_models.dart';
 import 'package:prohelpers_mobile/features/ai_assistant/data/ai_assistant_repository.dart';
 import 'package:prohelpers_mobile/features/ai_assistant/presentation/ai_assistant_chat_screen.dart';
+import 'package:prohelpers_mobile/features/knowledge_hub/presentation/knowledge_article_screen.dart';
 
 class _TestSecureStorage extends SecureStorageService {
   @override
@@ -46,6 +48,12 @@ class _OrganizationAuthNotifier extends AuthNotifier {
 
   void setOrganization(int organizationId) {
     state = AuthAuthenticated(_user(organizationId));
+  }
+
+  void setActor(int actorId) {
+    state = AuthAuthenticated(
+      _user(state.user!.currentOrganizationId!)..serverId = actorId,
+    );
   }
 
   @override
@@ -1189,6 +1197,156 @@ void main() {
     expect(find.byIcon(Icons.download_rounded), findsNothing);
   });
 
+  testWidgets('opens a checked chat article through the strict mobile GET', (
+    tester,
+  ) async {
+    final auth = _OrganizationAuthNotifier(11);
+    final requests = <RequestOptions>[];
+    var statusCode = 200;
+    await tester.pumpWidget(
+      _knowledgeArticleChat(
+        auth: auth,
+        articleResponse: (request) async {
+          requests.add(request);
+          return statusCode;
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final articleLink = find.widgetWithText(TextButton, 'Порядок работ');
+    expect(articleLink, findsOneWidget);
+    expect(find.text('Проект Север'), findsOneWidget);
+    expect(find.widgetWithText(TextButton, 'Проект Север'), findsNothing);
+    expect(find.text('Внешняя ссылка'), findsNothing);
+    expect(requests, isEmpty);
+
+    await tester.ensureVisible(articleLink);
+    await tester.tap(articleLink);
+    await tester.pumpAndSettle();
+
+    final articleScreen = find.byType(KnowledgeArticleScreen);
+    expect(articleScreen, findsOneWidget);
+    expect(
+      tester.widget<KnowledgeArticleScreen>(articleScreen).slug,
+      'Field_1-С',
+    );
+    expect(find.text('Порядок работ'), findsNWidgets(2));
+    expect(find.text('Откройте раздел и создайте заявку.'), findsOneWidget);
+    expect(find.text('Статья помогла?'), findsNothing);
+    expect(requests.single.method, 'GET');
+    expect(requests.single.followRedirects, isFalse);
+    expect(
+      requests.single.uri.toString(),
+      'https://mobile.example.test/api/v1/mobile/ai-assistant/knowledge/articles/Field_1-%D0%A1',
+    );
+
+    statusCode = 404;
+    final refresh =
+        tester
+            .widget<RefreshIndicator>(find.byType(RefreshIndicator))
+            .onRefresh();
+    await tester.pumpAndSettle();
+    await refresh;
+    expect(requests, hasLength(2));
+    expect(find.text('Статья недоступна.'), findsOneWidget);
+    expect(find.text('Откройте раздел и создайте заявку.'), findsNothing);
+    expect(find.text('Порядок работ'), findsNothing);
+  });
+
+  for (final (statusCode, serverMessage, userMessage) in [
+    (401, 'Unauthorized.', 'Статья недоступна.'),
+    (
+      500,
+      'FormatException: malformed article payload',
+      'Не удалось выполнить действие. Попробуйте еще раз.',
+    ),
+  ]) {
+    testWidgets('hides raw article errors from HTTP $statusCode', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _knowledgeArticleChat(
+          auth: _OrganizationAuthNotifier(11),
+          articleResponse: (_) async => statusCode,
+          articleErrorMessage: serverMessage,
+        ),
+      );
+      await tester.pumpAndSettle();
+      final link = find.widgetWithText(TextButton, 'Порядок работ');
+      await tester.ensureVisible(link);
+      await tester.tap(link);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(KnowledgeArticleScreen), findsOneWidget);
+      expect(find.text('Не удалось открыть статью'), findsOneWidget);
+      expect(find.text(userMessage), findsOneWidget);
+      expect(find.text(serverMessage, findRichText: true), findsNothing);
+      expect(find.text('Откройте раздел и создайте заявку.'), findsNothing);
+    });
+  }
+
+  testWidgets('hides a loaded chat article after the organization changes', (
+    tester,
+  ) async {
+    final auth = _OrganizationAuthNotifier(11);
+    var requests = 0;
+    await tester.pumpWidget(
+      _knowledgeArticleChat(
+        auth: auth,
+        articleResponse: (_) async {
+          requests++;
+          return 200;
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+    final link = find.widgetWithText(TextButton, 'Порядок работ');
+    await tester.ensureVisible(link);
+    await tester.tap(link);
+    await tester.pumpAndSettle();
+    expect(find.text('Откройте раздел и создайте заявку.'), findsOneWidget);
+
+    auth.setOrganization(12);
+    await tester.pumpAndSettle();
+    auth.setOrganization(11);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Статья недоступна.'), findsOneWidget);
+    expect(find.text('Откройте раздел и создайте заявку.'), findsNothing);
+    expect(find.text('Порядок работ'), findsNothing);
+    expect(requests, 1);
+  });
+
+  testWidgets('drops a delayed chat article after the actor changes', (
+    tester,
+  ) async {
+    final auth = _OrganizationAuthNotifier(11);
+    final pendingResponse = Completer<int>();
+    await tester.pumpWidget(
+      _knowledgeArticleChat(
+        auth: auth,
+        articleResponse: (_) => pendingResponse.future,
+      ),
+    );
+    await tester.pumpAndSettle();
+    final link = find.widgetWithText(TextButton, 'Порядок работ');
+    await tester.ensureVisible(link);
+    await tester.tap(link);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.text('Открываем статью'), findsOneWidget);
+
+    auth.setActor(8);
+    await tester.pump();
+    pendingResponse.complete(200);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Статья недоступна.'), findsOneWidget);
+    expect(find.text('Откройте раздел и создайте заявку.'), findsNothing);
+    expect(find.text('Порядок работ'), findsNothing);
+  });
+
   testWidgets('forbidden status polling stops instead of retrying', (
     tester,
   ) async {
@@ -1442,6 +1600,104 @@ void main() {
     expect(find.byType(TextField), findsNothing);
     expect(find.byTooltip('Доступ к чату'), findsNothing);
   });
+}
+
+Widget _knowledgeArticleChat({
+  required _OrganizationAuthNotifier auth,
+  required Future<int> Function(RequestOptions) articleResponse,
+  String? articleErrorMessage,
+}) {
+  final dio = Dio(
+    BaseOptions(baseUrl: 'https://mobile.example.test/api/v1/mobile'),
+  );
+  dio.interceptors.add(
+    InterceptorsWrapper(
+      onRequest: (options, handler) async {
+        const articlePath = '/ai-assistant/knowledge/articles/Field_1-%D0%A1';
+        final (data, statusCode) = switch (options.path) {
+          '/ai-assistant/conversations/1' => (
+            {
+              'conversation': {'id': 1, 'title': 'Диалог'},
+              'messages': [
+                {
+                  'id': 52,
+                  'role': 'assistant',
+                  'content': 'Нашёл инструкцию.',
+                  'metadata': {
+                    'contract_version': 1,
+                    'outcome': 'ok',
+                    'evidence': [
+                      {'title': 'Проект Север'},
+                    ],
+                    'source_refs': [
+                      {
+                        'source_type': 'knowledge',
+                        'entity_type': 'knowledge_article',
+                        'display_label': 'Порядок работ',
+                        'navigation': {
+                          'url': '/dashboard/help/knowledge/Field_1-%D0%A1',
+                        },
+                      },
+                      {
+                        'source_type': 'knowledge',
+                        'entity_type': 'knowledge_article',
+                        'display_label': 'Внешняя ссылка',
+                        'navigation': {
+                          'url':
+                              'https://external.example.test/dashboard/help/knowledge/Field_1-%D0%A1',
+                        },
+                      },
+                    ],
+                  },
+                },
+              ],
+            },
+            200,
+          ),
+          articlePath => (
+            {
+              'id': 41,
+              'slug': 'Field_1-С',
+              'title': 'Порядок работ',
+              'plain_text': 'Откройте раздел и создайте заявку.',
+            },
+            await articleResponse(options),
+          ),
+          _ => (null, 404),
+        };
+        final response = Response(
+          requestOptions: options,
+          statusCode: statusCode,
+          data: {
+            'success': statusCode == 200,
+            'data': data,
+            if (options.path == articlePath &&
+                statusCode != 200 &&
+                articleErrorMessage != null)
+              'message': articleErrorMessage,
+          },
+        );
+        if (statusCode == 200) {
+          handler.resolve(response);
+        } else {
+          handler.reject(
+            DioException.badResponse(
+              statusCode: statusCode,
+              requestOptions: options,
+              response: response,
+            ),
+          );
+        }
+      },
+    ),
+  );
+  return ProviderScope(
+    overrides: [
+      authProvider.overrideWith((_) => auth),
+      dioProvider.overrideWithValue(dio),
+    ],
+    child: const MaterialApp(home: AiAssistantChatScreen(conversationId: 1)),
+  );
 }
 
 class _AiAssistantRepository extends AiAssistantRepository {

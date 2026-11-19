@@ -2,6 +2,86 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:prohelpers_mobile/features/ai_assistant/data/ai_assistant_models.dart';
 
 void main() {
+  test(
+    'reads only canonical native article links from v1 assistant sources',
+    () {
+      Map<String, dynamic> article(String url, {String? label}) => {
+        'source_type': 'knowledge',
+        'entity_type': 'knowledge_article',
+        'display_label': label,
+        'navigation': {'url': url},
+      };
+      const prefix = '/dashboard/help/knowledge/';
+      final valid = article('${prefix}Field_1-%D0%A1', label: 'Порядок работ');
+      final metadata = {
+        'contract_version': 1,
+        'source_refs': [
+          valid,
+          article('${prefix}Field_1-%D0%A1', label: 'Повтор источника'),
+          article('${prefix}site-requests'),
+          article('${prefix}Topic%21'),
+          for (final suffix in [
+            '',
+            '.',
+            '..',
+            '%2E%2E',
+            'nested/slug',
+            'nested%2Fslug',
+            'nested%5Cslug',
+            'nested%252Fslug',
+            'slug?query',
+            'slug#header',
+            'slug%3Fquery',
+            'slug%23header',
+            '%73lug',
+            '%d0%a1',
+            'С',
+            'slug/',
+            ' slug',
+            'slug\n',
+            'slug%00',
+            'slug%C2%85',
+            'slug%E2%80%AE',
+            '%FF',
+            '%',
+          ])
+            article('$prefix$suffix'),
+          article('https://lk.xn--1-xtbgmf.xn--p1ai${prefix}slug'),
+          article('//lk.xn--1-xtbgmf.xn--p1ai${prefix}slug'),
+          article('/knowledge-hub/articles/slug'),
+          {...article('${prefix}wrong-type'), 'source_type': 'project'},
+          {...article('${prefix}wrong-entity'), 'entity_type': 'project'},
+          {'source_ref': article('${prefix}nested-source')},
+        ],
+        'rag_context': {
+          'sources': [article('${prefix}unchecked-rag')],
+        },
+        'evidence': [article('${prefix}unchecked-evidence')],
+      };
+
+      AiMessageModel message(String role, Object? contractVersion) =>
+          AiMessageModel.fromJson({
+            'id': 13,
+            'role': role,
+            'content': '[Откройте статью](${prefix}only-markdown)',
+            'metadata': {...metadata, 'contract_version': contractVersion},
+          });
+
+      final sources = message('assistant', 1).knowledgeSources;
+      expect(sources.map((source) => source.slug), [
+        'Field_1-С',
+        'site-requests',
+        'Topic!',
+      ]);
+      expect(sources.first.title, 'Порядок работ');
+      expect(sources[1].title, isNull);
+      expect(message('assistant', '1').knowledgeSources, isEmpty);
+      expect(message('assistant', 2).knowledgeSources, isEmpty);
+      expect(message('assistant', null).knowledgeSources, isEmpty);
+      expect(message('user', 1).knowledgeSources, isEmpty);
+    },
+  );
+
   test('loads public progress and a checked interim response from status', () {
     final request = AiAssistantChatRequest.fromJson({
       'request_id': 'request-1',
