@@ -158,6 +158,7 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
   AiActionPreviewModel? _activePreview;
   CancelToken? _sendCancelToken;
   int _requestRevision = 0;
+  int _conversationScopeRevision = 0;
   String? _progress;
   List<AiAssistantProgressModel> _progressSteps = const [];
   final Map<int, List<AiAssistantProgressModel>> _completedProgressByMessageId =
@@ -570,33 +571,49 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
       _showSnackBar('Списания выключены. За этот запрос списано 0 ед. МОСТ.');
     }
     if (reloadHistory) {
-      unawaited(_refreshAfterRecovery(result.conversationId, _requestRevision));
+      unawaited(
+        _refreshAfterRecovery(
+          result.conversationId,
+          _conversationScopeRevision,
+        ),
+      );
     }
     _scrollToBottom();
   }
 
-  Future<void> _refreshAfterRecovery(int conversationId, int revision) async {
+  Future<void> _refreshAfterRecovery(
+    int conversationId,
+    int scopeRevision,
+  ) async {
+    bool isCurrentScope() =>
+        mounted &&
+        scopeRevision == _conversationScopeRevision &&
+        conversationId == _conversationId;
+
     try {
       final details = await ref
           .read(aiAssistantRepositoryProvider)
           .fetchConversation(conversationId);
-      if (!mounted ||
-          revision != _requestRevision ||
-          conversationId != _conversationId) {
-        return;
-      }
+      if (!isCurrentScope()) return;
       final ids = <int>{};
+      final userRequests = <String>{};
       setState(() {
         _canWrite = details.conversation.canWrite;
         _canManageParticipants = details.conversation.canManageParticipants;
-        _messages = [
-          ...details.messages,
-          ..._messages,
-        ].where((message) => ids.add(message.id)).toList(growable: false);
+        _messages = [...details.messages, ..._messages]
+            .where((message) {
+              if (!ids.add(message.id)) return false;
+              final requestId = message.metadata?['request_id'];
+              return !message.isUser ||
+                  requestId is! String ||
+                  requestId.isEmpty ||
+                  userRequests.add(requestId);
+            })
+            .toList(growable: false);
       });
       _scrollToBottom();
     } catch (error) {
-      if (mounted && revision == _requestRevision) {
+      if (isCurrentScope()) {
         _showSnackBar(_resolveError(error));
       }
     }
@@ -635,6 +652,7 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
     _activeRequestRepository = null;
     _cancelRequested = false;
     _requestRevision++;
+    _conversationScopeRevision++;
     if (mounted && updateUi) {
       setState(() {
         _isSending = false;
@@ -706,6 +724,7 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
       role: 'user',
       content: message,
       createdAt: DateTime.now(),
+      metadata: {'request_id': requestId},
       attachments: attachments.map((item) => item.metadata).toList(),
     );
     _failedRequest = _PendingChat(

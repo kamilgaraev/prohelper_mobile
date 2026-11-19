@@ -770,6 +770,116 @@ void main() {
     FlutterSecureStorage.setMockInitialValues({});
   });
 
+  testWidgets('merges delayed draft history with the next completed turn', (
+    tester,
+  ) async {
+    const requestId = '2962344c-2256-4315-99f1-638ffb026a3e';
+    const recovered = AiMessageModel(
+      id: 72,
+      role: 'assistant',
+      content: 'Первый ответ',
+      createdAt: null,
+    );
+    const followUp = AiMessageModel(
+      id: 74,
+      role: 'assistant',
+      content: 'Следующий ответ',
+      createdAt: null,
+    );
+    final history = Completer<AiConversationDetailsModel>();
+    final nextResponse = Completer<AiAssistantChatRequest>();
+    final repository = _RaceRepository(
+      freeQuote: true,
+      delayedConversation: history.future,
+      postResponse: nextResponse.future,
+    );
+    FlutterSecureStorage.setMockInitialValues({
+      'assistant_draft_request_7_4': requestId,
+    });
+    addTearDown(() => FlutterSecureStorage.setMockInitialValues({}));
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authProvider.overrideWith((_) => _OrganizationAuthNotifier(4)),
+          aiAssistantRepositoryProvider.overrideWithValue(repository),
+        ],
+        child: const MaterialApp(home: AiAssistantChatScreen()),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+    repository.answer.complete(
+      const AiAssistantChatRequest(
+        requestId: requestId,
+        status: 'completed',
+        result: AiAssistantChatResult(
+          requestId: requestId,
+          conversationId: 1,
+          message: recovered,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Первый ответ'), findsOneWidget);
+
+    await tester.enterText(find.byType(TextField), 'Следующий вопрос');
+    await tester.tap(find.byIcon(Icons.send_rounded));
+    await tester.pump();
+    final nextId = repository.sentIds.single;
+    nextResponse.complete(
+      AiAssistantChatRequest(
+        requestId: nextId,
+        status: 'completed',
+        result: AiAssistantChatResult(
+          requestId: nextId,
+          conversationId: 1,
+          message: followUp,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    history.complete(
+      AiConversationDetailsModel(
+        conversation: const AiConversationModel(
+          id: 1,
+          title: 'Chat',
+          createdAt: null,
+          updatedAt: null,
+        ),
+        messages: [
+          const AiMessageModel(
+            id: 71,
+            role: 'user',
+            content: 'Восстановленный вопрос',
+            createdAt: null,
+          ),
+          recovered,
+          AiMessageModel(
+            id: 73,
+            role: 'user',
+            content: 'Следующий вопрос',
+            createdAt: null,
+            metadata: {'request_id': nextId},
+          ),
+        ],
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final messages = [
+      find.text('Восстановленный вопрос'),
+      find.text('Первый ответ'),
+      find.text('Следующий вопрос'),
+      find.text('Следующий ответ'),
+    ];
+    for (final message in messages) {
+      expect(message, findsOneWidget);
+    }
+    final positions =
+        messages.map((message) => tester.getTopLeft(message).dy).toList();
+    expect(positions, orderedEquals([...positions]..sort()));
+  });
+
   testWidgets('published reveal is noninteractive without mobile adapter', (
     tester,
   ) async {
@@ -1209,6 +1319,8 @@ class _RaceRepository extends AiAssistantRepository {
     this.cancelPending = false,
     this.quoteExpiresAt,
     this.activeRequest,
+    this.delayedConversation,
+    this.postResponse,
   }) : super(Dio());
   final bool canWrite;
   final bool failFirst;
@@ -1223,6 +1335,8 @@ class _RaceRepository extends AiAssistantRepository {
   final bool cancelPending;
   final DateTime? quoteExpiresAt;
   final AiAssistantChatRequest? activeRequest;
+  final Future<AiConversationDetailsModel>? delayedConversation;
+  final Future<AiAssistantChatRequest>? postResponse;
   int _stageIndex = 0;
   int _progressIndex = 0;
   int quoteCalls = 0;
@@ -1234,18 +1348,22 @@ class _RaceRepository extends AiAssistantRepository {
   String? cancelledRequestId;
   CancelToken? sentCancelToken;
   @override
-  Future<AiConversationDetailsModel> fetchConversation(int id) async =>
-      AiConversationDetailsModel(
-        conversation: AiConversationModel(
-          id: id,
-          title: 'Chat',
-          createdAt: null,
-          updatedAt: null,
-          canWrite: canWrite,
-        ),
-        messages: const [],
-        activeRequest: activeRequest,
-      );
+  Future<AiConversationDetailsModel> fetchConversation(int id) async {
+    final pending = delayedConversation;
+    if (pending != null) return pending;
+    return AiConversationDetailsModel(
+      conversation: AiConversationModel(
+        id: id,
+        title: 'Chat',
+        createdAt: null,
+        updatedAt: null,
+        canWrite: canWrite,
+      ),
+      messages: const [],
+      activeRequest: activeRequest,
+    );
+  }
+
   @override
   Future<AiAssistantPage<AiMessageModel>> fetchMessages(
     int conversationId, {
@@ -1302,7 +1420,7 @@ class _RaceRepository extends AiAssistantRepository {
         ),
       );
     }
-    return answer.future;
+    return postResponse ?? answer.future;
   }
 
   @override
