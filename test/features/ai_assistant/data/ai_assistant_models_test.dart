@@ -123,7 +123,7 @@ void main() {
     expect(message.artifacts.single.isReport, isTrue);
     expect(message.artifacts.single.displayTitle, 'timeline.pdf');
     expect(
-      message.artifacts.single.trustedUrl,
+      message.artifacts.single.downloadUrl,
       'https://example.test/timeline.pdf',
     );
     expect(message.artifacts.single.reportType, 'project_timelines');

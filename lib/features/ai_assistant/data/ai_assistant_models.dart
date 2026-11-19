@@ -495,17 +495,6 @@ class AiAssistantArtifact {
       (sourceTool?.startsWith('generate_') ?? false) ||
       (storagePath?.contains('/reports/') ?? false);
 
-  String? get trustedUrl {
-    final candidate = downloadUrl ?? url ?? href ?? path;
-    final uri = Uri.tryParse(candidate ?? '');
-
-    if (uri == null || (uri.scheme != 'https' && uri.scheme != 'http')) {
-      return null;
-    }
-
-    return uri.toString();
-  }
-
   String get displayTitle {
     final value = title ?? name ?? filename ?? fileName;
 
@@ -1107,7 +1096,6 @@ class AiCreditsBalanceModel {
 class AiCreditQuoteModel {
   const AiCreditQuoteModel({
     required this.id,
-    required this.maxConfirmed,
     required this.amount,
     required this.unit,
     this.processingDeadlineSeconds,
@@ -1115,7 +1103,6 @@ class AiCreditQuoteModel {
   });
 
   final String id;
-  final bool maxConfirmed;
   final String amount;
   final String unit;
   final int? processingDeadlineSeconds;
@@ -1124,7 +1111,6 @@ class AiCreditQuoteModel {
   factory AiCreditQuoteModel.fromJson(Map<String, dynamic> json) {
     return AiCreditQuoteModel(
       id: _stringValue(json['quote_id']) ?? _stringValue(json['id']) ?? '',
-      maxConfirmed: _boolValue(json['max_confirmed']),
       expiresAt: DateTime.tryParse(_stringValue(json['expires_at']) ?? ''),
       amount: formatAiMinor(_intValue(json['max_units_minor'])),
       unit: _stringValue(json['unit']) ?? 'ед. МОСТ',

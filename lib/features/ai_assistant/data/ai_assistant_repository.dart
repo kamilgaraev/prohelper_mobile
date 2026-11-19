@@ -194,66 +194,11 @@ class AiAssistantRepository {
     }
   }
 
-  Future<AiConversationDetailsModel> sendMessage({
-    required String message,
-    int? conversationId,
-    String? goal,
-    String? desiredMode,
-    bool? allowActions,
-    Map<String, dynamic>? context,
-    String? requestId,
-    String? quoteId,
-    bool? maxConfirmed,
-    CancelToken? cancelToken,
-  }) async {
-    try {
-      final payload = {
-        'message': message,
-        if (conversationId != null) 'conversation_id': conversationId,
-        if ((goal ?? '').trim().isNotEmpty) 'goal': goal!.trim(),
-        if ((desiredMode ?? '').trim().isNotEmpty)
-          'desired_mode': desiredMode!.trim(),
-        if (allowActions != null) 'allow_actions': allowActions,
-        if (context != null && context.isNotEmpty) 'context': context,
-        if ((requestId ?? '').trim().isNotEmpty)
-          'request_id': requestId!.trim(),
-        if ((quoteId ?? '').trim().isNotEmpty) 'quote_id': quoteId!.trim(),
-        if (maxConfirmed != null) 'max_confirmed': maxConfirmed,
-      };
-      final response = await _dio.post(
-        '/ai-assistant/chat',
-        data: payload,
-        cancelToken: cancelToken,
-      );
-
-      final responsePayload = _asMap(_unwrapData(response.data));
-      final nextConversationId = _intValue(responsePayload['conversation_id']);
-
-      if (nextConversationId <= 0) {
-        throw const ApiException('Сервер не вернул идентификатор диалога.');
-      }
-
-      return fetchConversation(nextConversationId);
-    } on DioException catch (error) {
-      throw ApiException.fromDio(
-        error,
-        fallbackMessage: 'Не удалось отправить сообщение ассистенту.',
-      );
-    } catch (error) {
-      if (error is ApiException) {
-        rethrow;
-      }
-
-      throw const ApiException('Не удалось отправить сообщение ассистенту.');
-    }
-  }
-
   Future<AiAssistantChatRequest> sendMessageRequest({
     required String message,
     required String requestId,
     int? conversationId,
     String? quoteId,
-    required bool maxConfirmed,
     String profile = 'normal',
     bool allowActions = true,
     Map<String, dynamic>? context,
@@ -287,14 +232,7 @@ class AiAssistantRepository {
                 status: 'completed',
                 result: AiAssistantChatResult.fromJson(payload),
               );
-      if (request.requestId != requestId ||
-          (request.conversationId != null &&
-              conversationId != null &&
-              request.conversationId != conversationId) ||
-          (request.runStatus == 'completed' &&
-              !_validChatResult(request.result, requestId, conversationId))) {
-        throw const ApiException('Получен ответ для другого запроса.');
-      }
+      _assertChatRequestIdentity(request, requestId, conversationId);
       return request;
     } on DioException catch (error) {
       throw ApiException.fromDio(
@@ -609,27 +547,16 @@ class AiAssistantRepository {
     return resolved;
   }
 
-  Future<Map<String, dynamic>> fetchRequest(String requestId) async {
-    final response = await _dio.get('/ai-assistant/requests/$requestId');
-    return _asMap(_unwrapData(response.data));
-  }
-
   Future<AiAssistantChatRequest> fetchChatRequest(
     String requestId, {
     int? conversationId,
   }) async {
     try {
+      final response = await _dio.get('/ai-assistant/requests/$requestId');
       final request = AiAssistantChatRequest.fromJson(
-        await fetchRequest(requestId),
+        _asMap(_unwrapData(response.data)),
       );
-      if (request.requestId != requestId ||
-          (request.conversationId != null &&
-              conversationId != null &&
-              request.conversationId != conversationId) ||
-          (request.runStatus == 'completed' &&
-              !_validChatResult(request.result, requestId, conversationId))) {
-        throw const ApiException('Получен ответ для другого запроса.');
-      }
+      _assertChatRequestIdentity(request, requestId, conversationId);
       return request;
     } on DioException catch (error) {
       throw ApiException.fromDio(
@@ -639,15 +566,25 @@ class AiAssistantRepository {
     }
   }
 
-  bool _validChatResult(
-    AiAssistantChatResult? result,
+  void _assertChatRequestIdentity(
+    AiAssistantChatRequest request,
     String requestId,
     int? conversationId,
-  ) =>
-      result != null &&
-      result.conversationId > 0 &&
-      result.requestId == requestId &&
-      (conversationId == null || result.conversationId == conversationId);
+  ) {
+    final result = request.result;
+    if (request.requestId != requestId ||
+        (request.conversationId != null &&
+            conversationId != null &&
+            request.conversationId != conversationId) ||
+        (request.runStatus == 'completed' &&
+            (result == null ||
+                result.conversationId <= 0 ||
+                result.requestId != requestId ||
+                (conversationId != null &&
+                    result.conversationId != conversationId)))) {
+      throw const ApiException('Получен ответ для другого запроса.');
+    }
+  }
 
   Future<AiAssistantChatRequest> cancelRequest(String requestId) async {
     try {
@@ -657,15 +594,7 @@ class AiAssistantRepository {
       final request = AiAssistantChatRequest.fromJson(
         _asMap(_unwrapData(response.data)),
       );
-      if (request.requestId != requestId ||
-          (request.runStatus == 'completed' &&
-              !_validChatResult(
-                request.result,
-                requestId,
-                request.conversationId,
-              ))) {
-        throw const ApiException('Получен ответ для другого запроса.');
-      }
+      _assertChatRequestIdentity(request, requestId, request.conversationId);
       return request;
     } on DioException catch (error) {
       throw ApiException.fromDio(

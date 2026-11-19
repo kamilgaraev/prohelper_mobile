@@ -116,37 +116,25 @@ void main() {
   );
 
   test(
-    'sends selected project and mobile UI context to chat endpoint',
+    'sends selected project and mobile UI context with an asynchronous turn',
     () async {
+      const requestId = '6d4cbf59-a08a-48cb-9f93-a9ac85ea4e16';
       late RequestOptions chatRequest;
       final dio = Dio(BaseOptions(baseUrl: 'https://api.example.test'));
       dio.httpClientAdapter = _JsonAdapter((options) {
-        if (options.method == 'POST' && options.path == '/ai-assistant/chat') {
-          chatRequest = options;
-          return _responseData({'conversation_id': 12});
-        }
-
-        if (options.method == 'GET' &&
-            options.path == '/ai-assistant/conversations/12') {
-          return _responseData({
-            'conversation': {
-              'id': 12,
-              'title': 'Диалог',
-              'created_at': '2026-05-22T10:00:00.000000Z',
-              'updated_at': '2026-05-22T10:00:00.000000Z',
-            },
-            'messages': const [],
-          });
-        }
-
-        return _responseData({'conversation_id': 0});
-      });
+        chatRequest = options;
+        return _responseData({
+          'request_id': requestId,
+          'conversation_id': 8,
+          'run_status': 'queued',
+        });
+      }, statusCode: (_) => 202);
       final repository = AiAssistantRepository(dio);
 
-      await repository.sendMessage(
+      await repository.sendMessageRequest(
         message: 'Что по рискам?',
+        requestId: requestId,
         conversationId: 8,
-        desiredMode: 'grounded',
         context: const {
           'source_module': 'ai-assistant',
           'source_route': 'mobile/ai-assistant/chat',
@@ -172,7 +160,7 @@ void main() {
       expect(chatRequest.path, '/ai-assistant/chat');
       expect(payload['message'], 'Что по рискам?');
       expect(payload['conversation_id'], 8);
-      expect(payload['desired_mode'], 'grounded');
+      expect(payload['async'], isTrue);
       expect(context['source_route'], 'mobile/ai-assistant/chat');
       expect(entityRefs.single, containsPair('id', 77));
       expect(filters['project_id'], 77);
@@ -240,7 +228,6 @@ void main() {
         requestId: requestId,
         conversationId: 12,
         quoteId: quote.id,
-        maxConfirmed: true,
         profile: 'short',
         allowActions: false,
         context: {'entity_refs': []},
@@ -265,7 +252,6 @@ void main() {
         message: 'Question',
         requestId: 'current',
         quoteId: 'quote',
-        maxConfirmed: true,
       ),
       throwsException,
     );
@@ -344,7 +330,6 @@ void main() {
       message: 'Вопрос',
       requestId: 'request-1',
       quoteId: 'quote-1',
-      maxConfirmed: true,
     );
     expect(accepted.status, 'running');
     expect(accepted.runStatus, 'queued');
@@ -408,7 +393,6 @@ void main() {
           requestId: 'same-id',
           conversationId: 12,
           quoteId: 'same-quote',
-          maxConfirmed: true,
         );
       }
       expect(payloads, hasLength(2));
@@ -441,7 +425,6 @@ void main() {
         requestId: 'same-id',
         conversationId: 12,
         quoteId: 'same-quote',
-        maxConfirmed: true,
       );
 
       expect(result.requestId, 'same-id');
@@ -566,7 +549,7 @@ void main() {
       await repository.updateParticipants(12, [
         const AiConversationParticipantModel(userId: '5', role: 'viewer'),
       ]);
-      await repository.fetchRequest('request-uuid');
+      await repository.fetchChatRequest('request-uuid');
       await repository.cancelRequest('request-uuid');
       expect(requests[0].method, 'PUT');
       expect(requests[0].data, {

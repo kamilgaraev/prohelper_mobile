@@ -1561,7 +1561,6 @@ class _RaceRepository extends AiAssistantRepository {
     quoteRequestId = requestId;
     return AiCreditQuoteModel(
       id: 'quote-uuid',
-      maxConfirmed: false,
       amount: freeQuote ? '0.00' : '1.50',
       unit: 'ед. МОСТ',
       processingDeadlineSeconds: processingDeadlineSeconds,
@@ -1575,7 +1574,6 @@ class _RaceRepository extends AiAssistantRepository {
     required String requestId,
     int? conversationId,
     String? quoteId,
-    required bool maxConfirmed,
     String profile = 'normal',
     bool allowActions = true,
     Map<String, dynamic>? context,

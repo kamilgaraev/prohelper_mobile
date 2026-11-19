@@ -883,7 +883,6 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
         message: message,
         requestId: requestId,
         quoteId: quote.id,
-        maxConfirmed: quote.maxConfirmed,
         profile: profile,
         conversationId: conversationAtSend,
         context: assistantContext,
@@ -1080,16 +1079,7 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
               ],
             ),
       );
-      return confirmed == true
-          ? AiCreditQuoteModel(
-            id: quote.id,
-            maxConfirmed: true,
-            amount: quote.amount,
-            unit: quote.unit,
-            processingDeadlineSeconds: quote.processingDeadlineSeconds,
-            expiresAt: quote.expiresAt,
-          )
-          : null;
+      return confirmed == true ? quote : null;
     } catch (error) {
       if (mounted) _showSnackBar(_resolveError(error));
       return null;
@@ -1151,7 +1141,6 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
       requestId: pending.requestId,
       conversationId: pending.conversationId,
       quoteId: pending.quote.id,
-      maxConfirmed: pending.quote.maxConfirmed,
       profile: pending.profile,
       context: pending.context,
       attachmentIds: pending.attachmentIds,
