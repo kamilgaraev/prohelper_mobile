@@ -319,7 +319,7 @@ class _CreditsCard extends StatelessWidget {
         if (balance?.billingMode == 'shadow') ...[
           const SizedBox(height: 6),
           Text(
-            'Тестовый режим: списания выключены. Показана оценка расхода, фактическое списание — 0.',
+            'Списания выключены. Показана только оценка расхода.',
             style: AppTypography.bodyMedium(
               context,
             ).copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),

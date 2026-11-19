@@ -96,11 +96,15 @@ class AiAssistantRepository {
   Future<AiConversationDetailsModel> fetchConversation(int id) async {
     try {
       final response = await _dio.get('/ai-assistant/conversations/$id');
-      final payload = _asMap(_unwrapData(response.data));
+      final parsed = MobileApiResponse.map(response.data);
+      final payload = parsed.data;
 
       final conversation = AiConversationModel.fromJson(
         _asMap(payload['conversation']),
       );
+      if (conversation.id != id) {
+        throw const ApiException('Получена история другого диалога.');
+      }
       final messages =
           _asList(
             payload['messages'],
@@ -109,6 +113,10 @@ class AiAssistantRepository {
       return AiConversationDetailsModel(
         conversation: conversation,
         messages: messages,
+        activeRequest: AiAssistantChatRequest.activeFromJson(
+          payload['active_request'] ?? parsed.meta['active_request'],
+          conversation.id,
+        ),
       );
     } on DioException catch (error) {
       throw ApiException.fromDio(
@@ -162,18 +170,21 @@ class AiAssistantRepository {
         '/ai-assistant/conversations/$conversationId/history',
         queryParameters: {'page': page},
       );
-      final payload = _unwrapData(response.data);
-      final map = _asMap(payload);
-      final rows = _asList(map['data']).isNotEmpty ? map['data'] : payload;
-      final meta = MobileApiResponse.list(response.data).meta;
+      final parsed = MobileApiResponse.list(response.data);
+      final meta = parsed.meta;
       final current = _intValue(meta['current_page']);
       final last = _intValue(meta['last_page']);
       return AiAssistantPage(
-        items: _asList(rows)
-            .map((item) => AiMessageModel.fromJson(_asMap(item)))
-            .toList(growable: false),
+        items: parsed.data.map(AiMessageModel.fromJson).toList(growable: false),
         nextPage: current > 0 && last > current ? current + 1 : null,
         total: _intValue(meta['total']),
+        activeRequest:
+            page == 1
+                ? AiAssistantChatRequest.activeFromJson(
+                  meta['active_request'],
+                  conversationId,
+                )
+                : null,
       );
     } on DioException catch (error) {
       throw ApiException.fromDio(
@@ -267,7 +278,9 @@ class AiAssistantRepository {
       );
       final payload = _asMap(_unwrapData(response.data));
       final request =
-          response.statusCode == 202
+          response.statusCode == 202 ||
+                  payload.containsKey('run_status') ||
+                  payload.containsKey('status')
               ? AiAssistantChatRequest.fromJson(payload)
               : AiAssistantChatRequest(
                 requestId: requestId,
@@ -278,7 +291,7 @@ class AiAssistantRepository {
           (request.conversationId != null &&
               conversationId != null &&
               request.conversationId != conversationId) ||
-          (request.status == 'completed' &&
+          (request.runStatus == 'completed' &&
               !_validChatResult(request.result, requestId, conversationId))) {
         throw const ApiException('Получен ответ для другого запроса.');
       }
@@ -536,6 +549,9 @@ class AiAssistantRepository {
     AiAssistantArtifact artifact, {
     Directory? temporaryDirectory,
   }) async {
+    if (artifact.isReportTask) {
+      throw const ApiException('Файл отчёта доступен в админке.');
+    }
     final rawUrl =
         artifact.downloadUrl ?? artifact.url ?? artifact.href ?? artifact.path;
     final uri = sourceUri(rawUrl, apiOrigin: true);
@@ -610,7 +626,7 @@ class AiAssistantRepository {
           (request.conversationId != null &&
               conversationId != null &&
               request.conversationId != conversationId) ||
-          (request.status == 'completed' &&
+          (request.runStatus == 'completed' &&
               !_validChatResult(request.result, requestId, conversationId))) {
         throw const ApiException('Получен ответ для другого запроса.');
       }
@@ -641,7 +657,13 @@ class AiAssistantRepository {
       final request = AiAssistantChatRequest.fromJson(
         _asMap(_unwrapData(response.data)),
       );
-      if (request.requestId != requestId) {
+      if (request.requestId != requestId ||
+          (request.runStatus == 'completed' &&
+              !_validChatResult(
+                request.result,
+                requestId,
+                request.conversationId,
+              ))) {
         throw const ApiException('Получен ответ для другого запроса.');
       }
       return request;

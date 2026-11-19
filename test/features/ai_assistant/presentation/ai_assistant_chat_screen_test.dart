@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:prohelpers_mobile/core/network/api_exception.dart';
@@ -646,7 +647,7 @@ void main() {
     expect(repository.cancelledRequestId, isNull);
   });
 
-  testWidgets('disposing the screen cancels the captured request', (
+  testWidgets('disposing the screen detaches without cancelling the turn', (
     tester,
   ) async {
     final repository = _RaceRepository(asyncAccepted: true);
@@ -659,13 +660,11 @@ void main() {
     await tester.pump();
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump();
-    expect(repository.cancelledRequestId, repository.requestId);
+    expect(repository.cancelledRequestId, isNull);
     expect(repository.sentCancelToken?.isCancelled, isTrue);
   });
 
-  testWidgets('organization change cancels request captured in old scope', (
-    tester,
-  ) async {
+  testWidgets('organization change detaches from the old turn', (tester) async {
     final repository = _RaceRepository(asyncAccepted: true);
     final auth = _OrganizationAuthNotifier(4);
     await tester.pumpWidget(
@@ -687,9 +686,167 @@ void main() {
     await tester.pump();
     auth.setOrganization(5);
     await tester.pump();
-    expect(repository.cancelledRequestId, repository.requestId);
+    expect(repository.cancelledRequestId, isNull);
     expect(repository.sentCancelToken?.isCancelled, isTrue);
     expect(find.text('Прошло 00:'), findsNothing);
+  });
+
+  testWidgets('reopening a chat watches the active turn from the server', (
+    tester,
+  ) async {
+    const requestId = '2962344c-2256-4315-99f1-638ffb026a3e';
+    final repository = _RaceRepository(
+      activeRequest: const AiAssistantChatRequest(
+        requestId: requestId,
+        conversationId: 1,
+        status: 'running',
+        canonicalStatus: 'queued',
+      ),
+    );
+    await tester.pumpWidget(buildScreen(repository));
+    await tester.pump();
+    await tester.pump();
+
+    expect(repository.polledIds, [requestId]);
+    expect(repository.sentIds, isEmpty);
+    expect(find.text('Стоп'), findsOneWidget);
+
+    repository.answer.complete(
+      const AiAssistantChatRequest(
+        requestId: requestId,
+        status: 'completed',
+        result: AiAssistantChatResult(
+          requestId: requestId,
+          conversationId: 1,
+          message: AiMessageModel(
+            id: 72,
+            role: 'assistant',
+            content: 'Запрос завершён после возвращения.',
+            createdAt: null,
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Запрос завершён после возвращения.'), findsOneWidget);
+    expect(find.text('Стоп'), findsNothing);
+    expect(repository.cancelledRequestId, isNull);
+  });
+
+  testWidgets('reopens a draft turn saved for the signed-in organization', (
+    tester,
+  ) async {
+    const requestId = '2962344c-2256-4315-99f1-638ffb026a3e';
+    FlutterSecureStorage.setMockInitialValues({
+      'assistant_draft_request_7_4': requestId,
+      'assistant_draft_request_7_5': 'bfb62fbc-e2cb-49f3-95aa-b169bb5538ce',
+    });
+    final repository = _RaceRepository();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authProvider.overrideWith((_) => _OrganizationAuthNotifier(4)),
+          aiAssistantRepositoryProvider.overrideWithValue(repository),
+        ],
+        child: const MaterialApp(home: AiAssistantChatScreen()),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(repository.polledIds, [requestId]);
+    expect(repository.sentIds, isEmpty);
+
+    repository.answer.complete(
+      const AiAssistantChatRequest(requestId: requestId, status: 'cancelled'),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Запрос остановлен.'), findsOneWidget);
+    const storage = FlutterSecureStorage();
+    expect(await storage.read(key: 'assistant_draft_request_7_4'), isNull);
+    expect(await storage.read(key: 'assistant_draft_request_7_5'), isNotNull);
+    FlutterSecureStorage.setMockInitialValues({});
+  });
+
+  testWidgets('published reveal is noninteractive without mobile adapter', (
+    tester,
+  ) async {
+    final repository = _AiAssistantRepository(
+      messages: [
+        AiMessageModel.fromJson({
+          'id': 51,
+          'role': 'assistant',
+          'content': 'Найдена работа.',
+          'metadata': {
+            'contract_version': 1,
+            'outcome': 'ok',
+            'coverage': {'status': 'partial'},
+            'source_refs': [
+              {
+                'title': 'Непроверенная ссылка',
+                'url': '/dashboard/projects/77',
+              },
+            ],
+            'evidence': [
+              {
+                'source_ref': {'title': 'Рабочий график'},
+              },
+            ],
+            'ui_actions': [
+              {
+                'type': 'reveal_source',
+                'label': 'Показать работу',
+                'surface': 'mobile',
+                'target': 'https://example.test/arbitrary',
+              },
+            ],
+          },
+        }),
+      ],
+    );
+    await tester.pumpWidget(buildScreen(repository));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Рабочий график'), findsOneWidget);
+    expect(find.text('Показать работу'), findsOneWidget);
+    expect(find.text('Эти действия недоступны в приложении.'), findsOneWidget);
+    expect(find.text('Непроверенная ссылка'), findsNothing);
+    expect(find.byIcon(Icons.open_in_new), findsNothing);
+  });
+
+  testWidgets('queued export task does not offer the file download', (
+    tester,
+  ) async {
+    final repository = _AiAssistantRepository(
+      messages: [
+        AiMessageModel.fromJson({
+          'id': 52,
+          'role': 'assistant',
+          'content': 'Собираю отчёт.',
+          'metadata': {
+            'contract_version': 1,
+            'export_task': {
+              'task_id': 'f6d3412e-5b13-4426-b77f-de8a5e81736d',
+              'title': 'График работ',
+              'status': 'queued',
+              'url':
+                  '/ai-assistant/report-tasks/f6d3412e-5b13-4426-b77f-de8a5e81736d',
+            },
+          },
+        }),
+      ],
+    );
+    await tester.pumpWidget(buildScreen(repository));
+    await tester.pumpAndSettle();
+
+    expect(find.text('График работ'), findsOneWidget);
+    expect(
+      find.text('Отчёт готовится. Статус доступен в админке.'),
+      findsOneWidget,
+    );
+    expect(find.byIcon(Icons.download_rounded), findsNothing);
   });
 
   testWidgets('forbidden status polling stops instead of retrying', (
@@ -804,9 +961,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(
-        find.text(
-          'Тестовый режим: списания выключены. Фактическое списание — 0 ед. МОСТ.',
-        ),
+        find.text('Списания выключены. За этот запрос списано 0 ед. МОСТ.'),
         findsOneWidget,
       );
       expect(find.textContaining('Списано: 0'), findsNothing);
@@ -978,6 +1133,7 @@ class _RaceRepository extends AiAssistantRepository {
     this.notSubmittedOnce = false,
     this.cancelPending = false,
     this.quoteExpiresAt,
+    this.activeRequest,
   }) : super(Dio());
   final bool canWrite;
   final bool failFirst;
@@ -991,6 +1147,7 @@ class _RaceRepository extends AiAssistantRepository {
   final bool notSubmittedOnce;
   final bool cancelPending;
   final DateTime? quoteExpiresAt;
+  final AiAssistantChatRequest? activeRequest;
   int _stageIndex = 0;
   int _progressIndex = 0;
   int quoteCalls = 0;
@@ -1012,6 +1169,7 @@ class _RaceRepository extends AiAssistantRepository {
           canWrite: canWrite,
         ),
         messages: const [],
+        activeRequest: activeRequest,
       );
   @override
   Future<AiAssistantPage<AiMessageModel>> fetchMessages(

@@ -267,6 +267,34 @@ void main() {
     );
   });
 
+  test('loads only a scoped active request from first history page', () async {
+    const requestId = '2962344c-2256-4315-99f1-638ffb026a3e';
+    final dio = Dio(BaseOptions(baseUrl: 'https://api.example.test'));
+    dio.httpClientAdapter = _JsonAdapter((request) {
+      return {
+        'success': true,
+        'data': [],
+        'meta': {
+          'active_request': {
+            'request_id': requestId,
+            'conversation_id': 12,
+            'status': 'running',
+            'run_status': 'queued',
+          },
+        },
+      };
+    });
+    final repository = AiAssistantRepository(dio);
+    final first = await repository.fetchMessages(12);
+    final older = await repository.fetchMessages(12, page: 2);
+    final unknown = await repository.fetchMessages(13);
+
+    expect(first.activeRequest?.requestId, requestId);
+    expect(first.activeRequest?.runStatus, 'queued');
+    expect(older.activeRequest, isNull);
+    expect(unknown.activeRequest, isNull);
+  });
+
   test('202 request completes through GET with the same identity', () async {
     final requests = <RequestOptions>[];
     final dio = Dio(BaseOptions(baseUrl: 'https://api.example.test'));
@@ -286,7 +314,7 @@ void main() {
       return _responseData({
         'request_id': 'request-1',
         'conversation_id': 12,
-        'status': 'completed',
+        'run_status': 'completed',
         'stage': 'completed',
         'progress': [
           {'id': 31, 'code': 'estimates', 'state': 'completed'},
@@ -295,6 +323,10 @@ void main() {
         'response': {
           'request_id': 'request-1',
           'conversation_id': 12,
+          'contract_version': 1,
+          'outcome': 'ok',
+          'coverage': {'status': 'found'},
+          'billing': {'charged_minor': 23},
           'message': {'id': 17, 'role': 'assistant', 'content': 'Готово'},
           'progress': [
             {'id': 31, 'code': 'estimates', 'state': 'completed'},
@@ -311,12 +343,15 @@ void main() {
       maxConfirmed: true,
     );
     expect(accepted.status, 'running');
+    expect(accepted.runStatus, 'queued');
     expect(accepted.result, isNull);
     expect(accepted.progress.single.code, 'estimates');
     expect(accepted.progress.single.state, 'started');
     expect((requests.first.data as Map)['async'], true);
     final completed = await repository.fetchChatRequest('request-1');
     expect(completed.result!.message!.content, 'Готово');
+    expect(completed.result!.message!.publication?.coverageStatus, 'found');
+    expect(completed.result!.publication?.chargedMinor, 23);
     expect(completed.progress.map((step) => step.code), [
       'estimates',
       'warehouse',
