@@ -183,60 +183,6 @@ class AiAssistantRepository {
     }
   }
 
-  Future<AiConversationDetailsModel> sendMessage({
-    required String message,
-    int? conversationId,
-    String? goal,
-    String? desiredMode,
-    bool? allowActions,
-    Map<String, dynamic>? context,
-    String? requestId,
-    String? quoteId,
-    bool? maxConfirmed,
-    CancelToken? cancelToken,
-  }) async {
-    try {
-      final payload = {
-        'message': message,
-        if (conversationId != null) 'conversation_id': conversationId,
-        if ((goal ?? '').trim().isNotEmpty) 'goal': goal!.trim(),
-        if ((desiredMode ?? '').trim().isNotEmpty)
-          'desired_mode': desiredMode!.trim(),
-        if (allowActions != null) 'allow_actions': allowActions,
-        if (context != null && context.isNotEmpty) 'context': context,
-        if ((requestId ?? '').trim().isNotEmpty)
-          'request_id': requestId!.trim(),
-        if ((quoteId ?? '').trim().isNotEmpty) 'quote_id': quoteId!.trim(),
-        if (maxConfirmed != null) 'max_confirmed': maxConfirmed,
-      };
-      final response = await _dio.post(
-        '/ai-assistant/chat',
-        data: payload,
-        cancelToken: cancelToken,
-      );
-
-      final responsePayload = _asMap(_unwrapData(response.data));
-      final nextConversationId = _intValue(responsePayload['conversation_id']);
-
-      if (nextConversationId <= 0) {
-        throw const ApiException('Сервер не вернул идентификатор диалога.');
-      }
-
-      return fetchConversation(nextConversationId);
-    } on DioException catch (error) {
-      throw ApiException.fromDio(
-        error,
-        fallbackMessage: 'Не удалось отправить сообщение ассистенту.',
-      );
-    } catch (error) {
-      if (error is ApiException) {
-        rethrow;
-      }
-
-      throw const ApiException('Не удалось отправить сообщение ассистенту.');
-    }
-  }
-
   Future<AiAssistantChatRequest> sendMessageRequest({
     required String message,
     required String requestId,
@@ -593,18 +539,14 @@ class AiAssistantRepository {
     return resolved;
   }
 
-  Future<Map<String, dynamic>> fetchRequest(String requestId) async {
-    final response = await _dio.get('/ai-assistant/requests/$requestId');
-    return _asMap(_unwrapData(response.data));
-  }
-
   Future<AiAssistantChatRequest> fetchChatRequest(
     String requestId, {
     int? conversationId,
   }) async {
     try {
+      final response = await _dio.get('/ai-assistant/requests/$requestId');
       final request = AiAssistantChatRequest.fromJson(
-        await fetchRequest(requestId),
+        _asMap(_unwrapData(response.data)),
       );
       if (request.requestId != requestId ||
           (request.conversationId != null &&

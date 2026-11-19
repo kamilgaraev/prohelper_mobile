@@ -112,37 +112,70 @@ void main() {
   );
 
   test(
-    'sends selected project and mobile UI context to chat endpoint',
+    'fetches a completed result after cancel returned only status',
     () async {
-      late RequestOptions chatRequest;
+      const requestId = '6d4cbf59-a08a-48cb-9f93-a9ac85ea4e16';
+      const requestPath = '/ai-assistant/requests/$requestId';
       final dio = Dio(BaseOptions(baseUrl: 'https://api.example.test'));
-      dio.httpClientAdapter = _JsonAdapter((options) {
-        if (options.method == 'POST' && options.path == '/ai-assistant/chat') {
-          chatRequest = options;
-          return _responseData({'conversation_id': 12});
-        }
-
-        if (options.method == 'GET' &&
-            options.path == '/ai-assistant/conversations/12') {
+      dio.httpClientAdapter = _JsonAdapter((request) {
+        if (request.method == 'POST') {
+          expect(request.path, '$requestPath/cancel');
           return _responseData({
-            'conversation': {
-              'id': 12,
-              'title': 'Диалог',
-              'created_at': '2026-05-22T10:00:00.000000Z',
-              'updated_at': '2026-05-22T10:00:00.000000Z',
-            },
-            'messages': const [],
+            'request_id': requestId,
+            'conversation_id': 12,
+            'status': 'completed',
           });
         }
 
-        return _responseData({'conversation_id': 0});
+        expect(request.method, 'GET');
+        expect(request.path, requestPath);
+        return _responseData({
+          'request_id': requestId,
+          'conversation_id': 12,
+          'status': 'completed',
+          'response': {
+            'request_id': requestId,
+            'conversation_id': 12,
+            'message': {'id': 17, 'role': 'assistant', 'content': 'Готово'},
+          },
+        });
       });
       final repository = AiAssistantRepository(dio);
 
-      await repository.sendMessage(
+      final cancellation = await repository.cancelRequest(requestId);
+      expect(cancellation.status, 'completed');
+      expect(cancellation.result, isNull);
+
+      final completed = await repository.fetchChatRequest(
+        requestId,
+        conversationId: 12,
+      );
+      expect(completed.result?.message?.content, 'Готово');
+    },
+  );
+
+  test(
+    'sends selected project and mobile UI context with an asynchronous turn',
+    () async {
+      const requestId = '6d4cbf59-a08a-48cb-9f93-a9ac85ea4e16';
+      late RequestOptions chatRequest;
+      final dio = Dio(BaseOptions(baseUrl: 'https://api.example.test'));
+      dio.httpClientAdapter = _JsonAdapter((options) {
+        chatRequest = options;
+        return _responseData({
+          'request_id': requestId,
+          'conversation_id': 8,
+          'status': 'running',
+          'stage': 'queued',
+        });
+      }, statusCode: (_) => 202);
+      final repository = AiAssistantRepository(dio);
+
+      final accepted = await repository.sendMessageRequest(
         message: 'Что по рискам?',
+        requestId: requestId,
         conversationId: 8,
-        desiredMode: 'grounded',
+        maxConfirmed: true,
         context: const {
           'source_module': 'ai-assistant',
           'source_route': 'mobile/ai-assistant/chat',
@@ -168,7 +201,9 @@ void main() {
       expect(chatRequest.path, '/ai-assistant/chat');
       expect(payload['message'], 'Что по рискам?');
       expect(payload['conversation_id'], 8);
-      expect(payload['desired_mode'], 'grounded');
+      expect(payload['async'], isTrue);
+      expect(accepted.status, 'running');
+      expect(accepted.stage, 'queued');
       expect(context['source_route'], 'mobile/ai-assistant/chat');
       expect(entityRefs.single, containsPair('id', 77));
       expect(filters['project_id'], 77);
@@ -492,7 +527,7 @@ void main() {
       await repository.updateParticipants(12, [
         const AiConversationParticipantModel(userId: '5', role: 'viewer'),
       ]);
-      await repository.fetchRequest('request-uuid');
+      await repository.fetchChatRequest('request-uuid');
       await repository.cancelRequest('request-uuid');
       expect(requests[0].method, 'PUT');
       expect(requests[0].data, {
