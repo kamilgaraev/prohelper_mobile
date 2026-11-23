@@ -729,6 +729,51 @@ void main() {
     });
   });
 
+  test('cancels by preview token and requires a cancelled outcome', () async {
+    final requests = <RequestOptions>[];
+    final dio = Dio();
+    var status = 'executed';
+    var statusCode = 200;
+    dio.httpClientAdapter = _JsonAdapter((request) {
+      requests.add(request);
+      return _responseData({'status': status});
+    }, statusCode: (_) => statusCode);
+    const actionId = 'fcfc7e05-7fde-401d-a979-30d649af529b';
+    final token = List.filled(64, 'x').join();
+    final preview = AiActionPreviewModel.fromJson({
+      'action': {
+        'id': actionId,
+        'tool_name': 'create_task',
+        'arguments': {'project_id': 2},
+      },
+      'preview_token': token,
+    });
+    final repository = AiAssistantRepository(dio);
+    Future<void> cancel() =>
+        repository.cancelAction(preview: preview, conversationId: 12);
+
+    await expectLater(cancel(), throwsA(isA<ApiException>()));
+    statusCode = 404;
+    await expectLater(
+      cancel(),
+      throwsA(
+        isA<ApiException>().having((error) => error.statusCode, 'code', 404),
+      ),
+    );
+    statusCode = 200;
+    status = 'cancelled';
+    await cancel();
+    for (final request in requests) {
+      expect(request.method, 'POST');
+      expect(request.path, '/ai-assistant/actions/cancel');
+      expect(request.data, {
+        'conversation_id': 12,
+        'action': {'id': actionId, 'preview_token': token},
+      });
+    }
+    expect(requests, hasLength(3));
+  });
+
   test(
     'memory mutations require confirmation and purchase uses commercial pack',
     () async {

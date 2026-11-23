@@ -416,7 +416,9 @@ void main() {
     expect(find.text('Выполнить'), findsOneWidget);
   });
 
-  testWidgets('does not execute action without confirmation', (tester) async {
+  testWidgets('closing preview does not execute or cancel the action', (
+    tester,
+  ) async {
     final repository = _AiAssistantRepository(
       messages: [
         _assistantMessage(actions: [_allowedAction()]),
@@ -431,11 +433,72 @@ void main() {
 
     expect(repository.executeCalls, 0);
 
-    await tester.tap(find.text('Отменить'));
+    await tester.tap(find.text('Закрыть'));
     await tester.pumpAndSettle();
 
     expect(repository.executeCalls, 0);
+    expect(repository.cancelCalls, 0);
     expect(find.text('Проверить действие'), findsNothing);
+  });
+
+  testWidgets('keeps preview until server confirms action cancellation', (
+    tester,
+  ) async {
+    final first = Completer<void>();
+    final second = Completer<void>();
+    final outcomes = [first.future, second.future].iterator;
+    final repository = _AiAssistantRepository(
+      messages: [
+        _assistantMessage(actions: [_allowedAction()]),
+      ],
+      onCancelAction: () {
+        outcomes.moveNext();
+        return outcomes.current;
+      },
+    );
+    await tester.pumpWidget(buildScreen(repository));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Подготовить'));
+    await tester.pumpAndSettle();
+
+    final cancel = find.text('Отменить действие');
+    const error = 'Отмена недоступна. Можно закрыть подготовку.';
+    await tester.tap(cancel);
+    await tester.pump();
+    expect(repository.cancelCalls, 1);
+    expect(find.text('Проверить действие'), findsOneWidget);
+    expect(find.text('Действие отменено.'), findsNothing);
+    for (final label in ['Закрыть', 'Отменяем…']) {
+      final button = tester.widget<TextButton>(
+        find.widgetWithText(TextButton, label),
+      );
+      expect(button.onPressed, isNull);
+    }
+    expect(
+      tester
+          .widget<FilledButton>(find.widgetWithText(FilledButton, 'Выполнить'))
+          .onPressed,
+      isNull,
+    );
+
+    first.completeError(const ApiException(error, statusCode: 404));
+    await tester.pumpAndSettle();
+    expect(find.text(error), findsOneWidget);
+    expect(find.text('Проверить действие'), findsOneWidget);
+    expect(
+      tester
+          .widget<TextButton>(find.widgetWithText(TextButton, 'Закрыть'))
+          .onPressed,
+      isNotNull,
+    );
+    await tester.tap(cancel);
+    await tester.pump();
+    expect(repository.cancelCalls, 2);
+    second.complete();
+    await tester.pumpAndSettle();
+    expect(find.text('Проверить действие'), findsNothing);
+    expect(find.text(error), findsNothing);
+    expect(repository.executeCalls, 0);
   });
 
   testWidgets('shows permission state for unavailable action', (tester) async {
@@ -1980,12 +2043,17 @@ Widget _knowledgeArticleChat({
 }
 
 class _AiAssistantRepository extends AiAssistantRepository {
-  _AiAssistantRepository({required this.messages, Dio? dio})
-    : super(dio ?? Dio());
+  _AiAssistantRepository({
+    required this.messages,
+    Dio? dio,
+    this.onCancelAction,
+  }) : super(dio ?? Dio());
 
   final List<AiMessageModel> messages;
+  final Future<void> Function()? onCancelAction;
   int previewCalls = 0;
   int executeCalls = 0;
+  int cancelCalls = 0;
 
   @override
   Future<AiConversationDetailsModel> fetchConversation(int id) async {
@@ -2028,6 +2096,15 @@ class _AiAssistantRepository extends AiAssistantRepository {
     executeCalls += 1;
 
     return const AiActionExecutionModel(messageText: 'Действие выполнено.');
+  }
+
+  @override
+  Future<void> cancelAction({
+    required AiActionPreviewModel preview,
+    required int conversationId,
+  }) async {
+    cancelCalls += 1;
+    await onCancelAction?.call();
   }
 }
 

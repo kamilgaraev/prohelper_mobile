@@ -482,6 +482,44 @@ class AiAssistantRepository {
     }
   }
 
+  Future<void> cancelAction({
+    required AiActionPreviewModel preview,
+    required int conversationId,
+  }) async {
+    const failure = 'Не удалось отменить действие.';
+    final actionId = preview.action.id;
+    if (conversationId < 1 ||
+        actionId == null ||
+        actionId.trim().isEmpty ||
+        preview.previewToken.trim().isEmpty) {
+      throw const ApiException(failure);
+    }
+
+    try {
+      final response = await _dio.post(
+        '/ai-assistant/actions/cancel',
+        data: {
+          'conversation_id': conversationId,
+          'action': {'id': actionId, 'preview_token': preview.previewToken},
+        },
+      );
+      final parsed = MobileApiResponse.map(response.data);
+      if (response.statusCode != 200 ||
+          !parsed.success ||
+          parsed.data['status'] != 'cancelled') {
+        throw const ApiException(failure);
+      }
+    } on DioException catch (error) {
+      if (error.response?.statusCode == 404) {
+        throw const ApiException(
+          'Отмена недоступна. Можно закрыть подготовку.',
+          statusCode: 404,
+        );
+      }
+      throw ApiException.fromDio(error, fallbackMessage: failure);
+    }
+  }
+
   Future<AiDocumentProcessingStatus> fetchDocumentProcessing({
     CancelToken? cancelToken,
   }) async {
