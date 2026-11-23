@@ -32,6 +32,7 @@ import 'ai_assistant_memory_screen.dart';
 import 'ai_assistant_sharing_screen.dart';
 import 'ai_assistant_credits_screen.dart';
 import 'ai_assistant_documents_screen.dart';
+import 'ai_assistant_presentation_view.dart';
 
 const _progressLabels = <String, List<String>>{
   'rag_search': [
@@ -260,6 +261,7 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
   String? _imageError;
   int _draftRevision = 0;
   int _uploadRevision = 0;
+  bool _isOpeningSource = false;
 
   @override
   void initState() {
@@ -1438,6 +1440,85 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
     );
   }
 
+  Future<void> _openDocumentSource(int messageId, int sourceIndex) async {
+    final conversationId = _conversationId;
+    final session = _sourceSession(ref.read(authProvider));
+    if (conversationId == null || session == null || _isOpeningSource) return;
+
+    _isOpeningSource = true;
+    try {
+      final preview = await ref
+          .read(aiAssistantRepositoryProvider)
+          .fetchSourcePreview(
+            conversationId: conversationId,
+            messageId: messageId,
+            sourceIndex: sourceIndex,
+          );
+      if (!mounted ||
+          _conversationId != conversationId ||
+          _sourceSession(ref.read(authProvider)) != session) {
+        return;
+      }
+      var sourceSessionChanged = false;
+      await showModalBottomSheet<void>(
+        context: context,
+        showDragHandle: true,
+        useSafeArea: true,
+        builder:
+            (_) => Consumer(
+              builder: (context, ref, _) {
+                ref.listen(authProvider.select(_sourceSession), (_, current) {
+                  if (current != session) sourceSessionChanged = true;
+                });
+                final isAuthorized =
+                    ref.watch(authProvider.select(_sourceSession)) == session &&
+                    !sourceSessionChanged;
+                return SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (isAuthorized) ...[
+                        Text(
+                          preview.title,
+                          style: Theme.of(context).textTheme.titleSmall,
+                        ),
+                        const SizedBox(height: 12),
+                        SelectableText(preview.content),
+                        if (preview.truncated)
+                          const Text('Показана часть фрагмента.'),
+                      ] else
+                        const Text('Фрагмент источника недоступен.'),
+                    ],
+                  ),
+                );
+              },
+            ),
+      );
+    } on ApiException catch (error) {
+      if (mounted &&
+          _conversationId == conversationId &&
+          _sourceSession(ref.read(authProvider)) == session) {
+        _showSnackBar(_resolveError(error));
+      }
+    } finally {
+      _isOpeningSource = false;
+    }
+  }
+
+  static Object? _sourceSession(AuthState state) =>
+      state is AuthAuthenticated &&
+              !state.needsReauthentication &&
+              state.user.serverId > 0 &&
+              (state.user.currentOrganizationId ?? 0) > 0
+          ? (
+            state.user.serverId,
+            state.user.currentOrganizationId,
+            state.sessionIdentity?.sessionId,
+          )
+          : null;
+
   Future<void> _openAssistantSource(AiAssistantEvidenceModel evidence) async {
     final target = _sourceTarget(evidence);
     if (target != null && target.mobileRoute != null) {
@@ -1754,6 +1835,11 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
                         final message = _messages[index];
                         final isUser = message.isUser;
                         final publication = isUser ? null : message.publication;
+                        final presentation = message.presentation;
+                        final answer =
+                            message.content.trim().isNotEmpty
+                                ? message.content
+                                : presentation?.leadingText ?? '';
                         final exportTask = publication?.exportTask;
                         final reportArtifacts =
                             isUser
@@ -1779,7 +1865,9 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
                                     )
                                     .toList(growable: false);
                         final sourceLinks =
-                            isUser || publication != null
+                            isUser ||
+                                    publication != null ||
+                                    presentation != null
                                 ? const <AiAssistantEvidenceModel>[]
                                 : message.evidence
                                     .where(_canOpenSource)
@@ -1833,23 +1921,37 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
                                           .toList(growable: false),
                                     ),
                                   ),
-                                if (message.content.trim().isNotEmpty)
+                                if (answer.isNotEmpty)
                                   Text(
-                                    message.content,
+                                    answer,
                                     style: AppTypography.bodyMedium(
                                       context,
                                     ).copyWith(color: bubbleTextColor),
                                   ),
-                                if (!isUser &&
-                                    _progressByMessageId.containsKey(
-                                      message.id,
-                                    )) ...[
-                                  const SizedBox(height: 10),
-                                  _AssistantProgressHistory(
-                                    key: PageStorageKey(message.id),
-                                    steps: _progressByMessageId[message.id]!,
+                                if (presentation != null)
+                                  AiAssistantPresentationView(
+                                    presentation: presentation,
+                                    sources: message.presentationSources,
+                                    evidence: publication?.evidence ?? const [],
+                                    canOpenArticle: articleScope != null,
+                                    onOpenArticle:
+                                        (source) => _openKnowledgeArticle(
+                                          source,
+                                          articleScope,
+                                        ),
+                                    canOpenDocument:
+                                        _conversationId != null &&
+                                        message.id > 0 &&
+                                        _sourceSession(
+                                              ref.read(authProvider),
+                                            ) !=
+                                            null,
+                                    onOpenDocument:
+                                        (index) => _openDocumentSource(
+                                          message.id,
+                                          index,
+                                        ),
                                   ),
-                                ],
                                 if (sourceLinks.isNotEmpty)
                                   Padding(
                                     padding: const EdgeInsets.only(top: 10),
@@ -1858,7 +1960,7 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
                                       onOpen: _openAssistantSource,
                                     ),
                                   ),
-                                if (publication != null)
+                                if (publication != null && presentation == null)
                                   _PublishedAssistantDetails(
                                     publication: publication,
                                     knowledgeSources:
@@ -1871,14 +1973,21 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
                                           articleScope,
                                         ),
                                   ),
+                                if (!isUser &&
+                                    _progressByMessageId.containsKey(
+                                      message.id,
+                                    )) ...[
+                                  const SizedBox(height: 10),
+                                  _AssistantProgressHistory(
+                                    key: PageStorageKey(message.id),
+                                    steps: _progressByMessageId[message.id]!,
+                                  ),
+                                ],
                                 if (reportArtifacts.isNotEmpty)
                                   ...reportArtifacts.map(
                                     (artifact) => Padding(
                                       padding: EdgeInsets.only(
-                                        top:
-                                            message.content.trim().isEmpty
-                                                ? 0
-                                                : 12,
+                                        top: answer.isEmpty ? 0 : 12,
                                       ),
                                       child: _ReportArtifactCard(
                                         artifact: artifact,
@@ -1892,7 +2001,7 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
                                     (action) => Padding(
                                       padding: EdgeInsets.only(
                                         top:
-                                            message.content.trim().isEmpty &&
+                                            answer.isEmpty &&
                                                     reportArtifacts.isEmpty
                                                 ? 0
                                                 : 12,
