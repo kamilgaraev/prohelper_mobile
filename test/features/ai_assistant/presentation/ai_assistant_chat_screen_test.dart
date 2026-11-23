@@ -141,7 +141,7 @@ void main() {
     expect(find.text('Внутренний текст'), findsNothing);
   });
 
-  testWidgets('renders v1 answer, selected blocks, and one entry per source', (
+  testWidgets('renders v1 limitations, selected blocks, and one source entry', (
     tester,
   ) async {
     const source = {
@@ -157,6 +157,17 @@ void main() {
           'role': 'assistant',
           'content': 'Сроки найдены.',
           'source_refs': [null, source, source],
+          'metadata': {
+            'contract_version': 1,
+            'outcome': 'ambiguous',
+            'coverage': {'status': 'partial'},
+            'evidence': [
+              {'source_ref': source},
+            ],
+            'ui_actions': [
+              {'type': 'reveal_source', 'label': 'Показать работу'},
+            ],
+          },
           'presentation': {
             'version': 1,
             'blocks': [
@@ -239,21 +250,35 @@ void main() {
     await tester.pumpAndSettle();
 
     final answer = find.text('Сроки найдены.');
+    final coverage = find.text('Проверена часть доступных данных.');
     final facts = find.text('2026-11-24');
     final listItem = find.text('Монтаж');
     final tableValue = find.text('1200,0100 RUB (с НДС)');
     final sourceLabel = find.text('[1] Рабочий график');
-    for (final element in [answer, facts, listItem, tableValue, sourceLabel]) {
+    for (final element in [
+      answer,
+      coverage,
+      facts,
+      listItem,
+      tableValue,
+      sourceLabel,
+    ]) {
       expect(element, findsOneWidget);
     }
     for (final (top, bottom) in [
-      (answer, facts),
+      (answer, coverage),
+      (coverage, facts),
       (facts, listItem),
       (listItem, tableValue),
       (tableValue, sourceLabel),
     ]) {
       expect(tester.getTopLeft(top).dy, lessThan(tester.getTopLeft(bottom).dy));
     }
+    expect(find.text('Найдено несколько совпадений.'), findsOneWidget);
+    expect(find.text('Показать работу'), findsOneWidget);
+    expect(find.text('Эти действия недоступны в приложении.'), findsOneWidget);
+    expect(find.text('Источники'), findsOneWidget);
+    expect(find.text('Рабочий график'), findsNothing);
     expect(find.text('Блок будущей версии'), findsNothing);
     expect(find.text('Неверная ссылка'), findsNothing);
     expect(find.byType(DataTable), findsOneWidget);

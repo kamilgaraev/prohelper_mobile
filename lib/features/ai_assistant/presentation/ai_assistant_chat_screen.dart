@@ -1928,6 +1928,21 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
                                       context,
                                     ).copyWith(color: bubbleTextColor),
                                   ),
+                                if (publication != null)
+                                  _PublishedAssistantDetails(
+                                    publication: publication,
+                                    showSources: presentation == null,
+                                    knowledgeSources:
+                                        presentation == null &&
+                                                articleScope != null
+                                            ? message.knowledgeSources
+                                            : const [],
+                                    onOpenArticle:
+                                        (source) => _openKnowledgeArticle(
+                                          source,
+                                          articleScope,
+                                        ),
+                                  ),
                                 if (presentation != null)
                                   AiAssistantPresentationView(
                                     presentation: presentation,
@@ -1959,19 +1974,6 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
                                       evidence: sourceLinks,
                                       onOpen: _openAssistantSource,
                                     ),
-                                  ),
-                                if (publication != null && presentation == null)
-                                  _PublishedAssistantDetails(
-                                    publication: publication,
-                                    knowledgeSources:
-                                        articleScope == null
-                                            ? const []
-                                            : message.knowledgeSources,
-                                    onOpenArticle:
-                                        (source) => _openKnowledgeArticle(
-                                          source,
-                                          articleScope,
-                                        ),
                                   ),
                                 if (!isUser &&
                                     _progressByMessageId.containsKey(
@@ -2193,11 +2195,13 @@ Color _readableForeground(Color background, Color preferred) {
 class _PublishedAssistantDetails extends StatelessWidget {
   const _PublishedAssistantDetails({
     required this.publication,
+    required this.showSources,
     required this.knowledgeSources,
     required this.onOpenArticle,
   });
 
   final AiAssistantPublication publication;
+  final bool showSources;
   final List<AiAssistantKnowledgeSource> knowledgeSources;
   final ValueChanged<AiAssistantKnowledgeSource> onOpenArticle;
 
@@ -2212,7 +2216,9 @@ class _PublishedAssistantDetails extends StatelessWidget {
       _ => null,
     };
     final evidenceTitles =
-        publication.evidence.map((item) => item.title).toSet();
+        showSources
+            ? publication.evidence.map((item) => item.title).toSet()
+            : const <String>{};
     final unavailable =
         publication.uiActions.map((action) => action.label).toSet();
     if (detail == null &&
