@@ -141,6 +141,261 @@ void main() {
     expect(find.text('Внутренний текст'), findsNothing);
   });
 
+  testWidgets('renders v1 limitations, selected blocks, and one source entry', (
+    tester,
+  ) async {
+    const source = {
+      'entity_id': 7,
+      'entity_type': 'schedule_task',
+      'content_scope': 'structured',
+      'display_label': 'Рабочий график',
+    };
+    final repository = _AiAssistantRepository(
+      messages: [
+        AiMessageModel.fromJson({
+          'id': 41,
+          'role': 'assistant',
+          'content': 'Сроки найдены.',
+          'source_refs': [null, source, source],
+          'metadata': {
+            'contract_version': 1,
+            'outcome': 'ambiguous',
+            'coverage': {'status': 'partial'},
+            'evidence': [
+              {'source_ref': source},
+            ],
+            'ui_actions': [
+              {'type': 'reveal_source', 'label': 'Показать работу'},
+            ],
+          },
+          'presentation': {
+            'version': 1,
+            'blocks': [
+              {
+                'id': 'lead',
+                'type': 'text',
+                'source_refs': [1],
+                'data': {'text': 'Сроки найдены.'},
+              },
+              {
+                'id': 'invalid',
+                'type': 'list',
+                'source_refs': [3],
+                'data': {
+                  'items': [
+                    {'id': 'invalid', 'title': 'Неверная ссылка'},
+                  ],
+                },
+              },
+              {
+                'id': 'future-block',
+                'type': 'future-block',
+                'source_refs': [1],
+                'data': {'text': 'Блок будущей версии'},
+              },
+              {
+                'id': 'facts',
+                'type': 'facts',
+                'source_refs': [1],
+                'data': {
+                  'items': [
+                    {
+                      'key': 'start',
+                      'label': 'Дата начала',
+                      'value': {'kind': 'date', 'value': '2026-11-24'},
+                    },
+                  ],
+                },
+              },
+              {
+                'id': 'list',
+                'type': 'list',
+                'source_refs': [2],
+                'data': {
+                  'items': [
+                    {'id': 'work', 'title': 'Монтаж', 'status': 'В работе'},
+                  ],
+                },
+              },
+              {
+                'id': 'table',
+                'type': 'table',
+                'source_refs': [1, 2],
+                'data': {
+                  'columns': [
+                    {'key': 'price', 'label': 'По смете'},
+                  ],
+                  'rows': [
+                    {
+                      'id': 'row',
+                      'cells': {
+                        'price': {
+                          'kind': 'decimal',
+                          'value': '1200.0100',
+                          'currency': 'RUB',
+                          'vat': 'included',
+                        },
+                      },
+                      'source_refs': [2],
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+        }),
+      ],
+    );
+    await tester.pumpWidget(buildScreen(repository, theme: ThemeData.dark()));
+    await tester.pumpAndSettle();
+
+    final answer = find.text('Сроки найдены.');
+    final coverage = find.text('Проверена часть доступных данных.');
+    final facts = find.text('2026-11-24');
+    final listItem = find.text('Монтаж');
+    final tableValue = find.text('1200,0100 RUB (с НДС)');
+    final sourceLabel = find.text('[1] Рабочий график');
+    for (final element in [
+      answer,
+      coverage,
+      facts,
+      listItem,
+      tableValue,
+      sourceLabel,
+    ]) {
+      expect(element, findsOneWidget);
+    }
+    for (final (top, bottom) in [
+      (answer, coverage),
+      (coverage, facts),
+      (facts, listItem),
+      (listItem, tableValue),
+      (tableValue, sourceLabel),
+    ]) {
+      expect(tester.getTopLeft(top).dy, lessThan(tester.getTopLeft(bottom).dy));
+    }
+    expect(find.text('Найдено несколько совпадений.'), findsOneWidget);
+    expect(find.text('Показать работу'), findsOneWidget);
+    expect(find.text('Эти действия недоступны в приложении.'), findsOneWidget);
+    expect(find.text('Источники'), findsOneWidget);
+    expect(find.text('Рабочий график'), findsNothing);
+    expect(find.text('Блок будущей версии'), findsNothing);
+    expect(find.text('Неверная ссылка'), findsNothing);
+    expect(find.byType(DataTable), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('checks document access again when reopening its source', (
+    tester,
+  ) async {
+    const message = <String, dynamic>{
+      'id': 41,
+      'role': 'assistant',
+      'content': 'Условие найдено.',
+      'metadata': {
+        'decision_contract': 3,
+        'source_refs': [
+          null,
+          {
+            'entity_type': 'assistant_document',
+            'entity_id': 17,
+            'preview_kind': 'source_chunk_preview',
+          },
+        ],
+        'presentation': {
+          'version': 1,
+          'blocks': [
+            {
+              'id': 'sources',
+              'type': 'sources',
+              'source_refs': [1],
+              'data': <String, dynamic>{},
+            },
+          ],
+        },
+      },
+    };
+    final dio = Dio(BaseOptions(baseUrl: 'https://mobile.example.test'));
+    var reads = 0;
+    dio.interceptors.add(
+      InterceptorsWrapper(
+        onRequest: (request, handler) {
+          if (request.path == '/ai-assistant/conversations/1/history') {
+            handler.resolve(
+              Response(
+                requestOptions: request,
+                statusCode: 200,
+                data: {
+                  'success': true,
+                  'data': [message],
+                },
+              ),
+            );
+            return;
+          }
+          expect(
+            request.path,
+            '/ai-assistant/conversations/1/messages/41/sources/1',
+          );
+          reads += 1;
+          final response = Response(
+            requestOptions: request,
+            statusCode: reads == 1 ? 200 : 403,
+            data: {
+              'success': reads == 1,
+              'data': {
+                'message_id': '41',
+                'source_index': 1,
+                'kind': 'source_chunk_preview',
+                'title': 'Протокол',
+                'content': 'Подтверждённый фрагмент.',
+              },
+            },
+          );
+          if (reads == 1) {
+            handler.resolve(response);
+          } else {
+            handler.reject(
+              DioException.badResponse(
+                statusCode: 403,
+                requestOptions: request,
+                response: response,
+              ),
+            );
+          }
+        },
+      ),
+    );
+    final repository = _AiAssistantRepository(
+      dio: dio,
+      messages: [AiMessageModel.fromJson(message)],
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          aiAssistantRepositoryProvider.overrideWithValue(repository),
+          authProvider.overrideWith((_) => _OrganizationAuthNotifier(12)),
+        ],
+        child: const MaterialApp(
+          home: AiAssistantChatScreen(conversationId: 1),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final source = find.text('[1] Документ №17');
+    await tester.tap(source);
+    await tester.pumpAndSettle();
+    expect(find.text('Подтверждённый фрагмент.'), findsOneWidget);
+
+    await tester.tapAt(const Offset(20, 20));
+    await tester.pumpAndSettle();
+    await tester.tap(source);
+    await tester.pumpAndSettle();
+    expect(reads, 2);
+    expect(find.text('Фрагмент источника недоступен.'), findsOneWidget);
+    expect(find.text('Подтверждённый фрагмент.'), findsNothing);
+  });
+
   testWidgets('shows action preview before execution', (tester) async {
     final repository = _AiAssistantRepository(
       messages: [
@@ -161,7 +416,9 @@ void main() {
     expect(find.text('Выполнить'), findsOneWidget);
   });
 
-  testWidgets('does not execute action without confirmation', (tester) async {
+  testWidgets('closing preview does not execute or cancel the action', (
+    tester,
+  ) async {
     final repository = _AiAssistantRepository(
       messages: [
         _assistantMessage(actions: [_allowedAction()]),
@@ -176,11 +433,72 @@ void main() {
 
     expect(repository.executeCalls, 0);
 
-    await tester.tap(find.text('Отменить'));
+    await tester.tap(find.text('Закрыть'));
     await tester.pumpAndSettle();
 
     expect(repository.executeCalls, 0);
+    expect(repository.cancelCalls, 0);
     expect(find.text('Проверить действие'), findsNothing);
+  });
+
+  testWidgets('keeps preview until server confirms action cancellation', (
+    tester,
+  ) async {
+    final first = Completer<void>();
+    final second = Completer<void>();
+    final outcomes = [first.future, second.future].iterator;
+    final repository = _AiAssistantRepository(
+      messages: [
+        _assistantMessage(actions: [_allowedAction()]),
+      ],
+      onCancelAction: () {
+        outcomes.moveNext();
+        return outcomes.current;
+      },
+    );
+    await tester.pumpWidget(buildScreen(repository));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Подготовить'));
+    await tester.pumpAndSettle();
+
+    final cancel = find.text('Отменить действие');
+    const error = 'Отмена недоступна. Можно закрыть подготовку.';
+    await tester.tap(cancel);
+    await tester.pump();
+    expect(repository.cancelCalls, 1);
+    expect(find.text('Проверить действие'), findsOneWidget);
+    expect(find.text('Действие отменено.'), findsNothing);
+    for (final label in ['Закрыть', 'Отменяем…']) {
+      final button = tester.widget<TextButton>(
+        find.widgetWithText(TextButton, label),
+      );
+      expect(button.onPressed, isNull);
+    }
+    expect(
+      tester
+          .widget<FilledButton>(find.widgetWithText(FilledButton, 'Выполнить'))
+          .onPressed,
+      isNull,
+    );
+
+    first.completeError(const ApiException(error, statusCode: 404));
+    await tester.pumpAndSettle();
+    expect(find.text(error), findsOneWidget);
+    expect(find.text('Проверить действие'), findsOneWidget);
+    expect(
+      tester
+          .widget<TextButton>(find.widgetWithText(TextButton, 'Закрыть'))
+          .onPressed,
+      isNotNull,
+    );
+    await tester.tap(cancel);
+    await tester.pump();
+    expect(repository.cancelCalls, 2);
+    second.complete();
+    await tester.pumpAndSettle();
+    expect(find.text('Проверить действие'), findsNothing);
+    expect(find.text(error), findsNothing);
+    expect(repository.executeCalls, 0);
   });
 
   testWidgets('shows permission state for unavailable action', (tester) async {
@@ -281,17 +599,41 @@ void main() {
           result: AiAssistantChatResult(
             requestId: firstId,
             conversationId: 1,
-            message: const AiMessageModel(
-              id: 10,
-              role: 'assistant',
-              content: 'Recovered',
-              createdAt: null,
-            ),
+            message: AiMessageModel.fromJson({
+              'id': 10,
+              'role': 'assistant',
+              'content': 'Recovered',
+              'metadata': {
+                'presentation': {
+                  'version': 1,
+                  'blocks': [
+                    {
+                      'id': 'recovered',
+                      'type': 'facts',
+                      'source_refs': [],
+                      'data': {
+                        'items': [
+                          {
+                            'key': 'status',
+                            'label': 'Статус',
+                            'value': {
+                              'kind': 'text',
+                              'value': 'Данные получены',
+                            },
+                          },
+                        ],
+                      },
+                    },
+                  ],
+                },
+              },
+            }),
           ),
         ),
       );
       await tester.pumpAndSettle();
       expect(find.text('Recovered'), findsOneWidget);
+      expect(find.text('Данные получены'), findsOneWidget);
     },
   );
 
@@ -1701,11 +2043,17 @@ Widget _knowledgeArticleChat({
 }
 
 class _AiAssistantRepository extends AiAssistantRepository {
-  _AiAssistantRepository({required this.messages}) : super(Dio());
+  _AiAssistantRepository({
+    required this.messages,
+    Dio? dio,
+    this.onCancelAction,
+  }) : super(dio ?? Dio());
 
   final List<AiMessageModel> messages;
+  final Future<void> Function()? onCancelAction;
   int previewCalls = 0;
   int executeCalls = 0;
+  int cancelCalls = 0;
 
   @override
   Future<AiConversationDetailsModel> fetchConversation(int id) async {
@@ -1748,6 +2096,15 @@ class _AiAssistantRepository extends AiAssistantRepository {
     executeCalls += 1;
 
     return const AiActionExecutionModel(messageText: 'Действие выполнено.');
+  }
+
+  @override
+  Future<void> cancelAction({
+    required AiActionPreviewModel preview,
+    required int conversationId,
+  }) async {
+    cancelCalls += 1;
+    await onCancelAction?.call();
   }
 }
 

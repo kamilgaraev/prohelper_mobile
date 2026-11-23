@@ -335,7 +335,7 @@ void main() {
   );
 
   test(
-    'quote and chat bind identical UUID, profile, context and allow_actions',
+    'quote and chat bind identical UUID, options and renderer capabilities',
     () async {
       final requests = <RequestOptions>[];
       final dio = Dio(BaseOptions(baseUrl: 'https://api.example.test'));
@@ -386,6 +386,8 @@ void main() {
             ..remove('async');
       expect(chat, requests[0].data);
       expect(chat['contract_version'], 1);
+      expect(chat['renderer_version'], 1);
+      expect(chat['supported_blocks'], ['facts', 'list', 'table']);
       expect((requests[1].data as Map)['async'], true);
       expect(result.runStatus, 'completed');
       expect(result.result!.creditUsage!.actualCharge, '0.50');
@@ -508,6 +510,32 @@ void main() {
           'outcome': 'ok',
           'coverage': {'status': 'found'},
           'billing': {'charged_minor': 23},
+          'source_refs': [
+            {
+              'entity_type': 'schedule_task',
+              'content_scope': 'structured',
+              'display_label': 'График корпуса',
+            },
+          ],
+          'presentation': {
+            'version': 1,
+            'blocks': [
+              {
+                'id': 'dates',
+                'type': 'facts',
+                'source_refs': [0],
+                'data': {
+                  'items': [
+                    {
+                      'key': 'end',
+                      'label': 'Завершение',
+                      'value': {'kind': 'date', 'value': '2026-11-30'},
+                    },
+                  ],
+                },
+              },
+            ],
+          },
           'message': {'id': 17, 'role': 'assistant', 'content': 'Готово'},
           'progress': [
             {'id': 31, 'code': 'estimates', 'state': 'completed'},
@@ -531,6 +559,11 @@ void main() {
     final completed = await repository.fetchChatRequest('request-1');
     expect(completed.result!.message!.content, 'Готово');
     expect(completed.result!.message!.publication?.coverageStatus, 'found');
+    expect(completed.result!.message!.presentation?.blocks.single.id, 'dates');
+    expect(
+      completed.result!.message!.presentationSources[0]?.label,
+      'График корпуса',
+    );
     expect(completed.result!.publication?.chargedMinor, 23);
     expect(completed.progress.map((step) => step.code), [
       'estimates',
@@ -696,6 +729,51 @@ void main() {
     });
   });
 
+  test('cancels by preview token and requires a cancelled outcome', () async {
+    final requests = <RequestOptions>[];
+    final dio = Dio();
+    var status = 'executed';
+    var statusCode = 200;
+    dio.httpClientAdapter = _JsonAdapter((request) {
+      requests.add(request);
+      return _responseData({'status': status});
+    }, statusCode: (_) => statusCode);
+    const actionId = 'fcfc7e05-7fde-401d-a979-30d649af529b';
+    final token = List.filled(64, 'x').join();
+    final preview = AiActionPreviewModel.fromJson({
+      'action': {
+        'id': actionId,
+        'tool_name': 'create_task',
+        'arguments': {'project_id': 2},
+      },
+      'preview_token': token,
+    });
+    final repository = AiAssistantRepository(dio);
+    Future<void> cancel() =>
+        repository.cancelAction(preview: preview, conversationId: 12);
+
+    await expectLater(cancel(), throwsA(isA<ApiException>()));
+    statusCode = 404;
+    await expectLater(
+      cancel(),
+      throwsA(
+        isA<ApiException>().having((error) => error.statusCode, 'code', 404),
+      ),
+    );
+    statusCode = 200;
+    status = 'cancelled';
+    await cancel();
+    for (final request in requests) {
+      expect(request.method, 'POST');
+      expect(request.path, '/ai-assistant/actions/cancel');
+      expect(request.data, {
+        'conversation_id': 12,
+        'action': {'id': actionId, 'preview_token': token},
+      });
+    }
+    expect(requests, hasLength(3));
+  });
+
   test(
     'memory mutations require confirmation and purchase uses commercial pack',
     () async {
@@ -814,6 +892,47 @@ void main() {
       isNull,
     );
   });
+
+  test(
+    'document fragment uses its ordinal and verifies response identity',
+    () async {
+      final dio = Dio(BaseOptions(baseUrl: 'https://api.example.test'));
+      var expectedMessage = '17';
+      dio.httpClientAdapter = _JsonAdapter((request) {
+        expect(request.method, 'GET');
+        expect(
+          request.path,
+          '/ai-assistant/conversations/12/messages/17/sources/2',
+        );
+        return _responseData({
+          'message_id': expectedMessage,
+          'source_index': 2,
+          'kind': 'source_chunk_preview',
+          'title': 'Протокол',
+          'content': 'Условие из протокола.',
+          'content_range': {'truncated': true},
+        });
+      });
+      final repository = AiAssistantRepository(dio);
+      final preview = await repository.fetchSourcePreview(
+        conversationId: 12,
+        messageId: 17,
+        sourceIndex: 2,
+      );
+      expect(preview.content, 'Условие из протокола.');
+      expect(preview.truncated, isTrue);
+
+      expectedMessage = '18';
+      await expectLater(
+        repository.fetchSourcePreview(
+          conversationId: 12,
+          messageId: 17,
+          sourceIndex: 2,
+        ),
+        throwsA(isA<ApiException>()),
+      );
+    },
+  );
 }
 
 class _MutableSecureStorage extends SecureStorageService {

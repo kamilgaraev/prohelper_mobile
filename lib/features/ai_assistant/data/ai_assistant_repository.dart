@@ -10,6 +10,7 @@ import '../../../core/network/dio_client.dart';
 import '../../../core/network/mobile_api_response.dart';
 import 'ai_assistant_models.dart';
 import 'ai_assistant_document_models.dart';
+import 'ai_assistant_presentation.dart';
 
 final aiAssistantRepositoryProvider = Provider<AiAssistantRepository>((ref) {
   return AiAssistantRepository(ref.read(dioProvider));
@@ -17,6 +18,10 @@ final aiAssistantRepositoryProvider = Provider<AiAssistantRepository>((ref) {
 
 class AiAssistantRepository {
   static const _turnContractVersion = 1;
+  static const _rendererCapabilities = {
+    'renderer_version': AiAssistantPresentation.version,
+    'supported_blocks': AiAssistantPresentation.supportedBlocks,
+  };
 
   AiAssistantRepository(
     this._dio, {
@@ -218,6 +223,7 @@ class AiAssistantRepository {
         '/ai-assistant/chat',
         data: {
           'contract_version': _turnContractVersion,
+          ..._rendererCapabilities,
           'message': message,
           'request_id': requestId,
           'async': true,
@@ -267,6 +273,7 @@ class AiAssistantRepository {
       '/ai-assistant/credits/quote',
       data: {
         'contract_version': _turnContractVersion,
+        ..._rendererCapabilities,
         'message': message,
         'request_id': requestId,
         'profile': profile,
@@ -285,6 +292,29 @@ class AiAssistantRepository {
       throw const ApiException('Оценка расхода недоступна или устарела.');
     }
     return quote;
+  }
+
+  Future<AiAssistantSourcePreview> fetchSourcePreview({
+    required int conversationId,
+    required int messageId,
+    required int sourceIndex,
+  }) async {
+    const unavailable = ApiException('Фрагмент источника недоступен.');
+    try {
+      final response = await _dio.get(
+        '/ai-assistant/conversations/$conversationId/messages/$messageId/sources/$sourceIndex',
+      );
+      final parsed = MobileApiResponse.map(response.data);
+      if (response.statusCode != 200 || !parsed.success) throw unavailable;
+      return AiAssistantSourcePreview.fromJson(
+            parsed.data,
+            messageId: messageId,
+            sourceIndex: sourceIndex,
+          ) ??
+          (throw unavailable);
+    } on DioException {
+      throw unavailable;
+    }
   }
 
   Future<AiAssistantPage<Map<String, dynamic>>> fetchCreditHistory({
@@ -449,6 +479,44 @@ class AiAssistantRepository {
       }
 
       throw const ApiException('Не удалось выполнить действие ассистента.');
+    }
+  }
+
+  Future<void> cancelAction({
+    required AiActionPreviewModel preview,
+    required int conversationId,
+  }) async {
+    const failure = 'Не удалось отменить действие.';
+    final actionId = preview.action.id;
+    if (conversationId < 1 ||
+        actionId == null ||
+        actionId.trim().isEmpty ||
+        preview.previewToken.trim().isEmpty) {
+      throw const ApiException(failure);
+    }
+
+    try {
+      final response = await _dio.post(
+        '/ai-assistant/actions/cancel',
+        data: {
+          'conversation_id': conversationId,
+          'action': {'id': actionId, 'preview_token': preview.previewToken},
+        },
+      );
+      final parsed = MobileApiResponse.map(response.data);
+      if (response.statusCode != 200 ||
+          !parsed.success ||
+          parsed.data['status'] != 'cancelled') {
+        throw const ApiException(failure);
+      }
+    } on DioException catch (error) {
+      if (error.response?.statusCode == 404) {
+        throw const ApiException(
+          'Отмена недоступна. Можно закрыть подготовку.',
+          statusCode: 404,
+        );
+      }
+      throw ApiException.fromDio(error, fallbackMessage: failure);
     }
   }
 

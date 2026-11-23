@@ -32,6 +32,7 @@ import 'ai_assistant_memory_screen.dart';
 import 'ai_assistant_sharing_screen.dart';
 import 'ai_assistant_credits_screen.dart';
 import 'ai_assistant_documents_screen.dart';
+import 'ai_assistant_presentation_view.dart';
 
 const _progressLabels = <String, List<String>>{
   'rag_search': [
@@ -209,6 +210,8 @@ class AiAssistantChatScreen extends ConsumerStatefulWidget {
       _AiAssistantChatScreenState();
 }
 
+enum _ActionOperation { execute, cancel }
+
 class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
   static const _sourceBaseUrl = String.fromEnvironment(
     'ASSISTANT_SOURCE_BASE_URL',
@@ -221,7 +224,7 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
   bool _isLoading = true;
   bool _isSending = false;
   bool _isPreviewLoading = false;
-  bool _isExecutingAction = false;
+  _ActionOperation? _actionOperation;
   String? _error;
   String? _actionError;
   int? _conversationId;
@@ -260,6 +263,9 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
   String? _imageError;
   int _draftRevision = 0;
   int _uploadRevision = 0;
+  bool _isOpeningSource = false;
+
+  bool get _isActionBusy => _actionOperation != null;
 
   @override
   void initState() {
@@ -294,6 +300,10 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
       _imageUploadProgress = null;
       _imageError = null;
       _messages = const [];
+      _activePreview = null;
+      _isPreviewLoading = false;
+      _actionOperation = null;
+      _actionError = null;
       _progressSteps = const [];
       _progressByMessageId.clear();
       _failedRequest = null;
@@ -360,6 +370,8 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
       _error = null;
       _actionError = null;
       _activePreview = null;
+      _isPreviewLoading = false;
+      _actionOperation = null;
     });
 
     try {
@@ -811,7 +823,7 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
         _isLoading ||
         _isSending ||
         _isQuoting ||
-        _isExecutingAction ||
+        _isActionBusy ||
         _activeRequestId != null ||
         _failedRequest != null ||
         !_canWrite) {
@@ -1190,7 +1202,7 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
       _progress = null;
       _isLoading = false;
       _isPreviewLoading = false;
-      _isExecutingAction = false;
+      _actionOperation = null;
       _canWrite = true;
       _canManageParticipants = false;
       _nextHistoryPage = null;
@@ -1228,7 +1240,7 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
     if (!_canWrite) return;
     final revision = _requestRevision;
     final conversation = _conversationId;
-    if (_isPreviewLoading || _isExecutingAction || !action.allowed) {
+    if (_isPreviewLoading || _isActionBusy || !action.allowed) {
       return;
     }
 
@@ -1273,12 +1285,12 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
     final revision = _requestRevision;
     final conversation = _conversationId;
     final preview = _activePreview;
-    if (preview == null || _isExecutingAction || !preview.executable) {
+    if (preview == null || _isActionBusy || !preview.executable) {
       return;
     }
 
     setState(() {
-      _isExecutingAction = true;
+      _actionOperation = _ActionOperation.execute;
       _actionError = null;
     });
 
@@ -1295,7 +1307,7 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
 
       setState(() {
         _activePreview = null;
-        _isExecutingAction = false;
+        _actionOperation = null;
         if (_conversationId == null && result.message != null) {
           _messages = [..._messages, result.message!];
         }
@@ -1315,18 +1327,58 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
 
       setState(() {
         _actionError = _resolveError(error);
-        _isExecutingAction = false;
+        _actionOperation = null;
       });
     }
 
     _scrollToBottom();
   }
 
-  void _rejectActionPreview() {
+  void _closeActionPreview() {
+    if (_isActionBusy) return;
     setState(() {
       _activePreview = null;
       _actionError = null;
     });
+  }
+
+  Future<void> _cancelActivePreview() async {
+    final conversation = _conversationId;
+    final preview = _activePreview;
+    if (conversation == null ||
+        preview == null ||
+        _isActionBusy ||
+        !_canWrite) {
+      return;
+    }
+    final scope = _conversationScopeRevision;
+    bool stillActive() =>
+        mounted &&
+        scope == _conversationScopeRevision &&
+        identical(preview, _activePreview) &&
+        _actionOperation == _ActionOperation.cancel;
+
+    setState(() {
+      _actionOperation = _ActionOperation.cancel;
+      _actionError = null;
+    });
+    try {
+      await ref
+          .read(aiAssistantRepositoryProvider)
+          .cancelAction(preview: preview, conversationId: conversation);
+      if (!stillActive()) return;
+      setState(() {
+        _actionOperation = null;
+        _activePreview = null;
+      });
+      _showSnackBar('Действие отменено.');
+    } catch (error) {
+      if (!stillActive()) return;
+      setState(() {
+        _actionOperation = null;
+        _actionError = _resolveError(error);
+      });
+    }
   }
 
   String _resolveError(Object error) {
@@ -1437,6 +1489,85 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
       ),
     );
   }
+
+  Future<void> _openDocumentSource(int messageId, int sourceIndex) async {
+    final conversationId = _conversationId;
+    final session = _sourceSession(ref.read(authProvider));
+    if (conversationId == null || session == null || _isOpeningSource) return;
+
+    _isOpeningSource = true;
+    try {
+      final preview = await ref
+          .read(aiAssistantRepositoryProvider)
+          .fetchSourcePreview(
+            conversationId: conversationId,
+            messageId: messageId,
+            sourceIndex: sourceIndex,
+          );
+      if (!mounted ||
+          _conversationId != conversationId ||
+          _sourceSession(ref.read(authProvider)) != session) {
+        return;
+      }
+      var sourceSessionChanged = false;
+      await showModalBottomSheet<void>(
+        context: context,
+        showDragHandle: true,
+        useSafeArea: true,
+        builder:
+            (_) => Consumer(
+              builder: (context, ref, _) {
+                ref.listen(authProvider.select(_sourceSession), (_, current) {
+                  if (current != session) sourceSessionChanged = true;
+                });
+                final isAuthorized =
+                    ref.watch(authProvider.select(_sourceSession)) == session &&
+                    !sourceSessionChanged;
+                return SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (isAuthorized) ...[
+                        Text(
+                          preview.title,
+                          style: Theme.of(context).textTheme.titleSmall,
+                        ),
+                        const SizedBox(height: 12),
+                        SelectableText(preview.content),
+                        if (preview.truncated)
+                          const Text('Показана часть фрагмента.'),
+                      ] else
+                        const Text('Фрагмент источника недоступен.'),
+                    ],
+                  ),
+                );
+              },
+            ),
+      );
+    } on ApiException catch (error) {
+      if (mounted &&
+          _conversationId == conversationId &&
+          _sourceSession(ref.read(authProvider)) == session) {
+        _showSnackBar(_resolveError(error));
+      }
+    } finally {
+      _isOpeningSource = false;
+    }
+  }
+
+  static Object? _sourceSession(AuthState state) =>
+      state is AuthAuthenticated &&
+              !state.needsReauthentication &&
+              state.user.serverId > 0 &&
+              (state.user.currentOrganizationId ?? 0) > 0
+          ? (
+            state.user.serverId,
+            state.user.currentOrganizationId,
+            state.sessionIdentity?.sessionId,
+          )
+          : null;
 
   Future<void> _openAssistantSource(AiAssistantEvidenceModel evidence) async {
     final target = _sourceTarget(evidence);
@@ -1754,6 +1885,11 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
                         final message = _messages[index];
                         final isUser = message.isUser;
                         final publication = isUser ? null : message.publication;
+                        final presentation = message.presentation;
+                        final answer =
+                            message.content.trim().isNotEmpty
+                                ? message.content
+                                : presentation?.leadingText ?? '';
                         final exportTask = publication?.exportTask;
                         final reportArtifacts =
                             isUser
@@ -1779,7 +1915,9 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
                                     )
                                     .toList(growable: false);
                         final sourceLinks =
-                            isUser || publication != null
+                            isUser ||
+                                    publication != null ||
+                                    presentation != null
                                 ? const <AiAssistantEvidenceModel>[]
                                 : message.evidence
                                     .where(_canOpenSource)
@@ -1833,12 +1971,59 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
                                           .toList(growable: false),
                                     ),
                                   ),
-                                if (message.content.trim().isNotEmpty)
+                                if (answer.isNotEmpty)
                                   Text(
-                                    message.content,
+                                    answer,
                                     style: AppTypography.bodyMedium(
                                       context,
                                     ).copyWith(color: bubbleTextColor),
+                                  ),
+                                if (publication != null)
+                                  _PublishedAssistantDetails(
+                                    publication: publication,
+                                    showSources: presentation == null,
+                                    knowledgeSources:
+                                        presentation == null &&
+                                                articleScope != null
+                                            ? message.knowledgeSources
+                                            : const [],
+                                    onOpenArticle:
+                                        (source) => _openKnowledgeArticle(
+                                          source,
+                                          articleScope,
+                                        ),
+                                  ),
+                                if (presentation != null)
+                                  AiAssistantPresentationView(
+                                    presentation: presentation,
+                                    sources: message.presentationSources,
+                                    evidence: publication?.evidence ?? const [],
+                                    canOpenArticle: articleScope != null,
+                                    onOpenArticle:
+                                        (source) => _openKnowledgeArticle(
+                                          source,
+                                          articleScope,
+                                        ),
+                                    canOpenDocument:
+                                        _conversationId != null &&
+                                        message.id > 0 &&
+                                        _sourceSession(
+                                              ref.read(authProvider),
+                                            ) !=
+                                            null,
+                                    onOpenDocument:
+                                        (index) => _openDocumentSource(
+                                          message.id,
+                                          index,
+                                        ),
+                                  ),
+                                if (sourceLinks.isNotEmpty)
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 10),
+                                    child: _MessageLinks(
+                                      evidence: sourceLinks,
+                                      onOpen: _openAssistantSource,
+                                    ),
                                   ),
                                 if (!isUser &&
                                     _progressByMessageId.containsKey(
@@ -1850,35 +2035,11 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
                                     steps: _progressByMessageId[message.id]!,
                                   ),
                                 ],
-                                if (sourceLinks.isNotEmpty)
-                                  Padding(
-                                    padding: const EdgeInsets.only(top: 10),
-                                    child: _MessageLinks(
-                                      evidence: sourceLinks,
-                                      onOpen: _openAssistantSource,
-                                    ),
-                                  ),
-                                if (publication != null)
-                                  _PublishedAssistantDetails(
-                                    publication: publication,
-                                    knowledgeSources:
-                                        articleScope == null
-                                            ? const []
-                                            : message.knowledgeSources,
-                                    onOpenArticle:
-                                        (source) => _openKnowledgeArticle(
-                                          source,
-                                          articleScope,
-                                        ),
-                                  ),
                                 if (reportArtifacts.isNotEmpty)
                                   ...reportArtifacts.map(
                                     (artifact) => Padding(
                                       padding: EdgeInsets.only(
-                                        top:
-                                            message.content.trim().isEmpty
-                                                ? 0
-                                                : 12,
+                                        top: answer.isEmpty ? 0 : 12,
                                       ),
                                       child: _ReportArtifactCard(
                                         artifact: artifact,
@@ -1892,7 +2053,7 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
                                     (action) => Padding(
                                       padding: EdgeInsets.only(
                                         top:
-                                            message.content.trim().isEmpty &&
+                                            answer.isEmpty &&
                                                     reportArtifacts.isEmpty
                                                 ? 0
                                                 : 12,
@@ -1901,7 +2062,7 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
                                         action: action,
                                         isBusy:
                                             _isPreviewLoading ||
-                                            _isExecutingAction ||
+                                            _isActionBusy ||
                                             _isSending ||
                                             _isQuoting ||
                                             _activeRequestId != null,
@@ -1926,9 +2087,15 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
               child: _ActionPreviewPanel(
                 preview: _activePreview!,
-                isExecuting: _isExecutingAction,
+                operation: _actionOperation,
                 onExecute: _executeActivePreview,
-                onCancel: _rejectActionPreview,
+                onClose: _closeActionPreview,
+                onCancel:
+                    _conversationId != null &&
+                            _activePreview!.action.id != null &&
+                            _canWrite
+                        ? _cancelActivePreview
+                        : null,
               ),
             ),
           if (!_canWrite)
@@ -2036,6 +2203,7 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
                           onPressed:
                               _isSending ||
                                       _isQuoting ||
+                                      _isActionBusy ||
                                       _isUploadingImage ||
                                       _activeRequestId != null
                                   ? null
@@ -2084,11 +2252,13 @@ Color _readableForeground(Color background, Color preferred) {
 class _PublishedAssistantDetails extends StatelessWidget {
   const _PublishedAssistantDetails({
     required this.publication,
+    required this.showSources,
     required this.knowledgeSources,
     required this.onOpenArticle,
   });
 
   final AiAssistantPublication publication;
+  final bool showSources;
   final List<AiAssistantKnowledgeSource> knowledgeSources;
   final ValueChanged<AiAssistantKnowledgeSource> onOpenArticle;
 
@@ -2103,7 +2273,9 @@ class _PublishedAssistantDetails extends StatelessWidget {
       _ => null,
     };
     final evidenceTitles =
-        publication.evidence.map((item) => item.title).toSet();
+        showSources
+            ? publication.evidence.map((item) => item.title).toSet()
+            : const <String>{};
     final unavailable =
         publication.uiActions.map((action) => action.label).toSet();
     if (detail == null &&
@@ -2290,15 +2462,17 @@ class _AssistantActionCard extends StatelessWidget {
 class _ActionPreviewPanel extends StatelessWidget {
   const _ActionPreviewPanel({
     required this.preview,
-    required this.isExecuting,
+    required this.operation,
     required this.onExecute,
+    required this.onClose,
     required this.onCancel,
   });
 
   final AiActionPreviewModel preview;
-  final bool isExecuting;
+  final _ActionOperation? operation;
   final VoidCallback onExecute;
-  final VoidCallback onCancel;
+  final VoidCallback onClose;
+  final VoidCallback? onCancel;
 
   @override
   Widget build(BuildContext context) {
@@ -2382,18 +2556,28 @@ class _ActionPreviewPanel extends StatelessWidget {
             ),
           ],
           const SizedBox(height: 14),
-          Row(
+          Wrap(
+            spacing: 8,
+            runSpacing: 4,
             children: [
               TextButton(
-                onPressed: isExecuting ? null : onCancel,
-                child: const Text('Отменить'),
+                onPressed: operation == null ? onClose : null,
+                child: const Text('Закрыть'),
               ),
-              const Spacer(),
+              if (onCancel != null)
+                TextButton(
+                  onPressed: operation == null ? onCancel : null,
+                  child: Text(
+                    operation == _ActionOperation.cancel
+                        ? 'Отменяем…'
+                        : 'Отменить действие',
+                  ),
+                ),
               FilledButton.icon(
                 onPressed:
-                    preview.executable && !isExecuting ? onExecute : null,
+                    preview.executable && operation == null ? onExecute : null,
                 icon:
-                    isExecuting
+                    operation == _ActionOperation.execute
                         ? const SizedBox(
                           width: 16,
                           height: 16,

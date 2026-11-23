@@ -1,4 +1,5 @@
 import '../../knowledge_hub/data/knowledge_article_model.dart';
+import 'ai_assistant_presentation.dart';
 
 class AiUsageModel {
   const AiUsageModel({
@@ -109,6 +110,35 @@ class AiMessageModel {
   AiAssistantPublication? get publication =>
       AiAssistantPublication.fromJson(metadata);
 
+  AiAssistantPresentation? get presentation =>
+      role == 'assistant'
+          ? AiAssistantPresentation.fromJson(
+            metadata?['presentation'],
+            sourceCount: _asList(metadata?['source_refs']).length,
+          )
+          : null;
+
+  Map<int, AiAssistantPublishedSource> get presentationSources {
+    if (role != 'assistant') return const {};
+    final refs = _asList(metadata?['source_refs']);
+    final hasStoredLocator =
+        metadata?['source_refs_version'] == 'ordinary-publication-locator/1';
+    final decisionContract = metadata?['decision_contract'];
+    final hasDecisionContract =
+        decisionContract is int && decisionContract == 3;
+    return {
+      for (final (index, value) in refs.indexed)
+        if (AiAssistantPublishedSource.fromJson(
+              value,
+              hasStoredLocator: hasStoredLocator,
+              hasDecisionContract: hasDecisionContract,
+              canPreview: index < 32,
+            )
+            case final source?)
+          index: source,
+    };
+  }
+
   List<AiAssistantKnowledgeSource> get knowledgeSources {
     final version = metadata?['contract_version'];
     if (role != 'assistant' || version is! int || version != 1) return const [];
@@ -142,14 +172,18 @@ class AiMessageModel {
       structuredPayload?.actions ?? const <AiAssistantActionModel>[];
 
   factory AiMessageModel.fromJson(Map<String, dynamic> json) {
-    final metadata = _nullableMap(json['metadata']);
+    final metadata = {
+      for (final key in const ['presentation', 'source_refs'])
+        if (json.containsKey(key)) key: json[key],
+      ...?_nullableMap(json['metadata']),
+    };
 
     return AiMessageModel(
       id: _intValue(json['id']),
       role: (json['role'] as String? ?? '').trim(),
       content: (json['content'] as String? ?? '').trim(),
       createdAt: _dateTimeValue(json['created_at']),
-      metadata: metadata,
+      metadata: metadata.isEmpty ? null : metadata,
       structuredPayload: AiAssistantStructuredPayload.fromMetadata(metadata),
       attachments: _asList(json['attachments'])
           .map(
@@ -157,6 +191,103 @@ class AiMessageModel {
                 AiImageAttachmentModel.fromJson(_nullableMap(item) ?? const {}),
           )
           .toList(growable: false),
+    );
+  }
+}
+
+class AiAssistantPublishedSource {
+  const AiAssistantPublishedSource._({
+    required this.label,
+    required this.key,
+    required this.article,
+    required this.documentPreview,
+    this.fetchedAt,
+  });
+
+  final String label;
+  final Object key;
+  final AiAssistantKnowledgeSource? article;
+  final bool documentPreview;
+  final DateTime? fetchedAt;
+
+  static AiAssistantPublishedSource? fromJson(
+    Object? value, {
+    required bool hasStoredLocator,
+    required bool hasDecisionContract,
+    required bool canPreview,
+  }) {
+    final json = _nullableMap(value);
+    if (json == null) return null;
+    final article = AiAssistantKnowledgeSource.fromJson(json);
+    final isDocument = json['entity_type'] == 'assistant_document';
+    final hasPreview =
+        (hasStoredLocator && isDocument) ||
+        (hasDecisionContract && json['preview_kind'] == 'source_chunk_preview');
+    final label =
+        _stringValue(json['display_label']) ??
+        _stringValue(json['title'] ?? json['label']);
+    if (article == null &&
+        !hasStoredLocator &&
+        !hasPreview &&
+        json['content_scope'] != 'structured' &&
+        json['content_scope'] != 'unstructured') {
+      return null;
+    }
+    if (article == null && label == null && !hasStoredLocator && !hasPreview) {
+      return null;
+    }
+    return AiAssistantPublishedSource._(
+      label:
+          label ??
+          (article != null ? 'Статья базы знаний' : _sourceTitle(json)!),
+      key:
+          article == null
+              ? (
+                type: _stringValue(json['entity_type']),
+                entity: _stringValue(json['entity_id'] ?? json['document_id']),
+                sourceType: _stringValue(json['source_type']),
+                source: _stringValue(json['source_id']),
+                project: _stringValue(json['project_id']),
+                version: _stringValue(
+                  json['source_version'] ?? json['version'],
+                ),
+                fragment: _stringValue(json['chunk_id'] ?? json['chunk_index']),
+                label: label,
+              )
+              : ('knowledge_article', article.slug),
+      article: article,
+      documentPreview: canPreview && hasPreview,
+      fetchedAt: _dateTimeValue(json['fetched_at']),
+    );
+  }
+}
+
+class AiAssistantSourcePreview {
+  const AiAssistantSourcePreview._(this.title, this.content, this.truncated);
+
+  final String title;
+  final String content;
+  final bool truncated;
+
+  static AiAssistantSourcePreview? fromJson(
+    Map<String, dynamic> json, {
+    required int messageId,
+    required int sourceIndex,
+  }) {
+    if (json['kind'] != 'source_chunk_preview' ||
+        _nullableInt(json['message_id']) != messageId ||
+        json['source_index'] != sourceIndex) {
+      return null;
+    }
+    final title = _stringValue(json['title']);
+    final content = json['content'];
+    if (title == null || content is! String || content.trim().isEmpty) {
+      return null;
+    }
+    return AiAssistantSourcePreview._(
+      title,
+      content,
+      _nullableMap(json['content_range'])?['truncated'] == true,
     );
   }
 }
@@ -744,6 +875,8 @@ class AiAssistantEvidenceModel {
     final title =
         _stringValue(json?['title']) ??
         _stringValue(json?['label']) ??
+        _stringValue(json?['display_label']) ??
+        _stringValue(sourceRef?['display_label']) ??
         _stringValue(sourceRef?['title'] ?? sourceRef?['label']) ??
         _sourceTitle(json) ??
         _sourceTitle(sourceRef);
@@ -934,6 +1067,10 @@ class AiAssistantChatResult {
         'billing',
         'ui_actions',
         'export_task',
+        'presentation',
+        'source_refs',
+        'source_refs_version',
+        'decision_contract',
       ])
         if (json.containsKey(key)) key: json[key],
       ...?_nullableMap(messageJson?['metadata']),
@@ -1340,6 +1477,7 @@ String? _sourceTitle(Map<String, dynamic>? json) {
   final label = switch (type) {
     'estimate' || 'estimate_item' || 'estimate_section' => 'Смета',
     'project' => 'Проект',
+    'schedule_task' || 'project_schedule' => 'График работ',
     'contract' => 'Договор',
     'completed_work' => 'Выполненные работы',
     'material' => 'Материал',

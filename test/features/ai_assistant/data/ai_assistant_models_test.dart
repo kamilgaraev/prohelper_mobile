@@ -2,6 +2,24 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:prohelpers_mobile/features/ai_assistant/data/ai_assistant_models.dart';
 
 void main() {
+  test('document access markers preserve original source indices', () {
+    final message = AiMessageModel.fromJson({
+      'id': 17,
+      'role': 'assistant',
+      'metadata': {
+        'source_refs_version': 'ordinary-publication-locator/1',
+        'source_refs': [
+          null,
+          {'entity_type': 'assistant_document', 'entity_id': 18},
+          {'entity_type': 'estimate', 'entity_id': 19},
+        ],
+      },
+    });
+    expect(message.presentationSources.keys, [1, 2]);
+    expect(message.presentationSources[1]?.documentPreview, isTrue);
+    expect(message.presentationSources[2]?.documentPreview, isFalse);
+  });
+
   test(
     'reads only canonical native article links from v1 assistant sources',
     () {
