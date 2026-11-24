@@ -252,7 +252,6 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
   String? _quotingRequestId;
   int? _nextHistoryPage;
   int? _historyRevision;
-  String _profile = 'normal';
   bool _canWrite = true;
   bool _canManageParticipants = false;
   _PendingChat? _failedRequest;
@@ -527,7 +526,18 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
           _failRequest('Запрос не отправлен. Введите вопрос снова.');
           return;
         }
-        progress = await _resubmitRequest(repository, pending);
+        try {
+          progress = await _resubmitRequest(repository, pending);
+        } on ApiException catch (error) {
+          if (error.statusCode != 409) rethrow;
+          if (mounted &&
+              revision == _requestRevision &&
+              requestId == _activeRequestId &&
+              conversationId == _conversationId) {
+            _failRequest(_resolveError(error));
+          }
+          return;
+        }
         if (!mounted ||
             revision != _requestRevision ||
             requestId != _activeRequestId) {
@@ -837,7 +847,6 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
     final attachmentIds = attachments.map((item) => item.metadata.id).toList();
     final conversationAtSend = _conversationId;
     final assistantContext = _assistantContext();
-    final profile = _profile;
     setState(() => _isQuoting = true);
     _quotingRequestId = requestId;
     final quote = await _confirmQuote(
@@ -845,7 +854,6 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
       requestId,
       conversationAtSend,
       assistantContext,
-      profile,
       attachmentIds,
     );
     if (!mounted || requestId != _quotingRequestId) return;
@@ -871,7 +879,6 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
       message: message,
       conversationId: conversationAtSend,
       context: assistantContext,
-      profile: profile,
       quote: quote,
       attachmentIds: attachmentIds,
       optimisticId: optimistic.id,
@@ -908,7 +915,6 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
         message: message,
         requestId: requestId,
         quoteId: quote.id,
-        profile: profile,
         conversationId: conversationAtSend,
         context: assistantContext,
         attachmentIds: attachmentIds,
@@ -1063,7 +1069,6 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
     String requestId,
     int? conversationId,
     Map<String, dynamic> assistantContext,
-    String profile,
     List<String> attachmentIds,
   ) async {
     try {
@@ -1072,7 +1077,6 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
           .quoteCredits(
             message: message,
             requestId: requestId,
-            profile: profile,
             conversationId: conversationId,
             context: assistantContext,
             attachmentIds: attachmentIds,
@@ -1085,12 +1089,7 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
             (context) => AlertDialog(
               title: const Text('Оценка расхода'),
               content: Text(
-                [
-                  'Оценка до ${quote.amount} ${quote.unit}. Фактическое списание будет рассчитано после ответа.',
-                  if (profile == 'detailed' &&
-                      quote.processingDeadlineSeconds != null)
-                    'Подробный анализ: ожидание до ${_formatProcessingDeadline(quote.processingDeadlineSeconds!)}.',
-                ].join('\n'),
+                'Оценка до ${quote.amount} ${quote.unit}. Фактическое списание будет рассчитано после ответа.',
               ),
               actions: [
                 TextButton(
@@ -1109,14 +1108,6 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
       if (mounted) _showSnackBar(_resolveError(error));
       return null;
     }
-  }
-
-  String _formatProcessingDeadline(int seconds) {
-    final minutes = seconds ~/ 60;
-    final remainingSeconds = seconds % 60;
-    if (minutes == 0) return '$seconds сек';
-    if (remainingSeconds == 0) return '$minutes мин';
-    return '$minutes мин $remainingSeconds сек';
   }
 
   Future<void> _stopSending() async {
@@ -1171,7 +1162,6 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
       requestId: pending.requestId,
       conversationId: pending.conversationId,
       quoteId: pending.quote.id,
-      profile: pending.profile,
       context: pending.context,
       attachmentIds: pending.attachmentIds,
       cancelToken: _sendCancelToken ??= CancelToken(),
@@ -1400,8 +1390,10 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
         return;
       }
 
+      final position = _scrollController.position;
+      if (position.maxScrollExtent <= position.minScrollExtent) return;
       _scrollController.animateTo(
-        _scrollController.position.maxScrollExtent + 80,
+        position.maxScrollExtent + 80,
         duration: const Duration(milliseconds: 250),
         curve: Curves.easeOut,
       );
@@ -1757,21 +1749,6 @@ class _AiAssistantChatScreenState extends ConsumerState<AiAssistantChatScreen> {
                 label: const Text('Стоп'),
               ),
             ),
-          DropdownButton<String>(
-            value: _profile,
-            items: const [
-              DropdownMenuItem(value: 'short', child: Text('Краткий ответ')),
-              DropdownMenuItem(value: 'normal', child: Text('Обычный ответ')),
-              DropdownMenuItem(
-                value: 'detailed',
-                child: Text('Подробный ответ'),
-              ),
-            ],
-            onChanged:
-                _isSending || _isQuoting
-                    ? null
-                    : (value) => setState(() => _profile = value ?? 'normal'),
-          ),
           if (_nextHistoryPage != null)
             TextButton(
               onPressed:
@@ -2844,7 +2821,6 @@ class _PendingChat {
     required this.message,
     required this.conversationId,
     required this.context,
-    required this.profile,
     required this.quote,
     required this.attachmentIds,
     required this.optimisticId,
@@ -2853,7 +2829,6 @@ class _PendingChat {
   final String message;
   final int? conversationId;
   final Map<String, dynamic> context;
-  final String profile;
   final AiCreditQuoteModel quote;
   final List<String> attachmentIds;
   final int optimisticId;

@@ -335,7 +335,7 @@ void main() {
   );
 
   test(
-    'quote and chat bind identical UUID, options and renderer capabilities',
+    'Auto quote and chat bind identical UUID, context and renderer capabilities',
     () async {
       final requests = <RequestOptions>[];
       final dio = Dio(BaseOptions(baseUrl: 'https://api.example.test'));
@@ -364,30 +364,39 @@ void main() {
         message: 'Question',
         requestId: requestId,
         conversationId: 12,
-        profile: 'short',
         allowActions: false,
         context: {'entity_refs': []},
+        attachmentIds: const ['attachment-uuid'],
       );
       expect(quote.amount, '1.75');
-      expect(quote.processingDeadlineSeconds, 120);
-      expect(quote.processingMode, AiAssistantProcessingMode.adaptive);
       final result = await repository.sendMessageRequest(
         message: 'Question',
         requestId: requestId,
         conversationId: 12,
         quoteId: quote.id,
-        profile: 'short',
         allowActions: false,
         context: {'entity_refs': []},
+        attachmentIds: const ['attachment-uuid'],
       );
       final chat =
           Map<String, dynamic>.from(requests[1].data as Map)
             ..remove('quote_id')
             ..remove('async');
       expect(chat, requests[0].data);
+      expect(requests.map((request) => request.path), [
+        '/ai-assistant/credits/quote',
+        '/ai-assistant/chat',
+      ]);
+      expect(chat.containsKey('profile'), isFalse);
+      expect(chat['request_id'], requestId);
+      expect(chat['conversation_id'], 12);
+      expect(chat['allow_actions'], isFalse);
+      expect(chat['context'], {'entity_refs': []});
+      expect(chat['attachment_ids'], ['attachment-uuid']);
       expect(chat['contract_version'], 1);
       expect(chat['renderer_version'], 1);
       expect(chat['supported_blocks'], ['facts', 'list', 'table']);
+      expect((requests[1].data as Map)['quote_id'], 'quote-uuid');
       expect((requests[1].data as Map)['async'], true);
       expect(result.runStatus, 'completed');
       expect(result.result!.creditUsage!.actualCharge, '0.50');
@@ -423,7 +432,6 @@ void main() {
       message: 'Привет',
       requestId: requestId,
     );
-    expect(quote.processingMode, AiAssistantProcessingMode.local);
     expect(quote.amount, '0.00');
     final request = await repository.sendMessageRequest(
       message: 'Привет',

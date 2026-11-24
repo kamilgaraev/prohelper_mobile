@@ -1281,40 +1281,25 @@ class AiCreditsBalanceModel {
   }
 }
 
-enum AiAssistantProcessingMode { local, adaptive }
-
 class AiCreditQuoteModel {
   const AiCreditQuoteModel({
     required this.id,
     required this.amount,
     required this.unit,
-    this.processingDeadlineSeconds,
-    this.processingMode,
     this.expiresAt,
   });
 
   final String id;
   final String amount;
   final String unit;
-  final int? processingDeadlineSeconds;
-  final AiAssistantProcessingMode? processingMode;
   final DateTime? expiresAt;
 
   factory AiCreditQuoteModel.fromJson(Map<String, dynamic> json) {
-    final metadata = _nullableMap(json['metadata']);
-    final deadline = metadata?['processing_deadline_seconds'];
     return AiCreditQuoteModel(
       id: _stringValue(json['quote_id']) ?? _stringValue(json['id']) ?? '',
       expiresAt: DateTime.tryParse(_stringValue(json['expires_at']) ?? ''),
       amount: formatAiMinor(_intValue(json['max_units_minor'])),
       unit: _stringValue(json['unit']) ?? 'ед. МОСТ',
-      processingDeadlineSeconds:
-          deadline is int && deadline > 0 ? deadline : null,
-      processingMode: switch (metadata?['processing_mode']) {
-        'local' => AiAssistantProcessingMode.local,
-        'adaptive' => AiAssistantProcessingMode.adaptive,
-        _ => null,
-      },
     );
   }
 }

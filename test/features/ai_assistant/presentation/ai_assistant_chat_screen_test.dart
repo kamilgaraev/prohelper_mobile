@@ -772,6 +772,50 @@ void main() {
     },
   );
 
+  testWidgets('requires new consent when a recovered quote is retired', (
+    tester,
+  ) async {
+    final response = Completer<AiAssistantChatRequest>();
+    final repository = _RaceRepository(
+      failFirst: true,
+      notSubmittedOnce: true,
+      postResponse: response.future,
+    );
+    await tester.pumpWidget(buildScreen(repository));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), 'Question');
+    await tester.tap(find.byIcon(Icons.send_rounded));
+    await tester.pumpAndSettle();
+    final firstRequestId = repository.quoteRequestId;
+    await tester.tap(find.text('Продолжить'));
+    await tester.pump();
+    expect(repository.sentIds, [firstRequestId, firstRequestId]);
+
+    response.completeError(
+      const ApiException(
+        'Оценка устарела. Рассчитайте стоимость снова.',
+        statusCode: 409,
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(repository.quoteCalls, 1);
+    expect(repository.sentIds, hasLength(2));
+    expect(
+      tester.widget<TextField>(find.byType(TextField)).controller?.text,
+      'Question',
+    );
+    expect(find.text('Стоп'), findsNothing);
+
+    await tester.tap(find.byIcon(Icons.send_rounded));
+    await tester.pumpAndSettle();
+    expect(repository.quoteCalls, 2);
+    expect(repository.quoteRequestId, isNot(firstRequestId));
+    expect(find.text('Оценка расхода'), findsOneWidget);
+    expect(repository.sentIds, hasLength(2));
+    await tester.tap(find.text('Отмена'));
+    await tester.pumpAndSettle();
+  });
+
   testWidgets(
     'shows accepted progress and keeps completed sources after a fast response',
     (tester) async {
@@ -995,6 +1039,7 @@ void main() {
       expect(find.text('График работ'), findsOneWidget);
       expect(find.text('Работа продолжается.'), findsOneWidget);
       expect(find.text('Запись проверена'), findsNothing);
+      expect(find.text('Ход работы').hitTestable(), findsOneWidget);
       await toggleProgressHistory(tester);
       await tester.pump(const Duration(milliseconds: 300));
       expect(find.text('Запись проверена'), findsOneWidget);
@@ -1883,46 +1928,24 @@ void main() {
     },
   );
 
-  testWidgets('shows server deadline in detailed quote confirmation', (
+  testWidgets('quotes the server reserve without a response mode selector', (
     tester,
   ) async {
-    final repository = _RaceRepository(processingDeadlineSeconds: 630);
+    final repository = _RaceRepository();
     await tester.pumpWidget(buildScreen(repository));
     await tester.pumpAndSettle();
-    await tester.tap(find.byType(DropdownButton<String>));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Подробный ответ'));
-    await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextField), 'Question');
-    await tester.tap(find.byIcon(Icons.send_rounded));
-    await tester.pumpAndSettle();
-
-    expect(
-      find.textContaining('Подробный анализ: ожидание до 10 мин 30 сек.'),
-      findsOneWidget,
-    );
-    await tester.tap(find.text('Отмена'));
-    await tester.pumpAndSettle();
-    expect(
-      find.textContaining('Подробный анализ: ожидание до 10 мин 30 сек.'),
-      findsNothing,
-    );
-  });
-
-  testWidgets('does not show server deadline for the normal profile', (
-    tester,
-  ) async {
-    final repository = _RaceRepository(processingDeadlineSeconds: 630);
-    await tester.pumpWidget(buildScreen(repository));
-    await tester.pumpAndSettle();
+    expect(find.byType(DropdownButton<String>), findsNothing);
     await tester.enterText(find.byType(TextField), 'Question');
     await tester.tap(find.byIcon(Icons.send_rounded));
     await tester.pumpAndSettle();
 
     expect(find.text('Оценка расхода'), findsOneWidget);
-    expect(find.textContaining('Подробный анализ: ожидание'), findsNothing);
+    expect(find.textContaining('Оценка до 1.50 ед. МОСТ.'), findsOneWidget);
+    expect(repository.sentIds, isEmpty);
     await tester.tap(find.text('Отмена'));
     await tester.pumpAndSettle();
+    expect(find.text('Оценка расхода'), findsNothing);
+    expect(repository.sentIds, isEmpty);
   });
 
   testWidgets('viewer sees history without message composer', (tester) async {
@@ -2172,7 +2195,6 @@ class _RaceRepository extends AiAssistantRepository {
     this.asyncAccepted = false,
     this.stages = const [],
     this.freeQuote = false,
-    this.processingDeadlineSeconds,
     this.initialProgress = const [],
     this.progressSnapshots = const [],
     this.pollErrorStatusCode,
@@ -2190,7 +2212,6 @@ class _RaceRepository extends AiAssistantRepository {
   final bool failFirst;
   final bool asyncAccepted;
   final bool freeQuote;
-  final int? processingDeadlineSeconds;
   final List<String> stages;
   final List<AiAssistantProgressModel> initialProgress;
   final List<List<AiAssistantProgressModel>> progressSnapshots;
@@ -2241,7 +2262,6 @@ class _RaceRepository extends AiAssistantRepository {
   Future<AiCreditQuoteModel> quoteCredits({
     required String message,
     required String requestId,
-    String profile = 'normal',
     bool allowActions = true,
     int? conversationId,
     Map<String, dynamic>? context,
@@ -2253,7 +2273,6 @@ class _RaceRepository extends AiAssistantRepository {
       id: 'quote-uuid',
       amount: freeQuote ? '0.00' : '1.50',
       unit: 'ед. МОСТ',
-      processingDeadlineSeconds: processingDeadlineSeconds,
       expiresAt: quoteExpiresAt,
     );
   }
@@ -2264,7 +2283,6 @@ class _RaceRepository extends AiAssistantRepository {
     required String requestId,
     int? conversationId,
     String? quoteId,
-    String profile = 'normal',
     bool allowActions = true,
     Map<String, dynamic>? context,
     List<String> attachmentIds = const <String>[],
