@@ -14,6 +14,7 @@ on:
 permissions:
   contents: read
   actions: read
+  pull-requests: read
 
 concurrency:
   group: rustore-build-${{ github.ref }}
@@ -28,6 +29,11 @@ jobs:
     steps:
       - name: Получение исходного кода
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+
+      - name: Проверка допуска ревизии к выпуску
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 .github/scripts/verify-release-review.py "$GITHUB_SHA"
 
       - name: Установка Python
         uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
