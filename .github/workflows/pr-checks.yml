@@ -4,16 +4,22 @@ on:
   pull_request:
     branches: [main]
 
+  pull_request_review:
+    types: [submitted, edited, dismissed]
+  pull_request_review_comment:
+    types: [created, edited, deleted]
+
 permissions:
   contents: read
 
 concurrency:
-  group: pr-checks-${{ github.event.pull_request.number }}
+  group: pr-checks-${{ github.event_name }}-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 jobs:
   verify:
-    name: Проверки по изменению
+    if: github.event_name == 'pull_request'
+    name: ${{ github.event_name == 'pull_request' && 'Проверки по изменению' || 'Событие ревью' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
