@@ -38,7 +38,7 @@ jobs:
           while IFS= read -r -d '' file; do
             case "$file" in
               AGENTS.md|README.md|.cursorrules|.github/pull_request_template.md|.agent/rules/*.md|docs/*.md) ;;
-              .github/*) release=true ;;
+              .github/*|scripts/rustore_release.py|scripts/tests/test_rustore_release.py) release=true ;;
               *) runtime=true ;;
             esac
           done < "$RUNNER_TEMP/changed"

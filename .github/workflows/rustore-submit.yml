@@ -28,6 +28,7 @@ on:
 permissions:
   contents: read
   actions: read
+  pull-requests: read
 
 concurrency:
   group: rustore-submit-${{ inputs.build_run_id }}
@@ -97,12 +98,14 @@ jobs:
           BUILD_RUN_ID: ${{ inputs.build_run_id }}
           RELEASE_TAG: ${{ inputs.release_tag }}
           BUILD_REPOSITORY: ${{ github.repository }}
-        run: >-
-          python scripts/rustore_release.py verify-run
-          --run-metadata "$RUNNER_TEMP/build-run.json"
-          --run-id "$BUILD_RUN_ID"
-          --release-tag "$RELEASE_TAG"
-          --repository "$BUILD_REPOSITORY"
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          source_sha=$(python scripts/rustore_release.py verify-run \
+            --run-metadata "$RUNNER_TEMP/build-run.json" \
+            --run-id "$BUILD_RUN_ID" --release-tag "$RELEASE_TAG" \
+            --repository "$BUILD_REPOSITORY" --print-sha)
+          python .github/scripts/verify-release-review.py "$source_sha"
 
       - name: Загрузка AAB из проверенного CI run
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
