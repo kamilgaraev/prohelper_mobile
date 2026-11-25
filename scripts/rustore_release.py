@@ -105,12 +105,15 @@ def verify_build_run(
 
 def verify_run_metadata(args: argparse.Namespace) -> None:
     metadata = load_json_object(args.run_metadata, "данные CI-сборки")
-    verify_build_run(
+    source_sha = verify_build_run(
         metadata,
         run_id=args.run_id,
         release_tag=args.release_tag,
         repository=args.repository,
     )
+    if args.print_sha:
+        print(source_sha)
+        return
     print(f"Проверена успешная Android-сборка {args.run_id} для {args.release_tag}")
 
 
@@ -459,6 +462,7 @@ def build_parser() -> argparse.ArgumentParser:
     submit.set_defaults(handler=submit_release)
 
     verify_run = commands.add_parser("verify-run")
+    verify_run.add_argument("--print-sha", action="store_true", help="Вывести проверенный SHA исходного кода")
     verify_run.add_argument("--run-metadata", required=True, type=Path)
     verify_run.add_argument("--run-id", required=True)
     verify_run.add_argument("--release-tag", required=True)

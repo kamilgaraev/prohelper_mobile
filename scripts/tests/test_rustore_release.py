@@ -1,6 +1,7 @@
 import base64
 import hashlib
 import json
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -76,6 +77,15 @@ class ReleaseArtifactVerificationTest(unittest.TestCase):
         )
         self.run_metadata_path = self.root / "run.json"
         self.run_metadata_path.write_text(json.dumps(self.run_metadata), encoding="utf-8")
+
+    def test_cli_outputs_only_verified_source_sha(self):
+        result = subprocess.run(
+            [sys.executable, str(SCRIPTS_DIR / "rustore_release.py"), "verify-run",
+             "--run-metadata", str(self.run_metadata_path), "--run-id", self.run_id,
+             "--release-tag", self.release_tag, "--repository", self.repository, "--print-sha"],
+            capture_output=True, text=True, check=True,
+        )
+        self.assertEqual(result.stdout.strip(), self.commit_sha)
 
     def test_accepts_signed_aab_only_from_successful_matching_build_run(self):
         actual = rustore_release.verify_release_artifact(
