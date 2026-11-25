@@ -5,12 +5,16 @@ import subprocess
 import sys
 
 
-def pages(endpoint, *args):
+def api(endpoint, *args):
     result = subprocess.run(
-        ["gh", "api", endpoint, "--paginate", "--slurp", *args],
+        ["gh", "api", endpoint, *args],
         check=True, stdout=subprocess.PIPE, encoding="utf-8",
     )
     return json.loads(result.stdout)
+
+
+def pages(endpoint, *args):
+    return api(endpoint, "--paginate", "--slurp", *args)
 
 
 def verify(repo, sha):
@@ -25,11 +29,14 @@ def verify(repo, sha):
     number, head = pr["number"], pr["head"]["sha"]
     if not isinstance(head, str) or not re.fullmatch(r"[a-f0-9]{40}", head):
         raise ValueError(f"Недействительный head SHA в PR #{number}")
-    verify_head(repo, number, head)
+    verify_head(repo, pr)
+    if api(f"repos/{repo}/compare/{sha}...main?per_page=1")["status"] not in ("ahead", "identical"):
+        raise ValueError(f"Ревизия {sha} отсутствует в истории main")
     print(f"PR #{number}, Codex Review {head}, release {sha}")
 
 
-def verify_head(repo, number, head):
+def verify_head(repo, pr):
+    number, head = pr["number"], pr["head"]["sha"]
     reports = []
     for page in pages(f"repos/{repo}/issues/{number}/comments?per_page=100"):
         for comment in page:
@@ -58,13 +65,18 @@ def verify_head(repo, number, head):
                                   f"?head_sha={head}&event=pull_request&per_page=100")
             for run in page["workflow_runs"] if run["head_sha"] == head
             and run["path"] == ".github/workflows/pr-checks.yml"
-            and any(pr["number"] == number for pr in run["pull_requests"])]
+            and run["event"] == "pull_request" and run["display_title"] == f"PR #{number}"
+            and run["head_branch"] == pr["head"]["ref"]
+            and run["head_repository"]["id"] == pr["head"]["repo"]["id"]
+            and all(associated["number"] == number for associated in run["pull_requests"])]
     latest = max(runs, key=lambda run: run["id"], default=None)
     if not latest or latest["status"] != "completed" or latest["conclusion"] != "success":
         raise ValueError(f"Нет успешной проверки PR #{number} для {head}")
 
 
 def publish_status(repo, number):
+    if number.startswith("PR #"):
+        number = number[4:]
     if not re.fullmatch(r"[1-9][0-9]*", number):
         raise ValueError("Некорректный номер PR")
     pr = pages(f"repos/{repo}/pulls/{number}")[0]
@@ -77,7 +89,7 @@ def publish_status(repo, number):
     status = ["gh", "api", endpoint, "-f", "context=most/release-admission"]
     subprocess.run([*status, "-f", "state=pending"], check=True)
     try:
-        verify_head(repo, int(number), head)
+        verify_head(repo, pr)
     except (ValueError, KeyError, TypeError, subprocess.CalledProcessError):
         subprocess.run([*status, "-f", "state=failure"], check=True)
         raise

@@ -12,19 +12,20 @@ class ReleaseReviewTest(unittest.TestCase):
     def setUp(self):
         self.sha = "a" * 40
         self.head = "b" * 40
-        self.pr = {"number": 7, "head": {"sha": self.head}, "merged_at": "2026-01-01",
+        self.pr = {"number": 7, "head": {"sha": self.head, "ref": "topic", "repo": {"id": 123}}, "merged_at": "2026-01-01",
                    "base": {"ref": "main", "repo": {"full_name": "owner/project"}}, "merge_commit_sha": self.sha}
         self.report = {"commit_sha": self.head, "status": "completed", "has_unresolved_findings": False}
 
-    def verify(self, *, bot_id=199175422, resolved=True, conclusion="success"):
+    def verify(self, *, bot_id=199175422, resolved=True, conclusion="success", run_number=7, ancestry="ahead"):
         body = "<!-- codex-review-state:v1 " + review.json.dumps({"code_review": self.report}) + " -->"
         comment = {"body": body, "user": {"id": bot_id},
                    "performed_via_github_app": {"slug": "chatgpt-codex-connector"}}
         thread = {"data": {"repository": {"pullRequest": {"reviewThreads": {"nodes": [{"isResolved": resolved}]}}}}}
         run = {"id": 1, "head_sha": self.head, "path": ".github/workflows/pr-checks.yml",
-               "pull_requests": [{"number": 7}], "status": "completed", "conclusion": conclusion}
+               "pull_requests": [], "display_title": f"PR #{run_number}", "event": "pull_request",
+               "head_branch": "topic", "head_repository": {"id": 123}, "status": "completed", "conclusion": conclusion}
         responses = [[[self.pr]], [[], [comment]], [thread], [{"workflow_runs": [run]}]]
-        with patch.object(review, "pages", side_effect=responses):
+        with patch.object(review, "pages", side_effect=responses), patch.object(review, "api", return_value={"status": ancestry}):
             review.verify("owner/project", self.sha)
 
     def test_reviewed_squash(self):
@@ -67,6 +68,16 @@ class ReleaseReviewTest(unittest.TestCase):
     def test_failed_ci(self):
         with self.assertRaises(ValueError):
             self.verify(conclusion="failure")
+
+
+    def test_other_pr_after_merge(self):
+        with self.assertRaises(ValueError):
+            self.verify(run_number=8)
+
+
+    def test_revision_removed_from_main(self):
+        with self.assertRaises(ValueError):
+            self.verify(ancestry="diverged")
 
 
 if __name__ == "__main__":
