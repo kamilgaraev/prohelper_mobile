@@ -1,0 +1,57 @@
+name: Проверки PR
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-checks-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Проверки по изменению
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - name: Определение затронутых файлов
+        id: paths
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --no-renames --name-only -z HEAD^1 HEAD > "$RUNNER_TEMP/changed"
+          runtime=false
+          release=false
+          while IFS= read -r -d '' file; do
+            case "$file" in
+              AGENTS.md|README.md|.cursorrules|.github/pull_request_template.md|.agent/rules/*.md|docs/*.md) ;;
+              .github/*) release=true ;;
+              *) runtime=true ;;
+            esac
+          done < "$RUNNER_TEMP/changed"
+          printf 'runtime=%s\nrelease=%s\n' "$runtime" "$release" >> "$GITHUB_OUTPUT"
+          printf 'Проверка приложения: %s. Проверка выпуска: %s.\n' "$runtime" "$release" >> "$GITHUB_STEP_SUMMARY"
+      - name: Проверка допуска к выпуску
+        if: steps.paths.outputs.release == 'true'
+        run: python3 .github/scripts/test_release_review.py -v
+      - name: Проверки клиента RuStore
+        if: steps.paths.outputs.runtime == 'true' || steps.paths.outputs.release == 'true'
+        run: python3 -m unittest discover -s scripts/tests -p 'test_*.py' -v
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2
+        if: steps.paths.outputs.runtime == 'true'
+        with:
+          flutter-version: '3.44.8'
+          channel: stable
+          cache: false
+      - name: Проверки приложения
+        if: steps.paths.outputs.runtime == 'true'
+        run: |
+          flutter pub get
+          flutter analyze --no-fatal-infos --no-fatal-warnings
+          flutter test
